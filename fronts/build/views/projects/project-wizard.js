@@ -21,30 +21,29 @@
 //   name; cleared, it follows again), wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl);
 //   #743: once Next is pressed, the access check and the clone are one wait in place: wizard-next shows
 //   wizard-spinner and "Cloning <name>…" (disabled only while onboarding:start is in flight, #641), the fields read-only, no status card, then the analysis
-//   step at once), analysis (the jobs
-//   from the clone on in wizard-cost, with wizard-cost-total and the paid part data-part="projectMap"
+//   step at once), analysis (the jobs from the clone on in wizard-cost, with wizard-cost-total and the paid part data-part="projectMap"
 //   (#730: no Product Owner ranking any more) before the click, checked and locked, a running row with a spinner (#724),
-//   wizard-clone-progress in the footer (data-status = the clone job's status, wizard-spinner while it runs,
-//   its reason and Retry when it failed), and wizard-skip; a
+//   wizard-clone-progress in the footer (data-status = the clone job's status, wizard-spinner while it runs, its reason and Retry when it
+//   failed), and wizard-skip (#850: a new project's projectMap is left for later, OnboardingModel.next: unticked, wizard-job-later-projectMap
+//   says why, no amount, no wizard-skip; its profile line wizard-profile says "from your answers"); a
 //   failed job reads its reason wizard-job-error-<id> (OnboardingModel's code, full error on hover), "—" as
 //   amount and wizard-job-retry-<id> (api.retryOnboarding); #725: the suggested workflows beside them (wizard-workflows-column,
 //   project-wizard-workflows.js); #781: activity lines say what runs (project-wizard-activity.js)) and review (#642, spec R10):
-//   wizard-review with the project's card (#781: wizard-review-languages), wizard-review-city (Open the
-//   city: Finish, then the project's City tab) / -findings / -backlog, each data-state="ready" | "pending"
-//   (its analysis still running: words say so) | "failed" | "skipped" (its analysis answered without a result)
-//   | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per report
+//   wizard-review with the project's card wizard-review-project (#781: wizard-review-languages, #852 its loading / failed
+//   placeholder; #850: a new project's "How it is worked on" is its step 2 answer, no "analyses were skipped" line), wizard-review-city (Open the
+//   city: Finish, then the project's City tab) / -findings / -backlog, each data-state="ready" | "pending" (its analysis still running: words
+//   say so, #852 and wizard-review-running, spinner + "running", beside the card's action) | "failed" | "skipped" (its analysis answered without
+//   a result) | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per report
 //   finding with wizard-review-create-issue / -prioritize, then its link wizard-review-finding-issue, and the idea field
 //   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
 //   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next (step 3:
 //   "Continue", enabled whatever the analysis does; before any analysis it skips it) or, on the review,
-//   wizard-finish (never disabled,
-//   never waits): it closes the wizard on the project's page with its Next steps
+//   wizard-finish (never disabled, never waits): it closes the wizard on the project's page with its Next steps
 //   card (openProject with nextSteps, project.js; #846: never the Start drawer), then sends the idea to the Inbox (no finding is filed
 //   without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
-//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform
-//   wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), the folder line
+//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), the folder line
 //   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the three questions
 //   wizard-question data-question="mode" | "ci" | "release" with their wizard-chip buttons (aria-pressed on the
 //   pick, OnboardingModel.CREATE_ANSWERS / CREATE_DEFAULTS). Next (api.createOnboarding) creates it, ready at
@@ -55,10 +54,8 @@
 //   "cli-signed-out" (the import goes on) with Open Setup, on the repository and the analysis steps. #740: Open
 //   Setup and Sign in open Settings › Agents & CLIs, the wizard hidden meanwhile (project-wizard-cli.js).
 // - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
-//   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus
-//   back to what opened it.
-// - #onboarding-tray (project-wizard-tray.js) follows onboarding:changed (api.onOnboardingChanged, subscribed
-//   when the script loads); #724: hidden while the wizard is open, the wizard shows the progress itself.
+//   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus back to what opened it.
+// - #onboarding-tray (project-wizard-tray.js) follows onboarding:changed (api.onOnboardingChanged, subscribed when the script loads); #724: hidden while the wizard is open, the wizard shows the progress itself.
 // - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
 //   change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
@@ -106,7 +103,7 @@
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
-  const workModel = window.ProjectWizardWorkModel({ cur: () => cur }); // #633: step 3's work model section
+  const workModel = window.ProjectWizardWorkModel({ cur: () => cur, recommended: column.recommended }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
     jobReason,
@@ -383,13 +380,14 @@
   function costBlock(started) {
     const jobs = cur.onboarding?.jobs || {};
     const loading = cur.estimate === undefined;
+    const later = (id) => PAID.includes(id) && cur.model.source === 'new' && !!cur.model.analyzeLater; // #850: left for later, unticked, saying why
     const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
     // #725: a failed job has no amount ("—"); a done one its cost, "free" for a free job, "—" for a paid
-    // one whose cost is not known
+    // one whose cost is not known (#850: or left for later)
     const amount = (id) => {
       const s = jobs[id]?.status;
       const p = sum.parts.find((x) => x.id === id);
-      if (s === 'failed') return '—';
+      if (s === 'failed' || later(id)) return '—';
       if (s === 'done') return p ? (Number.isFinite(p.estimate) ? money(p.estimate) : '—') : t('onboarding.cost_free');
       return p ? (loading ? t('onboarding.estimating') : costText(p.estimate)) : t('onboarding.cost_free');
     };
@@ -397,10 +395,10 @@
       const s = jobs[id]?.status || 'waiting';
       // #630 (mock-4): the profile row says the ways of working it found once its job is done
       const found = id === 'profile' && textOf(M.profileLine(profileOf())); // #726: keys, in the interface's language
-      const line = id === 'clone' ? cur.model.repository : found ? t('onboarding.profile_found', { profile: found }) : t(`onboarding.job_${id}_text`);
-      const testid = id === 'profile' ? ' data-testid="wizard-profile"' : '';
-      // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled)
-      const pick = PAID.includes(id) ? `<input type="checkbox" checked disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
+      const line = id === 'clone' ? cur.model.repository : found ? t(column.profileSourceKey(), { profile: found }) : t(`onboarding.job_${id}_${later(id) ? 'later_new' : 'text'}`);
+      const testid = id === 'profile' ? ' data-testid="wizard-profile"' : later(id) ? ` data-testid="wizard-job-later-${id}"` : '';
+      // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled; #850 unchecked when left for later)
+      const pick = PAID.includes(id) ? `<input type="checkbox"${later(id) ? '' : ' checked'} disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
       // #725: a failed job says why under its title (the full error on hover), with its Retry
       const failed = s === 'failed' && id !== 'clone'
         ? `<span class="small wizard-job-error" data-testid="wizard-job-error-${id}" title="${esc(jobs[id].error || jobs[id].reason || '')}">${esc(jobReason(jobs[id]))}</span>` : '';
@@ -413,11 +411,11 @@
     };
     const unknown = !loading && sum.total != null && sum.unknown.length
       ? `<span class="muted small">${esc(t('onboarding.cost_partial'))}</span>` : '';
-    const skip = started ? '' : `<button type="button" class="btn sm" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>`;
+    const skip = started || later(PAID[0]) ? '' : `<button type="button" class="btn sm" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>`;
     return `<div class="wizard-cost" data-testid="wizard-cost">
         <ul class="wizard-jobs">${(cur.model.source === 'new' ? JOBS : ['clone', ...JOBS]).map(row).join('')}</ul>
         <div class="card wizard-cost-total-row"><span>${esc(t('onboarding.cost_real_models'))}</span>
-          <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(loading ? t('onboarding.estimating') : costText(sum.total))}</strong>${skip}</div>
+          <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(later(PAID[0]) ? t('onboarding.cost_free') : loading ? t('onboarding.estimating') : costText(sum.total))}</strong>${skip}</div>
         ${unknown}
       </div>`;
   }
@@ -453,7 +451,7 @@
     return cur.model.analyzeLater && !ACTIVE.includes(cur.onboarding?.status) ? 'later' : 'pending';
   }
 
-  // a card of the review: its head (title, then an action or the pending badge), then its body once ready; #781: `pending`:
+  // a card of the review: its head (title, then #852 the running indicator beside its action), then its body once ready; #781: `pending`:
   // a key, or its markup's function; `failure`: the markup of a read that failed, for a card with no job to say so
   function reviewSection(id, title, job, read, body, pending, action = '', failure = '') {
     const state = failure ? 'failed' : sectionState(job, read);
@@ -465,9 +463,9 @@
       pending: () => t(pending),
       skipped: () => t('onboarding.review_section_skipped'),
     };
-    const badge = state === 'pending' && !own ? `<span class="badge job-running">${esc(t('onboarding.job_status_running'))}</span>` : '';
+    const badge = state === 'pending' && !own ? `<span class="wizard-review-running" data-testid="wizard-review-running" role="status">${SPINNER('wizard-review-spinner')}${esc(t('onboarding.job_status_running'))}</span>` : '';
     return `<section class="card wizard-review-section" data-testid="wizard-review-${id}" data-state="${state}">
-        <header class="wizard-review-head"><h3>${esc(t(title))}</h3>${action || badge}</header>
+        <header class="wizard-review-head"><h3>${esc(t(title))}</h3><span class="wizard-review-badges">${badge}${action}</span></header>
         ${failure || (state === 'ready' ? body() : own ? pending() : `<p class="muted small">${esc(words[state]())}</p>`)}
       </section>`;
   }
@@ -531,11 +529,13 @@
     const folder = (typeof state === 'object' && state?.projects?.find?.((p) => p.id === cur.projectId)?.folder) || '';
     const where = [cur.model.repository, folder].filter(Boolean).join(' · ');
     const chips = [platformOfRepo(cur.model.repository)?.label].filter(Boolean);
-    const languages = cur.review.facts ? `<div class="wizard-review-languages" data-testid="wizard-review-languages">${window.ProjectHealth?.languagesHtml(cur.review.facts.model?.languages) || ''}</div>` : '';
+    const languages = activity.languagesBlock(sectionState('projectMap', cur.review.facts !== undefined)); // #852
+    // #850: a new project is worked on as answered on step 2, never "read by the profile when it is done"
+    const said = cur.model.source === 'new' ? t(`onboarding.new_mode_${profileOf()?.mode || cur.answers?.mode || 'local'}`) : languages ? '' : t('onboarding.review_how_pending');
     const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="wizard-chip">${esc(c)}</span>`).join('')}</div>`
-      : languages ? '' : `<p class="muted small">${esc(t('onboarding.review_how_pending'))}</p>`;
+      : said ? `<p class="muted small">${esc(said)}</p>` : '';
     const flows = M.suggestWorkflows(null).suggestions.map((s) => `<span class="wizard-chip accent text-cut" title="${esc(s.id)}">${esc(s.id)}</span>`).join('');
-    return `<section class="card wizard-review-section wizard-review-project">
+    return `<section class="card wizard-review-section wizard-review-project" data-testid="wizard-review-project">
         <h3 id="project-wizard-title" class="text-cut" title="${esc(name)}">${esc(name)}</h3>
         <span class="mono muted small text-cut" title="${esc(where)}">${esc(where)}</span>
         <h4>${esc(t('onboarding.review_how', { name }))}</h4>${how}${languages}${kindField()}
@@ -547,7 +547,7 @@
   // three cards, then the backlog and the idea for the Inbox
   function reviewStep() {
     const r = cur.review;
-    const later = cur.model.analyzeLater ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
+    const later = cur.model.analyzeLater && cur.model.source !== 'new' ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
     const openCity = `<button type="button" class="btn sm" data-act="open-city" data-testid="wizard-open-city">${esc(t('onboarding.open_city'))}</button>`;
     return `<div class="wizard-review" data-testid="wizard-review">${later}
         <div class="wizard-review-grid">
@@ -660,7 +660,7 @@
     const pid = cur.projectId;
     if (!pid) return;
     const reads = [['backlog', () => activity.readBacklog(pid), true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
-      ['facts', () => api.architectureFacts?.(pid), jobDone('projectMap')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
+      ['facts', () => activity.readFacts(pid), jobDone('projectMap')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
     for (const [key, read, due] of reads) {
       if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
       cur.reading.add(key);
@@ -711,7 +711,7 @@
   }
 
   function toAnalysis() {
-    cur.model = { ...cur.model, step: 'analysis' };
+    cur.model = { ...(cur.model.step === 'repository' ? M.next(cur.model) : cur.model), step: 'analysis' }; // #850: the model's move (analyzeLater)
     column.loadManifest();
     if (cur.estimate !== undefined) return;
     const pid = cur.projectId;

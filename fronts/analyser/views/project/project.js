@@ -103,10 +103,13 @@ function nextStepsMarkup(pv) {
     return `<button type="button" class="btn sm" data-next-step="${step}"${testid}${later ? ` disabled aria-disabled="true" title="${reason}"` : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
       ${later ? `<span class="muted small" data-testid="next-step-reason">${reason}</span>` : ''}`;
   };
+  // #850: the release CI step of a project that has a release workflow does not say it needs one (still a later version)
+  const hasRelease = (pv.project?.workflows || []).some((w) => w?.name === 'release');
+  const reasonOf = (step, later) => (step === 'release-ci' && hasRelease ? 'onboarding.next_steps_release_ci_reason_ready' : later);
   const entry = ([step, title, line, action, later]) => `<li class="pr-next-step" data-testid="next-step-${step}">
       <strong>${esc(t(title))}</strong>
       ${line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
-      ${button(step, action, later)}
+      ${button(step, action, reasonOf(step, later))}
     </li>`;
   // #744: no refactors step once the proposals are read and there are none (never "File and add 0")
   const shown = PV_NEXT_STEPS.filter(([step]) => step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length);

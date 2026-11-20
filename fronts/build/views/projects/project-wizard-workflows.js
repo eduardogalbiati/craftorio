@@ -19,6 +19,8 @@
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
+// - #850 profileSourceKey(): step 3's profile line key, "from your answers" (a new project) or "from the git history".
+// - #851 recommended(): the wizard-recommended label, on Analyze the repository here and on Light (work model).
 // - #790 loadManifest(): reads cur.manifest for the Default row; pickedDefault(workflows): Finish's default.
 // - #726 textOf(x): the model's i18n keys (a key, { key, params }, an array) in the interface's language: the
 //   reasons (after the highlighted wizard-workflow-why "Why:" label), the selects' options, the profile line.
@@ -49,6 +51,12 @@
 
     // #630 (mock-4): the ways-of-working profile { mode, ci, tests } the profile job found, or null
     const profileOf = () => cur().onboarding?.profile || jobOf('profile').profile || null;
+    // #850: where step 3's profile line says the profile comes from: a new project's (#632) is its step 2 answers,
+    // an import's the git history
+    const profileSourceKey = () => (cur().model.source === 'new' ? 'onboarding.profile_found_answers' : 'onboarding.profile_found');
+
+    // #851: the "Recommended" label of the choice most owners should pick (Light, Analyze the repository)
+    const recommended = () => `<span class="badge wizard-recommended" data-testid="wizard-recommended">${esc(t('onboarding.recommended'))}</span>`;
 
     // the repository step's warning when the platform's CLI is missing or signed out (wizard-cli-warning)
     function cliWarning(cli) {
@@ -118,9 +126,9 @@
     const columnState = () => M.workflowsColumnState({ mode: cur().workflowsMode || (cur().model.source === 'new' ? 'analyze' : undefined), profileJob: { ...jobOf('profile'), profile: profileOf() } });
 
     // one of the two ways in (Analyze the repository / Define manually): a card with its hint, or a plain
-    // button (`inline`, beside Retry)
+    // button (`inline`, beside Retry); #851: Analyze the repository is the recommended one
     const choiceButton = (id, inline = false) => `<button type="button" class="${inline ? 'btn' : 'card wizard-workflows-choice'}" data-act="workflows-${id}" data-testid="wizard-workflows-choice-${id}">
-        <strong>${esc(t(`onboarding.workflows_choice_${id}`))}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}</button>`;
+        <strong>${esc(t(`onboarding.workflows_choice_${id}`))}${id === 'analyze' ? recommended() : ''}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}</button>`;
 
     // by its state: the two choices first; then the rows, dimmed under a loading notice while the profile
     // job runs, with the profile's reasons once it is done, without reasons when defined by hand; a failed
@@ -239,6 +247,8 @@
       kindField,
       pickedWorkflows,
       profileOf,
+      profileSourceKey,
+      recommended,
       textOf,
       workflowChoices,
       workflowsColumn,

@@ -9,6 +9,9 @@
 //   every second, followBacklog), backlogBody(): its summary and issues, that it is empty, or that the repository has
 //   Issues turned off (#845: wizard-review-backlog-issues-disabled, a link to its settings, no Retry), and backlogFailure(): the
 //   failed read's reason with wizard-review-backlog-retry (readBacklog(pid) reads it; onClick(e), before the wizard's: that Retry);
+// - #852 languagesBlock(state): the review's project card languages: the bar once the facts are read, before that
+//   wizard-review-languages-loading (a skeleton bar and "Reading the languages…") while the project map is pending, and
+//   wizard-review-languages-failed when readFacts(pid) (api.architectureFacts) failed;
 // - stop(): the timers, when the wizard closes.
 // Each read draws the wizard only when a line changed; the Oracle's reading and its clock move in place, so a second's
 // tick neither takes the focus from the step nor restarts the shine.
@@ -140,6 +143,25 @@
       });
     }
 
+    // #852: the review's facts read; a failure is kept on the review (review.factsFailed) for the languages block, which
+    // answers null either way
+    function readFacts(pid) {
+      const review = cur().review;
+      return Promise.resolve(api.architectureFacts?.(pid)).catch(() => { review.factsFailed = true; return null; });
+    }
+
+    // #852: the project card's languages (#781: the Health tab's bar) once the facts are read; until then, while the
+    // project map runs or its facts are read (`state` 'pending', the card's sectionState), a skeleton of the bar saying it
+    // loads; a failed read says so in one line; a project map that failed, was skipped or left for later shows nothing
+    function languagesBlock(state) {
+      const { facts, factsFailed } = cur().review;
+      if (facts) return `<div class="wizard-review-languages" data-testid="wizard-review-languages">${window.ProjectHealth?.languagesHtml(facts.model?.languages) || ''}</div>`;
+      if (factsFailed) return `<p class="muted small" data-testid="wizard-review-languages-failed">${esc(t('onboarding.review_languages_failed'))}</p>`;
+      if (state !== 'pending') return '';
+      return `<div class="wizard-review-languages wizard-review-loading" data-testid="wizard-review-languages-loading" role="status">
+          <span class="wizard-review-skeleton" aria-hidden="true"></span><span class="muted small">${esc(t('onboarding.review_languages_loading'))}</span></div>`;
+    }
+
     // the wizard's clicks, before its own handler: the Backlog's Retry puts the card back to reading; true when handled
     function onClick(e) {
       const c = cur();
@@ -182,8 +204,10 @@
       backlogLine,
       followAnalysis,
       followBacklog,
+      languagesBlock,
       onClick,
       readBacklog,
+      readFacts,
       stop,
     };
   };

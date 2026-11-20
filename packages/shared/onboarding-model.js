@@ -5,7 +5,8 @@
 //   name), analysis (nothing: the analyses are optional), review (the last step);
 // - initialState(): { step: 'start', source, repository, name, analyzeLater };
 // - canGoNext(state), next(state), back(state), skipAnalysis(state): pure moves, a new state each;
-//   skipAnalysis ("Skip, analyze later") goes from analysis to review with analyzeLater: true;
+//   skipAnalysis ("Skip, analyze later") goes from analysis to review with analyzeLater: true; #850: next() from
+//   the repository step of a new project (source 'new') sets analyzeLater too (step 3 and the review read it);
 // - suggestWorkflows(profile): { suggestions: [{ id, reason, value, choices }], defaulted }: feature, fix
 //   and release (#630) for { mode: 'local' | 'remote' | 'fork' (#738), ci: 'none' | 'release' | 'pr+release', tests:
 //   'unit' | 'unit+e2e', #844 or 'none' / null with no test command: no unit tests promised }, each with its reason and its selector (the value the profile picks among
@@ -28,7 +29,7 @@
 //   the new project's id and folder name (<workspace>/projects/<slug>).
 // - #738 forkSuggestion({ repo, push }): the "no push access" notice (Create a fork / Work locally), null
 //   unless push === false.
-// - #633 WORK_MODELS (light / standard / full, spec R9) and DEFAULT_WORK_MODEL ('standard'): how work on
+// - #633 WORK_MODELS (light / standard / full, spec R9) and DEFAULT_WORK_MODEL ('light', #851): how work on
 //   a project is documented, step 3's work model section and the project record's workModel.
 // #726: every text is an i18n key, never English: the choices' and PROFILE_LABELS' labels are keys
 // (onboarding.choice_* / onboarding.profile_*), a reason is a key or { key, params } whose params are keys
@@ -45,9 +46,10 @@
   const DEFAULT = 'feature';
   // #738: mode fork ("Fork + PR"): the owner cannot push to the original, runs push to their fork
   const PROFILE = { mode: ['local', 'remote', 'fork'], ci: ['none', 'release', 'pr+release'], tests: ['unit', 'unit+e2e'] };
-  // #633: the work model (Light: an issue only; Standard: intent → spec → plan; Full: + REVIEW.md and evals)
+  // #633: the work model (Light: an issue only; Standard: intent → spec → plan, Anthropic's AI-native SDLC
+  // playbook simplified; Full: the whole playbook, + REVIEW.md and evals); #851: Light is the default
   const WORK_MODELS = ['light', 'standard', 'full'];
-  const DEFAULT_WORK_MODEL = 'standard';
+  const DEFAULT_WORK_MODEL = 'light';
 
   const filled = (v) => typeof v === 'string' && v.trim().length > 0;
   const stepIndex = (s) => Math.max(0, STEPS.findIndex((x) => x.id === s?.step));
@@ -66,7 +68,9 @@
 
   function next(s) {
     if (!canGoNext(s)) return { ...s };
-    return { ...s, step: STEPS[stepIndex(s) + 1].id };
+    const step = STEPS[stepIndex(s) + 1].id;
+    // #850: a new project (almost empty) has nothing to analyse yet: its analyses are left for later from step 3 on
+    return { ...s, step, ...(step === 'analysis' && s?.source === 'new' ? { analyzeLater: true } : {}) };
   }
 
   function back(s) {

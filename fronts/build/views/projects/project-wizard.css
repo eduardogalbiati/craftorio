@@ -122,6 +122,8 @@
 .wizard-workflows-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .card.wizard-workflows-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; text-align: left; font-size: 13px; cursor: pointer; }
 .card.wizard-workflows-choice:hover { border-color: var(--accent); }
+/* #851: the "Recommended" label of a choice (the work model's Light, the workflows' Analyze the repository) */
+.badge.wizard-recommended { margin-left: 8px; color: var(--green); font-weight: 400; vertical-align: middle; }
 .wizard-workflows-choice:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .wizard-workflows-stage { position: relative; }
 .wizard-workflows[aria-busy="true"] { opacity: .45; pointer-events: none; user-select: none; }
@@ -154,6 +156,12 @@
 .wizard-rank { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); font-size: 11px; color: var(--muted); }
 .wizard-review-refactor .check { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wizard-review-badges { display: flex; align-items: center; gap: 4px; }
+/* #852: one loading look on the review: the running indicator of a card (spinner + "running", beside its action) and
+   the languages' skeleton bar until the facts arrive */
+.wizard-review-running { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--accent); }
+.wizard-review-loading { display: flex; flex-direction: column; gap: 6px; }
+.wizard-review-skeleton { display: block; height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--panel-2) 25%, var(--border) 50%, var(--panel-2) 75%); background-size: 200% 100%; animation: wizard-skeleton 1.4s ease-in-out infinite; }
+@keyframes wizard-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .wizard-review textarea { resize: vertical; font: inherit; font-size: 13px; }
 
 .wizard-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
@@ -165,10 +173,10 @@
 .wizard-bar.job-failed::after { right: 0; background: var(--red); }
 .wizard-bar.job-waiting::after, .wizard-bar.job-skipped::after { right: 100%; }
 /* #724 / #743: the import's progress in the wizard and the tray, the app's spinner at the text's size */
-.wizard-foot .btn .spinner, .wizard-clone-progress .spinner, .wizard-job .spinner, .tray-head .spinner { width: 12px; height: 12px; flex: none; }
+.wizard-foot .btn .spinner, .wizard-clone-progress .spinner, .wizard-job .spinner, .tray-head .spinner, .wizard-review .spinner { width: 12px; height: 12px; flex: none; }
 .wizard-job .spinner { margin-top: 3px; }
 .wizard-foot .btn[aria-busy="true"] { display: inline-flex; align-items: center; gap: 8px; }
-@media (prefers-reduced-motion: reduce) { .wizard-foot .spinner, .wizard-job .spinner, .tray-head .spinner { animation-duration: 2.4s; } }
+@media (prefers-reduced-motion: reduce) { .wizard-foot .spinner, .wizard-job .spinner, .tray-head .spinner { animation-duration: 2.4s; } .wizard-review .spinner, .wizard-review-skeleton { animation: none; } }
 
 @media (max-width: 760px) {
   .wizard-sources, .wizard-columns, .wizard-review-grid, .wizard-review-more { grid-template-columns: minmax(0, 1fr); }
