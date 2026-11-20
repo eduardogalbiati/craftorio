@@ -53,6 +53,14 @@ test('feature workflow (local mode): a simulated run merges right after verify_c
   // no gate on the way to the merge; in simulation the merge is skipped, never run
   assert.ok(!events.some((e) => e.type === 'approval.requested' && ['verify_change', 'resolve_merge', 'merge_blocked'].includes(e.step_id)));
   assert.ok(events.some((e) => e.type === 'action.executed' && e.command === 'merge: local' && e.skipped));
+  // #861: the engine pushes, not an agent: no prompt is sent at push_main, and its output keeps the
+  // fields the agent's answer had (pushed, summary)
+  assert.equal(events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'push_main').length, 0, 'no agent turn at push_main');
+  const pushed = events.filter((e) => e.type === 'step.finished' && e.step_id === 'push_main').map((e) => e.output);
+  assert.equal(pushed.length, 1);
+  assert.equal(typeof pushed[0]?.pushed, 'boolean');
+  assert.equal(typeof pushed[0]?.summary, 'string');
+  assert.equal(pushed[0].pushed, false, 'in simulation nothing is pushed (the merge was skipped)');
 });
 test('feature workflow (local mode): validated mode stops at developer_check with a local diff_base (no origin/ prefix); auto mode skips it', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
