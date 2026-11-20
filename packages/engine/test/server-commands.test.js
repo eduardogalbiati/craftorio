@@ -22,6 +22,10 @@ const SERVERS = [
   'bun dev',
   'bun run dev',
   'pnpm --filter web dev',
+  // pnpm's -w is --workspace-root (no value); npm's -w is --workspace <name>
+  'pnpm -w dev',
+  'pnpm -w run dev',
+  'npm -w web run dev',
   'vite',
   'npx vite --port 5173',
   'uvicorn app.main:app --reload',

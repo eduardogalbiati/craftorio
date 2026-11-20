@@ -42,8 +42,19 @@ const child = spawn(process.execPath, [process.argv[2], 'next', 'dev'], { stdio:
 process.stdout.write('server ' + child.pid + '\\n');
 child.on('exit', (code, signal) => { process.stdout.write('server-exit ' + code + ' ' + signal + '\\n'); setTimeout(() => process.exit(0), 50); });
 `;
+// the same CLI with a server already started in the background before (same command line): it starts
+// the background one, then the foreground one a moment later, and exits when the foreground one ends
+const CLI_TWO_JS = `const { spawn } = require('child_process');
+const bg = spawn(process.execPath, [process.argv[2], 'next', 'dev'], { stdio: 'ignore' });
+process.stdout.write('background ' + bg.pid + '\\n');
+setTimeout(() => {
+  const child = spawn(process.execPath, [process.argv[2], 'next', 'dev'], { stdio: 'ignore' });
+  process.stdout.write('server ' + child.pid + '\\n');
+  child.on('exit', () => setTimeout(() => process.exit(0), 50));
+}, 300);
+`;
 
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const alive =(pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function waitFor(predicate, ms) {
@@ -54,13 +65,13 @@ function waitFor(predicate, ms) {
   });
 }
 
-async function runWith(t, { background }) {
+async function runWith(t, { background, withBackgroundFirst = false }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-853-'));
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, YAML);
   fs.writeFileSync(path.join(dir, 'server.js'), SERVER_JS);
-  fs.writeFileSync(path.join(dir, 'cli.js'), CLI_JS);
-  const seen = { calls: 0, serverPid: null, cliExit: null, serverAliveAfterWait: null, stoppedByGuard: false };
+  fs.writeFileSync(path.join(dir, 'cli.js'), withBackgroundFirst ? CLI_TWO_JS : CLI_JS);
+  const seen = { calls: 0, serverPid: null, backgroundPid: null, cliExit: null, serverAliveAfterWait: null, stoppedByGuard: false };
   const leftovers = [];
   t.after(() => {
     for (const pid of leftovers) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
@@ -77,6 +88,13 @@ async function runWith(t, { background }) {
     const cliExited = new Promise((r) => cli.on('exit', (code, signal) => r({ code, signal })));
     opts.onItem?.({ kind: 'spawn', pid: cli.pid, command: process.execPath, args: [], cwd: dir, env: [] });
     opts.onSpawn?.({ pid: cli.pid, shim: false });
+    if (withBackgroundFirst) {
+      await waitFor(() => /background \d+/.test(out), 5000);
+      seen.backgroundPid = Number(/background (\d+)/.exec(out)?.[1]) || null;
+      if (seen.backgroundPid) leftovers.push(seen.backgroundPid);
+      opts.onItem?.({ kind: 'tool_call', id: 's0', name: 'Bash', input: { command: 'next dev', run_in_background: true } });
+      opts.onItem?.({ kind: 'tool_result', id: 's0', output: 'Command running in background with ID: bash_1' });
+    }
     await waitFor(() => /server \d+/.test(out), 5000);
     seen.serverPid = Number(/server (\d+)/.exec(out)?.[1]) || null;
     if (seen.serverPid) leftovers.push(seen.serverPid);
@@ -153,4 +171,13 @@ test('a server started with run_in_background is not stopped by the guard', { ti
   assert.equal(warns.length, 0);
   assert.equal(finished.status, 'success', finished.error);
   assert.equal(finished.summary.servers_in_foreground ?? 0, 0);
+});
+
+test('with the same command already running in the background, only the foreground server is stopped', { timeout: 60000 }, async (t) => {
+  const { finished, warns, seen } = await runWith(t, { background: false, withBackgroundFirst: true });
+  assert.equal(seen.stoppedByGuard, true, 'the engine stopped the foreground server');
+  assert.equal(alive(seen.serverPid), false);
+  assert.equal(alive(seen.backgroundPid), true, 'the background server started earlier is still running');
+  assert.equal(warns.length, 1);
+  assert.equal(finished.status, 'success', finished.error);
 });
