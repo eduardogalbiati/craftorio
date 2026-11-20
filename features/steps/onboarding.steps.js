@@ -90,6 +90,93 @@ Given('a local git repository with some code is ready to import', async ({ e2e }
   e2e.localRepo = makeRepository(e2e.scratch, 'sample-repo', { withCode: true });
 });
 
+// ---- #844: a repository whose history the ways of working must read right -----------------------------------
+// A local git repository (file:// URL, as above) whose history is built commit by commit with its own author and
+// date: the owner's pushes straight to main, outside contributors' pull requests merged by the owner as GitHub
+// does ("Merge pull request #<n> from <login>/<branch>", --no-ff), tags, and package.json with or without a test
+// command. Git identities: the owner commits under every identity left once each other person has one (same
+// name or same e-mail: "Ana Lima <ana@shop.dev>", "Ana Lima <ana.lima@gmail.com>", "ana <ana@shop.dev>"...).
+const OWNER_IDENTITIES = [['Ana Lima', 'ana@shop.dev'], ['Ana Lima', 'ana.lima@gmail.com'], ['ana', 'ana@shop.dev'], ['A. Lima', 'ana.lima@gmail.com'], ['ana-lima', 'ana@shop.dev']];
+const OUTSIDERS = [['Bruno Reis', 'bruno@outside.dev', 'bruno-reis'], ['Carla Dias', 'carla@outside.dev', 'carla-dias'], ['Davi Sousa', 'davi@outside.dev', 'davi-sousa'], ['Eva Rocha', 'eva@outside.dev', 'eva-rocha']];
+
+function historyRepository(scratch, name, { scripts = {}, files = {} } = {}) {
+  const folder = path.join(scratch, 'folders', name);
+  fs.mkdirSync(folder, { recursive: true });
+  const config = path.join(scratch, 'empty.gitconfig');
+  if (!fs.existsSync(config)) fs.writeFileSync(config, '');
+  let day = 0;
+  const git = (args, [who, email] = OWNER_IDENTITIES[0]) => {
+    day += 1;
+    const date = new Date(Date.UTC(2026, 6, 1) + day * 86400000).toISOString();
+    const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: config, GIT_AUTHOR_NAME: who, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: who, GIT_COMMITTER_EMAIL: email, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date };
+    return execFileSync('git', ['-c', 'core.autocrlf=false', ...args], { cwd: folder, env, encoding: 'utf8' });
+  };
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(folder, rel)), { recursive: true });
+    fs.writeFileSync(path.join(folder, rel), text);
+  };
+  write('README.md', `# ${name}\n`);
+  write('package.json', JSON.stringify({ name, private: true, scripts }, null, 2));
+  write('src/router.js', sourceFile(0));
+  for (const [rel, text] of Object.entries(files)) write(rel, text);
+  git(['init', '-q', '-b', 'main']);
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'First commit']);
+  // a change on main by `identity`, its file the n-th version of the router
+  let n = 0;
+  const push = (identity, message) => { n += 1; write('src/router.js', sourceFile(n)); git(['commit', '-q', '-am', message], identity); };
+  // a pull request of `login` (its commit by `identity`) merged into main by the owner, as GitHub merges it
+  let pr = 10;
+  const pull = (identity, login) => {
+    pr += 1;
+    const branch = `change-${pr}`;
+    git(['checkout', '-q', '-b', branch]);
+    n += 1;
+    write(`src/change-${pr}.js`, `module.exports = ${n};\n`);
+    git(['add', '-A']);
+    git(['commit', '-q', '-m', `Change ${pr}`], identity);
+    git(['checkout', '-q', 'main']);
+    git(['merge', '-q', '--no-ff', '-m', `Merge pull request #${pr} from ${login}/${branch}`, branch]);
+    git(['branch', '-q', '-D', branch]);
+  };
+  const tag = (name) => git(['tag', name]);
+  return { folder, push, pull, tag, url: pathToFileURL(folder).href };
+}
+
+// {people} people under {identities} identities: the owner (identities - people + 1 of them) pushes straight to
+// main, the others are outside contributors whose pull requests are merged; a tag after each round; no test
+// command and no test file
+Given("a local git repository is ready to import where {int} people commit under {int} git identities, the owner pushes straight to main, outside contributors' pull requests are merged, releases are tagged and nothing is tested", async ({ e2e }, people, identities) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const ownerIdentities = identities - people + 1;
+  if (people < 2 || ownerIdentities < 1 || ownerIdentities > OWNER_IDENTITIES.length || people - 1 > OUTSIDERS.length) {
+    throw new Error(`cannot seed ${people} people under ${identities} identities (at most ${OWNER_IDENTITIES.length} for the owner, ${OUTSIDERS.length} outsiders)`);
+  }
+  const repo = historyRepository(e2e.scratch, 'history-repo', { scripts: { start: 'node src/router.js' } });
+  const outsiders = OUTSIDERS.slice(0, people - 1);
+  for (let round = 1; round <= 3; round++) {
+    OWNER_IDENTITIES.slice(0, ownerIdentities).forEach((identity, i) => repo.push(identity, `Round ${round}: change ${i + 1} on main`));
+    outsiders.forEach(([who, email, login]) => repo.pull([who, email], login));
+    repo.tag(`v1.${round - 1}.0`);
+  }
+  e2e.localRepo = repo.url;
+});
+
+// the counterpart: every change lands through a pull request (one author), and the tests run with a test command
+Given('a local git repository is ready to import where every change lands through a merged pull request and the tests run with {string}', async ({ e2e }, command) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const script = command.replace(/^npm (run )?/, '');
+  if (script !== 'test') throw new Error(`only "npm test" is seeded (got "${command}")`);
+  const repo = historyRepository(e2e.scratch, 'pr-repo', {
+    scripts: { test: 'node --test' },
+    files: { 'test/router.test.js': "const test = require('node:test');\nconst { route } = require('../src/router');\ntest('route', () => { route('a', 1); });\n" },
+  });
+  const [who, email] = OWNER_IDENTITIES[0];
+  for (let i = 0; i < 4; i++) repo.pull([who, email], 'ana-lima');
+  repo.tag('v1.0.0');
+  e2e.localRepo = repo.url;
+});
+
 // the app's machine slots in a folder of this scenario's own (never the machine's: no other run waits),
 // where the analysis slot is held by this test process (alive, so never stale) until the app closes
 Given("the app is open while another analysis holds the machine's analysis slot", async ({ e2e }) => {
@@ -1382,4 +1469,21 @@ Then("the review's Backlog card does not say {string}", async ({ e2e }, text) =>
   const card = reviewBacklog(e2e.window);
   await expect(card.getByTestId('wizard-review-backlog-issues-disabled')).toHaveCount(0);
   await expect(card.getByText(text)).toHaveCount(0);
+});
+
+// ---- #844: what the wizard reads from a repository with no tests and tagged milestones ------------------------------
+// The ways of working profile (wizard-profile) of a repository with no test command and no test file says so ("No
+// tests found") or leaves the tests open, never "Unit tests"; the release row's selector (wizard-workflow
+// data-kind="release", wizard-workflow-select) shows the release style the project is saved with.
+Then("the wizard's ways of working profile says no tests were found or leaves the tests open", async ({ e2e }) => {
+  const profile = wizard(e2e.window).getByTestId('wizard-profile');
+  await expect(profile).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(profile).toContainText(/no tests( were)? found|tests?\b[^·]*\bopen\b|tests?\s*\?/i, { timeout: IMPORT_TIMEOUT });
+  await expect(profile).not.toContainText(/unit tests|unit and e2e/i);
+});
+
+Then('the suggested {string} workflow has {string} picked', async ({ e2e }, kind, label) => {
+  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
+  await expect(select).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`), { timeout: IMPORT_TIMEOUT });
 });

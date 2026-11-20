@@ -102,3 +102,93 @@ Feature: A project's ways of working, from an interview
     Then the interview shows the saved profile with its evidence, its open questions and the proposed workflows
     And the interview says when the repository was analyzed
     And the interview offers "Analyze again" as a secondary action
+
+  # #844: the profile says what the history shows, no more. The imported repository (a local git repository built
+  # commit by commit, see features/steps/onboarding.steps.js) has no test command and no test file, tags after each
+  # round, the owner pushing straight to main under 3 git identities and 2 outside contributors whose pull requests
+  # the owner merges: 3 people, 5 identities. The wizard picks the "Milestone" release style for it, and the project
+  # is saved with that pick.
+  @issue-844
+  Scenario: A repository with no tests says no tests were found, and Ways of working shows the release style picked in the wizard
+    Given the app is open
+    And a local git repository is ready to import where 3 people commit under 5 git identities, the owner pushes straight to main, outside contributors' pull requests are merged, releases are tagged and nothing is tested
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "notests-844"
+    And I go to the next step of the wizard
+    And I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard shows the ways of working profile
+    And the wizard's suggested workflows are not dimmed
+    And the wizard's ways of working profile says no tests were found or leaves the tests open
+    And the suggested "release" workflow has "Milestone · tag + notes" picked
+    When I go to the next step of the wizard
+    And I finish the wizard
+    Then the project page of "notests-844" is open
+    When I open the Ways of working interview
+    Then the interview shows the saved profile with its evidence, its open questions and the proposed workflows
+    And the interview says no tests were found or asks about them, never "unit tests"
+    And the interview's release style is "milestone", as picked in the wizard, never "train"
+
+  @issue-844
+  Scenario: Pushes straight to main next to outside contributors' pull requests are not read as "Remote: pull requests", and the authors are counted as people
+    Given the app is open
+    And a local git repository is ready to import where 3 people commit under 5 git identities, the owner pushes straight to main, outside contributors' pull requests are merged, releases are tagged and nothing is tested
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "mixed-844"
+    And I go to the next step of the wizard
+    And I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard shows the ways of working profile
+    And the wizard's suggested workflows are not dimmed
+    And the wizard's "ways of working profile" shows none of these English texts:
+      | Remote: pull requests |
+    When I go to the next step of the wizard
+    And I finish the wizard
+    Then the project page of "mixed-844" is open
+    When I open the Ways of working interview
+    Then the interview shows the saved profile with its evidence, its open questions and the proposed workflows
+    And the interview reads the mode as the local flow, or asks about it naming the pushes to main and the outside pull requests
+    And the interview counts 3 people among the authors
+
+  # The counterpart, so the fix does not swing the other way: a repository where every change lands through a pull
+  # request (one author) and the tests run with "npm test" still reads pull requests and unit tests.
+  @issue-844
+  Scenario: A repository where every change lands through a pull request and the tests run still reads pull requests and unit tests
+    Given the app is open
+    And a local git repository is ready to import where every change lands through a merged pull request and the tests run with "npm test"
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "pulls-844"
+    And I go to the next step of the wizard
+    And I choose "Analyze the repository" in the wizard's suggested workflows
+    Then the wizard shows the ways of working profile
+    And the wizard's suggested workflows are not dimmed
+    When I go to the next step of the wizard
+    And I finish the wizard
+    Then the project page of "pulls-844" is open
+    When I open the Ways of working interview
+    Then the interview shows the saved profile with its evidence, its open questions and the proposed workflows
+    And the interview's profile reads "Mode: pull requests"
+    And the interview's profile reads "Tests: unit tests"
+
+  # #847: with the interface in Português (Brasil) every text of the drawer reads in Portuguese: the open questions'
+  # labels, their hints (the question asked) and their options, and the run defaults. The texts below are the
+  # English ones the owner found left in the drawer.
+  @issue-847
+  Scenario: With the interface in Português (Brasil), the open questions of Ways of working and their options read in Portuguese
+    Given the app is open
+    And the demo project's folder is a git repository where one author commits straight to main
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Projetos" in the sidebar
+    And I open the project "demo-app" from the Projects screen
+    And I open the Ways of working interview
+    And I start the interview's analysis
+    Then the interview shows none of these English texts:
+      | Validate every round                                                  |
+      | Approve every change before it lands, or trust the automatic checks? |
+      | The most one issue may spend on models, in US$.                       |
+      | Capture the screens a change touches as its evidence?                 |
+      | Trust auto                                                            |
+      | On                                                                    |

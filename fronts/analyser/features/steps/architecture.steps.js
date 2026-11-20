@@ -1311,6 +1311,35 @@ Then('the city\'s {string} panel shows only its title row', async ({ e2e }, name
   expect(box && box.height, 'one title row high').toBeLessThan(80);
 });
 
+// ---- #847: the Health tab and the city's panels in the interface language ----------------------------------
+// The Health tab (data-testid="project-health": the excluded files' line, the complexity line, the quality gate's
+// chips) and a city panel's empty line (the "Most connected" panel's data-testid="city-connections-empty") follow
+// the interface language: none of the English texts of the table is left (features/support/english-texts.js).
+const { englishTextsIn, tableTexts } = require('../../../../features/support/english-texts');
+
+Then('the Health tab shows none of these English texts:', async ({ e2e }, table) => {
+  const health = byId(e2e.window, 'project-health');
+  await expect(health).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // the facts read from git are on screen (their complexity line among them) before the texts are looked for
+  await expect(byId(e2e.window, 'architecture-facts')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(byId(e2e.window, 'architecture-complexity')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const texts = tableTexts(table);
+  await expect.poll(() => englishTextsIn(health, texts), { message: 'English texts left in the Health tab', timeout: LOAD_TIMEOUT }).toEqual([]);
+});
+
+// the panel's empty line: one sentence (a single full stop, at its end) with none of the English texts
+Then('the city\'s {string} panel says in one sentence that it has nothing to list, with none of these English texts:', async ({ e2e }, name, table) => {
+  const panel = cityPanel(e2e.window, name).first();
+  await expect(panel, `the "${name}" panel`).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const empty = panel.locator('[data-testid$="-empty"]').filter({ visible: true }).first();
+  await expect(empty, `the "${name}" panel's empty line`).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const text = (await empty.innerText()).trim();
+  expect(text, 'a sentence').toMatch(/\S/);
+  expect(text, 'one sentence, ended by its only full stop').toMatch(/^[^.!?]+[.!?]$/);
+  const texts = tableTexts(table);
+  await expect.poll(() => englishTextsIn(empty, texts), { message: `English texts left in the "${name}" panel`, timeout: LOAD_TIMEOUT }).toEqual([]);
+});
+
 Then('the city\'s {string} panel is expanded', async ({ e2e }, name) => {
   const panel = cityPanel(e2e.window, name).first();
   await expect(panel).toBeVisible({ timeout: LOAD_TIMEOUT });

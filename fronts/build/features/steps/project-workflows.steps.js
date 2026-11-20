@@ -436,3 +436,85 @@ Then('the interview introduces the analysis', async ({ e2e }) => {
   await expect(intro).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(intro).toHaveText(/\S/);
 });
+
+// ---- #844: the profile tells what the history says, no more ------------------------------------------------------------
+// The profile (ways-of-working-profile) shows one badge per field ("Mode: local merge", "Release: milestone", "Tests:
+// unit tests"...) and its evidence (ways-of-working-evidence, "team authors 3 · commits 12"); an open question
+// (ways-of-working-question) is a field the history could not settle, its label and its hint (the question asked).
+// The repositories are seeded by features/steps/onboarding.steps.js (#844), imported with the wizard.
+const profileOf = (page) => interviewPart(page, 'ways-of-working-profile');
+// the profile's badge of a field ("Mode", "Release", "Tests"), by its label at the start
+const profileField = (page, label) => visible(profileOf(page).getByText(new RegExp(`^\\s*${escapeRe(label)}:`))).first();
+const questionAbout = (page, words) => visible(interview(page).getByTestId('ways-of-working-question')).filter({ hasText: words });
+
+Then('the interview\'s profile reads {string}', async ({ e2e }, text) => {
+  await expect(profileOf(e2e.window)).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(visible(profileOf(e2e.window).getByText(text, { exact: true })).first(), `the profile's "${text}"`).toBeVisible();
+});
+
+// no "unit tests" (nor "unit and E2E tests") anywhere in the profile: its Tests badge says none were found, or the
+// tests are an open question
+Then('the interview says no tests were found or asks about them, never {string}', async ({ e2e }, words) => {
+  const page = e2e.window;
+  await expect(profileOf(page)).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(profileOf(page)).not.toContainText(new RegExp(escapeRe(words), 'i'));
+  await expect(profileOf(page)).not.toContainText(/unit and e2e tests/i);
+  const tests = profileField(page, 'Tests');
+  const saysNone = (await tests.count()) > 0 && /no tests/i.test(await tests.innerText());
+  const asks = (await questionAbout(page, /test/i).count()) > 0;
+  expect(saysNone || asks, 'the Tests badge says no tests were found, or the tests are an open question').toBe(true);
+});
+
+// the Release badge reads the style (the value the wizard's release row picked), and the "Release style" question,
+// when asked, has it as its default; `never` is in neither
+Then('the interview\'s release style is {string}, as picked in the wizard, never {string}', async ({ e2e }, style, never) => {
+  const page = e2e.window;
+  const release = profileField(page, 'Release');
+  await expect(release).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(release).toHaveText(new RegExp(`^\\s*Release:\\s*${escapeRe(style)}\\b`, 'i'));
+  await expect(release).not.toContainText(new RegExp(`\\b${escapeRe(never)}\\b`, 'i'));
+  const question = questionAbout(page, /Release style/i);
+  if (await question.count()) {
+    const select = question.first().locator('select').first();
+    await expect(select, 'the "Release style" default').toHaveValue(style);
+  }
+});
+
+// the history has both the owner's pushes straight to main and outside contributors' merged pull requests: the Mode
+// badge reads the local flow, or the mode is an open question whose text names both facts; never pull requests alone
+Then('the interview reads the mode as the local flow, or asks about it naming the pushes to main and the outside pull requests', async ({ e2e }) => {
+  const page = e2e.window;
+  const mode = profileField(page, 'Mode');
+  await expect(mode).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  const text = await mode.innerText();
+  expect(text, 'the Mode badge does not settle on pull requests').not.toMatch(/^\s*Mode:\s*(Remote:\s*)?pull requests\s*$/i);
+  if (/local/i.test(text)) return;
+  const question = questionAbout(page, /Mode/i).first();
+  await expect(question, 'the mode is an open question').toBeVisible();
+  await expect(question).toContainText(/\bmain\b/i);
+  await expect(question).toContainText(/pull requests?/i);
+});
+
+// the evidence's count of authors is the number of people (identities with the same name or e-mail are one person)
+Then('the interview counts {int} people among the authors', async ({ e2e }, people) => {
+  const evidence = visible(interview(e2e.window).getByTestId('ways-of-working-evidence'));
+  await expect(evidence.first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  const counts = [];
+  for (const text of await evidence.allInnerTexts()) {
+    for (const m of text.matchAll(/\b(?:authors|people)\b\s*:?\s*(\d+)|(\d+)\s+(?:authors|people)\b/gi)) counts.push(Number(m[1] ?? m[2]));
+  }
+  expect(counts.length, 'the evidence counts the authors').toBeGreaterThan(0);
+  expect([...new Set(counts)], 'the authors counted as people').toEqual([people]);
+});
+
+// ---- #847: the interview in the interface language ---------------------------------------------------------------------
+// Every text of the drawer (the open questions' labels, hints and options, the run defaults, the profile) follows the
+// interface language: none of the English texts of the table is left (features/support/english-texts.js).
+const { englishTextsIn, tableTexts } = require('../../../../features/support/english-texts');
+
+Then('the interview shows none of these English texts:', async ({ e2e }, table) => {
+  const drawer = interview(e2e.window);
+  await expect(profileOf(e2e.window)).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  const texts = tableTexts(table);
+  await expect.poll(() => englishTextsIn(drawer, texts), { message: 'English texts left in Ways of working', timeout: LOAD_TIMEOUT }).toEqual([]);
+});

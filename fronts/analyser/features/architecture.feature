@@ -777,3 +777,43 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     Then the city says "1 commit since the last analysis" with the analysis button next to it
     And the City tab offers the "Analyze this project" button
     And the City tab's analysis button is primary
+
+  # #847: with the interface in Português (Brasil) the Health tab's facts read in Portuguese: the excluded files'
+  # line (nothing excluded in this project), the complexity line (JavaScript measured inside the app, Python not
+  # without lizard, as in the #385 scenarios: skipped on a machine with lizard) and the quality gate's chips (no
+  # gate configured). The texts below are the English ones the owner found left on the tab.
+  @issue-847
+  Scenario: With the interface in Português (Brasil), the Health tab's excluded files, complexity and quality gate read in Portuguese
+    Given the complexity tool lizard is not installed on this machine
+    And the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and no architecture report
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Projetos" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Saúde" project tab
+    Then the Health tab shows none of these English texts:
+      | Excluídos: nothing                                           |
+      | Complexity: measured for JavaScript; not measured for Python |
+      | Complexity · missing                                         |
+      | Coverage · missing                                           |
+      | Duplication · missing                                        |
+
+  # #847: the "Most connected" panel ("Mais conectados") of a city whose drawn files import nothing from each other
+  # (a JavaScript and a Python file) says so in one Portuguese sentence, not a Portuguese start with the English
+  # reason glued after it.
+  @issue-847
+  Scenario: With the interface in Português (Brasil), the city's "Most connected" panel says in one Portuguese sentence that it has nothing to list
+    Given the app is open
+    And the workspace has a git project "billing-service" with a JavaScript and a Python file and a city plan
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open "Projetos" in the sidebar
+    And I open the project "billing-service" from the Projects screen
+    And I open the "Cidade" project tab
+    Then the city shows the "Most connected" panel
+    And the city's "Most connected" panel says in one sentence that it has nothing to list, with none of these English texts:
+      | import between the drawn files was found |
+      | No connections to list                   |
