@@ -290,6 +290,22 @@ Given('the workspace has a git project {string} with mostly Rust files, a city p
   await seedGitProject(e2e, name, { seed: seedRustRepo, withPlan: true, withReport: true, findings: [] });
 });
 
+// #849: one file far larger than the rest (src/billing.js, ~3,000 lines, next to four files of 10 to 30
+// lines in src/ and tools/): its building towers over the city the camera has to frame → its head
+function seedDominantRepo(folder) {
+  initRepo(folder);
+  const date = '2026-09-01T10:00:00Z';
+  commitFiles(folder, 'Add billing, its rates and the export tools', date, {
+    'src/billing.js': jsBody(3000), 'src/rates.js': jsBody(20), 'src/rules.js': jsBody(30),
+    'tools/export.py': pyBody(10), 'tools/report.py': pyBody(15),
+  });
+  return { commit: git(folder, ['rev-parse', 'HEAD']), date };
+}
+
+Given('the workspace has a git project {string} with one file far larger than the others and a city plan', async ({ e2e }, name) => {
+  await seedGitProject(e2e, name, { seed: seedDominantRepo, withPlan: true });
+});
+
 // --- The project city (#373) ---
 
 Then('the City tab shows the project city', async ({ e2e }) => {
@@ -560,6 +576,79 @@ Then('the city is back inside the tab', async ({ e2e }) => {
   const viewport = e2e.window.viewportSize() || await e2e.window.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const box = await city.boundingBox();
   expect(box.width, 'narrower than the window (the sidebar shows)').toBeLessThan(viewport.width - 100);
+});
+
+// ---------- the city's camera frames the whole city, and zoom out works (#849) ----------
+// The city's root (data-testid="project-city", project-city.js) tells where its camera rests, updated
+// each time the camera settles: data-camera-distance (the camera's distance to its target, a number),
+// data-home-distance (that distance for the whole-city view, the ⌂ button's) and data-city-framed="true"
+// when every district and the top of the tallest building are inside the frame (recomputed when the
+// city's size changes, as when it expands over the whole window). The − button is the camera toolbar's
+// "Zoom out" (data-pc-zoom="out"), the + button its "Zoom in" (data-pc-zoom="in").
+const cameraNumber = async (city, attr) => {
+  const value = await city.getAttribute(attr);
+  const n = value == null || value === '' ? NaN : Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+const zoomButton = (page, name) => cityBox(page).getByRole('button', { name, exact: true }).first();
+
+// the camera's distance once it has stopped: two reads in a row give the same number
+async function settledDistance(city) {
+  let last = null;
+  await expect.poll(async () => {
+    const now = await cameraNumber(city, 'data-camera-distance');
+    const same = now !== null && last !== null && Math.abs(now - last) <= Math.max(1e-6, last * 0.001);
+    last = now;
+    return same;
+  }, { message: 'the camera settles at a distance (data-camera-distance on the city)', timeout: LOAD_TIMEOUT, intervals: [250] }).toBe(true);
+  return last;
+}
+
+Then('the city shows the whole city in the frame', async ({ e2e }) => {
+  const city = cityBox(e2e.window);
+  await settledDistance(city);
+  await expect(city, 'every district and the top of the tallest building are in the frame (data-city-framed on the city)')
+    .toHaveAttribute('data-city-framed', 'true', { timeout: LOAD_TIMEOUT });
+});
+
+Then('the camera rests at the whole-city view', async ({ e2e }) => {
+  const city = cityBox(e2e.window);
+  const distance = await settledDistance(city);
+  await expect.poll(() => cameraNumber(city, 'data-home-distance'), { message: 'the city tells the whole-city distance (data-home-distance)', timeout: LOAD_TIMEOUT }).toBeGreaterThan(0);
+  const home = await cameraNumber(city, 'data-home-distance');
+  expect(Math.abs(distance - home) / home, `the camera (${distance}) rests at the whole-city distance (${home})`).toBeLessThanOrEqual(0.02);
+});
+
+When('I zoom in the city {int} times', async ({ e2e }, times) => {
+  const city = cityBox(e2e.window);
+  for (let i = 0; i < times; i++) {
+    const before = await settledDistance(city);
+    await zoomButton(e2e.window, 'Zoom in').click();
+    await expect.poll(() => cameraNumber(city, 'data-camera-distance'), { message: `zoom in ${i + 1} brings the camera closer than ${before}`, timeout: LOAD_TIMEOUT }).toBeLessThan(before);
+  }
+  await settledDistance(city);
+});
+
+When('I zoom out the city', async ({ e2e }) => {
+  const city = cityBox(e2e.window);
+  e2e.cityCameraBefore = await settledDistance(city);
+  await zoomButton(e2e.window, 'Zoom out').click();
+});
+
+When('I zoom out the city {int} times', async ({ e2e }, times) => {
+  const city = cityBox(e2e.window);
+  for (let i = 0; i < times; i++) {
+    await settledDistance(city);
+    await zoomButton(e2e.window, 'Zoom out').click();
+  }
+});
+
+Then('the camera is at least {int}% farther than before', async ({ e2e }, percent) => {
+  const city = cityBox(e2e.window);
+  const before = e2e.cityCameraBefore;
+  expect(before, 'the camera\'s distance was read before the zoom').toBeGreaterThan(0);
+  const target = before * (1 + percent / 100);
+  await expect.poll(() => cameraNumber(city, 'data-camera-distance'), { message: `the camera moves from ${before} to at least ${target} (${percent}% farther)`, timeout: LOAD_TIMEOUT }).toBeGreaterThanOrEqual(target);
 });
 
 // ---------- an issue's impact preview on the city (#375) ----------
