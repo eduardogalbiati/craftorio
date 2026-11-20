@@ -222,6 +222,19 @@ test('#850 project page: with a release workflow, "Set up release CI" no longer 
   }
 });
 
+test('#850 project page: with a release workflow, "Set up release CI" gives its own reason, in en and pt-BR', { timeout: 30000 }, async () => {
+  for (const lang of ['en', 'pt-BR']) {
+    const ready = catalog(lang)['onboarding.next_steps_release_ci_reason_ready'];
+    assert.equal(typeof ready === 'string' && ready.length > 0, true, `${lang}: onboarding.next_steps_release_ci_reason_ready`);
+    assert.notEqual(ready, catalog(lang)['onboarding.next_steps_release_ci_reason'], `${lang}: a different text from the missing-workflow reason`);
+    const app = await projectPage(WITH_RELEASE, lang);
+    const entry = W.byTestId(nextStepsCard(app)?.outer || '', 'next-step-release-ci');
+    assert.ok(entry, `${lang}: the release CI entry`);
+    const reason = W.byTestId(entry.outer, 'next-step-reason');
+    assert.equal(reason ? textOf(reason) : null, ready, `${lang}: ${textOf(entry)}`);
+  }
+});
+
 test('#850 guard: without a release workflow, "Set up release CI" still says it needs one', { timeout: 30000 }, async () => {
   const app = await projectPage(WITHOUT_RELEASE);
   const entry = W.byTestId(nextStepsCard(app)?.outer || '', 'next-step-release-ci');
