@@ -2,7 +2,8 @@
 // docs/work/first-project-onboarding/plan.md): Home in a new workspace with the wizard open
 // (fronts/build/views/projects/project-wizard.js), driven through its own controls to the state of --mode:
 //   start         step 1, the two sources
-//   repository    step 2 with a URL and a name typed, before Next
+//   repository    step 2 with a URL and a name typed, before Next (#848: the demo account's repositories
+//                 under the field, filtered by --fill "#wizard-repo=<text>")
 //   cloning       the Repository step cloning in place (#743: Next's spinner and "Cloning <name>…", no
 //                 status card; #724: the tray stays hidden behind the open wizard) (the real onboarding:changed
 //                 channel says cloning for the project an import just made: a clone of a local repository
@@ -91,7 +92,8 @@ const typeIn = (js, sel, value) => js(`
   el.dispatchEvent(new Event('input', { bubbles: true }));`);
 
 // #632 (mock-3): gh signed in as a demo account and glab missing, so Create new project's private remote
-// can be ticked from the start mode (--click); the import modes keep the machine's own answer (its repo list)
+// can be ticked from the start mode (--click); the repository mode too (#848), the other import modes keep
+// the machine's own answer (its repo list)
 const DEMO_ACCOUNTS = [
   { provider: 'github', cli: 'gh', installed: true, signedIn: true, account: 'octo-demo' },
   { provider: 'gitlab', cli: 'glab', installed: false, signedIn: false },
@@ -103,9 +105,24 @@ function stubAccounts() {
   ipcMain.handle('onboarding:accounts', () => DEMO_ACCOUNTS);
 }
 
+// #848: the demo account's repositories, newest first (the API's order), FreeMyTvWebOS outside the 5 newest,
+// so the repository mode shows the list filtering: --fill "#wizard-repo=" (the 5 newest) or
+// --fill "#wizard-repo=freemy" (only FreeMyTvWebOS)
+const DEMO_REPOS = [
+  ['octo-demo/billing-api', true], ['octo-demo/multiagent-orchestrator', false], ['octo-demo/video-skills', false],
+  ['vercel/next.js', false], ['octo-demo/ai-memory', true], ['octo-demo/edugalbs', false], ['octo-demo/FreeMyTvWebOS', false],
+].map(([name, isPrivate], i) => ({ name, private: isPrivate, updatedAt: new Date(Date.now() - (i + 1) * 2 * 86400000).toISOString() }));
+
+function stubRepos() {
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler('onboarding:repos');
+  ipcMain.handle('onboarding:repos', () => DEMO_REPOS);
+}
+
 async function open({ args, click, js, pause, win }) {
   const mode = args.mode || 'start';
-  if (mode === 'start') stubAccounts();
+  if (mode === 'start' || mode === 'repository') stubAccounts();
+  if (mode === 'repository') stubRepos();
   await click('.nav-item[data-view="dashboard"]');
   await click('[data-testid="home-empty-create-project"]');
   await waitFor(js, '[data-testid="project-wizard"] [data-step="start"][aria-current="step"]', 10000);
