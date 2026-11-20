@@ -3,7 +3,7 @@
 // (fronts/analyser/views/project/project-city.js) calls once the bundle has loaded. The HUD (header,
 // legend, cards, controls, the connections panel) is that classic script's; the bundle draws the
 // city and reports what the pointer is on.
-//   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, cityLife, glow, relationsOf, onHover, onPick }) → handle
+//   ProjectCityScene.mount(element, { layout, paint, markers, tests, pins, theme, cityLife, glow, relationsOf, onHover, onPick, onCamera }) → handle
 //   - layout: packages/shared/city-layout.js layoutCity; paint: { colours: [hex], greyed: [bool] } per
 //     building (colourBy, then applyOverlay; #782: the district and landmark labels only for what is hovered, pinned
 //     or flown to, city-layout.js labelsShown); markers: applyOverlay's; tests: draw the test files;
@@ -11,9 +11,10 @@
 //     | 'light' (run3d-theme.js); cityLife, glow (#450, both on by default): the street life (trees,
 //     lamps, benches, cars, the lamps' pools) and the bloom with its vignette; relationsOf(kind, id) → { requires, requiredBy } (city-layout.js
 //     neighbours / districtNeighbours); onHover({ kind, id, x, y } | null) with the pointer's client
-//     position; onPick({ kind, id } | null) on a click (null: the empty sky).
+//     position; onPick({ kind, id } | null) on a click (null: the empty sky); onCamera({ distance, home, framed })
+//     when the camera rests somewhere new (#849: its distance, the home view's, the whole city in the frame).
 //   - handle: update(patch of the same keys; a new layout drops the hover and the pinned card, the
-//     pins stay), pin(target | null) (the card's target), flyTo(flyTarget), home(), zoom(factor),
+//     pins stay), pin(target | null) (the card's target), flyTo(flyTarget), home(), zoom('in' | 'out'),
 //     stats() → { firstFrameMs, fps, buildings, cityLife, glow, props, labels } (labels: labelsShown's; the time to the first frame,
 //     the frame rate while the camera moves; per drawn file { path, archetype, greyed }: its v2
 //     building's kind, scene.jsx buildingsOf, and whether the overlay greys it; the two switches; the
@@ -96,12 +97,13 @@ function App({ store }) {
 
 const same = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
 
-function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, cityLife = true, glow = true, relationsOf, onHover, onPick }) {
+function mount(element, { layout, paint, markers = [], tests = true, pins = [], theme, cityLife = true, glow = true, relationsOf, onHover, onPick, onCamera }) {
   const store = createStore({ layout, layoutKey: 1, paint, markers, tests, pins: [...pins], theme: cityTheme(theme), cityLife: !!cityLife, glow: !!glow, paused: false, level: 0, scoreDistrict: null, hover: null, pinned: null, fly: null, glError: '' });
   Object.assign(store, {
     tagEls: new Map(),
     tagAnchors: new Map(),
     rig: null,
+    onCamera: onCamera || null,
     lastFocus: null,
     invalidate: () => {},
     stats: { mountedAt: performance.now(), firstFrameMs: null, fps: null },
@@ -138,7 +140,7 @@ function mount(element, { layout, paint, markers = [], tests = true, pins = [], 
     pin(target) { store.set(target ? { pinned: target } : { pinned: null, fly: null }); },
     flyTo(target) { if (target) { store.set({ fly: target }); store.rig?.fly(target); } },
     home() { store.set({ fly: null }); store.rig?.home(); },
-    zoom(factor) { store.rig?.zoom(factor); },
+    zoom(direction) { store.rig?.zoom(direction); },
     stats: () => {
       const { layout, paint, cityLife, glow, hover, pinned, fly } = store.get(), built = buildingsOf(layout);
       const buildings = (layout?.buildings || []).map((b, i) => ({ path: b.path, archetype: built[i]?.kind || null, greyed: !!paint?.greyed?.[i] }));

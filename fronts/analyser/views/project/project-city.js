@@ -12,7 +12,8 @@
 // - the notes under it (project-city-notes.js): no plan, a stale plan, commits since the analysis or a current plan
 //   (#782), with the tab's one action (#381: `onAnalyze`, its combined estimate next to it) and its state, the plan's problems;
 // - the hover card of a building, a district or a zone, the card a click pins (project-city-cards.js), the camera
-//   buttons (zoom, home); the states: the facts still loading, not a git repository, no commits, an error with Retry.
+//   buttons (zoom 'in' | 'out', a fixed share of the distance a click, and home: #849 the whole city in the frame; the root's
+//   data-camera-distance, data-home-distance and data-city-framed tell where the camera rests); the states: the facts still loading, not a git repository, no commits, an error with Retry.
 // The overlay API, for the city epic's modules (they add their own files, not code here):
 //   ProjectCity.overlay(name, { highlight: { path: colour }, markers: [path | { path, colour, label }] } | null) sets or removes
 //     a named layer; the layers merge (later names win) and the buildings no layer highlights are greyed (city-layout.js applyOverlay);
@@ -25,7 +26,6 @@
 (() => {
   const BUNDLE = '../../../generated/project-city.js';
   const MISSING = 'The City view is not built: run `npm run build:3d` (or `npm install`) and reload. The Facts view has the same numbers, as tables.';
-  const ZOOM_IN = 0.72, ZOOM_OUT = 1.38;
   const COLOUR_LABEL = { quadrant: 'Quadrant', zone: 'Zone', churn: 'Churn' };
   const ICON_CITY = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="7" width="4" height="8" rx="1"/><rect x="6" y="2" width="4" height="13" rx="1"/><rect x="11" y="5" width="4" height="10" rx="1"/></svg>';
   const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>', ICON_CLOSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>'; // i18n-ignore
@@ -166,6 +166,10 @@
           layout: c.layout, ...paint(), tests: c.tests, pins: c.pins, theme: c.theme, cityLife: c.cityLife, glow: c.glow, relationsOf,
           onHover: (t) => { c.hover = t; renderHover(); },
           onPick: (t) => { c.pinned = t; renderDetail(); },
+          // #849: where the camera rests, on the city's root (data-camera-distance, data-home-distance, data-city-framed)
+          onCamera: ({ distance, home, framed }) => {
+            Object.assign(el.dataset, { cameraDistance: distance.toFixed(2), homeDistance: home.toFixed(2), cityFramed: String(!!framed) });
+          },
         });
         c.drawn = c.layout;
       } catch (e) {
@@ -339,7 +343,7 @@
       else if (t.closest('[data-pc-retry]')) load();
       else if (t.closest('[data-pc-unpin]')) { c.pinned = null; c.handle?.pin(null); renderDetail(); }
       else if (t.closest('[data-pc-home]')) c.handle?.home();
-      else if (t.closest('[data-pc-zoom]')) c.handle?.zoom(t.closest('[data-pc-zoom]').dataset.pcZoom === 'in' ? ZOOM_IN : ZOOM_OUT);
+      else if (t.closest('[data-pc-zoom]')) c.handle?.zoom(t.closest('[data-pc-zoom]').dataset.pcZoom === 'in' ? 'in' : 'out');
       else if (t.closest('[data-pc-theme]')) setTheme(c.theme === 'light' ? 'dark' : 'light');
       else if (t.closest('[data-pc-expand]')) setExpanded(!c.expanded);
       else if (t.closest('[data-pc-flag]')) { const b = t.closest('[data-pc-flag]'), k = b.dataset.pcFlag; c[k] = !c[k]; b.setAttribute('aria-pressed', String(c[k])); c.handle?.update({ [k]: c[k] }); }

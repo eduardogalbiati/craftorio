@@ -32,8 +32,10 @@
 // - Level of detail, by the camera's distance against the home view's: zones and their names only
 //   far away, district names and the parts' details closer (LOD_LABELS), up close (LOD_DETAIL) the
 //   district under the camera's target shows its files' scores as tags (`scoreDistrict`).
-// - The camera (Rig): MapControls as the run's view, the POC's home view (the whole city in the frame,
-//   clear of the HUD: fitDistance), zoom and a fly to a target; the frame loop is on demand (a frame
+// - The camera (Rig): MapControls as the run's view, the home view (#849 cityFrame: the whole city and the
+//   top of its tallest building in the frame, clear of the HUD, refitted on a resize while the user has not
+//   moved the camera), zoom (a fixed share of the distance a click, zoomDistance) and a fly to a target;
+//   at rest it tells store.onCamera({ distance, home, framed }); the frame loop is on demand (a frame
 //   when something moves). The floating tags (landmarks, ports) are DOM nodes moved every frame.
 //   Left alone for IDLE_MS with City life on (and motion allowed), the camera drifts slowly around
 //   what it looks at (#415's idle camera); any input stops it.
@@ -54,6 +56,7 @@ const HOME_DIR = new THREE.Vector3(0.5, 1.15, 1).normalize(); // the home view: 
 const IDLE_MS = 20000, IDLE_TURN = 0.04, UP = new THREE.Vector3(0, 1, 0); // the idle camera: after 20 s, radians a second
 const LOD_LABELS = 0.8, LOD_DETAIL = 0.5; // shares of the home distance
 const FOV = 30;
+const ZOOM_STEP = 0.2, ZOOM_ROOM = 4; // #849: a HUD zoom click's share of the distance; the farthest zoom out, in home distances
 const DIM_MS = 220; // the fade of the buildings outside a pinned file's connections
 const DIM = 0.8; // how far they go toward the theme's dim colour
 const LIT = 0.3; // how far a hovered building's connections go toward the ink
@@ -69,17 +72,54 @@ export function homeOf(bounds, aspect) {
 }
 
 /** The POC's home view: the camera distance along `dir` from `target` at which every corner of `rect` (ground and `top`) shows, clear of the HUD. */
-export function fitDistance(camera, target, dir, rect, top) {
+export function fitDistance(camera, target, dir, rect, top, cap = 4000) {
   const corners = [[rect.x, rect.z], [rect.x + rect.w, rect.z], [rect.x, rect.z + rect.d], [rect.x + rect.w, rect.z + rect.d]];
-  const points = corners.flatMap(([x, z]) => [new THREE.Vector3(x, 0, z), new THREE.Vector3(x, top, z)]);
+  return fitPoints(camera, target, dir, corners.flatMap(([x, z]) => [new THREE.Vector3(x, 0, z), new THREE.Vector3(x, top, z)]), cap);
+}
+
+// fitDistance over any points: the nearest distance (4% steps) at which they all show, clear of the HUD
+function fitPoints(camera, target, dir, points, cap) {
   const probe = camera.clone(), v = new THREE.Vector3();
-  for (let d = 20; d < 4000; d *= 1.04) {
+  for (let d = 20; d < cap; d *= 1.04) {
     probe.position.copy(target).addScaledVector(dir, d);
     probe.lookAt(target);
     probe.updateMatrixWorld();
     if (points.every((p) => { v.copy(p).project(probe); return Math.abs(v.x) < 0.94 && v.y < 0.76 && v.y > -0.95; })) return d;
   }
-  return 4000;
+  return cap;
+}
+
+// #849: what the first view keeps in sight: the city's ground (its ring and the quay past it) and the top
+// corners of its tallest building (antenna included), so one file far larger than the rest never fills the view
+function framePoints(layout) {
+  const b = layout.bounds, built = buildingsOf(layout);
+  const points = [[b.minX - QUAY, b.minZ - QUAY], [b.maxX + QUAY, b.minZ - QUAY], [b.minX - QUAY, b.maxZ + QUAY], [b.maxX + QUAY, b.maxZ + QUAY]].map(([x, z]) => new THREE.Vector3(x, 0, z));
+  let tall = null, top = 0;
+  layout.buildings.forEach((x, i) => { const h = Math.max(x.h, built[i]?.top ?? 0, x.h + (x.antenna || 0)); if (h > top) { tall = x; top = h; } });
+  if (tall) for (const [x, z] of [[tall.x, tall.z], [tall.x + tall.w, tall.z], [tall.x, tall.z + tall.d], [tall.x + tall.w, tall.z + tall.d]]) points.push(new THREE.Vector3(x, Y0 + top, z));
+  return points;
+}
+
+/** #849 the home view: { target, position, distance } of a camera along HOME_DIR that frames the whole city and its tallest top, in a frame of `aspect` (none yet: 1.6). */
+export function cityFrame(layout, aspect) {
+  const b = layout.bounds;
+  const target = new THREE.Vector3((b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2);
+  const probe = new THREE.PerspectiveCamera(FOV, aspect > 0 ? aspect : 1.6, 1, 1e6);
+  const distance = fitPoints(probe, target, HOME_DIR, framePoints(layout), 1e5);
+  return { target, position: target.clone().addScaledVector(HOME_DIR, distance), distance };
+}
+
+/** #849 whether every point of the home view (cityFrame's) shows through `camera`, inside 95% of the frame. */
+export function cityFramed(layout, camera) {
+  const v = new THREE.Vector3();
+  return framePoints(layout).every((p) => { v.copy(p).project(camera); return v.z < 1 && Math.abs(v.x) <= 0.95 && Math.abs(v.y) <= 0.95; });
+}
+
+/** #849 the distance after a HUD zoom click: ZOOM_STEP of the distance closer ('in') or the inverse away ('out'); a click out that passes near the home view lands on it. */
+export function zoomDistance(distance, direction, homeDistance) {
+  if (direction !== 'out') return distance * (1 - ZOOM_STEP);
+  const next = distance / (1 - ZOOM_STEP);
+  return distance < homeDistance && Math.abs(next - homeDistance) <= homeDistance * 0.05 ? homeDistance : next;
 }
 
 // the POC's slab: a rounded box over a ground rect, its top at `top`, `thick` tall
@@ -616,27 +656,32 @@ function Lights({ layout, T, life }) {
 
 function Rig({ layout, store, T }) {
   const { camera, gl, invalidate, scene, size } = useThree();
-  const b = layout.bounds;
-  // the POC's home view, fixed when the city is laid out: a resize keeps the camera where the user put it
-  const home = useMemo(() => {
-    const rect = { x: b.minX - 6, z: b.minZ - 6, w: b.maxX - b.minX + 12, d: b.maxZ - b.minZ + 12 };
-    const target = new THREE.Vector3(rect.x + rect.w / 2, 0, rect.z + rect.d / 2 + rect.d * 0.1); // a little south of the centre
-    const probe = new THREE.PerspectiveCamera(FOV, size.width && size.height ? size.width / size.height : 1.6, 1, 10000);
-    const distance = size.width && size.height ? fitDistance(probe, target, HOME_DIR, rect, 12) : homeOf(b, 1.6);
-    return { target, distance };
-  }, [b]); // eslint-disable-line react-hooks/exhaustive-deps
-  const state = useMemo(() => ({ goal: null, frames: 0, since: 0, first: false, input: performance.now() }), []);
+  // #849 the home view frames the whole city and its tallest top in the canvas's shape (cityFrame); it follows
+  // a resize (the tab shown, the city expanded): the camera goes there while the user has not moved it
+  const aspect = size.width && size.height ? size.width / size.height : 0;
+  const home = useMemo(() => cityFrame(layout, aspect), [layout, aspect]);
+  const homeRef = useRef(home);
+  homeRef.current = home;
+  const state = useMemo(() => ({ goal: null, frames: 0, since: 0, first: false, input: performance.now(), moved: false, placed: false, told: '' }), []);
   const motion = useMemo(moves, []);
   const controls = useMemo(() => {
     const c = new MapControls(camera, gl.domElement);
-    Object.assign(c, { enableDamping: true, dampingFactor: 0.12, minDistance: 12 * (layout.scale || 1), maxDistance: home.distance * 3.2, minPolarAngle: 0.3, maxPolarAngle: 1.25, zoomSpeed: 0.8 });
-    c.target.copy(home.target);
-    camera.position.copy(c.target).addScaledVector(HOME_DIR, home.distance);
-    camera.near = Math.max(0.5, home.distance / 500);
-    camera.far = home.distance * 10;
-    camera.updateProjectionMatrix();
+    Object.assign(c, { enableDamping: true, dampingFactor: 0.12, minDistance: 12 * (layout.scale || 1), minPolarAngle: 0.3, maxPolarAngle: 1.25, zoomSpeed: 0.8 });
     return c;
-  }, [camera, gl, home, layout.scale]);
+  }, [camera, gl, layout.scale]);
+  useLayoutEffect(() => {
+    controls.maxDistance = home.distance * ZOOM_ROOM;
+    camera.near = Math.max(0.5, home.distance / 500);
+    camera.far = home.distance * (ZOOM_ROOM + 6);
+    camera.updateProjectionMatrix();
+    if (!state.moved) {
+      // the first view is placed at once; a later resize flies there (or jumps, motion reduced)
+      if (state.placed && motion) state.goal = { target: home.target.clone(), dist: home.distance, angle: true };
+      else { state.goal = null; controls.target.copy(home.target); camera.position.copy(home.position); }
+      state.placed = true;
+    }
+    invalidate();
+  }, [controls, camera, home, state, motion, invalidate]);
   useEffect(() => {
     scene.fog = new THREE.Fog(T.skyHorizon, home.distance * 2.2, home.distance * 4.8);
     invalidate();
@@ -644,22 +689,23 @@ function Rig({ layout, store, T }) {
   }, [scene, T, home, invalidate]);
   useEffect(() => {
     const onChange = () => invalidate();
-    const stop = () => { state.goal = null; };
+    const stop = () => { state.goal = null; state.moved = true; };
     const touched = () => { state.input = performance.now(); };
     controls.addEventListener('change', onChange);
     gl.domElement.addEventListener('pointerdown', stop);
     gl.domElement.addEventListener('wheel', stop, { passive: true });
     const INPUTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'];
     for (const ev of INPUTS) window.addEventListener(ev, touched, { passive: true });
-    // the commands of the HUD: the home view, a zoom step, a fly to a target
+    // the commands of the HUD: the home view, a zoom step ('in' | 'out', #849: zoomDistance), a fly to a target
     store.rig = {
-      home: () => { state.goal = { target: home.target.clone(), dist: home.distance, angle: true }; invalidate(); },
-      zoom: (k) => {
+      home: () => { const h = homeRef.current; state.moved = false; state.goal = { target: h.target.clone(), dist: h.distance, angle: true }; invalidate(); },
+      zoom: (direction) => {
         const d = camera.position.distanceTo(controls.target);
-        state.goal = { target: controls.target.clone(), dist: THREE.MathUtils.clamp(d * k, controls.minDistance, controls.maxDistance), angle: false };
+        state.moved = true;
+        state.goal = { target: controls.target.clone(), dist: THREE.MathUtils.clamp(zoomDistance(d, direction, homeRef.current.distance), controls.minDistance, controls.maxDistance), angle: false };
         invalidate();
       },
-      fly: (t) => { state.goal = { target: new THREE.Vector3(t.x, t.y || 0, t.z), dist: t.distance, angle: false }; invalidate(); },
+      fly: (t) => { state.moved = true; state.goal = { target: new THREE.Vector3(t.x, t.y || 0, t.z), dist: t.distance, angle: false }; invalidate(); },
     };
     return () => {
       controls.removeEventListener('change', onChange);
@@ -669,7 +715,7 @@ function Rig({ layout, store, T }) {
       controls.dispose();
       store.rig = null;
     };
-  }, [controls, gl, camera, invalidate, store, state, home]);
+  }, [controls, gl, camera, invalidate, store, state]);
   const off = useMemo(() => new THREE.Vector3(), []);
   const v = useMemo(() => new THREE.Vector3(), []);
   useFrame((_, dt) => {
@@ -726,6 +772,15 @@ function Rig({ layout, store, T }) {
       }
       placed.push(r);
       s.el.style.transform = `translate(${s.x.toFixed(1)}px,${r.y1.toFixed(1)}px) translate(-50%,-100%)`;
+    }
+    // #849: once the camera rests, the HUD hears where it is (once per change, not every frame)
+    if (!state.goal && store.onCamera) {
+      const distance = camera.position.distanceTo(controls.target);
+      const told = `${distance.toFixed(2)}|${home.distance.toFixed(2)}|${size.width}x${size.height}`;
+      if (told !== state.told) {
+        state.told = told;
+        store.onCamera({ distance, home: home.distance, framed: cityFramed(layout, camera) });
+      }
     }
     // the measures: the time to the first frame, the frame rate while the camera moves
     const now = performance.now();
