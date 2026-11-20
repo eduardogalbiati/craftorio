@@ -27,6 +27,7 @@ const {
   memoryProblem,
   sharedMemoryGuard,
 } = require('../../engine/memory-guard');
+const { runOptionsFromSettings } = require('../../engine/run-settings');
 const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../domains/workspace/workspace');
 const projects = require('../../domains/project/projects');
@@ -51,18 +52,6 @@ const {
 const SLOT_POLL_MS = 1000;
 // how often a start refused for low memory (#276) checks whether memory recovered
 const MEMORY_RETRY_MS = 30e3;
-
-// #262: Settings' providers.<name>.fallbacks as the WorkflowRun `fallbacks` option ({ <provider>: [entries] })
-const settingsFallbacks = (settings) => Object.fromEntries(Object.entries(settings.providers || {})
-  .filter(([, p]) => Array.isArray(p?.fallbacks) && p.fallbacks.length)
-  .map(([name, p]) => [name, p.fallbacks.map(String)]));
-
-// #312: Settings' providers.<name>.accounts (those with a folder) as the WorkflowRun `accounts` option
-const settingsAccounts = (settings) => Object.fromEntries(Object.entries(settings.providers || {})
-  .map(([name, p]) => [name, (Array.isArray(p?.accounts) ? p.accounts : []).filter((a) => a?.name && a?.dir)])
-  .filter(([, list]) => list.length));
-// #312: Settings' accountCooldownMinutes (60 by default) as the WorkflowRun `accountCooldownMs` option
-const settingsAccountCooldownMs = (settings) => (settings.accountCooldownMinutes ?? 60) * 60e3;
 
 module.exports = (ctx) => {
   const { events } = ctx;
@@ -384,7 +373,7 @@ module.exports = (ctx) => {
   // onSlotWait: (why) => void, called once when it has to wait
   // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
   // agentOverrides: { <agent>: { provider?, model?, effort? } } this run's choice per agent (#262, WorkflowRun);
-  // every run also gets Settings' fallback chains per provider and limits per model (settingsFallbacks)
+  // every run also gets Settings' fallback chains per provider and limits per model (runOptionsFromSettings, engine/run-settings.js)
   // workspaceWorkflow: the workspace's `file` even when the project's repository declares one (#485)
   // A new run's issues already in work (#112) refuse it, naming the run that holds them (err.runId).
   function refuseDuplicateWork(issues, allowKeptWork) {
@@ -473,21 +462,18 @@ module.exports = (ctx) => {
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),
         budget, prices: settings.prices, projectId, issues, resume, recover, attachments, mockSequences: mock ? mockSequences : null, then, from,
-        agentOverrides, ownerCopy: wfFile.ownerCopy,fallbacks: settingsFallbacks(settings), models: settings.models || {},
-        accounts: settingsAccounts(settings), accountCooldownMs: settingsAccountCooldownMs(settings),
+        agentOverrides, ownerCopy: wfFile.ownerCopy,
+        // #862: the options Settings give every run (memory guard, idle warning, models, fallbacks,
+        // accounts, language, test workers), shared with the CLI (scripts/run.js)
+        ...runOptionsFromSettings({ settings, ws, mock }),
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
-        // #327: Settings › Language, read at each turn (a change reaches the run at its next turn)
-        language: () => workspace.readSettings(ws).language,
-        // #367: the machine profile's test workers per run (auto from this machine, or the owner's)
-        testWorkers: machineProfile.resolveLimits(settings, machineProfile.readMachine()).testWorkers,
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
         parent, startChild: (spec) => startChildRun(run, spec),
         // simulation runs never touch git: the agents are mocked and work in the repository folder
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets
         peerSessions: () => peerSessions(run),
-        idleWarnMs: settings.idleWarningMinutes != null && Number.isFinite(+settings.idleWarningMinutes) ?+settings.idleWarningMinutes * 60e3 : undefined,
         // `persona: random` agents become one of the user's agents (Agents menu)
         personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
         // CI waiting on a PR whose account ran out of Actions minutes reports it instead of waiting

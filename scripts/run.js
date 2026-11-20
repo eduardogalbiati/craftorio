@@ -11,12 +11,15 @@
 // --mock-ask <step>: in mock mode, that ask_human step asks the owner once (mockSequences.needs_human).
 // --project <id> (#735): the workspace project the run is for (else the one whose folder is --repo):
 // its run defaults (packages/engine/domains/project/project-run-defaults.js) fill the inputs not given.
+// Settings apply like in an app run (#862): memory guard, idle warning, models, fallbacks, accounts,
+// language and test workers come from packages/engine/engine/run-settings.js, shared with the app.
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
 const { aliasInputs } = require('@multiagent/shared/default-workflow');
 const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
 const { Recorder } = require('@multiagent/engine/engine/recorder');
+const { runOptionsFromSettings } = require('@multiagent/engine/engine/run-settings');
 const {
   readSettings,
   resolveWorkspace,
@@ -111,6 +114,9 @@ const run = new WorkflowRun({
   skillsDirs: [ws.skills],
   budget,
   prices: settings.prices,
+  // #862: the options Settings give an app run too (memory guard, idle warning, models, fallbacks,
+  // accounts, language, test workers)
+  ...runOptionsFromSettings({ settings, ws, mock: args.mock }),
   // orchestrator.worktree: one git worktree per run in <workspace>/worktrees (never in simulation)
   worktreesDir: args.mock ? null : ws.worktrees,
 });
