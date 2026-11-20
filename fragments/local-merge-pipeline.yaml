@@ -59,7 +59,7 @@ steps:
 
   # #630 (closes #617): Local mode's last step, once the change is merged: the local base is pushed by
   # the workflow, not by the project's auto-push any more. #861: the engine pushes, no agent, no model
-  # call (packages/engine/engine/run/transitions.js pushLocalBase → domains/local/local-push.js pushBase);
+  # call (packages/engine/engine/run/machine-steps.js runPushBaseStep → domains/local/local-push.js pushBase);
   # an origin that is the person's own folder with the base checked out is fast-forwarded there instead.
   # A repository without a remote, or a push that cannot go, ends the run all the same (merged locally);
   # the output (pushed, summary, reason, commands) and the run's chat say what to do.

@@ -6,9 +6,9 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`packages/engine/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
 
 - **`type: push_base`** (#861, `push_main` of a Local feature/fix run, `fragments/local-merge-pipeline.yaml`):
-  no agent, no model call. After `merge: local` the engine pushes the local base (`runPushBaseStep` →
-  `transitions.js` `pushLocalBase` → the machine adapter's `pushBase` → `packages/engine/domains/local/local-push.js`
-  `pushBase`; an origin that is the person's own folder is synced as in [worktrees.md](../worktrees.md), Local
+  no agent, no model call. After `merge: local` the engine pushes the local base
+  (`packages/engine/engine/run/machine-steps.js` `runPushBaseStep` → the machine adapter's `pushBase`,
+  `packages/engine/engine/machine-actions.js` → `packages/engine/domains/local/local-push.js` `pushBase`; an origin that is the person's own folder is synced as in [worktrees.md](../worktrees.md), Local
   workflows). Never fails the run. Output `{ kind: 'push_base', pushed, summary, target, how: push | fast-forward,
   reason, commands }` (`steps.push_main.output.pushed` / `summary` as the agent's output had), `ctx.local_push`,
   and a log line (warn when nothing moved, with the commands, shown in the run's chat). A simulated run merges

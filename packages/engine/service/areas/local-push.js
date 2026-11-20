@@ -69,6 +69,11 @@ module.exports = (ctx) => {
     const result = update ? await localPush.updateAndPush({ repo: project.folder, base }) : await localPush.pushBase({ repo: project.folder, base });
     // a merge conflict (#69) is a row of the notification center too, whoever asked for the push
     if (result.conflict) ctx.notify(notifier.pushConflictNotice({ project, base, files: result.files, error: result.error }), { projectId: project.id });
+    // #861: a local-folder origin with uncommitted changes or a diverged base: nothing moved there; the
+    // Backlog's push modal shows the reason and the commands to run by hand (its error line)
+    if (!result.pushed && result.commands?.length) {
+      throw clientError(`${result.reason} To bring the commits over, run:\n${result.commands.join('\n')}`);
+    }
     return afterPush(project.id, result);
   }
 

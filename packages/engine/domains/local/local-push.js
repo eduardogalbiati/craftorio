@@ -86,19 +86,21 @@ const syncCommands = (origin, clone, base, ffOnly = true) => [
  */
 async function fastForwardLocalOrigin(before, origin) {
   const { base, repo: clone, commits, issues } = before;
-  const target = origin.dir;
+  // where <base> is checked out (the repository's root or one of its linked worktrees): the fetch, the merge
+  // and the commands a person runs by hand all go there, never to a checkout of another branch
+  const target = origin.checkout.dir;
   const keep = (reason, ffOnly = true) => {
     const commands = syncCommands(target, clone, base, ffOnly);
-    return { pushed: false, how: 'fast-forward', target, reason: `${reason} Nothing changed in ${target}. To bring the commits over: ${commands.join(' && ')}`, commands, commits, issues, status: before };
+    return { pushed: false, how: 'fast-forward', target, reason: `${reason} Nothing changed in ${target}.`, commands, commits, issues, status: before };
   };
-  if (await tryGit(['status', '--porcelain', '--untracked-files=no'], origin.checkout.dir)) {
-    return keep(`${origin.checkout.dir} has uncommitted changes on ${base}: commit or stash them first.`);
+  if (await tryGit(['status', '--porcelain', '--untracked-files=no'], target)) {
+    return keep(`${target} has uncommitted changes on ${base}: commit or stash them first.`);
   }
   const ancestor = await git(['merge-base', '--is-ancestor', `refs/remotes/origin/${base}`, `refs/heads/${base}`], clone).then(() => true, () => false);
   if (!ancestor) return keep(`${base} in ${target} has diverged from the merged ${base}: it has commits the run's ${base} has not.`, false);
   try {
-    await git(['fetch', '--end-of-options', clone, `refs/heads/${base}`], origin.checkout.dir, { timeout: PUSH_TIMEOUT_MS });
-    await git(['merge', '--ff-only', '-q', 'FETCH_HEAD'], origin.checkout.dir);
+    await git(['fetch', '--end-of-options', clone, `refs/heads/${base}`], target, { timeout: PUSH_TIMEOUT_MS });
+    await git(['merge', '--ff-only', '-q', 'FETCH_HEAD'], target);
   } catch (e) {
     return keep(`Could not fast-forward ${base} in ${target} (${e.message.split('\n')[0]}).`);
   }
