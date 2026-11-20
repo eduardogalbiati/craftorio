@@ -206,7 +206,8 @@ async function processTreeCommands(pid) {
 /**
  * #853: stops the tree of one dev server or watcher an agent runs in the foreground: under the agent
  * CLI's `rootPid`, the highest descendant whose command line holds `command` (the Bash tool's shell)
- * or is a server (server-commands.js), with its whole subtree. Never `rootPid` itself, never anything
+ * or is a server (server-commands.js), with its whole subtree; of several such (the same command
+ * already running in the background), the newest one. Never `rootPid` itself, never anything
  * outside its tree; `protectChildren` (a .cmd/.bat shim whose child is the CLI, as the memory guard's)
  * spares rootPid's direct children too: the CLI's own command line may quote the command (its system prompt).
  * @param {number} rootPid
@@ -229,9 +230,19 @@ async function stopServerTree(rootPid, command, { protectChildren = false } = {}
     return out;
   };
   const wanted = String(command || '').trim();
-  // breadth first: the first match is the highest one (the shell running the command, before the server it started)
   const below = subtree(rootPid).filter((p) => !(protectChildren && p.ppid === rootPid));
-  const top = below.find((p) => wanted && p.cmd?.includes(wanted)) || below.find((p) => isServerCommand(p.cmd));
+  // the highest matches (the shell running the command, not the server it started), then the newest
+  // of them (highest pid): the same command may already run in the background, started earlier
+  const newestTop = (matches) => {
+    const pids = new Set(matches.map((p) => p.pid));
+    const byPid = new Map(below.map((p) => [p.pid, p]));
+    const hasMatchAbove = (p) => {
+      for (let up = byPid.get(p.ppid); up; up = byPid.get(up.ppid)) if (pids.has(up.pid)) return true;
+      return false;
+    };
+    return matches.filter((p) => !hasMatchAbove(p)).sort((a, b) => b.pid - a.pid)[0];
+  };
+  const top = newestTop(below.filter((p) => wanted && p.cmd?.includes(wanted))) || newestTop(below.filter((p) => isServerCommand(p.cmd)));
   if (!top) return { listed: true, stopped: [] };
   const tree = [top, ...subtree(top.pid)];
   if (process.platform === 'win32') {

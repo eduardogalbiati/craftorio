@@ -23,7 +23,9 @@ const WRAPPERS = new Set(['bunx', 'env', 'eval', 'exec', 'nohup', 'npx', 'sudo',
 const WRAPPER_PAIRS = /^(bundle|npm|pnpm|yarn) (dlx|exec)$/;
 const PACKAGE_MANAGERS = new Set(['bun', 'npm', 'pnpm', 'yarn']);
 // package-manager options that take a value (`pnpm --filter web dev`, `yarn workspace web dev`)
-const PM_VALUE_FLAGS = new Set(['--filter', '-F', '--dir', '-C', '--prefix', '--cwd', '--workspace', '-w', 'workspace']);
+const PM_VALUE_FLAGS = new Set(['--filter', '-F', '--dir', '-C', '--prefix', '--cwd', '--workspace', 'workspace']);
+// per manager: npm's `-w <name>` is --workspace; pnpm's `-w` (--workspace-root) takes no value (`pnpm -w dev`)
+const PM_OWN_VALUE_FLAGS = { npm: new Set(['-w']) };
 // scripts that start a server: dev, start, serve (and `dev:web`-like variants)
 const SERVER_SCRIPT = /^(dev|start|serve)(:|$)/;
 const NEXT_SERVER = new Set(['dev', 'start']);
@@ -56,10 +58,11 @@ function commandWords(segment) {
 
 // the script a package manager runs: its first word that is not an option (or an option's value),
 // after `run` / `run-script`
-function packageScript(args) {
+function packageScript(program, args) {
   const plain = [];
+  const own = PM_OWN_VALUE_FLAGS[program];
   for (let i = 0; i < args.length; i++) {
-    if (PM_VALUE_FLAGS.has(args[i])) { i++; continue; }
+    if (PM_VALUE_FLAGS.has(args[i]) || own?.has(args[i])) { i++; continue; }
     if (!args[i].startsWith('-')) plain.push(args[i]);
   }
   return ['run', 'run-script'].includes(plain[0]) ? plain[1] : plain[0];
@@ -74,7 +77,7 @@ function isServerSegment(segment) {
   if (program === 'next') return NEXT_SERVER.has(args[0]);
   if (program === 'vite') return VITE_SERVER(args[0]);
   if (PACKAGE_MANAGERS.has(program)) {
-    const script = packageScript(args);
+    const script = packageScript(program, args);
     return (!!script && SERVER_SCRIPT.test(script)) || args.some((a) => PM_WATCH_FLAG.test(a));
   }
   if (WATCH_RUNNERS.has(program) && args.some((a) => WATCH_FLAG.test(a))) return true;
