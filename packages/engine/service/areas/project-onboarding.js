@@ -142,16 +142,33 @@ const machineCli = (provider) => toolSignIn(issues.PLATFORMS[provider].cli);
 
 // the wizard's repository step before any import (#669, mock-2): per platform with a CLI, { provider, cli,
 // installed, signedIn, account? }, from the same probe as the import's check
-const cliAccounts = (cli = machineCli) => Promise.all(Platforms.PLATFORMS.filter((p) => p.cli)
+const cliAccounts = (cli = accountsCli) => Promise.all(Platforms.PLATFORMS.filter((p) => p.cli)
   .map(async (p) => ({ provider: p.id, cli: p.cli, ...(await cli(p.id)) })));
+
+// #848: the E2E hook of a simulated run (features/steps/onboarding.steps.js): MULTIAGENT_E2E_GITHUB_REPOS=<JSON
+// array of { name, private, updatedAt }, newest first> stands for gh on the repository step: GitHub signed in as
+// e2e-owner and that list, without calling gh. null without the hook (or with no JSON array)
+function e2eGithubRepos() {
+  if (!simulation.simulationOnly() || !process.env.MULTIAGENT_E2E_GITHUB_REPOS) return null;
+  try {
+    const repos = JSON.parse(process.env.MULTIAGENT_E2E_GITHUB_REPOS);
+    return Array.isArray(repos) ? repos : null;
+  } catch { return null; }
+}
+const accountsCli = (provider) => (provider === 'github' && e2eGithubRepos()
+  ? { installed: true, signedIn: true, account: E2E_LOGIN }
+  : machineCli(provider));
 
 // the signed-in account's repositories as its CLI lists them (mock-2's list under the field, the adapter's
 // repoListCommand / parseRepos): [{ name: 'owner/repo', private, updatedAt }], [] for an unknown provider or
-// when the CLI is missing, signed out or answers no JSON
+// when the CLI is missing, signed out or answers no JSON. #848: up to 100, so the wizard's filter finds
+// older repositories too (GitLab's --per-page caps at 100)
 async function machineRepos(provider) {
   const platform = Platforms.findPlatform(provider);
   if (!platform?.cli || typeof platform.repoListCommand !== 'function') return [];
-  const { cli, args } = platform.repoListCommand(30);
+  const e2e = provider === 'github' ? e2eGithubRepos() : null;
+  if (e2e) return e2e;
+  const { cli, args } = platform.repoListCommand(100);
   const r = await resolveCommandAsync(cli);
   if (!r) return [];
   const out = await runTool(r.file, args);

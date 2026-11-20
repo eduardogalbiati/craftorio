@@ -217,18 +217,17 @@
     } catch { return ''; }
   }
 
-  // mock-2's list under the field: the account's five latest repositories on the picked provider
+  // mock-2's list under the field: the account's repositories on the picked provider; #848: the first five
+  // (API order, newest first) whose owner/name holds the typed text (case-insensitive, a URL read as owner/name)
   const repoUrl = (name) => `https://${(platformById(pickedProvider()) || platformById(window.Platforms?.DEFAULT_PLATFORM))?.host}/${name}`;
   function repoList() {
-    const repos = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).slice(0, 5);
-    if (!repos.length) return '';
     const typed = cur.model.repository.trim().replace(/\.git$/, '');
-    const item = (r) => {
-      const meta = [t(r.private ? 'onboarding.repo_private' : 'onboarding.repo_public'), updatedAgo(r.updatedAt)].filter(Boolean).join(' · ');
-      return `<li><button type="button" class="wizard-repo-item" data-act="pick-repo" data-repo="${esc(r.name)}" data-testid="wizard-repo-option" aria-pressed="${typed === repoUrl(r.name)}">
-          <span class="text-cut" title="${esc(r.name)}">${esc(r.name)}</span><span class="muted">${esc(meta)}</span></button></li>`;
-    };
-    return `<ul class="wizard-repos" data-testid="wizard-repo-list" aria-label="${esc(t('onboarding.repo_list'))}">${repos.map(item).join('')}</ul>`;
+    const query = (window.Platforms?.parseRepoUrl?.(typed)?.path || typed).toLowerCase();
+    const repos = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).filter((r) => String(r.name || '').toLowerCase().includes(query)).slice(0, 5);
+    const meta = (r) => [t(r.private ? 'onboarding.repo_private' : 'onboarding.repo_public'), updatedAgo(r.updatedAt)].filter(Boolean).join(' · ');
+    const item = (r) => `<li><button type="button" class="wizard-repo-item" data-act="pick-repo" data-repo="${esc(r.name)}" data-testid="wizard-repo-option" aria-pressed="${typed === repoUrl(r.name)}">
+          <span class="text-cut" title="${esc(r.name)}">${esc(r.name)}</span><span class="muted">${esc(meta(r))}</span></button></li>`;
+    return repos.length ? `<ul class="wizard-repos" data-testid="wizard-repo-list" aria-label="${esc(t('onboarding.repo_list'))}">${repos.map(item).join('')}</ul>` : '';
   }
 
   // the badges and the list arrive after the step is drawn: only their own parts change (the caret stays)
@@ -240,9 +239,9 @@
     }
     const badges = document.getElementById('wizard-cli-badges');
     if (badges) badges.innerHTML = cliBadges();
-    const list = document.getElementById('wizard-repo-slot');
-    if (list) list.innerHTML = repoList();
+    repoSlot();
   }
+  function repoSlot() { const slot = document.getElementById('wizard-repo-slot'); if (slot) slot.innerHTML = repoList(); }
 
   // read once per opening of the wizard: gh / glab's sign-in, then each signed-in account's repositories
   async function loadAccounts() {
@@ -896,6 +895,7 @@
       const nameField = document.getElementById('wizard-name');
       if (nameField) nameField.value = cur.model.name;
     }
+    if (id === 'wizard-repo') repoSlot(); // #848: the list under the field follows the typed text
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)
     const on = pickedProvider();
     for (const id of providers()) {
