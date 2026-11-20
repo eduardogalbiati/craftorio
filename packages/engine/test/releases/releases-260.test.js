@@ -112,6 +112,29 @@ test('shipRelease: pushes the local base to origin and a tag at it (#260)', asyn
   assert.equal(git(f.origin, 'rev-parse', 'refs/tags/v1.2.0^{commit}'), f.local, 'origin has the tag at that commit');
 });
 
+test('shipRelease: a local-folder origin with uncommitted changes on its checked-out main refuses; nothing is pushed or tagged (#861)', async (t) => {
+  const { shipRelease } = load();
+  const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'release-local-')));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }));
+  const user = path.join(tmp, 'finance-app');
+  const repo = path.join(tmp, 'repo');
+  fs.mkdirSync(user);
+  git(user, 'init', '-q', '-b', 'main');
+  const first = commit(user, 'a.txt', 'a\n', 'init');
+  git(tmp, 'clone', '-q', user, repo);
+  commit(repo, 'b.txt', 'b\n', 'Add a /health endpoint (#12)');
+  fs.writeFileSync(path.join(user, 'a.txt'), 'edited by the user\n');
+  await assert.rejects(shipRelease({ repo, base: 'main', tag: 'v1.2.0' }), (e) => {
+    assert.match(e.message, /uncommitted/i);
+    assert.match(e.message, /Nothing was tagged/);
+    return true;
+  });
+  assert.equal(git(user, 'rev-parse', 'refs/heads/main'), first);
+  assert.equal(git(user, 'tag', '-l'), '');
+  assert.equal(git(repo, 'tag', '-l'), '');
+  assert.equal(fs.readFileSync(path.join(user, 'a.txt'), 'utf8'), 'edited by the user\n');
+});
+
 test('building the notes and marking the release push nothing: origin stays behind until Ship (#260)', async (t) => {
   const { releaseNotes, markReleased } = load();
   const f = fixture(t);
