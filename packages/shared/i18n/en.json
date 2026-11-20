@@ -5775,7 +5775,8 @@
 
   "start_drawer.a_real_run_of_this_workflow": "A real run of this workflow fails at Start without them.",
   "start_drawer.all": "All",
-  "start_drawer.analysis_estimate": { "one": "The analysis is a real model call: ≈ US$ {cost} (from the last {count} analysis of this project), counted in the run's budget.", "other": "The analysis is a real model call: ≈ US$ {cost} (from the last {count} analyses of this project), counted in the run's budget." },
+  "start_drawer.analysis_already_running": "An analysis of {project} is already running (its onboarding, in the Imports tray): a second one would be paid again. Wait for it to end.",
+  "start_drawer.analysis_estimate":{ "one": "The analysis is a real model call: ≈ US$ {cost} (from the last {count} analysis of this project), counted in the run's budget.", "other": "The analysis is a real model call: ≈ US$ {cost} (from the last {count} analyses of this project), counted in the run's budget." },
   "start_drawer.base_behind": { "one": "{base} is {count} commit behind origin/{base}: a run from it does not have it.", "other": "{base} is {count} commits behind origin/{base}: a run from it does not have them." },
   "start_drawer.base_continue": "Go on from the local base",
   "start_drawer.base_diverged": { "one": "{base} has diverged: {count} commit behind origin/{base}, with commits of its own. It was not moved: resolve it with Update and push on the Backlog.", "other": "{base} has diverged: {count} commits behind origin/{base}, with commits of its own. It was not moved: resolve it with Update and push on the Backlog." },

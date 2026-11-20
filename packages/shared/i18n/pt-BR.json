@@ -5775,7 +5775,8 @@
 
   "start_drawer.a_real_run_of_this_workflow": "Uma execução real deste workflow falha no início sem eles.",
   "start_drawer.all": "Todos",
-  "start_drawer.analysis_estimate": { "one": "A análise é uma chamada real de modelo: ≈ US$ {cost} (da última {count} análise deste projeto), contada no orçamento da execução.", "other": "A análise é uma chamada real de modelo: ≈ US$ {cost} (das últimas {count} análises deste projeto), contada no orçamento da execução." },
+  "start_drawer.analysis_already_running": "Uma análise de {project} já está em execução (a do onboarding, na bandeja de Importações): uma segunda seria paga de novo. Espere ela terminar.",
+  "start_drawer.analysis_estimate":{ "one": "A análise é uma chamada real de modelo: ≈ US$ {cost} (da última {count} análise deste projeto), contada no orçamento da execução.", "other": "A análise é uma chamada real de modelo: ≈ US$ {cost} (das últimas {count} análises deste projeto), contada no orçamento da execução." },
   "start_drawer.base_behind": { "one": "{base} está {count} commit atrás de origin/{base}: uma execução a partir dela não tem esse commit.", "other": "{base} está {count} commits atrás de origin/{base}: uma execução a partir dela não tem esses commits." },
   "start_drawer.base_continue": "Seguir da base local",
   "start_drawer.base_diverged": { "one": "{base} divergiu: {count} commit atrás de origin/{base}, com commits próprios. Ela não foi movida: resolva com Atualizar e enviar no Backlog.", "other": "{base} divergiu: {count} commits atrás de origin/{base}, com commits próprios. Ela não foi movida: resolva com Atualizar e enviar no Backlog." },

@@ -39,7 +39,7 @@
 //   "Continue", enabled whatever the analysis does; before any analysis it skips it) or, on the review,
 //   wizard-finish (never disabled,
 //   never waits): it closes the wizard on the project's page with its Next steps
-//   card (openProject with nextSteps, project.js), then sends the idea to the Inbox (no finding is filed
+//   card (openProject with nextSteps, project.js; #846: never the Start drawer), then sends the idea to the Inbox (no finding is filed
 //   without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
@@ -64,6 +64,8 @@
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
 // architecture:createIssue (never runNow), the backlog and api.createDiscoveryCard (an Inbox idea).
+// window.ProjectWizard = { analyzing(projectId), close, open }: #846 analyzing is true while that project's onboarding
+// clones or analyses it (ACTIVE, from onboarding:changed); the Start drawer then refuses analyze-project.
 // Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.ProjectWizardCli.
 
 (function () {
@@ -676,7 +678,7 @@
 
   // Finish: the project's page at once (with its Next steps card), then the idea to the Inbox, in the
   // background (#730: a finding becomes an issue only from its own button); an analysis still running
-  // notifies when it ends (remember). city: the review's Open the city finishes the same way, then shows
+  // notifies when it ends (remember); #846: no Start drawer here, the page only. city: the review's Open the city finishes the same way, then shows
   // the project's City tab
   function finish({ city = false } = {}) {
     const pid = cur.projectId;
@@ -990,6 +992,7 @@
   window.I18n?.onChange?.(() => render());
 
   window.ProjectWizard = {
+    analyzing: (projectId) => ACTIVE.includes(states.get(projectId)?.status),
     close,
     open,
   };

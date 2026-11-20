@@ -17,7 +17,8 @@
 //   it; opened by itself when there is none, over the Setup, which then leaves it the focus; the
 //   list is read again when it closes). Finish saves setupDone and
 //   developerMode only, never settings.hiddenWorkflows (what a workspace hides from Start stays), then
-//   opens the Start drawer (Simulation checked when it shows, applyDeveloperMode).
+//   opens the Start drawer (Simulation checked when it shows, applyDeveloperMode); #846: not after an onboarding
+//   opened from First project that left its project's page open (its analysis may still run).
 // window.Setup = { open(step), isOpen(), skip() } (app.js, Settings, scripts/screenshot.js).
 // Registers its dialog with registerView (view-registry.js, modals only: no screen, no menu entry); uses app.js globals ($, esc,
 // state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode),
@@ -42,6 +43,7 @@
     tools: null,       // env:details, null while checking
     simulation: true,  // the Try it safely switch
     machine: null,     // settings:machineProfile (#367), its line shown in Try it safely
+    onboarded: false,  // #846: First project opened the onboarding wizard
   };
   const $s = (sel) => document.querySelector(`#setup-modal ${sel}`);
 
@@ -216,6 +218,7 @@
 
   function newProject() {
     if (!canNewProject()) return false;
+    setup.onboarded = true; // #846: Finish then leaves the project's page the wizard opened, no Start drawer
     window.Actions.call('openProjectWizard');
     // the wizard has no callback: the list is read again when it closes (hidden)
     const wizard = document.getElementById('project-wizard');
@@ -275,6 +278,9 @@
     } catch (e) { showToast(t('setup.save_setup_failed'), errMsg(e)); return; }
     applyDeveloperMode();
     close();
+    // #846: the onboarding opened from here finished on its project's page, its analysis maybe still running
+    // (the Imports tray): a Start drawer there (analyze-project, that project) would offer a second paid analysis
+    if (setup.onboarded && state.view === 'project') return;
     openDrawer({}).catch((e) => showToast(t('setup.open_start_failed'), errMsg(e)));
   }
 
@@ -289,6 +295,7 @@
   async function open(stepId = 'agents') {
     setup.step = Math.max(0, STEPS.findIndex((s) => s.id === stepId));
     setup.open = true;
+    setup.onboarded = false;
     setup.simulation = state.settings.setupDone === false ? true : !!state.settings.developerMode;
     // a first run records that it is not done yet, so quitting before Finish or Skip opens it again
     // even after another setting was saved (workspace.js writeSettings leaves an unknown setupDone out)

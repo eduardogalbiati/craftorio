@@ -11,7 +11,8 @@
 // asks for its first stage's inputs (its fixed ones set), shows the whole chain with a cost estimate
 // instead of the ChainPicker, and Start calls api.runPipeline.
 // An analysis workflow (ANALYSIS_WORKFLOWS, analyze-project.yaml, #378/#631) shows its model turn's
-// estimate from api.architectureEstimate (#wf-estimate) before the start.
+// estimate from api.architectureEstimate (#wf-estimate) before the start; #846: its Start is refused
+// (#start-error) while the project's onboarding still runs (window.ProjectWizard.analyzing, the build front).
 
 const LS_KEY = 'multiagent.inputs';
 const PIPE = 'pipe:';
@@ -352,6 +353,8 @@ async function startRun({ keepOpen = false, baseChoice = null } = {}) {
   const pathKeys = Object.keys(wf.inputs || {}).filter(isPathInput);
   if (pathKeys.some((k) => wf.inputs[k].required !== false) && !project) return ($('#start-error').textContent = t('start_drawer.select_a_project_its_folder_is'));
   if (project && !project.exists) return ($('#start-error').textContent = t('start_drawer.the_project_folder_does_not_exist', { folder: project.folder }));
+  // #846: the project's onboarding still clones or analyses it (the Imports tray): a second paid analysis is refused
+  if (project && window.ProjectWizard?.analyzing?.(project.id) && ANALYSIS_WORKFLOWS.includes(wf.file)) return ($('#start-error').textContent = t('start_drawer.analysis_already_running', { project: project.name }));
 
   const inputs = readInputs();
   // the main field is not remembered: the next run starts from an empty task
