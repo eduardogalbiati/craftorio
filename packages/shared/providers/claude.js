@@ -173,7 +173,13 @@
         }
         // #302: --max-turns reached (the agent's max_requests): not an error, the engine wraps the turn up
         if (ev.subtype === 'error_max_turns') acc.cut = { requests: ev.num_turns ?? acc.mainCalls?.size ?? 0 };
-        else if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
+        else if (ev.is_error) {
+          // #860: the result's own error details (error_during_execution has no result text) say why
+          const details = (Array.isArray(ev.errors) ? ev.errors : [])
+            .map((e) => (typeof e === 'string' ? e : (e?.message ?? JSON.stringify(e))))
+            .filter((e) => e && String(e).trim());
+          acc.error = [`Claude returned an error: ${ev.subtype}`, ev.result, details.join('; ')].filter(Boolean).join(' ');
+        }
         emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
         break;
       }

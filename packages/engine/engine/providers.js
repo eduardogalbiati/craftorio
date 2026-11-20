@@ -479,7 +479,9 @@ function runCli(opts, parser) {
       parser.stderr?.(stderr, acc);
       // a --max-turns of the agent's own args (not its max_requests): the attempt fails, as before #302
       if (acc.cut && !opts.hint?.maxRequests) acc.error ||= 'Claude returned an error: error_max_turns (the --max-turns of its args)';
-      if (acc.error) return finish(new Error(acc.error));
+      // #860: the tail of what the CLI printed on stderr says why the turn failed
+      const tail = stderr.trim() ? stderr.slice(-800).trim() : '';
+      if (acc.error) return finish(new Error(tail ? `${acc.error}\n\nstderr: ${tail}` : acc.error));
       if (code !== 0 && !acc.text && !acc.cut) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
       finish(null, { ...turnResult(acc), exitCode: code });
     });
