@@ -837,3 +837,42 @@ Feature: Bring a project in with a guided wizard
     Then the wizard shows no repository list
     When I go to the next step of the wizard
     Then the wizard is on its "analysis" step
+
+  # #845: a GitHub repository whose Issues are turned off is a state of the repository, not a failed read: the
+  # review's Backlog card and the Backlog screen say so, with no Retry and a link to the repository's settings, and
+  # the onboarding still finishes. A network failure still shows its reason and Retry. gh's answer is simulated (an
+  # E2E hook standing for gh issue list, see onboarding.steps.js).
+  @issue-845
+  Scenario: Importing a GitHub repository whose Issues are turned off says so on the review and in the Backlog, and the project still opens
+    Given the app is open where the GitHub repositories I import have their Issues turned off
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "noissues-845"
+    And I go to the next step of the wizard
+    And I skip the analysis for later
+    Then the wizard is on its "review" step
+    And the review's Backlog card says "Issues are turned off in this repository" without a Retry
+    And the review's Backlog card links to the repository's settings
+    When I type the idea "Turn the issues on later" in the review
+    And I finish the wizard
+    Then the project wizard closes right away
+    And the project page of "noissues-845" is open
+    When I open "Backlog" in the sidebar
+    And I choose the project "noissues-845" in the header
+    Then the Backlog says "Issues are turned off in this repository" and shows no sync error
+    When I open "Inbox" in the sidebar
+    Then the Inbox lists the idea "Turn the issues on later"
+
+  @issue-845
+  Scenario: A network failure while reading a GitHub repository's issues still says why and offers Retry
+    Given the app is open where reading GitHub issues fails because the network is down
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "offline-845"
+    And I go to the next step of the wizard
+    And I skip the analysis for later
+    Then the wizard is on its "review" step
+    And the review's Backlog card says why the issues could not be read, mentioning "error connecting to api.github.com", and offers a Retry
+    And the review's Backlog card does not say "Issues are turned off in this repository"

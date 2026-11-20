@@ -1317,3 +1317,69 @@ Then('the wizard shows no repository list', async ({ e2e }) => {
   await expect(repoOptions(e2e.window)).toHaveCount(0);
   await expect(wizard(e2e.window).getByTestId('wizard-repo-list').filter({ visible: true })).toHaveCount(0);
 });
+
+// ---- #845: a repository with Issues turned off is a state, not a failed Backlog read ------------------------------
+// What the screens expose (to be added by #845):
+// - in the review's wizard-review-backlog: data-testid="wizard-review-backlog-issues-disabled", the line "Issues are
+//   turned off in this repository" (no wizard-review-backlog-retry), holding the link
+//   data-testid="wizard-review-backlog-settings-link" (an <a> to https://github.com/<owner>/<repo>/settings);
+// - on the Backlog screen: data-testid="backlog-issues-disabled", the same line, instead of the sync error (#bl-error
+//   stays empty).
+// A network or auth failure keeps today's failed line (wizard-review-backlog-activity data-state="failed") with its
+// reason and wizard-review-backlog-retry.
+//
+// E2E HOOK THE DEVELOPER MUST ADD, read only when MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_ISSUES_FAIL=
+// disabled|network stands for gh issue list on any project's backlog read (the review's getBacklog / syncBacklog and
+// the Backlog screen's sync), a local file:// import included, which then stands for the GitHub repository
+// https://github.com/e2e-owner/<the local folder's name>; without calling gh the read fails as gh does:
+// - disabled: "gh issue list failed: the 'e2e-owner/<name>' repository has disabled issues";
+// - network: "gh issue list failed: error connecting to api.github.com".
+const ISSUES_DISABLED = 'Issues are turned off in this repository';
+const reviewBacklog = (page) => review(page).getByTestId('wizard-review-backlog');
+
+Given('the app is open where the GitHub repositories I import have their Issues turned off', async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ISSUES_FAIL: 'disabled' } });
+});
+
+Given('the app is open where reading GitHub issues fails because the network is down', async ({ e2e }) => {
+  await e2e.open({ env: { MULTIAGENT_E2E_ISSUES_FAIL: 'network' } });
+});
+
+Then("the review's Backlog card says {string} without a Retry", async ({ e2e }, text) => {
+  const card = reviewBacklog(e2e.window);
+  const line = card.getByTestId('wizard-review-backlog-issues-disabled');
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(text);
+  await expect(card.getByTestId('wizard-review-backlog-retry')).toHaveCount(0);
+  await expect(card.getByRole('button', { name: /retry/i })).toHaveCount(0);
+  await expect(card.getByText(/gh issue list failed|has disabled issues/i)).toHaveCount(0);
+});
+
+Then("the review's Backlog card links to the repository's settings", async ({ e2e }) => {
+  const link = reviewBacklog(e2e.window).getByTestId('wizard-review-backlog-settings-link');
+  await expect(link).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(link).toHaveAttribute('href', /^https:\/\/github\.com\/[^/]+\/[^/]+\/settings\b/);
+});
+
+Then('the Backlog says {string} and shows no sync error', async ({ e2e }, text) => {
+  const page = e2e.window;
+  const line = page.getByTestId('backlog-issues-disabled').filter({ visible: true });
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(text);
+  await expect(page.locator('#bl-error')).toHaveText('');
+  await expect(page.getByText(/gh issue list failed|has disabled issues/i).filter({ visible: true })).toHaveCount(0);
+});
+
+Then("the review's Backlog card says why the issues could not be read, mentioning {string}, and offers a Retry", async ({ e2e }, reason) => {
+  const card = reviewBacklog(e2e.window);
+  const line = card.getByTestId('wizard-review-backlog-activity');
+  await expect(line).toHaveAttribute('data-state', 'failed', { timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(reason);
+  await expect(card.getByTestId('wizard-review-backlog-retry')).toBeVisible();
+});
+
+Then("the review's Backlog card does not say {string}", async ({ e2e }, text) => {
+  const card = reviewBacklog(e2e.window);
+  await expect(card.getByTestId('wizard-review-backlog-issues-disabled')).toHaveCount(0);
+  await expect(card.getByText(text)).toHaveCount(0);
+});
