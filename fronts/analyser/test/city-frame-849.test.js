@@ -246,3 +246,46 @@ test('#849 zoomDistance: a zoom-in click brings the camera closer by at least 15
     assert.ok(d <= from * 0.85, `from ${from} one click in comes at least 15% closer: ${d}`);
   }
 });
+
+// a camera on the home view's line, `k` times its distance from the target
+function cameraOn(frame, aspect, k) {
+  const cam = new THREE.PerspectiveCamera(FOV, aspect, 0.1, 1e6);
+  const t = frame.target, p = frame.position;
+  cam.position.set(t.x + (p.x - t.x) * k, t.y + (p.y - t.y) * k, t.z + (p.z - t.z) * k);
+  cam.lookAt(t.x, t.y, t.z);
+  cam.updateMatrixWorld(true);
+  cam.updateProjectionMatrix();
+  return cam;
+}
+
+test('#849 cityFramed: true for the home camera, also from farther away', async (t) => {
+  const s = await sceneWith(t, 'cityFrame', 'cityFramed');
+  if (!s) return;
+  for (const [name, layout] of [['dominant', dominantCity()], ['large', largeCity()]]) {
+    const frame = s.cityFrame(layout, 1.6);
+    assert.equal(s.cityFramed(layout, cameraOn(frame, 1.6, 1)), true, `${name}: the home camera frames the city`);
+    assert.equal(s.cityFramed(layout, cameraOn(frame, 1.6, 2)), true, `${name}: twice as far still frames it`);
+  }
+});
+
+test('#849 cityFramed: false once a few zoom-in clicks bring the camera close', async (t) => {
+  const s = await sceneWith(t, 'cityFrame', 'cityFramed');
+  if (!s) return;
+  const layout = dominantCity();
+  const frame = s.cityFrame(layout, 1.6);
+  // three 20% clicks in: 0.8^3 ≈ 0.51 of the home distance
+  assert.equal(s.cityFramed(layout, cameraOn(frame, 1.6, 0.51)), false, 'half the home distance no longer shows the whole city');
+  assert.equal(s.cityFramed(layout, cameraOn(frame, 1.6, 0.2)), false, 'up close the city is out of frame');
+});
+
+test('#849 zoomDistance: a zoom-out click that passes near the home view lands on it', async (t) => {
+  const s = await sceneWith(t, 'zoomDistance');
+  if (!s) return;
+  const home = 1000;
+  assert.equal(s.zoomDistance(790, 'out', home), home, 'from 790 a click (≈ 988) lands on the home view');
+  assert.equal(s.zoomDistance(800, 'out', home), home, 'from 800 a click lands exactly on the home view');
+  const far = s.zoomDistance(500, 'out', home);
+  assert.ok(far > 600 && far < 700, `from 500 a click is a plain step, far from home: ${far}`);
+  const past = s.zoomDistance(home, 'out', home);
+  assert.ok(past > 1200, `from the home view a click still moves out: ${past}`);
+});
