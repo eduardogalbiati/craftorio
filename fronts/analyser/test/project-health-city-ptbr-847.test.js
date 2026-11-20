@@ -159,3 +159,23 @@ test('#847 City in pt-BR, no file edges: "Mais conectados" says so with no Engli
   assert.ok(empty, 'the empty text is shown');
   assert.equal(empty.includes('import between the drawn files was found'), false, empty);
 });
+
+const cityWhoseEdges = (edges) => {
+  const built = buildCity({ plan: null, facts: facts(), sources: { imports: [], manifests: {} } });
+  built.model.edges = edges;
+  return { state: 'ok', ...built };
+};
+
+test('#847 City in pt-BR, a language whose imports are not read: one Portuguese sentence naming it', async (t) => {
+  inLanguage(t, 'pt-BR');
+  const city = await openCity(cityWhoseEdges('not read for Python'));
+  const empty = text(city.el.querySelector('[data-testid="city-connections-empty"]'));
+  assert.equal(empty, 'Nenhuma conexão para listar: os imports de arquivos Python não são lidos.');
+});
+
+test('#847 City in English, no file edges: the empty text is the English sentence', async (t) => {
+  inLanguage(t, 'en');
+  const city = await openCity(cityWhoseEdges([]));
+  const empty = text(city.el.querySelector('[data-testid="city-connections-empty"]'));
+  assert.equal(empty, I18n.t('project_city_connections.empty_no_import', undefined, 'en'));
+});

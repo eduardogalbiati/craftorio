@@ -60,6 +60,17 @@ test('#382 edgesState: edges, none between the files, or a language whose import
   assert.match(notRead.reason, /Python/);
 });
 
+test('#847 edgesState gives a code the panel words in the interface language', () => {
+  assert.deepEqual(CityConnections.edgesState({ edges: [] }), { ok: false, code: 'no_import', reason: '' });
+  const notRead = CityConnections.edgesState({ edges: 'not read for Python' });
+  assert.equal(notRead.code, 'not_read');
+  assert.equal(notRead.language, 'Python');
+  const other = CityConnections.edgesState({ edges: 'the import graph timed out' });
+  assert.equal(other.code, 'other');
+  assert.equal(other.language, null);
+  assert.equal(other.reason, 'the import graph timed out');
+});
+
 // ---------- the panel ----------
 
 function load(answer) {

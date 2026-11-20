@@ -125,6 +125,32 @@ test('#844 a mode left open (an open question without a default) reads as open i
   assert.equal(w.profile.includes(line), true, `"${line}" in ${w.profile}`);
 });
 
+const en = (key) => I18n.t(key, undefined, 'en');
+const SAVED_FORK = { id: 'p1', name: 'shop', workflows: [{ name: 'feature', origin: 'bundled', category: 'build', variant: 'fork-code' }, { name: 'fix', origin: 'bundled', category: 'build', variant: 'fork-code' }] };
+
+test('#844 a project saved with the fork variant and no run defaults reads the fork mode', async (t) => {
+  const w = await opened(t, lastOf({ ...NO_TESTS, mode: 'remote' }), { project: SAVED_FORK });
+  assert.equal(w.profile.includes(`${en('ways_of_working.q_mode')}: ${en('ways_of_working.merge_fork')}`), true, `the profile: ${w.profile}`);
+});
+
+test('#844 the saved run defaults\' mode wins over a feature / fix variant that says otherwise', async (t) => {
+  const project = { ...SAVED, workflows: SAVED.workflows.map((wf) => (wf.variant === 'local-code' ? { ...wf, variant: 'remote-code' } : wf)), runDefaults: { mode: 'local' } };
+  const w = await opened(t, lastOf({ ...NO_TESTS, mode: 'remote' }), { project });
+  assert.equal(w.profile.includes(`${en('ways_of_working.q_mode')}: ${en('ways_of_working.merge_local')}`), true, `the profile: ${w.profile}`);
+});
+
+test('#844 a project with no saved workflows nor run defaults shows the analysis\' mode and release', async (t) => {
+  const w = await opened(t, lastOf({ ...NO_TESTS, mode: 'remote', release: 'train' }), { project: { id: 'p1', name: 'shop' } });
+  assert.equal(w.profile.includes(`${en('ways_of_working.q_mode')}: ${en('ways_of_working.merge_pr')}`), true, `the profile: ${w.profile}`);
+  assert.equal(w.profile.includes(`${en('ways_of_working.release')}: train`), true, `the profile: ${w.profile}`);
+});
+
+test('#844 tests unset with a test command read open, not "no tests"', async (t) => {
+  const w = await opened(t, lastOf({ ...NO_TESTS, testCommand: 'npm test', tests: null }));
+  assert.equal(w.profile.includes(`${en('ways_of_working.tests')}: ${en('ways_of_working.open')}`), true, `the profile: ${w.profile}`);
+  assert.equal(w.profile.includes(en('ways_of_working.tests_none')), false, `the profile: ${w.profile}`);
+});
+
 test('#847 in pt-BR the open questions show no English label, option or hint', async (t) => {
   const questions = loadCompose().openQuestions(NO_TESTS);
   const w = await opened(t, lastOf(NO_TESTS, questions), { lang: 'pt-BR' });
