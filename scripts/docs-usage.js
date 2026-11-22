@@ -13,7 +13,7 @@
 //   node scripts/docs-usage.js [--workspace <dir>] [--root <repo>] [--project <id>] [--since YYYY-MM-DD] [--json]
 //   npm run docs:usage -- --project craftorio --since 2026-09-26
 //
-// Defaults: $CRAFTORIO_WORKSPACE (else ~/multiagent-workspace), this repository, its project id
+// Defaults: $CRAFTORIO_WORKSPACE (else ~/craftorio-workspace, or ~/multiagent-workspace from before the rename), this repository, its project id
 // and the last 30 days.
 
 const fs = require('fs');
@@ -136,7 +136,7 @@ function sessionsOfRun(summary, events) {
 
 /** `{ markdown, model }` over the runs of `project` started since `since` (YYYY-MM-DD). */
 function docsUsage({
-  workspace = process.env.CRAFTORIO_WORKSPACE || path.join(os.homedir(), 'multiagent-workspace'),
+  workspace = process.env.CRAFTORIO_WORKSPACE || require('@craftorio/engine/domains/workspace/workspace').existingDefaultWorkspace(),
   root = path.join(__dirname, '..'),
   project = 'craftorio',
   since = new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10),

@@ -123,3 +123,37 @@ test('cloneRepo clones the first time and only fetches afterwards', async (t) =>
   assert.deepEqual([first.cloned, second.cloned], [true, false]);
   assert.equal(first.dir, path.join(home, 'repos', 'o-r'));
 });
+
+// ---- T2c: an install from before the rename to Craftorio ----------------------------------------
+
+test('T2c the old default folder ~/multiagent-workspace is used (and registered) when the new one does not exist', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-legacy-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(home, 'multiagent-workspace'));
+  const store = { value: null, get() { return this.value; }, set(v) { this.value = v; } };
+  const r = resolveWorkspace({ store, env: {}, home });
+  assert.equal(r.dir, path.join(home, 'multiagent-workspace'));
+  assert.equal(r.source, 'default');
+  assert.equal(store.value, path.join(home, 'multiagent-workspace'));
+  assert.equal(r.fallback, path.join(home, 'craftorio-workspace'), 'a new install still gets the new name');
+});
+
+test('T2c with both default folders the new one wins', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-legacy-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  for (const d of ['multiagent-workspace', 'craftorio-workspace']) fs.mkdirSync(path.join(home, d));
+  const store = { value: null, get() { return this.value; }, set(v) { this.value = v; } };
+  assert.equal(resolveWorkspace({ store, env: {}, home }).dir, path.join(home, 'craftorio-workspace'));
+});
+
+test('T2c fileStore reads the old file when the new one is missing, and writes the new one', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-legacy-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const legacy = path.join(home, '.multiagent-orchestrator.json');
+  fs.writeFileSync(legacy, JSON.stringify({ workspace: '/old/ws' }));
+  const store = fileStore(path.join(home, '.craftorio.json'), legacy);
+  assert.equal(store.get(), '/old/ws');
+  store.set('/new/ws');
+  assert.equal(store.get(), '/new/ws');
+  assert.equal(JSON.parse(fs.readFileSync(legacy, 'utf8')).workspace, '/old/ws', 'the old file is left as it was');
+});

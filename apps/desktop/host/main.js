@@ -300,7 +300,7 @@ service.events.on('notify', (n) => {
 });
 
 // Resolves the workspace before opening the window. If the registered folder (or the default
-// ~/multiagent-workspace) does not exist, asks whether to create the default or pick another.
+// ~/craftorio-workspace) does not exist, asks whether to create the default or pick another.
 async function ensureWorkspace() {
   const r = workspace.resolveWorkspace();
   if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' && r.source !== 'simulation' });

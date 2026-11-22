@@ -8,8 +8,11 @@
 //      folder (simulationWorkspace), never the registered one, so an agent's check that missed its
 //      run's scratch workspace can't write to the owner's (#120); not persisted
 //   2. registered path (Windows: HKCU\Software\Craftorio\WorkspacePath;
-//      other OSes: ~/.multiagent-orchestrator.json)
-//   3. default folder ~/multiagent-workspace, if it already exists
+//      other OSes: ~/.craftorio.json)
+//   3. default folder ~/craftorio-workspace, if it already exists
+// T2c: what an install from before the rename to Craftorio left is still found, never moved: the
+// registry key HKCU\Software\MultiagentOrchestrator, ~/.multiagent-orchestrator.json and the default
+// folder ~/multiagent-workspace (registered under the new name when found).
 // If none of these exist, it is up to the UI to ask the user (create the default or pick another).
 
 const fs = require('fs');
@@ -26,12 +29,19 @@ const {
   writeSettings,
 } = require('./settings');
 
-const DEFAULT_NAME = 'multiagent-workspace';
+const DEFAULT_NAME = 'craftorio-workspace';
+const LEGACY_DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\Craftorio';
+const LEGACY_REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
 const REG_VALUE = 'WorkspacePath';
 const ENV_VAR = 'CRAFTORIO_WORKSPACE';
 
+const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const defaultWorkspace = (home = os.homedir()) => path.join(home, DEFAULT_NAME);
+// the default folder an install from before the rename created (T2c)
+const legacyDefaultWorkspace = (home = os.homedir()) => path.join(home, LEGACY_DEFAULT_NAME);
+// the default folder that exists, the new name first; the new one when neither does (the scripts' default)
+const existingDefaultWorkspace = (home = os.homedir()) => [defaultWorkspace(home), legacyDefaultWorkspace(home)].find(isDir) || defaultWorkspace(home);
 // Where a simulation-only process given no workspace works: { workspace, userData } (#120)
 const simulationWorkspace = (tmp = os.tmpdir()) => ({
   workspace: path.join(tmp, 'craftorio-simulation', 'workspace'),
@@ -44,26 +54,33 @@ const simulationWorkspace = (tmp = os.tmpdir()) => ({
 const registryStore = {
   describe: `${REG_KEY}\\${REG_VALUE}`,
   get() {
-    try {
-      // chcp 65001: without it reg.exe returns accented characters in the OEM code page.
-      const out = execFileSync('cmd', ['/d', '/c', `chcp 65001>nul & reg query ${REG_KEY} /v ${REG_VALUE}`],
-        { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8');
-      const m = out.match(new RegExp(`${REG_VALUE}\\s+REG_(?:EXPAND_)?SZ\\s+(.+?)\\s*$`, 'm'));
-      return m ? m[1] : null;
-    } catch {
-      return null; // key does not exist yet
+    for (const key of [REG_KEY, LEGACY_REG_KEY]) {
+      try {
+        // chcp 65001: without it reg.exe returns accented characters in the OEM code page.
+        const out = execFileSync('cmd', ['/d', '/c', `chcp 65001>nul & reg query ${key} /v ${REG_VALUE}`],
+          { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8');
+        const m = out.match(new RegExp(`${REG_VALUE}\\s+REG_(?:EXPAND_)?SZ\\s+(.+?)\\s*$`, 'm'));
+        if (m) return m[1];
+      } catch { /* key does not exist (yet): the old one, then none */ }
     }
+    return null;
   },
   set(dir) {
     execFileSync('reg', ['add', REG_KEY, '/v', REG_VALUE, '/t', 'REG_SZ', '/d', dir, '/f'], { windowsHide: true, stdio: 'ignore' });
   },
 };
 
-function fileStore(file = path.join(os.homedir(), '.multiagent-orchestrator.json')) {
+const STORE_FILE = () => path.join(os.homedir(), '.craftorio.json');
+const LEGACY_STORE_FILE = () => path.join(os.homedir(), '.multiagent-orchestrator.json');
+// legacy: the file read when `file` has no path, the old default's (only with the default file)
+function fileStore(file = STORE_FILE(), legacy = file === STORE_FILE() ? LEGACY_STORE_FILE() : null) {
   return {
     describe: file,
     get() {
-      try { return JSON.parse(fs.readFileSync(file, 'utf8')).workspace || null; } catch { return null; }
+      for (const f of [file, legacy].filter(Boolean)) {
+        try { return JSON.parse(fs.readFileSync(f, 'utf8')).workspace || null; } catch { /* the old file, then none */ }
+      }
+      return null;
     },
     set(dir) {
       fs.writeFileSync(file, JSON.stringify({ workspace: dir }, null, 2));
@@ -76,7 +93,6 @@ const defaultStore = () => (process.platform === 'win32' ? registryStore : fileS
 // ---------------------------------------------------------------------------
 // Resolution
 // ---------------------------------------------------------------------------
-const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
 /**
  * Finds the workspace without user interaction.
@@ -91,9 +107,10 @@ function resolveWorkspace({ store = defaultStore(), env = process.env, home = os
 
   const registered = store.get();
   if (registered && isDir(registered)) return { dir: path.resolve(registered), source: 'registry', registered, fallback };
-  if (isDir(fallback)) {
-    store.set(fallback); // register it for the next launches
-    return { dir: fallback, source: 'default', registered, fallback };
+  for (const dir of [fallback, legacyDefaultWorkspace(home)]) {
+    if (!isDir(dir)) continue;
+    store.set(dir); // register it for the next launches
+    return { dir, source: 'default', registered, fallback };
   }
   return { dir: null, source: null, registered, fallback };
 }
@@ -218,10 +235,13 @@ module.exports = {
   defaultWorkspace,
   ENV_VAR,
   execGit,
+  existingDefaultWorkspace,
   fileStore,
   gitAuthArgs,
   isGitUrl,
   layout,
+  LEGACY_DEFAULT_NAME,
+  legacyDefaultWorkspace,
   readSettings,
   registryStore,
   repoNameFromUrl,

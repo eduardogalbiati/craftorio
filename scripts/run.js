@@ -87,7 +87,7 @@ function withProjectDefaults(file, typed, project) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-// Same workspace as the app (CRAFTORIO_WORKSPACE > registered path > ~/multiagent-workspace).
+// Same workspace as the app (CRAFTORIO_WORKSPACE > registered path > ~/craftorio-workspace, or ~/multiagent-workspace from before the rename).
 // With no interactive terminal, creates the default folder if none exists. An agent's check
 // (CRAFTORIO_SIMULATION_ONLY=1) gets its run's scratch workspace or a temporary one, never the owner's (#120).
 const found = resolveWorkspace();

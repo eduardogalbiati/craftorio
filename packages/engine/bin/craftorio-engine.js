@@ -132,7 +132,16 @@ if (!lock.ok) {
 
 // The account session of the server lives next to the user's home, readable only by this user
 // (there is no OS encryption here as in the desktop app).
-const accountFile = path.join(os.homedir(), '.multiagent-orchestrator', 'server-account.json');
+const accountFile = path.join(os.homedir(), '.craftorio', 'server-account.json');
+// T2c: a server signed in before the rename to Craftorio keeps its session (copied once, the old file left)
+const legacyAccountFile = path.join(os.homedir(), '.multiagent-orchestrator', 'server-account.json');
+if (!fs.existsSync(accountFile) && fs.existsSync(legacyAccountFile)) {
+  try {
+    fs.mkdirSync(path.dirname(accountFile), { recursive: true });
+    fs.copyFileSync(legacyAccountFile, accountFile);
+    fs.chmodSync(accountFile, 0o600);
+  } catch { /* signs in again */ }
+}
 const authOff = !authConfig.enabled || process.env.CRAFTORIO_AUTH === 'off';
 const storage = fileStorage(accountFile);
 const auth = createAuth({
