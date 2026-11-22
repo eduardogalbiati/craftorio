@@ -144,12 +144,10 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    failed in the onboarding state) holds the import step on `wizard-fork-notice`: "You can't push to
    <owner/repo>…", Create a fork (`wizard-create-fork`, `api.forkOnboarding`) and Work locally
    (`wizard-work-locally`, `api.workLocallyOnboarding`); the answer moves on to analysis.
-   The footer shows the clone's progress (`wizard-clone-progress`, `data-status` the clone job's, with
-   `wizard-spinner` while it runs) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
-   the analysis goes on in the background and the review shows what is pending. #20: on an import,
-   Continue starts the ticked analysis when it has not started (Define manually included; during the clone the
-   engine starts it when the clone ends) and stays on step 3 when the start fails; only Skip, analyze later
-   skips it.
+   The footer: the clone's progress (`wizard-clone-progress`, the clone job's `data-status`, `wizard-spinner`
+   while it runs) on the left, Back and Continue (`wizard-next`, always enabled; the review shows what is
+   pending) on the right. #20: on an import, Continue starts the ticked analysis not started yet (Define
+   manually too; during the clone, when it ends) and stays on step 3 if that fails; only Skip, analyze later skips it.
 4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on: #781 the Health tab's
    language bar in `wizard-review-languages`, the project type opening on the kind the analysis found, marked
    `wizard-kind-detected`, "Detect from the files" only while no kind is known; its workflows),
@@ -174,8 +172,7 @@ only when the project has its own set (a wizard import has none, so no count).
 
 The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`;
 its code is `fronts/build/views/projects/project-wizard-tray.js` (`window.ProjectWizardTray`, over the
-wizard's maps of states and names).
-#724: it is hidden while the wizard is open (the wizard shows the import's progress itself, nothing
+wizard's maps of states and names). #724: it is hidden while the wizard is open (the wizard shows the import's progress itself, nothing
 covers its footer); with the wizard closed it lists only what needs attention: an import running (with
 `tray-spinner`) or failed (its reason and Retry). A finished import (ready or analyzed, no paid job
 failed) leaves it about 5 s later with the toast "<name> imported" and Open the project (no toast when
