@@ -11,6 +11,10 @@
 //   access-error  a repository the app cannot reach: wizard-error data-error="no-access", its Retry and Edit
 //   analysis      a local git repository imported (file://, no network): the jobs and the cost, before the click
 //   review        that repository analysed (simulated) and the review step
+//   new-workflows Create new project named "garden-log" (no answer changed), its step 3 (#21: its own heading,
+//                 the suggestions from the answers, no row left waiting without its reason)
+// --review manual (with --mode review, #20): Define manually then Continue, no Analyze click: the city starts
+// on Continue, the review shows it running, without the "skipped" banner
 // --review issues-off (with --mode review, #845): a repository with Issues turned off, its Backlog card says so,
 // no Retry (the simulation-only hook CRAFTORIO_E2E_ISSUES_FAIL answers the issue read as gh does)
 // --review running (with --mode review, #852): the project map still running, City and Findings with the same
@@ -22,7 +26,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { execFileSync } = require('child_process');
 
-const MODES = ['start', 'repository', 'cloning', 'access-error', 'analysis', 'review'];
+const MODES = ['start', 'repository', 'cloning', 'access-error', 'analysis', 'review', 'new-workflows'];
 // the access check (git ls-remote, up to 30 s in the engine) and a local clone; the simulated analyses
 const IMPORT_WAIT_MS = 45000;
 const ANALYSIS_WAIT_MS = 90000;
@@ -132,6 +136,16 @@ async function open({ args, click, js, pause, win }) {
   await click('[data-testid="home-empty-create-project"]');
   await waitFor(js, '[data-testid="project-wizard"] [data-step="start"][aria-current="step"]', 10000);
   if (mode === 'start') return;
+  if (mode === 'new-workflows') {
+    await click('[data-testid="wizard-source-new"]');
+    await click('[data-testid="wizard-next"]');
+    await waitFor(js, '#wizard-new-name', 5000);
+    await typeIn(js, '#wizard-new-name', 'garden-log');
+    await click('[data-testid="wizard-next"]');
+    await waitFor(js, '[data-testid="project-wizard"] [data-step="analysis"][aria-current="step"]', IMPORT_WAIT_MS);
+    await pause(1000); // the profile's suggestions
+    return;
+  }
   await click('[data-testid="wizard-source-import"]');
   await click('[data-testid="wizard-next"]');
   await waitFor(js, '#wizard-repo', 5000);
@@ -155,6 +169,14 @@ async function open({ args, click, js, pause, win }) {
   if (mode === 'analysis') return;
   // #725: the workflows column's Analyze the repository starts the analysis; Continue is always there,
   // the review is captured when every analysis ended
+  if (args.review === 'manual') {
+    // #20: Define manually, then Continue with the city still ticked: the review while the analyses run
+    await click('[data-testid="wizard-workflows-choice-manual"]');
+    await click('[data-testid="wizard-next"]');
+    await waitFor(js, '[data-testid="wizard-review"]', 5000);
+    await pause(1500); // the review's reads
+    return;
+  }
   await click('[data-testid="wizard-workflows-choice-analyze"]');
   await waitFor(js, '[data-testid="tray-item"][data-status="analyzed"], [data-testid="tray-item"][data-status="failed"]', ANALYSIS_WAIT_MS);
   await click('[data-testid="wizard-next"]');
@@ -174,7 +196,7 @@ module.exports = {
   modes: MODES,
   open,
   // #845: the review of a repository with Issues turned off; #852: the review with the project map still running
-  options: { review: ['issues-off', 'running'] },
+  options: { review: ['issues-off', 'manual', 'running'] },
   sampleRepository,
   seed,
   typeIn,
