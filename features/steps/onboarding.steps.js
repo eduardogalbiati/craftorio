@@ -1571,3 +1571,66 @@ Then("the review's project card shows a placeholder for the languages", async ({
   await expect(languages).toHaveText(/\S/);
   await expect(languages.getByTestId('architecture-languages-bar')).toHaveCount(0);
 });
+
+// ---- #20 #21: step 3 of an import with "Define manually", and step 3 of a new project ------------------------------
+// Acceptance tests, written before the code (features/20-21-project-wizard-import-manual-new-step3.feature). They use
+// what the screens already expose: step 3's job rows (wizard-cost's list items, the paid ones data-part="<job>", each
+// with its checkbox named by the analysis, its status dot a role="img" named by the status: "waiting", "running",
+// "done"...; a failed one wizard-job-error-<job>, one left for later wizard-job-later-<job>), the footer's
+// wizard-back, the review (wizard-review) and its cards' data-state (pending | ready | failed | skipped | later).
+
+When('I go back to the previous step of the wizard', async ({ e2e }) => {
+  await footer(e2e.window).getByTestId('wizard-back').click();
+});
+
+Then("the wizard's {string} analysis is ticked", async ({ e2e }, words) => {
+  const row = jobRow(e2e.window, words);
+  await expect(row).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(row.getByRole('checkbox')).toBeChecked();
+});
+
+Then('the review says {string}', async ({ e2e }, text) => {
+  await expect(review(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(review(e2e.window).getByText(text)).toBeVisible();
+});
+
+// running (pending, its "running" badge) or done (ready): never "later", the look of analyses skipped in the wizard
+Then("the review's {string} card is running or done, not left for later", async ({ e2e }, name) => {
+  const card = reviewCard(e2e.window, name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toHaveAttribute('data-state', /^(pending|ready)$/, { timeout: LOAD_TIMEOUT });
+  await expect(card).not.toContainText('Not analyzed yet');
+});
+
+Then('the wizard does not say {string}', async ({ e2e }, text) => {
+  await expect(wizard(e2e.window)).toBeVisible();
+  await expect(wizard(e2e.window).getByText(text)).toHaveCount(0);
+});
+
+Then('the wizard has no heading that reads {string}', async ({ e2e }, text) => {
+  await expect(wizard(e2e.window)).toBeVisible();
+  await expect(wizard(e2e.window).getByRole('heading', { name: text })).toHaveCount(0);
+});
+
+Then("the wizard's suggested workflows do not say {string}", async ({ e2e }, text) => {
+  const column = workflowsColumn(e2e.window);
+  await expect(column).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(column).not.toContainText(new RegExp(escapeRe(text), 'i'));
+});
+
+// every row of step 3's left column runs, is done, failed saying why, or is left for later saying why: none stays
+// "waiting" with nothing said (checked over a few seconds, so a row that only starts late is not a failure)
+Then("no analysis of the wizard is left waiting without saying why", async ({ e2e }) => {
+  const rows = wizard(e2e.window).getByTestId('wizard-cost').getByRole('listitem');
+  await expect(rows.first()).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect.poll(async () => {
+    const silent = [];
+    for (const row of await rows.all()) {
+      const waiting = await row.getByRole('img', { name: 'waiting', exact: true }).count();
+      const why = row.locator('[data-testid^="wizard-job-later-"], [data-testid^="wizard-job-error-"]');
+      const said = (await why.count()) && /\S/.test(await why.first().innerText());
+      if (waiting && !said) silent.push((await row.innerText()).split('\n')[0].trim());
+    }
+    return silent;
+  }, { message: 'the rows waiting with no reason', timeout: IMPORT_TIMEOUT }).toEqual([]);
+});
