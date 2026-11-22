@@ -160,7 +160,67 @@ test('#20 guard: the facts job not done and the city job running: no languages b
   assert.equal(W.byTestId(card?.outer || '', 'wizard-review-languages'), null, textOf(card));
 });
 
-// ---- 8. a new project: the city stays left for later (#850) ------------------------------------------------------
+// ---- 7b. Continue when the analysis is not 'ready': the clone still running, a failed state (review round 1) ---
+
+// step 3 reached with the onboarding in `state` (Next on step 2 when the wizard waits there)
+async function atAnalysisWhile(state, api = {}) {
+  let app;
+  if (state.status === 'cloning') {
+    app = await W.imported(state, { api: { ...REVIEW_API, ...api } });
+    if (W.currentStep(app) !== 'analysis') await W.press(app, 'wizard-next');
+  } else {
+    app = await atAnalysis(api);
+    await W.emit(app, state);
+  }
+  assert.equal(W.currentStep(app), 'analysis', 'the wizard is on the analysis step');
+  return app;
+}
+
+const ANALYSIS_FAILED = stateWith('failed', { facts: { status: 'failed', error: 'boom' } });
+for (const [what, state] of [['the clone is still running', W.CLONING], ['the onboarding failed', ANALYSIS_FAILED]]) {
+  test(`#20 import, Define manually then Continue while ${what}: the analysis is asked for and the Review does not say it was skipped`, { timeout: 30000 }, async () => {
+    const app = await atAnalysisWhile(state);
+    await W.press(app, 'wizard-workflows-choice-manual');
+    await toReview(app);
+    assert.deepEqual([...new Set(analyzeCalls(app))], [W.PID], `api.analyzeOnboarding calls: ${JSON.stringify(analyzeCalls(app))}`);
+    assert.equal(savedAnalyzeLater(app), false, 'the last api.saveOnboardingWizard picks.analyzeLater');
+    assert.equal(reviewText(app).includes(REVIEW_LATER), false, reviewText(app));
+  });
+}
+
+test('#20 import, Continue when starting the analysis is refused: the wizard stays on step 3, nothing saved as skipped', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ analyzeOnboarding: async () => { throw new Error('engine refused'); } });
+  await W.press(app, 'wizard-workflows-choice-manual');
+  await W.press(app, 'wizard-next');
+  await app.settle(20);
+  assert.equal(analyzeCalls(app).length, 1, 'api.analyzeOnboarding was asked once');
+  assert.equal(W.currentStep(app), 'analysis', 'still on step 3');
+  assert.notEqual(savedAnalyzeLater(app), true, 'not saved as "analyze later"');
+});
+
+test('#20 import, closing the wizard while Continue starts the analysis: no error, the wizard stays closed', { timeout: 30000 }, async () => {
+  const errors = [];
+  const onError = (e) => errors.push(String(e?.stack || e));
+  process.on('unhandledRejection', onError);
+  process.on('uncaughtException', onError);
+  try {
+    let app = null;
+    app = await atAnalysis({
+      analyzeOnboarding: async (id) => { W.wizard(app).close(); await Promise.resolve(); return { ...W.clone(MAP_RUNNING), projectId: id }; },
+    });
+    await W.press(app, 'wizard-workflows-choice-manual');
+    await W.press(app, 'wizard-next');
+    await app.settle(20);
+    assert.equal(analyzeCalls(app).length, 1, 'api.analyzeOnboarding was asked');
+    assert.deepEqual(errors, [], 'no error after the wizard closed');
+    assert.equal(W.currentStep(app), null, 'the wizard is closed');
+  } finally {
+    process.off('unhandledRejection', onError);
+    process.off('uncaughtException', onError);
+  }
+});
+
+// ---- 8. a new project: the city stays left for later (#850)------------------------------------------------------
 
 const NEW_PID = 'field-notes';
 const CREATED = {

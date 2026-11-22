@@ -34,22 +34,22 @@ const CREATED = {
   },
 };
 
-function newPage() {
+function newPage(created = CREATED) {
   return loadApp({
     api: {
       listProjects: async () => [],
       onboardingAccounts: async () => [W.clone(GH_IN)],
       onboardingRepos: async () => [],
-      createOnboarding: async () => W.clone(CREATED),
-      onboardingStatus: async () => W.clone(CREATED),
+      createOnboarding: async () => W.clone(created),
+      onboardingStatus: async () => W.clone(created),
       architectureEstimate: async () => null,
       getBacklog: async () => ({ issues: [] }),
     },
   });
 }
 
-async function newAtAnalysis({ lang = 'en' } = {}) {
-  const app = newPage();
+async function newAtAnalysis({ lang = 'en', created } = {}) {
+  const app = newPage(created);
   await app.boot();
   if (lang !== 'en') app.sandbox.I18n.setLanguage(lang);
   W.wizard(app).open();
@@ -164,6 +164,16 @@ test('#21 new project step 3: no job row is left pending (waiting) without sayin
   assert.equal(rows.length > 0, true, 'the job rows of step 3');
   const pending = rows.filter((r) => (rowState(r) === 'waiting' || rowState(r) === null) && !explained(r)).map(textOf);
   assert.deepEqual(pending, [], `rows pending without a word: ${pending.join(' | ')}`);
+});
+
+// the engine's create() marks a new project's facts job 'skipped' (packages/engine/service/areas/project-onboarding.js)
+test('#21 new project step 3, facts job skipped as the engine creates it: every row not done says why', { timeout: 30000 }, async () => {
+  const created = { ...W.clone(CREATED), jobs: { ...W.clone(CREATED.jobs), facts: { status: 'skipped' } } };
+  const app = await newAtAnalysis({ created });
+  const rows = jobRows(app);
+  assert.equal(rows.length > 0, true, 'the job rows of step 3');
+  const silent = rows.filter((r) => rowState(r) !== 'done' && !explained(r)).map((r) => `${textOf(r)} [${rowState(r)}]`);
+  assert.deepEqual(silent, [], `rows neither done nor explained: ${silent.join(' | ')}`);
 });
 
 // ---- d) the import's step 3 is unchanged ------------------------------------------------------------------------

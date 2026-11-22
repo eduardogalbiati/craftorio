@@ -16,7 +16,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const MODES = ['start', 'repository', 'cloning', 'access-error', 'analysis', 'review'];
+// #21: new-workflows is a new project's step 3 (its own heading and suggestions line)
+const MODES = ['start', 'repository', 'cloning', 'access-error', 'analysis', 'new-workflows', 'review'];
 const PROJECT_PAGE = path.join(ROOT, 'fronts', 'analyser', 'views', 'project', 'project.js');
 const WIZARD = path.join(ROOT, 'fronts', 'build', 'views', 'projects', 'project-wizard.js');
 const CATALOGS = path.join(ROOT, 'packages', 'shared', 'i18n');
@@ -25,7 +26,7 @@ const catalogs = () => ({ en: readJson(path.join(CATALOGS, 'en.json')), pt: read
 const text = (v) => (v && typeof v === 'object' ? Object.values(v).join(' ') : v); // a plural { one, other }
 const keyLiterals = (src) => [...src.matchAll(/['"`]([a-z][\w-]*\.[a-z][\w.-]*)['"`]/g)].map((m) => m[1]);
 
-test('--view onboarding is a screenshot view whose modes are the wizard\'s six states', () => {
+test('--view onboarding is a screenshot view whose modes are the wizard\'s states', () => {
   const { VIEWS, parseArgs } = require('../scripts/screenshot');
   assert.ok(fs.existsSync(path.join(ROOT, 'scripts', 'screenshot', 'views', 'onboarding.js')), 'scripts/screenshot/views/onboarding.js exists');
   const view = VIEWS.onboarding;
