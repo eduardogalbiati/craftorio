@@ -54,6 +54,8 @@
     // #850: where step 3's profile line says the profile comes from: a new project's (#632) is its step 2 answers,
     // an import's the git history
     const profileSourceKey = () => (cur().model.source === 'new' ? 'onboarding.profile_found_answers' : 'onboarding.profile_found');
+    // #21: the line above the suggested workflows: a new project's come from its step 2 answers, an import's from how it is worked on
+    const suggestionsKey = () => (cur().model.source === 'new' ? 'onboarding.workflows_line_new' : 'onboarding.workflows_line');
 
     // #851: the "Recommended" label of the choice most owners should pick (Light, Analyze the repository)
     const recommended = () => `<span class="badge wizard-recommended" data-testid="wizard-recommended">${esc(t('onboarding.recommended'))}</span>`;
@@ -167,7 +169,7 @@
         </li>`;
       };
       const head = `<h3>${esc(t('onboarding.workflows_title'))}</h3>
-        <p class="muted">${esc(t(at === 'choose' ? 'onboarding.workflows_choose_line' : 'onboarding.workflows_line', { name }))}</p>`;
+        <p class="muted">${esc(t(at === 'choose' ? 'onboarding.workflows_choose_line' : suggestionsKey(), { name }))}</p>`;
       let body;
       if (at === 'choose') body = `<div class="wizard-workflows-choices">${choiceButton('analyze')}${choiceButton('manual')}</div>`;
       else if (at === 'failed') {

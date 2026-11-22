@@ -380,7 +380,7 @@
   function costBlock(started) {
     const jobs = cur.onboarding?.jobs || {};
     const loading = cur.estimate === undefined;
-    const later = (id) => PAID.includes(id) && cur.model.source === 'new' && !!cur.model.analyzeLater; // #850: left for later, unticked, saying why
+    const later = (id) => ['facts', ...PAID].includes(id) && cur.model.source === 'new' && !!cur.model.analyzeLater; // #850 (#21: facts too): left for later, saying why
     const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
     // #725: a failed job has no amount ("—"); a done one its cost, "free" for a free job, "—" for a paid
     // one whose cost is not known (#850: or left for later)
@@ -426,8 +426,8 @@
     const said = started ? `<p class="muted small">${esc(t(o.status === 'analyzed' ? 'onboarding.analysis_done' : 'onboarding.analysis_running'))}</p>` : '';
     return `<div class="wizard-columns">
         <div class="wizard-column">
-          <h2 id="project-wizard-title">${esc(t('onboarding.analyze_title', { name: cur.model.name }))}</h2>
-          <p class="muted">${esc(t('onboarding.read_only'))}</p>
+          <h2 id="project-wizard-title">${esc(t(cur.model.source === 'new' ? 'onboarding.analyze_title_new' : 'onboarding.analyze_title', { name: cur.model.name }))}</h2>
+          <p class="muted">${esc(t(cur.model.source === 'new' ? 'onboarding.read_only_new' : 'onboarding.read_only'))}</p>
           ${costBlock(started)}
           ${said}
           ${o.status === 'failed' ? errorBlock(o) : ''}
@@ -529,7 +529,7 @@
     const folder = (typeof state === 'object' && state?.projects?.find?.((p) => p.id === cur.projectId)?.folder) || '';
     const where = [cur.model.repository, folder].filter(Boolean).join(' · ');
     const chips = [platformOfRepo(cur.model.repository)?.label].filter(Boolean);
-    const languages = activity.languagesBlock(sectionState('projectMap', cur.review.facts !== undefined)); // #852
+    const languages = activity.languagesBlock(sectionState('facts', cur.review.facts !== undefined)); // #852, #20: from the facts job
     // #850: a new project is worked on as answered on step 2, never "read by the profile when it is done"
     const said = cur.model.source === 'new' ? t(`onboarding.new_mode_${profileOf()?.mode || cur.answers?.mode || 'local'}`) : languages ? '' : t('onboarding.review_how_pending');
     const how = chips.length ? `<div class="wizard-chips">${chips.map((c) => `<span class="wizard-chip">${esc(c)}</span>`).join('')}</div>`
@@ -547,7 +547,7 @@
   // three cards, then the backlog and the idea for the Inbox
   function reviewStep() {
     const r = cur.review;
-    const later = cur.model.analyzeLater && cur.model.source !== 'new' ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
+    const later = sectionState('projectMap', true) === 'later' && cur.model.source !== 'new' ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
     const openCity = `<button type="button" class="btn sm" data-act="open-city" data-testid="wizard-open-city">${esc(t('onboarding.open_city'))}</button>`;
     return `<div class="wizard-review" data-testid="wizard-review">${later}
         <div class="wizard-review-grid">
@@ -660,7 +660,7 @@
     const pid = cur.projectId;
     if (!pid) return;
     const reads = [['backlog', () => activity.readBacklog(pid), true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
-      ['facts', () => activity.readFacts(pid), jobDone('projectMap')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
+      ['facts', () => activity.readFacts(pid), jobDone('facts')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
     for (const [key, read, due] of reads) {
       if (!due || cur.review[key] !== undefined || cur.reading.has(key)) continue;
       cur.reading.add(key);
@@ -766,9 +766,10 @@
       return;
     }
     if (cur.model.step === 'repository') toAnalysis();
-    // #725: Continue before the analysis was started is "analyze later" (the review says so, not pending)
-    else if (cur.model.step === 'analysis' && !['analyzing', 'analyzed'].includes(cur.onboarding?.status)) cur.model = M.skipAnalysis(cur.model);
-    else cur.model = M.next(cur.model);
+    else if (cur.model.step === 'analysis' && cur.model.source !== 'new') { // #725, #20: Continue is never Skip: an import's analysis not started yet starts
+      if (cur.onboarding?.status === 'ready') await call(() => api.analyzeOnboarding(cur.projectId));
+      cur.model = M.next({ ...cur.model, analyzeLater: false });
+    } else cur.model = M.next(cur.model);
     if (cur.model.step === 'review') loadReview();
     render();
   }
@@ -856,11 +857,10 @@
     else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
     // #738: the fork suggestion's two choices; the answer (cloned, the fork chosen) moves on to analysis
     else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));
-    // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part
-    // too), or runs again a failed profile job
+    // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part too; #20: an earlier Skip no longer holds), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
     else if (act === 'workflows-analyze' && cur.projectId) {
-      cur.workflowsMode = 'analyze';
+      cur.workflowsMode = 'analyze'; cur.model = { ...cur.model, analyzeLater: false }; // only an import offers the choice
       const again = jobOf('profile').status === 'failed';
       await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId)));
     }

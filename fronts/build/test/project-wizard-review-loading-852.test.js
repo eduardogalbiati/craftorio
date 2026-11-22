@@ -149,8 +149,9 @@ test('#852 facts not read yet: the project card shows the languages placeholder,
   assert.equal(textOf(el).includes(catalog('en')['onboarding.review_languages_loading']), true, textOf(el));
 });
 
+// #20: the languages come from the facts job (not the project map): the placeholder while the facts job still runs
 test('#852 the analysis still running: the project card shows the languages placeholder', { timeout: 30000 }, async () => {
-  const app = await atReview(MAP_RUNNING);
+  const app = await atReview({ ...MAP_RUNNING, jobs: { ...MAP_RUNNING.jobs, facts: { status: 'running' } } });
   assert.ok(placeholder(app), 'data-testid="wizard-review-languages-loading" in the project card');
 });
 
