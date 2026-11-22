@@ -2,8 +2,10 @@
 // after the app (%APPDATA%\craftorio, ~/Library/Application Support/craftorio, ~/.config/craftorio);
 // an install from before the rename has its sign-in, its engine connection, its secrets, its window
 // state and its speech models in the folder named multiagent-orchestrator next to it. On the first
-// launch with no folder of the new name, that one is copied over (Chromium's caches and lock files
-// left out), and the old folder is left as it was. Called in main.js before anything creates the new
+// launch whose folder holds none of the app's own files (Electron creates the folder, and Chromium
+// writes its files in it, before main.js runs: the folder itself always exists), that one is copied
+// over: Chromium's caches and lock files left out, a file the new folder already has never overwritten.
+// The old folder is left as it was. Called in main.js before anything creates the new
 // folder (requestSingleInstanceLock does), never for a throwaway user data folder.
 // On macOS the secrets and the account are encrypted with a keychain entry named after the app: the
 // new name cannot read them, so that user signs in and enters the secrets again (Windows' DPAPI is
@@ -14,15 +16,20 @@ const path = require('path');
 
 const LEGACY_NAME = 'multiagent-orchestrator';
 // Chromium's own, rebuilt as needed; the lock files belong to a process that is not running
+// the app's own files: one of them in the new folder means the copy happened, or the user started fresh
+const OWN = ['account.bin', 'engine-connection.json', 'secrets.bin', 'speech-models'];
 const SKIP = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'Crashpad', 'blob_storage', 'Service Worker', 'Shared Dictionary', 'SingletonCookie', 'SingletonLock', 'SingletonSocket', 'lockfile']);
 
 function migrateLegacyUserData({ userData, legacyName = LEGACY_NAME, log = () => {} } = {}) {
   if (!userData) return null;
   const legacy = path.join(path.dirname(userData), legacyName);
-  if (path.resolve(legacy) === path.resolve(userData) || fs.existsSync(userData) || !fs.existsSync(legacy)) return null;
+  if (path.resolve(legacy) === path.resolve(userData) || !fs.existsSync(legacy)) return null;
+  if (OWN.some((f) => fs.existsSync(path.join(userData, f)))) return null;
   try {
     fs.cpSync(legacy, userData, {
       recursive: true,
+      force: false,
+      errorOnExist: false,
       filter: (src) => {
         const rel = path.relative(legacy, src);
         return !rel || !SKIP.has(rel.split(path.sep)[0]);

@@ -35,11 +35,22 @@ test('T3 the first launch copies the old folder to the new one, without the cach
   assert.match(logs.join('\n'), /copied/);
 });
 
-test('T3 a new folder that exists is never touched, and no old folder means nothing to do', (t) => {
+test('T3 the folder Electron created before main.js (Chromium\'s files only) still gets the copy; Chromium\'s files are not overwritten', (t) => {
+  const { old, now } = appData(t);
+  fs.mkdirSync(path.join(now, 'Cache'), { recursive: true });
+  fs.writeFileSync(path.join(now, 'DIPS'), 'new');
+  fs.writeFileSync(path.join(old, 'DIPS'), 'old');
+  assert.equal(migrateLegacyUserData({ userData: now }), old);
+  assert.equal(fs.readFileSync(path.join(now, 'engine-connection.json'), 'utf8'), '{"mode":"remote"}');
+  assert.equal(fs.readFileSync(path.join(now, 'DIPS'), 'utf8'), 'new', 'a file the new folder has is kept');
+});
+
+test('T3 a new folder with one of the app\'s own files is never touched, and no old folder means nothing to do', (t) => {
   const { dir, now } = appData(t);
   fs.mkdirSync(now);
+  fs.writeFileSync(path.join(now, 'engine-connection.json'), '{"mode":"local"}');
   assert.equal(migrateLegacyUserData({ userData: now }), null);
-  assert.deepEqual(fs.readdirSync(now), []);
+  assert.deepEqual(fs.readdirSync(now), ['engine-connection.json']);
   const lonely = path.join(dir, 'elsewhere', 'craftorio');
   assert.equal(migrateLegacyUserData({ userData: lonely }), null);
   assert.equal(fs.existsSync(lonely), false);
