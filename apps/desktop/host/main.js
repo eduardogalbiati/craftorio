@@ -118,6 +118,9 @@ if (!app.isPackaged && !process.env.CRAFTORIO_WORKSPACE && process.env.CRAFTORIO
 // CRAFTORIO_SIMULATION_ONLY and a workspace of its own but no CRAFTORIO_USER_DATA keeps the real
 // keychain, so its account.bin stays readable by the next normal launch), never in the packaged app.
 if (!app.isPackaged && process.env.CRAFTORIO_SIMULATION_ONLY === '1' && scratchUserData) app.commandLine.appendSwitch('use-mock-keychain');
+// T3: the user data folder from before the rename to Craftorio, copied once to the new one before the
+// single-instance lock below creates it (host/legacy-user-data.js); never for a throwaway folder
+if (!scratchUserData) require('./legacy-user-data').migrateLegacyUserData({ userData: app.getPath('userData'), log: (m) => console.log(m) });
 const secondCopy = !process.env.CRAFTORIO_WORKSPACE && !app.requestSingleInstanceLock();
 if (secondCopy) {
   const dir = workspace.resolveWorkspace().dir || os.tmpdir();
