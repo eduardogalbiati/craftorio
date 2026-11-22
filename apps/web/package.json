@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/web",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "private": true,
   "description": "The browser UI the engine server serves at /: its page (renderer/index.html, generated from its composition) and api-http.js, which builds window.api over the server's HTTP and WebSocket API.",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/front-build",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "private": true,
   "description": "The Code & Build front: projects, the backlog with the Roadmap and the Product Owner, releases, sessions, workflows, runs, run chats, artifacts and the supervisor; its screens, their CSS, its features and its tests.",
   "license": "MIT",

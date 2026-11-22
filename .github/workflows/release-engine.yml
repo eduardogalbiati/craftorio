@@ -1,0 +1,57 @@
+# The engine's own release (T7 of the Craftorio migration): pushing an engine-vX.Y.Z tag (scripts/
+# release-tags.js creates it when Changesets bumped @craftorio/engine) runs the engine's and the
+# contract's tests and publishes the engine package (npm pack of packages/engine) as the GitHub
+# release engine-vX.Y.Z, with its SHA256SUMS and the engine's changelog section. Linux only, a few
+# minutes: an engine release never builds the installers (that is deploy.yml, on a vX.Y.Z tag).
+name: Release engine
+
+on:
+  push:
+    tags: ['engine-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-engine
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ github.repository == 'eduardogalbiati/craftorio' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: The engine's and the contract's tests
+        env:
+          CRAFTORIO_SIMULATION_ONLY: '1'
+          CI: '1'
+        run: npx turbo run test --filter=@craftorio/engine --filter=@craftorio/contract --filter=@craftorio/shared --ui=stream
+      - name: The tag is the engine's version
+        run: |
+          TAG="${{ github.ref_name }}"
+          PKG=$(node -p "require('./packages/engine/package.json').version")
+          test "engine-v${PKG}" = "$TAG" || { echo "::error::${TAG} is not @craftorio/engine ${PKG}: run npm run release:version, then npm run release:tags"; exit 1; }
+      - name: Pack the engine
+        run: |
+          mkdir -p assets
+          npm pack -w packages/engine --pack-destination assets
+          cd assets && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#engine-v}"
+          # the changelog section of this version (Changesets: "## <version>" up to the next "## ")
+          awk -v v="## ${VERSION}" '$0==v{on=1;next} /^## /{if(on)exit} on' packages/engine/CHANGELOG.md > "$RUNNER_TEMP/notes.md" || true
+          [ -s "$RUNNER_TEMP/notes.md" ] || echo "Engine ${VERSION}." > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" assets/* --verify-tag --title "Engine ${VERSION}" --notes-file "$RUNNER_TEMP/notes.md" --latest=false

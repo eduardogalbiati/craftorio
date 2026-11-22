@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "baseBranch": "main",
+  "access": "restricted",
+  "fixed": [
+    [
+      "@craftorio/desktop",
+      "@craftorio/web",
+      "@craftorio/ui-kit",
+      "@craftorio/front-ai",
+      "@craftorio/front-analyser",
+      "@craftorio/front-build",
+      "@craftorio/front-plan"
+    ]
+  ],
+  "linked": [],
+  "ignore": [],
+  "privatePackages": {
+    "version": true,
+    "tag": false
+  },
+  "updateInternalDependencies": "patch",
+  "format": false,
+  "commit": false,
+  "changelog": "@changesets/cli/changelog"
+}
