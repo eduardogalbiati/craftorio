@@ -77,11 +77,11 @@ the workspace folder.
   `whisper-cli.exe` in Settings › General › Voice input. Models (`ggml-<id>.bin`) are downloaded
   from Settings into `%APPDATA%\<app>\speech-models` (Electron's userData; the engine server uses
   `%APPDATA%\craftorio\speech-models`). Tests use a fake CLI, never the real one.
-- Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\Craftorio\WorkspacePath`,
+- Workspace: `%USERPROFILE%\craftorio-workspace` (registry `HKCU\Software\Craftorio\WorkspacePath`,
   overridable with `CRAFTORIO_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),
   `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `craftorio`
-  points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repository is public, MIT).
+  points at `repos/eduardogalbiati-craftorio` (SSH remote; the repository is public, MIT).
 - **Developing while runs are active**: pulling or merging changes the sources (`packages/`, `apps/`) under the running app.
   Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
   server) keeps the code it started with, so new channels are missing. The process records its
@@ -140,7 +140,7 @@ One repository, one `node_modules` (default hoisting), the workspaces of the roo
   runs them all plus the root `test/`, the repository's own tests).
 - **The app root** (`packages/engine/domains/workspace/app-root.js`): the bundled defaults
   (`workflows/`, `skills/`, `pipelines/`, `seeds/`, `fragments/`), the app version and the server's static
-  root come from the first `package.json` above the module with `workspaces` or a `multiagent` section
+  root come from the first `package.json` above the module with `workspaces` or a `craftorio` section
   (the repository's; `resources/app`'s in the packaged app, where the packager strips `workspaces`),
   never from a package's own folder (`__dirname`); `CRAFTORIO_APP_ROOT` overrides it. The root
   `package.json`'s `craftorio.ui` names the UI folder the engine server serves.

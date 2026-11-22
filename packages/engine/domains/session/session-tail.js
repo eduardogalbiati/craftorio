@@ -167,10 +167,10 @@ if (require.main === module) {
     process.exit(1);
   }
   if (sessionId === '--file') {
-    process.stdout.write(`\x1b]0;${rel} · multiagent\x07`); // window title
+    process.stdout.write(`\x1b]0;${rel} · craftorio\x07`); // window title
     followFile(path.join(runDir, rel), (text) => process.stdout.write(text));
   } else {
-    process.stdout.write(`\x1b]0;${sessionId} · multiagent\x07`); // window title
+    process.stdout.write(`\x1b]0;${sessionId} · craftorio\x07`); // window title
     followSession(runDir, sessionId, (text) => process.stdout.write(text));
   }
 }

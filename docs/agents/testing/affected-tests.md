@@ -70,7 +70,7 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
 - **One whole suite at a time per machine** (#455): the per-test budgets (#402) were measured
   with one suite on the machine, so a whole-suite round (not a focused list of files, not the
   simulated suite) takes the machine-wide `suite` slot (`packages/engine/engine/machine-slot.js`,
-  `<os tmp>/multiagent-orchestrator/locks/suite.slot`) before its command, and frees it when the
+  `<os tmp>/craftorio/locks/suite.slot`) before its command, and frees it when the
   command ends, however it ends. An agent's own whole `npm test` (agent mode, no file list) takes
   the same slot (agents get `CRAFTORIO_LOCKS_DIR` set to that folder); the suite step's child
   inherits it through `CRAFTORIO_SUITE_SLOT`. While another run holds it, the round waits and

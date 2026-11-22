@@ -4,7 +4,7 @@
 // Opened from a gate's Show the diff and Changed files entries (gate-panel.js, scrolled to that
 // file) and from the Run screen's Review changes (any run with a worktree or reported files).
 // - left: the changed files grouped by folder, an added / modified / deleted / renamed icon, +n −m,
-//   a filter box, Viewed marks remembered per run (localStorage multiagent.diffViewed.<runId>) and
+//   a filter box, Viewed marks remembered per run (localStorage craftorio.diffViewed.<runId>) and
 //   "n of m viewed"; ↑ / ↓ or j / k move between files;
 // - middle: the selected file's diff, Split (before | after, aligned, line numbers on both sides) or
 //   Unified, remembered (multiagent.diffMode), with syntax highlighting, word-level highlights,

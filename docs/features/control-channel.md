@@ -51,7 +51,7 @@ the installed app). It reads `endpoint.json` from `CRAFTORIO_WORKSPACE` or `--wo
 checks the app's contract version (`GET /api/version`) and prints the result as JSON:
 
 ```
-craftorio-ctl roadmap:get "{\"projectId\":\"my-app\"}" --workspace C:/Users/me/multiagent-workspace
+craftorio-ctl roadmap:get "{\"projectId\":\"my-app\"}" --workspace C:/Users/me/craftorio-workspace
 craftorio-ctl --list
 ```
 
@@ -69,7 +69,7 @@ curl -s -X POST http://127.0.0.1:<port>/api/roadmap:pause -H "Authorization: Bea
 With PowerShell, which works with the packaged app too:
 
 ```
-$ep = Get-Content "$env:USERPROFILE\multiagent-workspace\control\endpoint.json" | ConvertFrom-Json
+$ep = Get-Content "$env:USERPROFILE\craftorio-workspace\control\endpoint.json" | ConvertFrom-Json
 Invoke-RestMethod -Method Post -Uri "$($ep.url)/api/roadmap:start" -Headers @{ Authorization = "Bearer $($ep.token)" } -ContentType 'application/json' -Body (@{ arg = @{ projectId = 'my-app' } } | ConvertTo-Json -Depth 10)
 ```
 

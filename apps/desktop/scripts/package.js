@@ -118,7 +118,7 @@ function packagerOptions({ platform, arch, out }) {
     // Nothing else is (#342): the external live terminal and the MCP server are the Rust binaries
     // of resources/bin/, always shipped, so no script needs the system node.
     asar: { unpack: '**/node_modules/node-pty/**' },
-    // the native sidecars (buildNative), outside app.asar: resources/bin/multiagent-{ctl,mcp,tail}[.exe]
+    // the native sidecars (buildNative), outside app.asar: resources/bin/craftorio-{ctl,mcp,tail}[.exe]
     extraResource: [nativeBinDir({ platform, arch, out })],
     // the license texts of the shipped npm libraries (scripts/third-party-licenses.js, #482) next to
     // app/ in the resources folder: buildPath is resources/app on every platform

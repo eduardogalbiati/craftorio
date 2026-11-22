@@ -71,7 +71,7 @@ Page alerts, toasts with an action, ⋮ menus, the roadmap card and releases, an
   aria-label "Release <version>, <state>") and its dashed `roadmap-release-line` follow the release's
   stage; they are never stages (no `data-stage`, no menu, no drop target) and replace the cut line's
   row once its release run started. The filter row's `roadmap-release-filter` (`view.release`,
-  localStorage `multiagent.roadmapRelease`) narrows `visibleStages` to the release's runs (`v.runs`).
+  localStorage `craftorio.roadmapRelease`) narrows `visibleStages` to the release's runs (`v.runs`).
   Screenshots: `--release checking|waiting|held|shipped` (the demo cut line's release run) and
   `--release-filter next|<version>`.
 - **A roadmap changed elsewhere** (#287): every save of the Roadmap screen sends the roadmap's

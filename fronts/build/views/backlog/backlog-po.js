@@ -1051,7 +1051,7 @@
     openProjectId: () => (po.open ? po.projectId : null),
     syncSendButton,
   };
-  // #744: the Next steps card's "Open the PO" (project.js): issue mode on that project; an issue filed then marks the step done (localStorage multiagent.nextStepsPoIssue)
+  // #744: the Next steps card's "Open the PO" (project.js): issue mode on that project; an issue filed then marks the step done (localStorage craftorio.nextStepsPoIssue)
   window.Actions?.register('openPoIssue', async (projectId) => { actions()?.focusProject(projectId); Object.assign(po, { issueFor: projectId }); await open(); setMode('issue'); });
   // #263: the Product Owner in the Agents window: the same conversation, a second chat in the pane
   window.AgentsWindow?.register({

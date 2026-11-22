@@ -27,7 +27,7 @@ The full-screen 3D overlay of a run: what it draws, its model, its four HUD card
     theme's palette (`useTheme()` in a component that paints with it; a texture drawn with theme
     colours passes `themed`, so it is freed when the theme is left). A state colour comes from
     `statusColor()` and always with its label. The top bar's sun / moon button
-    (`[data-testid=run3d-theme]`) switches; the choice is in localStorage (`multiagent.run3d.theme`).
+    (`[data-testid=run3d-theme]`) switches; the choice is in localStorage (`craftorio.run3d.theme`).
   - **HUD cards** (`Kpis` in `run3d/hud.jsx`, `[data-testid=run3d-card-<name>]`), left to right:
     step visits (with the agent turns), cost (with the effective `$/M tokens` under it,
     `run3d-cost-per-m`, the same figure as Analytics › Run), tokens (the total, `run3d-tokens-total`,

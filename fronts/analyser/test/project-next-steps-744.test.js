@@ -1,5 +1,5 @@
 // #744 acceptance, written before the code: the Next steps card on the project's page
-// (fronts/analyser/views/project/project.js, shown while localStorage multiagent.nextSteps[<project>] is
+// (fronts/analyser/views/project/project.js, shown while localStorage craftorio.nextSteps[<project>] is
 // 'open'), on the real page (packages/ui-kit/test/renderer-app-harness.js) as project-next-steps-642.test.js.
 //
 // The contract assumed here (new seams of #744):
@@ -7,7 +7,7 @@
 //   data-testid="next-step-po-issue-open" ("Open the PO"), which calls Actions.call('openPoIssue', <project id>)
 //   (packages/ui-kit/actions.js; the Build front's backlog-po.js registers it);
 // - the entry is done once an issue was filed through it for the project: the PO saves a marker in
-//   localStorage multiagent.nextStepsPoIssue = { <projectId>: { issue, url } }; the entry then shows the
+//   localStorage craftorio.nextStepsPoIssue = { <projectId>: { issue, url } }; the entry then shows the
 //   issue's link (data-testid="next-step-po-issue-link", href = url) and no "Open the PO" button;
 // - the refactors entry (next-step-refactors) is left out when the project has no refactor proposal;
 // - a disabled step button carries its reason: a non-empty `title` and a visible line

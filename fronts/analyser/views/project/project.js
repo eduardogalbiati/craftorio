@@ -16,13 +16,13 @@
 // docs/work/first-project-onboarding/images, #669: "<name> is ready · <n> workflows" in its head (the count only
 // for a project with its own workflow set), then a grid of entries:
 // next-step-po-issue (#744) → the Product Owner's chat in issue mode on the project (Actions openPoIssue),
-// done with the filed issue's link once one was filed through it (localStorage multiagent.nextStepsPoIssue),
+// done with the filed issue's link once one was filed through it (localStorage craftorio.nextStepsPoIssue),
 // next-step-refactors (#744: left out when the project has no proposal), the project's proposals with a checkbox each and "File and add <n>" (the checked ones
 // filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence's "Turn on"
 // → the Health tab, where the findings become issues (#730; it does not turn anything on itself), and
 // next-step-release-ci / next-step-screenshots shown disabled (later phases), their reason in the button's
 // tooltip and a line (#744);
-// next-steps-dismiss), remembered per project in localStorage multiagent.nextSteps.
+// next-steps-dismiss), remembered per project in localStorage craftorio.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
 // (view-registry.js); uses app.js globals ($, esc, state, api, errMsg, showView, openDrawer,

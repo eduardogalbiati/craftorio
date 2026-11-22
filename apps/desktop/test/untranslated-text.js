@@ -55,7 +55,8 @@ function untranslated(src, name = 'file') {
 }
 
 // the product's name is not translated (the brand, the window title)
-const PRODUCT = /^(?:Multiagent|Orchestrator|Craftorio)$/;
+// the product name, also split across the brand's two spans (Craft<span>orio</span>)
+const PRODUCT = /^(?:Craftorio|Craft|orio)$/;
 const HTML_TAG = /<(\/?)([a-z][a-z0-9-]*)((?:\s[^<>]*)?)\/?>([^<]*)/gi;
 
 /** Visible text of a static page without its data-i18n hook: ['file:line: "text"']. */

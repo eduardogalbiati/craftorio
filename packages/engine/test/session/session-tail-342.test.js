@@ -172,7 +172,7 @@ for (const tail of TAILS) {
     const runDir = runFolder(t, { session: `${jsonl(SESSION_EVENTS.slice(0, 5))}{not json\n${jsonl(SESSION_EVENTS.slice(5))}` });
     const out = await printed(t, tail, runDir, 'developer-1', 'session closed: success');
     assert.ok(out.includes(`Following ${path.join(runDir, 'sessions', 'developer-1.jsonl')}`), 'names the file it follows');
-    assert.ok(out.includes('developer-1 · multiagent'), 'the window title');
+    assert.ok(out.includes('developer-1 · craftorio'), 'the window title');
     for (const s of ['── turn 1', 'npm test', 'provider session abc-123', 'in 10 · cache 2000 · out 30 · $0.5000', 'retrying']) assert.ok(out.includes(s), s);
     assert.equal(out.includes('ignored'), false, 'unknown stream kinds print nothing');
   });

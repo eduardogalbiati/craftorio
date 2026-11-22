@@ -32,7 +32,7 @@ Where a run's state comes from, run titles and PRs, and how every way of opening
   alive in another app window (its `listRuns` row's `runningElsewhere`) is not interrupted: it
   ends with `runchat-elsewhere-note`, its gate says to answer it there, and no Resume.
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
-  localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
+  localStorage `craftorio.runView`). Every way of opening a run (sidebar Run menu, toasts,
   notifications, a run card's "Open run", Backlog run links, the gate badge, a resume) goes through
   `selectRun(runId)` / `showRun(runId, { workflow, running })` in `app.js`, which open that run's
   chat (Write & Review and AI Arena: their own screens) or its Run screen (a run this window does

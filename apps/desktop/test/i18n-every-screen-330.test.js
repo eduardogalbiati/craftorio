@@ -72,7 +72,7 @@ test('#330 (a) the index.html check itself: a hook translates, a literal without
   assert.equal(untranslatedHtml('<button title="Close">×</button>').length, 1);
   assert.equal(untranslatedHtml('<input placeholder="Ask about this run" />').length, 1);
   assert.equal(untranslatedHtml('<input placeholder="Ask" data-i18n-placeholder="sup.ask" />').length, 0);
-  assert.equal(untranslatedHtml('<div class="brand">Multiagent <span>Orchestrator</span></div>').length, 0);
+  assert.equal(untranslatedHtml('<div class="brand">Craft<span>orio</span></div>').length, 0);
   assert.equal(untranslatedHtml('<title>Craftorio</title>').length, 0);
   assert.equal(untranslatedHtml('<!-- <b>Start workflow</b> -->').length, 0);
   assert.equal(untranslatedHtml('<label for="p">Project <span class="req">*</span></label>').length, 1);

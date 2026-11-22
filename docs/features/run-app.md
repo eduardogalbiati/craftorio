@@ -27,11 +27,11 @@ app's state (running / stopped / failed, with the busy-port message), **Terminal
 its terminal and **Open URL** when a URL is set.
 
 Which command runs, first match wins: the project's Local preview (Projects › Edit) > the
-repository's `.multiagent/local-preview.yaml` > the workflow's `orchestrator.local_preview` >
+repository's `.craftorio/local-preview.yaml` > the workflow's `orchestrator.local_preview` >
 detection. A repository declares how it runs once, committed, and everyone gets one-click Run App:
 
 ```yaml
-# .multiagent/local-preview.yaml
+# .craftorio/local-preview.yaml
 install: npm ci          # optional
 command: npm run dev
 url: http://localhost:5173   # optional
@@ -50,7 +50,7 @@ published port), a dev container's `postStartCommand` (forwarded port), a Procfi
 Makefile `run`/`dev`/`start` target, the README's run command, Django, Go, Rust or .NET; each
 suggestion says where it came from. **Run** saves a detected command as the project's Local preview;
 **Edit** opens the fields, and **Save and run** can also write them to
-`.multiagent/local-preview.yaml` in the project folder (a change you commit). Projects › Edit
+`.craftorio/local-preview.yaml` in the project folder (a change you commit). Projects › Edit
 shows what the project's folder declares or is detected to run with (**Use it**), before any gate;
 Projects › Add detects nothing until the project is saved (only a project's folder or a run's
 worktree is read, so a browser on `npm run serve` cannot list any folder of the machine). For this

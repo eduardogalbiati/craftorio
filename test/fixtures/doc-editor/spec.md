@@ -102,7 +102,7 @@ translation: spec.pt-BR.md
 - **Project:** created with `status: cloning`, then `ready` or `failed`, with Retry.
 - **Suggestion:** #487's `composeWorkflowSet`, extended for mode/ci/tests and to generate feature/fix/release.
 - **Aliases:** in the workflow loader, where an old name resolves to the new one with its variant's inputs.
-- **Where things live:** the project's workflows are referenced in the project's JSON, in the workspace. "Customize" writes to `.multiagent/`, uncommitted.
+- **Where things live:** the project's workflows are referenced in the project's JSON, in the workspace. "Customize" writes to `.craftorio/`, uncommitted.
 
 ## Areas of concern
 

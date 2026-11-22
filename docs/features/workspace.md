@@ -49,11 +49,11 @@ order: 100
   log says so.
 
 <!-- section:workspace order:400 -->
-- On startup the app looks for `%USERPROFILE%\multiagent-workspace`. If it does not exist, it asks
+- On startup the app looks for `%USERPROFILE%\craftorio-workspace`. If it does not exist, it asks
   whether to create it or pick another folder.
 - The chosen path is stored in the Windows registry at
   `HKCU\Software\Craftorio\WorkspacePath` and reloaded on the next launches
-  (on other OSes, in `~/.multiagent-orchestrator.json`). If the stored folder disappears, the app asks again.
+  (on other OSes, in `~/.craftorio.json`). If the stored folder disappears, the app asks again.
 - Settings shows the current workspace, with **Open** and **Change…**.
 - The `repo_path` input accepts a git URL (`https://…` or `git@…`): the app clones it into
   `repos/<owner>-<repo>` (or runs `git fetch` if already cloned) and runs the workflow on that copy.

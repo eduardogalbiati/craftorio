@@ -176,7 +176,7 @@ function layout({ title, active, main, side, lang, file }) {
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="${S.menu}">☰</button>
-  <a class="brand" href="index.html">Multiagent <span>Orchestrator</span><em>${S.docs}</em></a>
+  <a class="brand" href="index.html">Craft<span>orio</span><em>${S.docs}</em></a>
   <div class="search"><input id="search" type="search" placeholder="${S.filter}" autocomplete="off"></div>
   <div class="header-right">${langSwitch(lang, file)}<a class="btn" href="${REPO}" target="_blank" rel="noopener">GitHub</a></div>
 </header>

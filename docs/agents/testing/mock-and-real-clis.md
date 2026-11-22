@@ -86,7 +86,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   different paths (both off: no test step; run_existing + E2E off: suite only); mock runs cover each
   combination with `inputs: { unit_tests, e2e_tests }` and `tests_status: ['pass']`.
 - **One Electron screenshot at a time (#199)**: `scripts/screenshot.js` and the screenshots step
-  take the machine-wide slot of `packages/engine/engine/machine-slot.js` (`<os tmp>/multiagent-orchestrator/locks/screenshot.slot`,
+  take the machine-wide slot of `packages/engine/engine/machine-slot.js` (`<os tmp>/craftorio/locks/screenshot.slot`,
   or `CRAFTORIO_LOCKS_DIR`): a second capture waits ("waiting for the screenshot slot"), a dead
   holder's slot is freed. Tests use their own `dir`.
 - **Dependencies (#198)**: run worktrees get `node_modules` linked from `<workspace>/cache/deps`

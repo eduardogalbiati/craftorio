@@ -102,7 +102,7 @@ source: spec.md (English)
 - **Projeto:** criado com `status: cloning` e, depois, `ready` ou `failed`, com Retry.
 - **Sugestão:** o `composeWorkflowSet` do #487, estendido para mode/ci/tests e para gerar feature/fix/release.
 - **Aliases:** no carregador de workflows, onde o nome antigo resolve para o novo com os inputs da variante.
-- **Onde fica cada coisa:** os fluxos do projeto ficam referenciados no JSON do projeto, no workspace. "Customize" escreve em `.multiagent/`, sem commit.
+- **Onde fica cada coisa:** os fluxos do projeto ficam referenciados no JSON do projeto, no workspace. "Customize" escreve em `.craftorio/`, sem commit.
 
 ## Pontos de atenção
 

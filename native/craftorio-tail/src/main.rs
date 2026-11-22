@@ -47,7 +47,7 @@ fn main() -> ExitCode {
         };
         let file = js::join(&[&run_dir, rel]);
         let head = format!(
-            "\x1b]0;{rel} · multiagent\x07{}\n",
+            "\x1b]0;{rel} · craftorio\x07{}\n",
             format::dim(&format!("Following {file}\n"))
         );
         let mut tail = FileTail::new(file);
@@ -70,7 +70,7 @@ fn main() -> ExitCode {
         },
     };
     let head = format!(
-        "\x1b]0;{session_id} · multiagent\x07{}\n",
+        "\x1b]0;{session_id} · craftorio\x07{}\n",
         format::dim(&format!("Following {file}\n"))
     );
     follow(&head, || tail.read_new())

@@ -14,7 +14,7 @@ The first project's onboarding: the wizard, its progress tray, the review and th
   anywhere on its own), `onboarding:start | status | analyze | retry`
   and the `onboarding:changed` event.
 - `fronts/analyser/views/project/project.js`: the Next steps card (`project-next-steps`), shown after
-  Finish until dismissed, remembered per project in localStorage `multiagent.nextSteps`.
+  Finish until dismissed, remembered per project in localStorage `craftorio.nextSteps`.
 
 ## Who opens it
 
