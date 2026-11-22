@@ -54,7 +54,7 @@
 // Stack (#807, roadmap-stack.js): the next stage starts from the branch of an item that waits for its PR's merge.
 // Main stays green (#405, packages/engine/domains/project/base-health.js): a red test on the base puts a fix item in a new stage before the current one (`insertFrontStage`).
 // The waiting refactor stage (#435): a disabled stage marked `waiting` (Send to Refactor's items,
-// fronts/analyser/engine/channels/refactor.js) stays last: `propose` adds its stages before it, and so does
+// packages/engine/fronts/analyser/channels/refactor.js) stays last: `propose` adds its stages before it, and so does
 // `cleanStages` with the stages a save adds after it (the owner's add stage). Enabled, it loses
 // the marker and becomes a plain stage.
 // Screen: fronts/build/views/backlog/backlog-roadmap.js; channels: packages/engine/service/channels/roadmap.js.

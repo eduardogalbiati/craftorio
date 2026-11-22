@@ -1,6 +1,6 @@
 // Monitor › Errors (#634, spec R12, mockup docs/work/first-project-onboarding/images/mock-8.jpg): the
 // project's production errors, grouped with no model by the Monitor area
-// (fronts/ai/engine/areas/monitor.js, channels monitor:*). A row: status, title, message · where, a
+// (packages/engine/fronts/ai/areas/monitor.js, channels monitor:*). A row: status, title, message · where, a
 // sparkline of the last hour, count · window, its state (new → Diagnose; intent in Inbox → Propose fix,
 // the badge opens the card; fix run · waiting for you → the badge opens the run, stopped at its gate).
 // The header lists the sources ("Sources…" adds one: Sentry with its token in the keychain, a log

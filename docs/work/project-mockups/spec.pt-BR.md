@@ -357,7 +357,7 @@ Design system e código divergem: o código sobrescreve componentes, cria os seu
   - um inspetor injetado via `postMessage`.
 - **Kit:** `workflows/ui-kit-map.yaml`: um passo de máquina para os tokens determinísticos e depois um agente só-leitura. A saída vai para `docs/work/_kit/`.
 - **Agente designer:** uma sessão persistente por mockup. O `cwd` é a pasta do mockup e o código do projeto é só-leitura. As skills são `mockup-design` e `design-system`.
-- **Domínio e canais:** `fronts/plan/engine/domains/mockups.js` e os canais `mockups:*` (listar, criar, renderizar, lint).
+- **Domínio e canais:** `packages/engine/fronts/plan/domains/mockups.js` e os canais `mockups:*` (listar, criar, renderizar, lint).
 - **Handoff:** os anexos do card do Discovery; o diálogo de commit do #258 com os recortes; um input `mockup` nos workflows de dev; um item no rubric da revisão de UI.
 
 ## Pontos de atenção

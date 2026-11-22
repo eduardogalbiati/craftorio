@@ -72,7 +72,7 @@ const AREAS = {
 // the front's UI reaches its own engine code only through window.api).
 for (const f of fronts(ROOT)) {
   AREAS[`front:${f.id}`] = { may: [`front:${f.id}`, 'kit', 'shared'], what: `the ${f.id} front (${f.dir}/): its screens, their CSS and its Home card` };
-  AREAS[`front-engine:${f.id}`] = { may: [`front-engine:${f.id}`, 'service', 'root', 'engine', 'utility', 'shared'], what: `the ${f.id} front's engine side (${f.dir}/engine/): its channels, areas and domain modules` };
+  AREAS[`front-engine:${f.id}`] = { may: [`front-engine:${f.id}`, 'service', 'root', 'engine', 'utility', 'shared'], what: `the ${f.id} front's engine side (packages/engine/fronts/${f.id}/, T4): its channels, areas and domain modules` };
 }
 // a front's engine-side folder (scripts/source-tree.js frontEngineDirs), by the front's folder
 const FRONT_ENGINE = Object.fromEntries(frontEngineDirs(ROOT, { all: true }).map((f) => [f.dir, f.engine]));
@@ -92,23 +92,28 @@ const PACKAGES = {
   ...Object.fromEntries(fronts(ROOT).map((f) => [f.dir, `front:${f.id}`])),
 };
 
+// The area of a workspace's file (pkg: its first two path parts, a key of PACKAGES), or null.
+function packageAreaOf(file, parts, pkg) {
+  // a package's tests and features are not sources; a front's engine folder is its own area (phase 4)
+  // the desktop app's composition (the fronts it ships, phase 3) is read by its host (main.js passes it to the service, phase 4)
+  if (file === 'apps/desktop/composition.js') return 'desktop';
+  if (PACKAGES[pkg]) {
+    if (parts[2] === 'test' || parts[2] === 'features') return null;
+    if (FRONT_ENGINE[pkg] && file.startsWith(`${FRONT_ENGINE[pkg]}/`)) return `front-engine:${PACKAGES[pkg].slice('front:'.length)}`;
+    return PACKAGES[pkg];
+  }
+  if (parts.length < 4 || parts[2] === 'test') return null;
+  // T4: a front's engine side kept in the engine package (packages/engine/fronts/<id>/)
+  if (pkg === 'packages/engine' && parts[2] === 'fronts') return parts.length > 4 && AREAS[`front-engine:${parts[3]}`] ? `front-engine:${parts[3]}` : null;
+  if (parts[2] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
+  return FOLDERS[parts[2]] || null;
+}
+
 // The area of a file (path from the repository root, with /), or null when no area holds it.
 function areaOf(file) {
   const parts = file.split('/');
   const pkg = parts.length > 2 ? `${parts[0]}/${parts[1]}` : null;
-  if (pkg && pkg in PACKAGES) {
-    // a package's tests and features are not sources; a front's engine folder is its own area (phase 4)
-    // the desktop app's composition (the fronts it ships, phase 3) is read by its host (main.js passes it to the service, phase 4)
-    if (file === 'apps/desktop/composition.js') return 'desktop';
-    if (PACKAGES[pkg]) {
-      if (parts[2] === 'test' || parts[2] === 'features') return null;
-      if (FRONT_ENGINE[pkg] && file.startsWith(`${FRONT_ENGINE[pkg]}/`)) return `front-engine:${PACKAGES[pkg].slice('front:'.length)}`;
-      return PACKAGES[pkg];
-    }
-    if (parts.length < 4 || parts[2] === 'test') return null;
-    if (parts[2] === 'domains') return ENGINE_ROOT_UTILITIES.includes(file) ? 'utility' : 'root';
-    return FOLDERS[parts[2]] || null;
-  }
+  if (pkg && pkg in PACKAGES) return packageAreaOf(file, parts, pkg);
   // any other app (apps/web, phase 3): its page folder is the renderer area; nothing else there requires
   if (parts[0] === 'apps' && parts.length > 3) return FOLDERS[parts[2]] === 'renderer' ? 'renderer' : null;
   if (parts[0] !== 'src' || parts.length < 2) return null;

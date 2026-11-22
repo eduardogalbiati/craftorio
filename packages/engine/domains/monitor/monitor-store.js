@@ -2,7 +2,7 @@
 // error sources (never a token: tokens live in the system keychain), the events read so far by id
 // (deduplicated across polls), each group's state (new, intent with its Inbox card, fix-run with its
 // run), the automation (diagnose / fix: ask | on | off, a daily cap) and today's diagnoses count.
-// Read and written by fronts/ai/engine/channels/monitor.js.
+// Read and written by packages/engine/fronts/ai/channels/monitor.js.
 const fs = require('fs');
 const path = require('path');
 const { writeJsonSafe } = require('../workspace/state-file');

@@ -6,7 +6,7 @@
 // attachment count; a card opens next to the list with its document (Edit: Save / Cancel), its
 // attachments and its thread, and the triage actions: Accept (to Discovery › Triage), Merge into…
 // another card, Discard (archived with a reason). Enter captures, Esc closes the open card.
-// Import… (#322, fronts/plan/engine/domains/discovery-import.js) opens a panel that takes a .md/.txt file (chosen or
+// Import… (#322, packages/engine/fronts/plan/domains/discovery-import.js) opens a panel that takes a .md/.txt file (chosen or
 // dropped on it) or pasted text and previews the items the document is cut into (one per top-level
 // heading or list item; its `- [ ]` lines its criteria): title (Rename: Save / Cancel), first lines,
 // number of criteria, the clarity score the card gets, a duplicate of an open card or open synced

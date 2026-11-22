@@ -25,7 +25,7 @@ Scope: phase 0 (the editor on the reader prototype) and phase 1 (MVP, R1–R13 f
 - `packages/shared/doc-model.js`: the selection payload (file, anchor, lines, passage, context), translation alignment by block, and the markdown lint (front matter, the playbook's sections, R1…, `**Recommended:**`, images). Pure, dual-load.
 - `fronts/plan/views/docs/docs.js` and `docs.css`: the Documents screen (items and stages, New item).
 - `fronts/plan/views/docs/doc-editor.js`: the editor (the reader's iframe, the stages, the contents, the chat, the selection chip, the change marks, the unreviewed queue).
-- `fronts/plan/engine/channels/docs.js` and `fronts/plan/engine/domains/docs.js`: list `docs/work/`, read the runs in progress, swap a section's lines in the source and its translation, commit each request in the run's worktree.
+- `packages/engine/fronts/plan/channels/docs.js` and `packages/engine/fronts/plan/domains/docs.js`: list `docs/work/`, read the runs in progress, swap a section's lines in the source and its translation, commit each request in the run's worktree.
 - The engine's `human_edit` step: a gate that accepts requests while it waits; each request is a turn of the named agent; only the person ends it. It joins the protected gates.
 - `workflows/write-doc.yaml`: evidence → draft → `human_edit` → review → `human_approval`, for `intent.md` or `spec.md`.
 - `skills/intent-writing/SKILL.md` and `skills/spec-writing/SKILL.md`, with their rubrics.

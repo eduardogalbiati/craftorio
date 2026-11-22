@@ -1,5 +1,5 @@
-// #835 Mockups phase 2, review follow-ups on the mockups service (fronts/plan/engine/domains/mockups.js and
-// fronts/plan/engine/channels/mockups.js):
+// #835 Mockups phase 2, review follow-ups on the mockups service (packages/engine/fronts/plan/domains/mockups.js and
+// packages/engine/fronts/plan/channels/mockups.js):
 // - promoteToKit with two colours in one declaration (both become kit tokens, the lint flags neither) and a
 //   token name the kit already has (the existing token kept, the new one suffixed -2);
 // - keepVariant('main') with another variant present (main stays, the others go) and switchVariant to an
@@ -14,8 +14,8 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 
-const load = () => require('../engine/domains/mockups');
-const loadChannels = () => require('../engine/channels/mockups');
+const load = () => require('@craftorio/engine/fronts/plan/domains/mockups');
+const loadChannels = () => require('@craftorio/engine/fronts/plan/channels/mockups');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

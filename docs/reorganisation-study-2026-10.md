@@ -207,7 +207,7 @@ root `npm test` runs every workspace.
 - *Horizontal* (phases 2 and 3): the engine package owns every channel file and domain module; a
   front is UI only. Simple; a front still cannot be developed without touching `packages/engine`.
 - *Vertical* (phase 4): a front package carries its channel files, area files and domain modules
-  (`fronts/analyser/engine/channels/architecture.js`, `.../domains/refactor-*.js`), and the engine
+  (`packages/engine/fronts/analyser/channels/architecture.js`, `.../domains/refactor-*.js`), and the engine
   discovers channel files from the installed fronts the way it already discovers them from a folder.
   This is what makes a front independent in code and tests, and what lets an engine build ship only
   the channels of the fronts it serves. Recommended, as the end state.

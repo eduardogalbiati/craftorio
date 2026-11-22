@@ -178,7 +178,7 @@ const service = createService({
     relaunch: () => restartApp(),
     // #634: the Monitor's source tokens, encrypted by the system (host/secrets.js)
     secrets: createSecrets({ file: path.join(app.getPath('userData'), 'secrets.bin'), safeStorage }),
-    // #625: the mockup editor window (mockups:open-editor, fronts/plan/engine/channels/mockups.js)
+    // #625: the mockup editor window (mockups:open-editor, packages/engine/fronts/plan/channels/mockups.js)
     openMockupEditor: (a) => !!mockupsWindow?.open(a || {}),
     // #836: a selected region of the editor window as a PNG data URL (mockups:crops), `box` [x, y, width,
     // height] in the window's coordinates; null when there is nothing to capture

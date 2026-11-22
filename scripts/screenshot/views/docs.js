@@ -1,5 +1,5 @@
 // Screenshot seed of the Documents screen (--view docs, #647): a git repository for the demo project
-// with three work items written through the Documents service (fronts/plan/engine/domains/docs.js),
+// with three work items written through the Documents service (packages/engine/fronts/plan/domains/docs.js),
 // so each request is its own commit:
 // - write-doc: an accepted intent and a draft spec with three requests (one undone);
 // - offline-mode: a draft intent, still the skeleton but for its Problem;
@@ -29,7 +29,7 @@ function fill(docs, DocModel, dir, item, doc, heading, en, pt, request) {
 }
 
 function demoDocs(appDir, dir) {
-  const docs = require(path.join(appDir, 'fronts', 'plan', 'engine', 'domains', 'docs'));
+  const docs = require(path.join(appDir, 'packages', 'engine', 'fronts', 'plan', 'domains', 'docs'));
   const DocModel = require(path.join(appDir, 'packages', 'shared', 'doc-model'));
   const f = (...a) => fill(docs, DocModel, dir, ...a);
 

@@ -357,7 +357,7 @@ A design system and the code drift apart: the code overrides components, adds lo
   - an inspector injected over `postMessage`.
 - **Kit:** `workflows/ui-kit-map.yaml`: a machine step for the deterministic tokens, then a read-only agent. The output goes in `docs/work/_kit/`.
 - **Designer agent:** a persistent session per mockup. Its `cwd` is the mockup folder and the project code is read-only. Its skills are `mockup-design` and `design-system`.
-- **Domain and channels:** `fronts/plan/engine/domains/mockups.js` and `mockups:*` channels (list, create, render, lint).
+- **Domain and channels:** `packages/engine/fronts/plan/domains/mockups.js` and `mockups:*` channels (list, create, render, lint).
 - **Handoff:** the Discovery card's attachments; the #258 commit dialog with crops; a `mockup` input on the dev workflows; a UI review rubric item.
 
 ## Areas of concern

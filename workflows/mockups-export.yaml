@@ -9,7 +9,7 @@
 # request (fragments/pr-pipeline.yaml: pr_open, then stack_follow when stacked, then pr_monitor; the team
 # merges it). `kit_official` (Q-2, per project): the README says the kit is the project's official design
 # system, or only a reference. The list of files is the Mockups service's exportPlan
-# (fronts/plan/engine/domains/mockups.js); the channel mockups:export-repo starts this run (real only:
+# (packages/engine/fronts/plan/domains/mockups.js); the channel mockups:export-repo starts this run (real only:
 # simulated, CRAFTORIO_SIMULATION_ONLY, it answers the plan and starts nothing). The Mockups screen's
 # "Export to the repository" opens the Start panel with `slugs` (and `screens`, the same list).
 # Docs: docs/agents/storage/mockups.md.

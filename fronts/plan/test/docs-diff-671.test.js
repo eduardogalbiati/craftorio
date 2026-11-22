@@ -1,14 +1,14 @@
 // #671 The Diff tab of the Documents screen (mock-3, spec R11): the change's page draws only the sections
 // a request touched. fronts/plan/views/docs/docs-diff.js (Node side): words(a, b) → [{ op, text }] word
 // diff; compare(before, after, DocModel) → the sections at the change with touched / removed / near and
-// the parts of each touched one. fronts/plan/engine/domains/docs.js readAt(dir, { item, doc, commit }) →
+// the parts of each touched one. packages/engine/fronts/plan/domains/docs.js readAt(dir, { item, doc, commit }) →
 // the source at the change's parent and at it (git show), a non-commit refused.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRepo } = require('@craftorio/engine/test/repo-workflow-fixtures-485');
 const DocModel = require('../../../packages/shared/doc-model');
 const { compare, words } = require('../views/docs/docs-diff');
-const docs = require('../engine/domains/docs');
+const docs = require('@craftorio/engine/fronts/plan/domains/docs');
 
 const SPEC = `---
 item: demo

@@ -26,7 +26,7 @@
 //                            counts { todo, running (in progress or waiting), local, done } and the
 //                            stage: in_delivery, delivered (every issue done), released (every issue in
 //                            a shipped release, packages/engine/domains/releases/releases.js)
-// Service: fronts/plan/engine/channels/discovery.js (discovery:commit-proposal, discovery:commit, the board's
+// Service: packages/engine/fronts/plan/channels/discovery.js (discovery:commit-proposal, discovery:commit, the board's
 // `committed` list); screen: fronts/plan/views/discovery/discovery-commit.js.
 
 const fs = require('fs');
@@ -140,7 +140,7 @@ function normalizeSplit(raw, card, { workflow = null, workflows = [] } = {}) {
 }
 
 // #836 an issue's mockup crops [{ mid, file, name }]: the regions the owner selected in the mockup editor
-// (fronts/plan/engine/domains/mockups.js saveCrops), each with its data-mid; anything else dropped
+// (packages/engine/fronts/plan/domains/mockups.js saveCrops), each with its data-mid; anything else dropped
 const cleanCrops = (list) => (Array.isArray(list) ? list : [])
   .map((c) => ({ mid: String(c?.mid ?? '').trim(), file: String(c?.file ?? '').trim(), name: String(c?.name ?? '').trim() }))
   .filter((c) => c.mid && c.file)

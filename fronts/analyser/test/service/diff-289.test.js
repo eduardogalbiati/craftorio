@@ -1,4 +1,4 @@
-// #289: the expanded run card's Repository column reads run:diff (fronts/analyser/engine/areas/diff.js) for an
+// #289: the expanded run card's Repository column reads run:diff (packages/engine/fronts/analyser/areas/diff.js) for an
 // ended run. Once the run's worktree folder is gone its branch still answers (#202); once the branch
 // is gone too (deleted, nothing merged) the answer must say so instead of failing: { commits: [],
 // unavailable: /branch .*gone/i }. Acceptance test, written before the code, on the area's own seam
@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const diffArea = require('../../engine/areas/diff');
+const diffArea = require('@craftorio/engine/fronts/analyser/areas/diff');
 
 function makeDiffCtx(t) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-diffctx-289-'));

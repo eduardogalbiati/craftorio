@@ -1,4 +1,4 @@
-// #836: the host's captureMockupRegion (mockups:crops, fronts/plan/engine/channels/mockups.js) turns a
+// #836: the host's captureMockupRegion (mockups:crops, packages/engine/fronts/plan/channels/mockups.js) turns a
 // selected region of the mockup editor window, `box` [x, y, width, height] in the window's coordinates,
 // into a PNG data URL, or null when there is nothing to capture (no window, a destroyed one, a bad or empty
 // box, an empty image). It lives inline in apps/desktop/host/main.js (the `host` object given to

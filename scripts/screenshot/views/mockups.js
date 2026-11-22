@@ -1,5 +1,5 @@
 // Screenshot seed of the Mockups screen (--view mockups, #625): the demo project's mockups in
-// <workspace>/mockups/<project id>/, written through the mockups domain (fronts/plan/engine/domains/mockups.js,
+// <workspace>/mockups/<project id>/, written through the mockups domain (packages/engine/fronts/plan/domains/mockups.js,
 // one local git commit each), so the gallery shows real cards:
 // - a tokens kit (the app's own palette as the sample project's tokens);
 // - four screens: Orders dashboard (two chat turns, so three versions), Customer detail, Checkout
@@ -26,7 +26,7 @@ const TOKENS = [
 ];
 
 function demoMockups(appDir, root, projectId) {
-  const mockups = require(path.join(appDir, 'fronts', 'plan', 'engine', 'domains', 'mockups'));
+  const mockups = require(path.join(appDir, 'packages', 'engine', 'fronts', 'plan', 'domains', 'mockups'));
   const MockupModel = require(path.join(appDir, 'packages', 'shared', 'mockup-model'));
   mockups.writeKit(root, projectId, {
     tokensCss: MockupModel.tokensCss(TOKENS),

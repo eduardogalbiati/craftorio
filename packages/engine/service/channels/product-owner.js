@@ -124,9 +124,9 @@ module.exports = (ctx) => {
       runDefaults: p ? runDefaultsNow(ctx, p) : null, // #785: what the plan deduces from and never repeats
     };
   };
-  // a discovery card's commit proposal asks the same Product Owner (#258, fronts/plan/engine/channels/discovery.js)
+  // a discovery card's commit proposal asks the same Product Owner (#258, packages/engine/fronts/plan/channels/discovery.js)
   ctx.productOwnerOptions = askOptions;
-  // the Refactor tab's ranking reads no issue (#357, fronts/analyser/engine/channels/refactor.js)
+  // the Refactor tab's ranking reads no issue (#357, packages/engine/fronts/analyser/channels/refactor.js)
   ctx.productOwnerAgentOptions = agentOptions;
 
   // ---- the inbox's mechanical kinds (#240): the code of the owner's own buttons ------------------

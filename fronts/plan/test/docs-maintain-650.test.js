@@ -1,6 +1,6 @@
 // #650 Write doc phase 5 (docs/work/write-doc/spec.md R16): Maintain from the Monitor and the Night watch,
 // a front for the intents. Acceptance tests written before the code.
-// Seams assumed in fronts/plan/engine/domains/docs.js (plain functions, the repository folder first):
+// Seams assumed in packages/engine/fronts/plan/domains/docs.js (plain functions, the repository folder first):
 // - recordIncident(dir, { item, date, source, error, diagnosis? }) → { commit, intent: { item, file } }:
 //   one row in the ## Incidents table of docs/work/<item>/maintain.md (and its maintain.pt-BR.md when it
 //   exists; maintain.md is created from the playbook's skeleton when the item has none), and a NEW item
@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { makeRepo } = require('@craftorio/engine/test/repo-workflow-fixtures-485');
 
-const load = () => require('../engine/domains/docs');
+const load = () => require('@craftorio/engine/fronts/plan/domains/docs');
 
 const fm = (fields) => `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n`;
 

@@ -1,5 +1,5 @@
 // #625 Project mockups (Phase 0 + Phase 1 MVP): the mockups service of the plan front.
-// fronts/plan/engine/domains/mockups.js (fs + local git, the workspace folder first, never the project's repository):
+// packages/engine/fronts/plan/domains/mockups.js (fs + local git, the workspace folder first, never the project's repository):
 // - projectDir(workspace, projectId) → <workspace>/mockups/<projectId>; throws for '/', '\', '..' or empty;
 // - ensureProject → kit/ screens/ flows/ refs/ chat/ and a git repository with a commit, idempotent;
 // - createScreen(ws, id, { title, html, source }) → { slug, commit }: screens/<slug>/index.html (data-mid on
@@ -11,7 +11,7 @@
 // - saveRef(ws, id, { data, ext }) → 'refs/<hex>.<ext>' from a content hash;
 // - appendChat / readChat → chat/<slug>.jsonl, in order, [] when none;
 // - writeKit / readKit → kit/tokens.css, kit/components.css, kit/kit.json, one commit; null without a kit.
-// fronts/plan/engine/channels/mockups.js: `(ctx) => [{ channel, method, params, schema, fn }]`, every channel
+// packages/engine/fronts/plan/channels/mockups.js: `(ctx) => [{ channel, method, params, schema, fn }]`, every channel
 // `mockups:*` (front-channels-590 covers its schemas and duplicates once the file exists).
 // The service makes its own commits: each test gets a temp workspace and an isolated git config with an
 // identity (GIT_CONFIG_GLOBAL, like @craftorio/engine/test/repo-workflow-fixtures-485), env restored after.
@@ -23,8 +23,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const load = () => require('../engine/domains/mockups');
-const loadChannels = () => require('../engine/channels/mockups');
+const load = () => require('@craftorio/engine/fronts/plan/domains/mockups');
+const loadChannels = () => require('@craftorio/engine/fronts/plan/channels/mockups');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

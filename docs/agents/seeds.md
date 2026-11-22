@@ -2,7 +2,7 @@
 
 A seed is a prompt the Oracle runs read-only on a project (`packages/engine/domains/oracle/oracle-seeds.js`), shown in the
 Architecture tab's Seeds section (`fronts/analyser/views/project/project-seeds.js`, channels in
-`fronts/analyser/engine/channels/seeds.js`). Bundled seeds live in `seeds/<name>/seed.md` and are seeded into
+`packages/engine/fronts/analyser/channels/seeds.js`). Bundled seeds live in `seeds/<name>/seed.md` and are seeded into
 `<workspace>/seeds/` by `seedSeeds` (`packages/engine/domains/seed/seeds.js`, through `seedBundle` of `packages/engine/domains/seed/seed.js`): an
 edited copy freezes like a skill.
 
@@ -55,7 +55,7 @@ commits, tags), the test command from `detectTestCommand`, the check command fro
 
 ## As a tool
 
-"Make it a tool" (`fronts/analyser/engine/domains/seed-tool-issue.js`) files an issue asking for the seed as a deterministic
+"Make it a tool" (`packages/engine/fronts/analyser/domains/seed-tool-issue.js`) files an issue asking for the seed as a deterministic
 tool (pure core, cached network data, sorted JSON, a golden test, VERIFY as tests). The tool's
 command, recorded as `seedTools[<seed>]` in the project's JSON, prints the model on stdout; a run
 then executes it in the project's folder, with no model cost.

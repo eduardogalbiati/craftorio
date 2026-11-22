@@ -7,7 +7,7 @@
 // to Refactor and Add to roadmap now plan in the waiting stage (placeWaiting: a disabled stage at the
 // end, an item that already changes the same file joined), "run it now" after the stage in progress
 // (placeRunNow); the cadence keeps placeRefactor. The service
-// (fronts/analyser/engine/channels/refactor.js) stores the cadence and adds the item through packages/engine/domains/roadmap/roadmap.js.
+// (packages/engine/fronts/analyser/channels/refactor.js) stores the cadence and adds the item through packages/engine/domains/roadmap/roadmap.js.
 
 'use strict';
 

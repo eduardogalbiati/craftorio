@@ -75,7 +75,7 @@ Artifact previews and the image viewer, the Run screen's tabs, the gate layout, 
   error when the run's branch was deleted). Screenshots: `--view workflows --tab runs` with the demo
   runs (every run's `run:diff` is `demoRunDiff`). Its data is `run:diff` (the files with their status, counts and patches,
   and the branch's commits) and `run:diffFile` (one file's patch and both sides, used to expand
-  context, load a huge diff and preview images). Both are served by `fronts/analyser/engine/areas/diff.js`,
+  context, load a huge diff and preview images). Both are served by `packages/engine/fronts/analyser/areas/diff.js`,
   which takes the folder and base from the open gate or the run's `worktree.ready`. The model is pure
   and Node-testable: `parsePatch`, `rows` (gaps and expansion), `splitRows` (split and unified
   share the hunks), `wordDiff`, `highlightHtml` and `groupByFolder`. In screenshots, `run:diff` /

@@ -24,14 +24,14 @@ function tmpRoot(t, files) {
 test('a front\'s id comes from craftorio.front, its engine folder from craftorio.engine', (t) => {
   const root = tmpRoot(t, {
     'fronts/build/package.json': JSON.stringify({ name: '@craftorio/front-build', craftorio: { front: 'build' } }),
-    'fronts/build/engine/channels/x.js': '',
+    'packages/engine/fronts/build/channels/x.js': '',
     'fronts/legacy-dir/package.json': JSON.stringify({ name: '@craftorio/front-ai', craftorio: { front: 'ai', engine: 'backend' } }),
     'fronts/legacy-dir/backend/areas/y.js': '',
     'fronts/plan/package.json': JSON.stringify({ name: '@craftorio/front-plan' }),
   });
   assert.deepEqual(fronts(root).map((f) => [f.id, f.dir]), [['ai', 'fronts/legacy-dir'], ['build', 'fronts/build'], ['plan', 'fronts/plan']], 'by id; the folder name without the field');
-  assert.deepEqual(frontEngineDirs(root).map((f) => [f.id, f.engine]), [['ai', 'fronts/legacy-dir/backend'], ['build', 'fronts/build/engine']], 'the existing engine folders');
-  assert.deepEqual(frontEngineDirs(root, { all: true }).map((f) => f.engine), ['fronts/legacy-dir/backend', 'fronts/build/engine', 'fronts/plan/engine']);
+  assert.deepEqual(frontEngineDirs(root).map((f) => [f.id, f.engine]), [['ai', 'fronts/legacy-dir/backend'], ['build', 'packages/engine/fronts/build']], 'the existing engine folders');
+  assert.deepEqual(frontEngineDirs(root, { all: true }).map((f) => f.engine), ['fronts/legacy-dir/backend', 'packages/engine/fronts/build', 'fronts/plan/engine']);
 });
 
 test('the repository: every front declares its id, and the engine package reads the same list', () => {

@@ -6,7 +6,7 @@
 // #357: the owner writes one on the tab ({ source: 'owner', target, improvement, evidence }); Dismiss
 // keeps it with its reason (status 'dismissed'); the Product Owner's ranking puts rank, rankReason
 // and complexity on each and is kept with its date and cost in ranking.json; updateProposal records
-// its issue and its Danger Zone before / outcome (fronts/analyser/engine/domains/refactor-outcome.js).
+// its issue and its Danger Zone before / outcome (packages/engine/fronts/analyser/domains/refactor-outcome.js).
 
 'use strict';
 

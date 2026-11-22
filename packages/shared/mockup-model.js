@@ -16,7 +16,7 @@
 // attachmentName / parseAttachmentName ('<slug>@<sha7>.mockup.json', a Discovery card's frozen version),
 // frozenThumbnail(name, text) (the thumbnail stored in that attachment: what discovery:attachment shows)
 // and attachmentThumbnail({ title, commit }) (its SVG data URL).
-// Browser: window.MockupModel; Node: module.exports. The domain is fronts/plan/engine/domains/mockups.js.
+// Browser: window.MockupModel; Node: module.exports. The domain is packages/engine/fronts/plan/domains/mockups.js.
 (function (root) {
   'use strict';
 

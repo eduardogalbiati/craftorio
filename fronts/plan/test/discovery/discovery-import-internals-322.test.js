@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const discovery = require('@craftorio/engine/domains/discovery/discovery');
-const imports = require('../../engine/domains/discovery-import');
+const imports = require('@craftorio/engine/fronts/plan/domains/discovery-import');
 const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
 const { createService } = require('@craftorio/engine/service');
 

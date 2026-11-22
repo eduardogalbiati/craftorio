@@ -420,8 +420,8 @@ An item like the ones in this series (an intent, a spec, ~20 edit requests, two 
 - Plan front:
   - `fronts/plan/views/docs/docs.js` and `docs.css`
   - `fronts/plan/views/docs/doc-editor.js` (iframe, selection, stages rail)
-  - `fronts/plan/engine/channels/docs.js`
-  - `fronts/plan/engine/domains/docs.js` (lists the repository's `docs/work/` and the runs in progress)
+  - `packages/engine/fronts/plan/channels/docs.js`
+  - `packages/engine/fronts/plan/domains/docs.js` (lists the repository's `docs/work/` and the runs in progress)
 - Shared:
   - `packages/shared/doc-model.js` (the selection payload, the pure lint)
   - The document reader (a dependency: source positions and selection events)

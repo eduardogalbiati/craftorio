@@ -30,6 +30,16 @@ const path = require('path');
 const { appRoot } = require('../domains/workspace/app-root');
 
 const FRONT_ENGINE_DIR = 'engine';
+// T4 (the monorepo split): the engine keeps the engine side of its own fronts in its package,
+// packages/engine/fronts/<id>/, so a front package holds screens only; a front package that carries
+// its own engine side (craftorio.engine, a front from outside this repository) is read from there
+const ENGINE_FRONTS = path.join(__dirname, '..', 'fronts');
+const engineSideOf = (id, dir, engineDir) => {
+  const own = path.join(ENGINE_FRONTS, id);
+  if (fs.existsSync(own)) return own;
+  const carried = path.join(dir, engineDir);
+  return fs.existsSync(carried) ? carried : null;
+};
 const FRONT_ID = /^[a-z][a-z0-9-]*$/;
 
 // the folders a front package may sit in: the checkout's fronts/ (first, so it wins over the
@@ -66,8 +76,7 @@ function installedFronts(root = appRoot()) {
         if (seen.name && seen.name === name) continue; // the same package, linked or copied
         throw new Error(`Two packages declare the front "${id}": ${seen.dir} (${seen.name || 'no name'}) and ${dir} (${name || 'no name'}).`);
       }
-      const engine = path.join(dir, engineDir);
-      byId.set(id, { id, name, dir, engine: fs.existsSync(engine) ? engine : null });
+      byId.set(id, { id, name, dir, engine: engineSideOf(id, dir, engineDir) });
     }
   }
   return [...byId.values()].sort(byCodeUnit((f) => f.id));
@@ -105,6 +114,7 @@ function serviceFiles(kernelDir, fronts, sub) {
 }
 
 module.exports = {
+  ENGINE_FRONTS,
   FRONT_ENGINE_DIR,
   frontManifest,
   installedFronts,

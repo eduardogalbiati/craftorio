@@ -5,8 +5,8 @@ The project mockups of Plan & Design › Mockups in `<workspace>/mockups/` (#625
 ## The mockups folder: files and a local git repository (#625)
 
 Files only, in `<workspace>/mockups/<project-id>/` (no index.db table yet), written by
-`fronts/plan/engine/domains/mockups.js` through the `mockups:*` channels
-(`fronts/plan/engine/channels/mockups.js`); never next to `__dirname`, never in the project's
+`packages/engine/fronts/plan/domains/mockups.js` through the `mockups:*` channels
+(`packages/engine/fronts/plan/channels/mockups.js`); never next to `__dirname`, never in the project's
 repository (the designer only reads it). The folder is its own local git repository (D10): one commit
 per change (a new screen, a designer turn, a restore, a kit build), so `mockups:versions` is
 `git log` of `screens/<slug>/` and `mockups:restore` writes an older version back as a new commit.
@@ -120,7 +120,7 @@ The handoff only prepares work: no channel here starts a development run or file
   one line naming the Figma file. One `Figma import: <name>` commit; a file without a `document` is refused
   and the kit is untouched.
 - **Live link (blocked).** `mockups:live-link` answers `{ token (48 hex), path: '/mockups/live/<token>',
-  expiresAt }` (`fronts/plan/engine/areas/mockup-live-links.js`, in the engine's memory only: a restart
+  expiresAt }` (`packages/engine/fronts/plan/areas/mockup-live-links.js`, in the engine's memory only: a restart
   forgets every link; 24 h by default, `ttlMs` to shorten). The engine server's `GET /mockups/live/<token>`
   (`packages/engine/server/index.js`) is outside the server token (the link's token admits it) and stays
   **blocked (403) until the security review #466–#470** is done: `createServer({ mockupLiveLinks: true })`

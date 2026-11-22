@@ -3,7 +3,7 @@
 // project }. Logs are JSON lines (blank or malformed lines skipped). Sentry is read with the token
 // from the system keychain (`getToken(source.id)`, never stored here). pollSource never throws: a
 // failure is { ok: false, error }. webhookEvents maps a pushed payload (the Monitor's webhook) to the
-// same events. Called by fronts/ai/engine/areas/monitor.js.
+// same events. Called by packages/engine/fronts/ai/areas/monitor.js.
 const crypto = require('crypto');
 const fs = require('fs');
 

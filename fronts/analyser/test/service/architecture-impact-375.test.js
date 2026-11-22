@@ -1,4 +1,4 @@
-// #375: the channel architecture:impact({ projectId, record? }) (fronts/analyser/engine/channels/architecture.js,
+// #375: the channel architecture:impact({ projectId, record? }) (packages/engine/fronts/analyser/channels/architecture.js,
 // method architectureImpact) gives the city impact preview what it reads without a model call: the
 // project's city plan and the hit rates kept per issue, in <workspace>/architecture/<project id>/
 // impact-history.json → { plan, history: { [issue]: [{ hitRate, ts, run }] }, error }. `record`

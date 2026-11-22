@@ -1,4 +1,4 @@
-// #256 Discovery channels (fronts/plan/engine/channels/discovery.js, found by packages/engine/service/manifest.js like
+// #256 Discovery channels (packages/engine/fronts/plan/channels/discovery.js, found by packages/engine/service/manifest.js like
 // every channel file): the Inbox screen reaches the store (packages/engine/domains/discovery/discovery.js) through these, each
 // on the workspace's discovery folder (layout().discovery). The contract assumed here, channel →
 // window.api method (params):

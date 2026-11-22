@@ -17,7 +17,7 @@
 // The project city (#371, readCity): the facts (with the test files, its campus, #372) and a city plan through the pure core
 // packages/shared/city-model.js, with the edges' sources read at the same commit (the tracked files, the
 // relative require/import lines of JavaScript/TypeScript files in one `git grep`, the Cargo.toml
-// files), cached per facts read (a refresh rebuilds it) and plan hash. Used by fronts/analyser/engine/channels/architecture.js.
+// files), cached per facts read (a refresh rebuilds it) and plan hash. Used by packages/engine/fronts/analyser/channels/architecture.js.
 // opts.ref (#376, packages/engine/domains/releases/release-city.js): the facts and the city at any commit-ish (a release's previous
 // tag) instead of the default branch; an unknown ref is the state 'unknown-ref'.
 // changedSince (#378): the files changed between a tag or commit and the default branch's commit.

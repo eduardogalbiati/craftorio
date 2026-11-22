@@ -22,7 +22,7 @@
 //                           (the id; the folder name before phase 4), the field the engine reads too
 //                           (packages/engine/service/fronts.js)
 //   frontEngineDirs(root)   the fronts' engine-side folders (phase 4, #590): [{ id, dir, engine:
-//                           'fronts/build/engine' }] for the fronts that have one (`craftorio.engine`
+//                           'packages/engine/fronts/build' }] for the fronts that have one (`craftorio.engine`
 //                           names another folder name; { all: true } lists every front's, existing or
 //                           not); their channels/, areas/ and domains/ hold engine code the service
 //                           loads when the composition serves the front
@@ -136,7 +136,9 @@ function fronts(root) {
 }
 
 function frontEngineDirs(root, { all = false } = {}) {
-  return fronts(root).map((f) => ({ ...f, engine: `${f.dir}/${frontManifest(root, f.dir).engine}` }))
+  // T4: the engine package's fronts/<id>/ first (this repository's fronts), else the front's own folder
+  const own = (f) => `packages/engine/fronts/${f.id}`;
+  return fronts(root).map((f) => ({ ...f, engine: fs.existsSync(path.join(root, own(f))) ? own(f) : `${f.dir}/${frontManifest(root, f.dir).engine}` }))
     .filter((f) => all || fs.existsSync(path.join(root, f.engine)));
 }
 

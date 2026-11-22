@@ -1,4 +1,4 @@
-// #835 Project mockups, phase 2: the new exports of fronts/plan/engine/domains/mockups.js (fs + local git,
+// #835 Project mockups, phase 2: the new exports of packages/engine/fronts/plan/domains/mockups.js (fs + local git,
 // the workspace folder first), the new mockups:* channels and the kit workflow/skill. Written before the code:
 // the modules are loaded inside each test. The contract:
 // - applyKitMap(ws, id, { components_css, components: [{ name, source: 'file:line', html? }], inferences })
@@ -27,8 +27,8 @@ const zlib = require('zlib');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const load = () => require('../engine/domains/mockups');
-const loadChannels = () => require('../engine/channels/mockups');
+const load = () => require('@craftorio/engine/fronts/plan/domains/mockups');
+const loadChannels = () => require('@craftorio/engine/fronts/plan/channels/mockups');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

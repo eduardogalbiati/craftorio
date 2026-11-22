@@ -76,7 +76,7 @@ O "depois" vem do mesmo comando na branch do run, das telas dos Mockups (#625) o
 
 - **Tela Documents e editor:** `fronts/plan/views/docs/` (`docs.js`, `doc-editor.js`). O leitor abre num `iframe sandbox="allow-scripts"` de origem opaca, servido por `doc://`, com CSP sem rede e sem `window.api`; a seleção sai por `postMessage`, já mapeada para o `.md`.
 - **Regras puras:** `packages/shared/doc-model.js` (a carga da seleção, o alinhamento da tradução, o lint do markdown), testável sem DOM.
-- **Serviço:** `fronts/plan/engine/` (`channels/docs.js`, `domains/docs.js`): lista o `docs/work/`, lê os runs em andamento, troca as linhas de uma seção e commita cada pedido no worktree do run.
+- **Serviço:** `packages/engine/fronts/plan/` (`channels/docs.js`, `domains/docs.js`): lista o `docs/work/`, lê os runs em andamento, troca as linhas de uma seção e commita cada pedido no worktree do run.
 - **Engine:** o passo `human_edit`; o `write-doc.yaml`; os aliases no carregador de workflows.
 - **Onde as coisas ficam:** os artefatos no repositório do projeto, `docs/work/<item>/`; os dados do run (chat, notas, custos) na pasta do run, no workspace.
 - **Custo (estimativas, sem medição):** rascunho do intent $0.30–1.00; rascunho do spec $1.00–3.00 (Arena $3–10); um pedido de edição $0.05–0.40; revisão $0.20–0.60; primeira tradução $0.30–1.00, depois $0.02–0.10 por pedido. Captura, lint, diff e versões não custam nada.

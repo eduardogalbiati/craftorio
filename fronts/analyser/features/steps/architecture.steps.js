@@ -792,7 +792,7 @@ Given('the backlog of {string} has the open issue {string} whose body is:', asyn
 
 // A real (not simulated) finished run of the project started for the issue (its task names the
 // issue's URL, backlog.linkRuns), with no worktree left: the run's diff is the files its developer
-// reported (step.finished output.files_changed, fronts/analyser/engine/areas/diff.js reportedFiles).
+// reported (step.finished output.files_changed, packages/engine/fronts/analyser/areas/diff.js reportedFiles).
 Given('a finished run of {string} for the issue {string} changed {string}', async ({ e2e }, name, title, file) => {
   const project = projectOf(e2e, name);
   const backlog = JSON.parse(fs.readFileSync(path.join(backlogDir(e2e), `${project.id}.json`), 'utf8'));

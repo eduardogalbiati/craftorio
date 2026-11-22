@@ -1,5 +1,5 @@
-// #836 Mockups phase 3 (the handoff): the new exports of fronts/plan/engine/domains/mockups.js, the new
-// mockups:* channels (fronts/plan/engine/channels/mockups.js), the crops reaching the issues of the #258 commit
+// #836 Mockups phase 3 (the handoff): the new exports of packages/engine/fronts/plan/domains/mockups.js, the new
+// mockups:* channels (packages/engine/fronts/plan/channels/mockups.js), the crops reaching the issues of the #258 commit
 // (packages/engine/domains/discovery/discovery-commit.js) and the i18n/docs of the new labels. Written before
 // the code: every new export is loaded inside its test. All simulated (CRAFTORIO_SIMULATION_ONLY=1, set by
 // `npm test`): no model is called, no workflow run starts. The contract:
@@ -37,8 +37,8 @@ const { EventEmitter } = require('events');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const load = () => require('../engine/domains/mockups');
-const loadChannels = () => require('../engine/channels/mockups');
+const load = () => require('@craftorio/engine/fronts/plan/domains/mockups');
+const loadChannels = () => require('@craftorio/engine/fronts/plan/channels/mockups');
 const loadModel = () => require('@craftorio/shared/mockup-model');
 const loadCommit = () => require('@craftorio/engine/domains/discovery/discovery-commit');
 

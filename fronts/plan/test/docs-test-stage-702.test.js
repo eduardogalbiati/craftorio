@@ -1,4 +1,4 @@
-// #702: the Documents service (fronts/plan/engine/domains/docs.js listItems) lists the Build and Test
+// #702: the Documents service (packages/engine/fronts/plan/domains/docs.js listItems) lists the Build and Test
 // stages' documents: plan.md and test.md (sdlc-record sets its `status: collecting`), and reads a plan
 // whose Progress is N of N done as `built`.
 // The interface these tests assume: listItems(dir) → [{ item, stage, docs: [{ doc, file, status }] }] as
@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const load = () => require('../engine/domains/docs');
+const load = () => require('@craftorio/engine/fronts/plan/domains/docs');
 
 const fm = (fields) => `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n`;
 const INTENT = `${fm({ item: 'demo', stage: 'intent', status: 'accepted', date: '2026-10-30', translation: 'intent.pt-BR.md' })}\n# Intent: demo\n\n## Problem\n\nP.\n`;

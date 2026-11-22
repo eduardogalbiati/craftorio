@@ -1,4 +1,4 @@
-// #327 review round, the Supervisor's watch (fronts/build/engine/domains/supervisor-watch.js createWatches,
+// #327 review round, the Supervisor's watch (packages/engine/fronts/build/domains/supervisor-watch.js createWatches,
 // option `language()` read at each turn): the [Language] line on the first and on a resumed turn, and
 // a change applies from the next turn. Split from packages/engine/test/language-review-327.test.js in
 // phase 4 of the reorganisation (#590): the domain is the build front's. No CLI is started: the
@@ -10,7 +10,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const providers = require('@craftorio/engine/engine/providers');
-const { createWatches } = require('../engine/domains/supervisor-watch');
+const { createWatches } = require('@craftorio/engine/fronts/build/domains/supervisor-watch');
 const Language = require('@craftorio/shared/language');
 const SKILLS = path.join(__dirname, '..', '..', '..', 'skills');
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');

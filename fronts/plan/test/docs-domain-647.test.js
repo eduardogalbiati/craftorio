@@ -1,5 +1,5 @@
 // #647 Write doc phase 1 (docs/work/write-doc/spec.md R1, R3, R11, R13): the Documents service.
-// fronts/plan/engine/domains/docs.js (plain functions, the folder first):
+// packages/engine/fronts/plan/domains/docs.js (plain functions, the folder first):
 // - listItems(repoDir) → [{ item, stage, docs: [{ doc: 'intent' | 'spec', file, status, translation }] }] from
 //   the front matter of docs/work/<item>/intent.md and spec.md (file repository-relative, `/`; translation
 //   as the front matter writes it; stage: the latest document's, the spec's over the intent's); [] without docs/work;
@@ -11,7 +11,7 @@
 // - unreviewed(worktreeDir, runDir, { base }) / markReviewed(runDir, commit): the queue of unreviewed changes;
 // - acceptDoc(worktreeDir, { item, doc, approver, date }): intent → accepted, spec → signed off, approver and
 //   date in the source and translation front matter, one commit, the body unchanged.
-// fronts/plan/engine/channels/docs.js: `(ctx) => [{ channel, method, params, schema, fn }]`.
+// packages/engine/fronts/plan/channels/docs.js: `(ctx) => [{ channel, method, params, schema, fn }]`.
 // A throwaway git repository per test (isolated git config, a local identity for the service's commits).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -20,8 +20,8 @@ const os = require('os');
 const path = require('path');
 const { makeRepo } = require('@craftorio/engine/test/repo-workflow-fixtures-485');
 
-const load = () => require('../engine/domains/docs');
-const loadChannels = () => require('../engine/channels/docs');
+const load = () => require('@craftorio/engine/fronts/plan/domains/docs');
+const loadChannels = () => require('@craftorio/engine/fronts/plan/channels/docs');
 
 const fm = (fields) => `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n`;
 

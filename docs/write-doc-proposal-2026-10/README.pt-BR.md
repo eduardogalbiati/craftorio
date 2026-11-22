@@ -420,8 +420,8 @@ Um item como os desta série (um intent, um spec, uns 20 pedidos de edição, du
 - Front plan:
   - `fronts/plan/views/docs/docs.js` e `docs.css`
   - `fronts/plan/views/docs/doc-editor.js` (iframe, seleção, trilho das etapas)
-  - `fronts/plan/engine/channels/docs.js`
-  - `fronts/plan/engine/domains/docs.js` (lista o `docs/work/` do repositório e os runs em andamento)
+  - `packages/engine/fronts/plan/channels/docs.js`
+  - `packages/engine/fronts/plan/domains/docs.js` (lista o `docs/work/` do repositório e os runs em andamento)
 - Compartilhado:
   - `packages/shared/doc-model.js` (a carga da seleção, o lint puro)
   - O leitor de documentos (dependência: posições de origem e eventos de seleção)

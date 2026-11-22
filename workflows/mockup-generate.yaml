@@ -3,10 +3,10 @@
 # -----------------------------------------------------------------------------
 #   design (the designer: a new screen, or an edit started by hand) ──► end
 #
-# The designer of the project mockups. The Mockups service (fronts/plan/engine/channels/mockups.js)
+# The designer of the project mockups. The Mockups service (packages/engine/fronts/plan/channels/mockups.js)
 # starts one run per big operation (`mode` generate: a new screen's first version, from a prompt or
 # a Discovery card). The editor window's chat does NOT start runs: each message is one turn of the
-# screen's persistent designer session in the service (D8, fronts/plan/engine/domains/mockup-designer.js).
+# screen's persistent designer session in the service (D8, packages/engine/fronts/plan/domains/mockup-designer.js).
 # `mode` edit stays for an edit started from the Workflows screen (the chat message of
 # MockupModel.buildChatMessage as JSON). The designer answers with the whole screen (`html`, a static
 # HTML document that links ../../kit/tokens.css and ../../kit/components.css, a data-mid on every

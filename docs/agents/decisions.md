@@ -72,7 +72,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (`docs/work/<item>/intent.md`, then `spec.md`, each with its `pt-BR` translation, the playbook's
   sections) are written in Plan & Design › Documents with one writer (`workflows/write-doc.yaml`, the
   `intent-writing` / `spec-writing` skills). The agents only read: the Documents service
-  (`fronts/plan/engine/domains/docs.js`) is the only code that writes them. Editing is by selection on
+  (`packages/engine/fronts/plan/domains/docs.js`) is the only code that writes them. Editing is by selection on
   the rendered page (a sandboxed iframe without scripts); each request is a writer turn of the
   `human_edit` gate (a protected gate: the supervisor and the automatic answers never end it, only
   the person's Send to review does) and **one commit per request**, swapped into the source and its

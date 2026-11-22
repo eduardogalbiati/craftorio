@@ -2,7 +2,7 @@
 // live link (its server route is pinned in packages/engine/test/mockups-live-link-837.test.js) and the docs.
 // Written before the code: every new export, channel and file is loaded inside its test. All simulated
 // (CRAFTORIO_SIMULATION_ONLY=1): no model, no workflow run, no network. The contract:
-// - fronts/plan/engine/domains/mockups.js, new exports:
+// - packages/engine/fronts/plan/domains/mockups.js, new exports:
 //   - detectStorybook(folder) → { available: boolean, configDir: string | null }: available when the project
 //     folder has a `.storybook/` folder (configDir '.storybook') or a `storybook` / `@storybook/*` entry in
 //     package.json dependencies or devDependencies; otherwise { available: false, configDir: null }.
@@ -20,7 +20,7 @@
 //     id, name } in kit.json `references`, and kit.json `inferences` records the import (an entry naming
 //     Figma); ONE commit. A file without a document throws and leaves kit.json as it was. With `fileKey`
 //     the real path downloads it with `fetch`; simulated (CRAFTORIO_SIMULATION_ONLY) it never calls fetch.
-// - fronts/plan/engine/channels/mockups.js, new channels (channel → api method):
+// - packages/engine/fronts/plan/channels/mockups.js, new channels (channel → api method):
 //   mockups:storybook ({ projectId }) → detectStorybook of the project's folder, detectMockupStorybook;
 //   mockups:export-repo ({ projectId, slugs, kitOfficial }) → { plan, runId }: real, a
 //     workflows/mockups-export.yaml run (inputs project_path, mockup_dir, slugs, kit_official); simulated,
@@ -42,8 +42,8 @@ const path = require('path');
 const { EventEmitter } = require('events');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const load = () => require('../engine/domains/mockups');
-const loadChannels = () => require('../engine/channels/mockups');
+const load = () => require('@craftorio/engine/fronts/plan/domains/mockups');
+const loadChannels = () => require('@craftorio/engine/fronts/plan/channels/mockups');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

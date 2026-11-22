@@ -1795,7 +1795,7 @@ A finding of the Oracle's report becomes an issue from where it is: **Projects â
 (and the onboarding's review). There is no separate proposals list and no Product Owner ranking any
 more: the finding is the diagnosis and the issue is what gets worked on.
 
-- **Create issue** (`architecture:createIssue`, `fronts/analyser/engine/channels/architecture.js`):
+- **Create issue** (`architecture:createIssue`, `packages/engine/fronts/analyser/channels/architecture.js`):
   files the finding in the project's tracker with its text, files and evidence and the `refactor`
   label (created first when missing on GitHub; GitLab creates it on filing), naming the Refactor
   workflow (`runDraft` of `packages/engine/domains/refactor/refactor-issues.js`). The finding then shows

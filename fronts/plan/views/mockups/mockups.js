@@ -1,6 +1,6 @@
 /* global api */
 // Mockups screen (#625, Plan & Design › Mockups, D1): the header's project's mockup screens, kept in
-// <workspace>/mockups/<projectId>/ (the mockups: channels, fronts/plan/engine/channels/mockups.js). What leads:
+// <workspace>/mockups/<projectId>/ (the mockups: channels, packages/engine/fronts/plan/channels/mockups.js). What leads:
 // the screens by title (the gallery, one card each, Open → the editor window, mockups:open-editor; the
 // editor is fronts/plan/views/mockups/mockup-editor.js). Before the visual kit and the first screen, the
 // empty state says what to do next: Build the visual kit (the deterministic machine step, then the

@@ -5,7 +5,7 @@
 // issues they name (the issue filter). Tags in semver order (packages/engine/domains/releases/releases.js releaseSemver /
 // compareSemver) for the two-tag picker. A project without tags compares any two commits. Never
 // throws: a folder that is not a repository is 'not-git', a ref git does not know 'unknown-ref'.
-// Used by fronts/analyser/engine/channels/architecture.js (architecture:release).
+// Used by packages/engine/fronts/analyser/channels/architecture.js (architecture:release).
 
 'use strict';
 

@@ -2,7 +2,7 @@
 // An event is { id, at, source, status (500 or 'ERR'), method?, path?, worker?, message, file?, line? }.
 // Its fingerprint ignores id and time; numeric and uuid path segments become :id, so
 // /api/orders/123 and /api/orders/9 are one group. Pure functions: called by the ai front's
-// monitor channels (fronts/ai/engine/channels/monitor.js).
+// monitor channels (packages/engine/fronts/ai/channels/monitor.js).
 const crypto = require('crypto');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

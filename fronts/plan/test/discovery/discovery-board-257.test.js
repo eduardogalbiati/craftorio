@@ -15,7 +15,7 @@
 //   restoreVersion(dir, projectId, id, name, { by }) → card (the current document is kept as a version first)
 //   recordResult(dir, projectId, id, { source, text, runId }) → card (document = text, a version
 //     whose name contains the source, a thread entry { kind: 'result', source, runId })
-// Channels (fronts/plan/engine/channels/discovery.js), channel → window.api method (params):
+// Channels (packages/engine/fronts/plan/channels/discovery.js), channel → window.api method (params):
 //   discovery:board           → discoveryBoard (projectId)
 //   discovery:set-wip         → setDiscoveryWip (projectId, column, limit)
 //   discovery:move            → moveDiscoveryCard (projectId, cardId, column, index)

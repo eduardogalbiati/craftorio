@@ -76,7 +76,7 @@ The "after" comes from the same command on the run's branch, the Mockups' screen
 
 - **Documents screen and editor:** `fronts/plan/views/docs/` (`docs.js`, `doc-editor.js`). The reader opens in an `iframe sandbox="allow-scripts"` with an opaque origin, served on `doc://` with a CSP that allows no network and no `window.api`; the selection comes out through `postMessage`, already mapped to the `.md`.
 - **Pure rules:** `packages/shared/doc-model.js` (the selection payload, translation alignment, the markdown lint), testable with no DOM.
-- **Service:** `fronts/plan/engine/` (`channels/docs.js`, `domains/docs.js`): lists `docs/work/`, reads the runs in progress, swaps a section's lines, commits each request in the run's worktree.
+- **Service:** `packages/engine/fronts/plan/` (`channels/docs.js`, `domains/docs.js`): lists `docs/work/`, reads the runs in progress, swaps a section's lines, commits each request in the run's worktree.
 - **Engine:** the `human_edit` step; `write-doc.yaml`; the aliases in the workflow loader.
 - **Where things live:** the artifacts in the project's repository, `docs/work/<item>/`; the run's data (chat, notes, costs) in the workspace run folder.
 - **Cost (estimates, not measured):** intent draft $0.30–1.00; spec draft $1.00–3.00 (Arena $3–10); an edit request $0.05–0.40; review $0.20–0.60; first translation $0.30–1.00, then $0.02–0.10 per request. Capture, lint, diff and versions cost nothing.

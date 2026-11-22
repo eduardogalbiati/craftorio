@@ -687,7 +687,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
   # top, then the Oracle's latest report (its summary, a verdict per area) and its findings. A finding's "Create
   # issue" files it as a `refactor` issue and nothing more; afterwards the finding shows the issue's link where its
   # buttons were. In simulation the issue is filed into the project's synced backlog with the next free number,
-  # never with gh/glab (fronts/analyser/engine/channels/refactor.js simulatedFiler): the backlog issue below gives
+  # never with gh/glab (packages/engine/fronts/analyser/channels/refactor.js simulatedFiler): the backlog issue below gives
   # the project its synced GitHub backlog (#1), so the finding's issue is #2.
   @issue-730
   Scenario: Health shows the git facts above the Oracle's report, and a finding's "Create issue" turns into its issue's link

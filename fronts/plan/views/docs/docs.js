@@ -1,7 +1,7 @@
 /* global api */
 // Documents screen (#647, Plan & Design › Documents, docs/work/write-doc/spec.md R1, R8-R13): the work
 // items of the header's project, read from its repository's docs/work/ (the docs: channels,
-// fronts/plan/engine/channels/docs.js), each with its stage and its documents' status (and the
+// packages/engine/fronts/plan/channels/docs.js), each with its stage and its documents' status (and the
 // write-doc runs in progress, reopened with their gate). New item starts the write-doc workflow
 // (workflows/write-doc.yaml), whose worktree the service writes: the skeleton, the writer's draft,
 // each request (the docs: channels take the runId); an accepted intent offers Write the spec. The editor draws the document

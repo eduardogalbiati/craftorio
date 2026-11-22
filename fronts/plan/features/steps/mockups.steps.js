@@ -16,7 +16,7 @@
 // the prompt (named "Prompt" or "Describe the screen") and a "Create" / "Generate" button; the
 // simulated designer (CRAFTORIO_SIMULATION_ONLY) writes the screen.
 // A seeded mockup is written in the scratch workspace through the mockups domain
-// (fronts/plan/engine/domains/mockups.js createScreen), required inside the step. The editor window
+// (packages/engine/fronts/plan/domains/mockups.js createScreen), required inside the step. The editor window
 // is found among the app's windows (e2e.app.windows()) by its root and kept as e2e.mockupWindow; the
 // fixture closes every window after the scenario.
 

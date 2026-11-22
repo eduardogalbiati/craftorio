@@ -4,7 +4,7 @@
 #   (machine step, in the service) ──► components (the kit agent, read-only) ──► end
 #
 # The visual kit of a project's mockups (D2, D3): a minimal kit that grows. The deterministic part
-# runs in the Mockups service before this run starts (mockups:build-kit, fronts/plan/engine/channels/
+# runs in the Mockups service before this run starts (mockups:build-kit, packages/engine/fronts/plan/channels/
 # mockups.js, no model): the CSS custom properties and fonts of the project's stylesheets and theme
 # files (MockupModel.extractTokens) become kit/tokens.css and kit/kit.json in
 # <workspace>/mockups/<project>/, one commit. This run is the agent part: it reads the project's

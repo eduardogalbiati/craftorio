@@ -51,7 +51,7 @@ function setup(t) {
 
   const proposals = loadProposals();
   const add = (title, file) => proposals.addProposal(stores.refactor, PROJECT, { source: 'architecture', key: `k:${file}`, title, files: [{ path: file }], severity: 'high' });
-  // the service's real options (fronts/analyser/engine/channels/refactor.js realOptions), plus `extra`
+  // the service's real options (packages/engine/fronts/analyser/channels/refactor.js realOptions), plus `extra`
   const realOptions = (extra = {}) => ({
     mock: false, backlogDir: stores.backlog, projectId: PROJECT, folder, agent: { model: 'sonnet', effort: 'default' },
     skillsDirs: [skillsDir], resolveCommand: () => true, budget: null, language: null, ...extra,

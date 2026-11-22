@@ -1,4 +1,4 @@
-// #429: architecture:impact({ projectId, record }) (fronts/analyser/engine/channels/architecture.js) keeps the
+// #429: architecture:impact({ projectId, record }) (packages/engine/fronts/analyser/channels/architecture.js) keeps the
 // record's `withSection` (the issue had a `## Expected files` section) on the history entry, so the
 // hit rate can be compared with the section against without it.
 const test = require('node:test');

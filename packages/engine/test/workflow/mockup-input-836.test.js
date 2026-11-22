@@ -1,7 +1,7 @@
 // #836 Mockups phase 3, the workflows:
 // - the dev workflows (workflows/feature.yaml, workflows/fix.yaml and the repository's own
 //   .craftorio/workflows/ai-development-local-hero.yaml) take an OPTIONAL `mockup` input (a string, default
-//   ''): the folder of a frozen mockup version (fronts/plan/engine/domains/mockups.js freezeVersion: its
+//   ''): the folder of a frozen mockup version (packages/engine/fronts/plan/domains/mockups.js freezeVersion: its
 //   index.html and kit/); the develop step reads it (the developer sees the screen and its kit), and a run
 //   without it behaves as today;
 // - "Matches the mockup": with a `mockup` input, the UI reviewer (feature and the hero's code_review prompt,

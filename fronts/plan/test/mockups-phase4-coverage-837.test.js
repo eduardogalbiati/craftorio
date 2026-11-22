@@ -15,8 +15,8 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 
-const mockups = require('../engine/domains/mockups');
-const channels = require('../engine/channels/mockups');
+const mockups = require('@craftorio/engine/fronts/plan/domains/mockups');
+const channels = require('@craftorio/engine/fronts/plan/channels/mockups');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

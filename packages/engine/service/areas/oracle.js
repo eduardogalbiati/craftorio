@@ -1,6 +1,6 @@
 // The Oracle service (#122, packages/engine/domains/oracle/oracle.js), a kernel area since phase 4 of the
 // reorganisation study (#590): the `oracle:*` channels live in the ai front
-// (fronts/ai/engine/channels/oracle.js) and read it through ctx (oracleService, oracleDelegate,
+// (packages/engine/fronts/ai/channels/oracle.js) and read it through ctx (oracleService, oracleDelegate,
 // oracleProposeOrRoute, oracleRequestAgent, oracleWake, oracleToolList); the kernel's run area, the
 // seed runs, the Product Owner and the Night watch call it whatever fronts the engine serves.
 // The Oracle: the app-wide master agent's persistent conversation, its memory,

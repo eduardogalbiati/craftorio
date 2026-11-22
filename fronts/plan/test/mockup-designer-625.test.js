@@ -1,4 +1,4 @@
-// #625 (D8): the mockup designer's chat turn, fronts/plan/engine/domains/mockup-designer.js. One persistent
+// #625 (D8): the mockup designer's chat turn, packages/engine/fronts/plan/domains/mockup-designer.js. One persistent
 // session per screen (chat/<slug>.session.json): resumed while the model is the same and the session is not
 // idle for 55 min, fresh otherwise (with the handoff note); each turn commits the ```html block, records its
 // cost on the chat entry and in chat/usage.jsonl. runTurn is injected: no CLI is reached.
@@ -8,8 +8,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const mockups = require('../engine/domains/mockups');
-const designer = require('../engine/domains/mockup-designer');
+const mockups = require('@craftorio/engine/fronts/plan/domains/mockups');
+const designer = require('@craftorio/engine/fronts/plan/domains/mockup-designer');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

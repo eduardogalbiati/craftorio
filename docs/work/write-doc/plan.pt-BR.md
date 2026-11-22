@@ -25,7 +25,7 @@ Escopo: a fase 0 (o editor sobre o protótipo do leitor) e a fase 1 (MVP, R1–R
 - `packages/shared/doc-model.js`: a carga da seleção (arquivo, âncora, linhas, trecho, contexto), o alinhamento da tradução por bloco e o lint do markdown (front matter, seções do playbook, R1…, `**Recommended:**`, imagens). Puro, dual-load.
 - `fronts/plan/views/docs/docs.js` e `docs.css`: a tela Documents (itens e etapas, New item).
 - `fronts/plan/views/docs/doc-editor.js`: o editor (o iframe do leitor, as etapas, o índice, o chat, o chip de seleção, as marcas de mudança, a fila de não revisadas).
-- `fronts/plan/engine/channels/docs.js` e `fronts/plan/engine/domains/docs.js`: listam o `docs/work/`, leem os runs em andamento, trocam as linhas de uma seção na fonte e na tradução, e commitam cada pedido no worktree do run.
+- `packages/engine/fronts/plan/channels/docs.js` e `packages/engine/fronts/plan/domains/docs.js`: listam o `docs/work/`, leem os runs em andamento, trocam as linhas de uma seção na fonte e na tradução, e commitam cada pedido no worktree do run.
 - O passo `human_edit` do engine: um gate que aceita pedidos enquanto espera; cada pedido é um turno do agente indicado; só a pessoa o encerra. Entra na lista de gates protegidos.
 - `workflows/write-doc.yaml`: evidências → rascunho → `human_edit` → revisão → `human_approval`, para o `intent.md` ou o `spec.md`.
 - `skills/intent-writing/SKILL.md` e `skills/spec-writing/SKILL.md`, com as rubricas.

@@ -7,7 +7,7 @@
 // - The run is started for a project: WorkflowRun's `projectId` (also given as the input
 //   `project_id`) and the input `repo_path` (the project's folder; `project_path` before #631). The workspace is the runs
 //   folder's parent, so the proposals are those the Refactor tab reads: <workspace>/refactor
-//   (fronts/analyser/engine/channels/refactor.js root()), through packages/engine/domains/refactor/refactor-proposals.js listProposals.
+//   (packages/engine/fronts/analyser/channels/refactor.js root()), through packages/engine/domains/refactor/refactor-proposals.js listProposals.
 // - The mock analyst answers from the analyze step's output schema (one finding); a second run on the
 //   same project finds the same finding, so propose drops it as known.
 // - facts lists the files changed since `since` (an array holding 'src/changed.js', as a string or

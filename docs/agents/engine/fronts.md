@@ -2,6 +2,15 @@
 
 Phase 4 of the reorganisation study: a front package carries the channels, areas and domain modules only it uses; the engine discovers them from the installed fronts and serves the ones the app's composition names.
 
+**Since the monorepo split (T4 of the Craftorio migration):** the engine side of this repository's
+fronts lives in the engine package, `packages/engine/fronts/<id>/{channels,areas,domains}/`, so a
+front package (`fronts/<id>/`) holds screens only and the interface never ships engine code. The
+service still loads a front's channels and areas only when the composition serves that front
+(`packages/engine/service/fronts.js` looks in `packages/engine/fronts/<id>/` first, then in the
+front package's `craftorio.engine` folder, kept for a front from outside this repository). Their
+layer is still `front-engine:<id>` (`scripts/layers.js`), their tests are in
+`packages/engine/test/fronts/`, and a front's own tests reach them as `@craftorio/engine/fronts/<id>/...`.
+
 Read this before adding a channel, an area or a domain module, before moving one between the engine
 kernel (`packages/engine`) and a front (`fronts/<id>`), and before changing how the service loads
 them (`packages/engine/service/index.js`, `manifest.js`, `fronts.js`). The study is
