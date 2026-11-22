@@ -1,5 +1,5 @@
 // The Run App capture of the screenshots step (#649, write-doc phase 3): a project without a screenshot
-// command but with a .multiagent/local-preview.yaml ({ install, command, url, cwd, env }) gets its
+// command but with a .craftorio/local-preview.yaml ({ install, command, url, cwd, env }) gets its
 // screens taken by starting that preview and opening `url` in a headless Chromium (Playwright, loaded
 // when a capture runs: a machine without it gets an error that says so, and the step reports it).
 // capturePreview({ entry, side, ref, out, cwd, config, env, signal, timeoutMs, session }) writes `out`
@@ -144,7 +144,7 @@ async function shoot(url, { route, clicks }, out) {
 }
 
 async function capturePreview({ entry, ref, out, cwd, config, env = process.env, signal, timeoutMs = 180000, session = null }) {
-  if (!config?.command || !config.url) throw new Error('.multiagent/local-preview.yaml needs a command and a url');
+  if (!config?.command || !config.url) throw new Error('.craftorio/local-preview.yaml needs a command and a url');
   loadChromium();
   const base = ref ? await baseWorktree(cwd, ref, session) : null;
   try {

@@ -711,7 +711,7 @@ test('runAppSetupHtml (#111): Edit\'s fields are labelled above the controls, wi
   const html = runAppSetupHtml({ project: { id: 'p1', name: 'demo' }, install: { state: 'none' } }, { command: 'npm start', from: 'package.json (scripts.start)' });
   assert.match(html, /<label class="small">Install[\s\S]*<input data-setup="install"/);
   assert.match(html, /<label class="small">Command[\s\S]*<input data-setup="command" value="npm start"/);
-  assert.match(html, /Also write it to <code>\.multiagent\/local-preview\.yaml<\/code>/);
+  assert.match(html, /Also write it to <code>\.craftorio\/local-preview\.yaml<\/code>/);
   assert.match(html, /data-gate-tool="app-save">Save as this project's Run App and start</);
 });
 

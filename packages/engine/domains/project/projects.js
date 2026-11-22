@@ -4,7 +4,7 @@
 // (the same place git URLs given as repo_path go); one without a repository gets an empty
 // <workspace>/projects/<id>/.
 // #486: a project keeps its workflow set (`workflows: [{ name, origin, category? }]`) and its
-// `defaultWorkflow` (a name); projectManifest reads a repository's `.multiagent/project.yaml` before
+// `defaultWorkflow` (a name); projectManifest reads a repository's `.craftorio/project.yaml` before
 // the project is created. #790: the default comes from the project and its manifest only
 // (projectDefaultWorkflow: the one order of packages/shared/default-workflow.js projectDefault, the
 // clone taking the manifest's `default`); #791: `workflowKinds` ({ feature?, fix?: { name, inputs } },
@@ -375,7 +375,7 @@ function withManifest(project) {
 const AFTER_CLONE = 'The repository could not be read without credentials: its workflows manifest will be read after cloning.';
 
 /**
- * #486: a repository's workflows manifest (.multiagent/project.yaml, packages/engine/domains/project/project-manifest.js) before the
+ * #486: a repository's workflows manifest (.craftorio/project.yaml, packages/engine/domains/project/project-manifest.js) before the
  * project exists: from a local folder, or from a remote repository through its provider's contents
  * API (gh api / glab api), else an unauthenticated raw read for a public one. Never clones.
  * @param {{ url?: string, folder?: string }} target
@@ -384,14 +384,14 @@ const AFTER_CLONE = 'The repository could not be read without credentials: its w
  *   #790 / #791: `default` and `kinds` as the manifest declares them (what the wizard and the project page read)
  */
 async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) {
-  const { MANIFEST_FILE, parseManifest } = require('./project-manifest');
+  const { LEGACY_MANIFEST_FILE, MANIFEST_FILE, parseManifest } = require('./project-manifest');
   const entries = (text) => {
     const { workflows, default: def, kinds, errors } = parseManifest(text);
     return { workflows, default: def, kinds, ...(errors.length ? { errors } : {}) };
   };
   if (target?.folder) {
-    const file = path.join(String(target.folder), ...MANIFEST_FILE.split('/'));
-    if (!fs.existsSync(file)) return null;
+    const file = [MANIFEST_FILE, LEGACY_MANIFEST_FILE].map((f) => path.join(String(target.folder), ...f.split('/'))).find((f) => fs.existsSync(f));
+    if (!file) return null;
     return entries(fs.readFileSync(file, 'utf8'));
   }
   const issues = require('../backlog/issues');
@@ -400,20 +400,27 @@ async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) 
   const platform = issues.platformOfHost(parsed.host);
   const adapter = platform && issues.adapterOf(platform);
   if (adapter?.fileCommand) {
-    const { cli, args } = adapter.fileCommand(parsed, MANIFEST_FILE);
-    try {
-      const out = await (exec || issues.execCli)(cli, args);
-      return entries(decodeContents(out));
-    } catch (e) {
-      if (/\b404\b|not found/i.test(String(e?.message))) return null;
+    let missing = 0;
+    for (const name of [MANIFEST_FILE, LEGACY_MANIFEST_FILE]) {
+      const { cli, args } = adapter.fileCommand(parsed, name);
+      try {
+        const out = await (exec || issues.execCli)(cli, args);
+        return entries(decodeContents(out));
+      } catch (e) {
+        if (/\b404\b|not found/i.test(String(e?.message))) missing++;
+        else break;
+      }
     }
+    if (missing === 2) return null;
   }
   // no CLI that can read it: a public repository's raw file
-  const raw = require('@craftorio/shared/platforms').rawFileUrl(platform, parsed, MANIFEST_FILE);
-  try {
-    const res = typeof fetch === 'function' ? await fetch(raw) : null;
-    if (res?.ok) return entries(await res.text());
-  } catch { /* offline: read after cloning */ }
+  for (const name of [MANIFEST_FILE, LEGACY_MANIFEST_FILE]) {
+    const raw = require('@craftorio/shared/platforms').rawFileUrl(platform, parsed, name);
+    try {
+      const res = typeof fetch === 'function' ? await fetch(raw) : null;
+      if (res?.ok) return entries(await res.text());
+    } catch { /* offline: read after cloning */ break; }
+  }
   return { workflows: [], default: null, kinds: {}, pending: true, message: AFTER_CLONE };
 }
 

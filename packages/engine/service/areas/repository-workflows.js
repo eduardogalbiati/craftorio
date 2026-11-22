@@ -1,4 +1,4 @@
-// Service area (#485): a project's repository workflows, the ones its .multiagent/project.yaml
+// Service area (#485): a project's repository workflows, the ones its .craftorio/project.yaml
 // declares with a `file` (packages/engine/domains/project/project-manifest.js). They are read from the checkout's HEAD (the
 // committed text, never an uncommitted edit), written to <workspace>/repository-workflows/<project>/<sha>/
 // for the engine and the builder, and accepted by the owner per commit: projects/<id>.json keeps
@@ -9,11 +9,23 @@
 const fs = require('fs');
 const path = require('path');
 const projects = require('../../domains/project/projects');
-const { MANIFEST_FILE, parseManifest } = require('../../domains/project/project-manifest');
+const {
+  LEGACY_MANIFEST_FILE,
+  MANIFEST_FILE,
+  parseManifest,
+} = require('../../domains/project/project-manifest');
 const { editedWorkspaceCopy, repositoryEntry } = require('../../domains/workflow/workflows');
 const { gitOut } = require('../common');
 
-const CRAFTORIO_DIR = path.posix.dirname(MANIFEST_FILE);
+// the manifest at a commit and the folder it sits in: .craftorio/, else .multiagent/ (a repository set
+// up before the rename to Craftorio, T2c); null when the commit has neither
+function manifestAt(folder, rev) {
+  for (const file of [MANIFEST_FILE, LEGACY_MANIFEST_FILE]) {
+    const text = gitOut(folder, ['show', `${rev}:${file}`]);
+    if (text != null) return { text, dir: path.posix.dirname(file) };
+  }
+  return null;
+}
 // a commit's hash, short or full: 40 characters for SHA-1, 64 for a SHA-256 repository
 const SHA = /^[0-9a-f]{7,64}$/i;
 // the diff since the last accepted commit the screen shows, cut past this
@@ -29,9 +41,9 @@ module.exports = (ctx) => {
     if (!project?.folder || !project.exists) return null;
     const head = gitOut(project.folder, ['rev-parse', 'HEAD']);
     if (!head) return null;
-    const text = gitOut(project.folder, ['show', `${head}:${MANIFEST_FILE}`]);
-    if (text == null) return null;
-    return { head, manifest: parseManifest(text, { appVersion: ctx.host?.appVersion }) };
+    const at = manifestAt(project.folder, head);
+    if (!at) return null;
+    return { head, dir: at.dir, manifest: parseManifest(at.text, { appVersion: ctx.host?.appVersion }) };
   }
 
   const copiesDir = () => path.join(ctx.ws.root, 'repository-workflows');
@@ -61,13 +73,13 @@ module.exports = (ctx) => {
     const project = projectId ? projectOf(projectId) : null;
     const found = headManifest(project);
     if (!found) return { errors: [], items: [], categories: {} };
-    const { head, manifest } = found;
+    const { head, dir, manifest } = found;
     if (manifest.errors.length) return { errors: manifest.errors, items: [], categories: {} };
     const categories = Object.fromEntries(manifest.workflows.filter((e) => !e.file && e.category).map((e) => [e.name, e.category]));
     const accepted = project.acceptedWorkflows || {};
     const items = [];
     for (const entry of manifest.workflows.filter((e) => e.file)) {
-      const rel = `${CRAFTORIO_DIR}/${entry.file}`;
+      const rel = `${dir}/${entry.file}`;
       const blob = gitOut(project.folder, ['rev-parse', `${head}:${rel}`]);
       if (!blob) continue; // declared but never committed: nothing to accept yet
       const file = path.posix.basename(entry.file);
@@ -87,9 +99,9 @@ module.exports = (ctx) => {
     if (!project) throw new Error(`Project not found: ${projectId}`);
     const sha = String(commit || '');
     if (!SHA.test(sha) || gitOut(project.folder, ['cat-file', '-e', `${sha}^{commit}`]) == null) throw new Error(`Commit ${sha} is not in the repository of ${project.name || projectId}.`);
-    const text = gitOut(project.folder, ['show', `${sha}:${MANIFEST_FILE}`]);
-    const entry = text == null ? null : repositoryEntry(parseManifest(text).workflows, path.basename(String(file || '')));
-    const blob = entry && gitOut(project.folder, ['rev-parse', `${sha}:${CRAFTORIO_DIR}/${entry.file}`]);
+    const at = manifestAt(project.folder, sha);
+    const entry = at == null ? null : repositoryEntry(parseManifest(at.text).workflows, path.basename(String(file || '')));
+    const blob = entry && gitOut(project.folder, ['rev-parse', `${sha}:${at.dir}/${entry.file}`]);
     if (!blob) throw new Error(`Workflow ${file} is not declared in ${MANIFEST_FILE} at commit ${sha.slice(0, 7)}.`);
     const full = gitOut(project.folder, ['rev-parse', `${sha}^{commit}`]);
     projects.updateProject(ctx.ws.projects, project.id, { acceptedWorkflows: { ...(project.acceptedWorkflows || {}), [entry.file.split('/').pop()]: { commit: full, blob } } });

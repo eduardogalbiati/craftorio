@@ -45,7 +45,7 @@ test('#861 a composed Local workflow set: feature and fix get the same engine pu
   const entries = manifestParser().parseManifest(out.manifest.yaml).workflows.filter((e) => ['feature', 'fix'].includes(e.category));
   assert.equal(entries.length, 2);
   for (const e of entries) {
-    const wf = engine().loadWorkflow(path.join(dir, '.multiagent', ...String(e.file).split('/')));
+    const wf = engine().loadWorkflow(path.join(dir, '.craftorio', ...String(e.file).split('/')));
     assertEngineStep(wf, `composed ${e.category}`);
   }
 });

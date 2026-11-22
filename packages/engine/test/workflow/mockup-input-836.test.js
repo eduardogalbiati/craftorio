@@ -1,6 +1,6 @@
 // #836 Mockups phase 3, the workflows:
 // - the dev workflows (workflows/feature.yaml, workflows/fix.yaml and the repository's own
-//   .multiagent/workflows/ai-development-local-hero.yaml) take an OPTIONAL `mockup` input (a string, default
+//   .craftorio/workflows/ai-development-local-hero.yaml) take an OPTIONAL `mockup` input (a string, default
 //   ''): the folder of a frozen mockup version (fronts/plan/engine/domains/mockups.js freezeVersion: its
 //   index.html and kit/); the develop step reads it (the developer sees the screen and its kit), and a run
 //   without it behaves as today;
@@ -17,8 +17,8 @@ const yaml = require('js-yaml');
 const { loadWorkflow } = require('../../engine/workflow');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
-const DEV_WORKFLOWS = ['workflows/feature.yaml', 'workflows/fix.yaml', '.multiagent/workflows/ai-development-local-hero.yaml'];
-const UI_REVIEWED = ['workflows/feature.yaml', '.multiagent/workflows/ai-development-local-hero.yaml'];
+const DEV_WORKFLOWS = ['workflows/feature.yaml', 'workflows/fix.yaml', '.craftorio/workflows/ai-development-local-hero.yaml'];
+const UI_REVIEWED = ['workflows/feature.yaml', '.craftorio/workflows/ai-development-local-hero.yaml'];
 const raw = (rel) => yaml.load(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 const step = (wf, id) => (wf.steps || []).find((s) => s.id === id);
 const readsMockup = (text) => /\binputs\.mockup\b/.test(String(text ?? ''));

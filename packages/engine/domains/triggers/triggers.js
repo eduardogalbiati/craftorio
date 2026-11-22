@@ -1,4 +1,4 @@
-// Platform triggers (#568, 12-Factor Agents factor 11): a repository's `.multiagent/project.yaml` may
+// Platform triggers (#568, 12-Factor Agents factor 11): a repository's `.craftorio/project.yaml` may
 // list `triggers:`, rules of the form "this platform event starts that workflow with these inputs":
 //   { on: issue_labeled, label: ready, workflow: software-development, inputs: { issues: ["{{ event.issue.number }}"] } }
 //   { on: pr_comment, mention: "@orchestrator", workflow: fix }

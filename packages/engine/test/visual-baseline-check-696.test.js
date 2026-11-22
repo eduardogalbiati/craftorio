@@ -29,7 +29,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
-const WORKFLOW = path.join(__dirname, '..', '..', '..', '.multiagent', 'workflows', 'ai-development-local-hero.yaml');
+const WORKFLOW = path.join(__dirname, '..', '..', '..', '.craftorio', 'workflows', 'ai-development-local-hero.yaml');
 
 // the module the change creates: loaded inside each test
 const load = () => require('../engine/visual-baselines');
@@ -235,7 +235,7 @@ test('#696 run: a visual_baselines step reports the missing baseline (file and u
   assert.deepEqual(present.output.missing, []);
 });
 
-// ---- the workflow (.multiagent/workflows/ai-development-local-hero.yaml) ---------------------------
+// ---- the workflow (.craftorio/workflows/ai-development-local-hero.yaml) ---------------------------
 
 test('#696 workflow: a baseline_check step without an agent (type visual_baselines)', () => {
   const wf = engine().loadWorkflow(WORKFLOW);

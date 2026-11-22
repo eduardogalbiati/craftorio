@@ -9,8 +9,8 @@ const yaml = require('js-yaml');
 const ROOT = path.join(__dirname, '..');
 const FILES = [
   'workflows/feature.yaml',
-  '.multiagent/workflows/ai-development-local-hero.yaml',
-  '.multiagent/workflows/ai-development-remote-hero.yaml',
+  '.craftorio/workflows/ai-development-local-hero.yaml',
+  '.craftorio/workflows/ai-development-remote-hero.yaml',
 ];
 
 for (const file of FILES) {

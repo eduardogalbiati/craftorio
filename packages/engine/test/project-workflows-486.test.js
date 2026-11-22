@@ -1,5 +1,5 @@
 // #486: a project's workflow set and default, read from the repository's manifest (#485's
-// `.multiagent/project.yaml`, packages/engine/domains/project/project-manifest.js) when the project is created. Acceptance tests,
+// `.craftorio/project.yaml`, packages/engine/domains/project/project-manifest.js) when the project is created. Acceptance tests,
 // written before the code.
 //
 // Spec (the interface these tests assume):
@@ -50,8 +50,8 @@ function tempDir(t, prefix) {
 
 function folderWithManifest(t, text = MANIFEST) {
   const dir = tempDir(t, 'pj-wf-486-');
-  fs.mkdirSync(path.join(dir, '.multiagent'), { recursive: true });
-  fs.writeFileSync(path.join(dir, '.multiagent', 'project.yaml'), text);
+  fs.mkdirSync(path.join(dir, '.craftorio'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.craftorio', 'project.yaml'), text);
   return dir;
 }
 
@@ -78,7 +78,7 @@ function cliWithFile(cli, text) {
     if (/project\.yaml|project%2Eyaml/i.test(joined)) {
       if (text == null) throw new Error(`${name} api failed: HTTP 404: Not Found`);
       if (/raw/i.test(joined)) return text;
-      return JSON.stringify({ type: 'file', encoding: 'base64', content: b64(text), name: 'project.yaml', file_name: 'project.yaml', path: '.multiagent/project.yaml', file_path: '.multiagent/project.yaml' });
+      return JSON.stringify({ type: 'file', encoding: 'base64', content: b64(text), name: 'project.yaml', file_name: 'project.yaml', path: '.craftorio/project.yaml', file_path: '.craftorio/project.yaml' });
     }
     return JSON.stringify({ full_name: 'o/r', path_with_namespace: 'o/r', private: true, visibility: 'private', default_branch: 'main' });
   };
@@ -146,7 +146,7 @@ test('#486 projectManifest of a folder whose manifest is not valid YAML returns 
 
 // ---- createProject on a repository it clones (the git runner is the boundary) -------------------
 
-// A git runner whose clone makes the folder a repository holding `.multiagent/project.yaml`
+// A git runner whose clone makes the folder a repository holding `.craftorio/project.yaml`
 function cloningGit(text = MANIFEST) {
   const calls = [];
   const git = async (args) => {
@@ -154,8 +154,8 @@ function cloningGit(text = MANIFEST) {
     if (args[0] === 'clone') {
       const folder = args[2];
       fs.mkdirSync(path.join(folder, '.git'), { recursive: true });
-      fs.mkdirSync(path.join(folder, '.multiagent'), { recursive: true });
-      fs.writeFileSync(path.join(folder, '.multiagent', 'project.yaml'), text);
+      fs.mkdirSync(path.join(folder, '.craftorio'), { recursive: true });
+      fs.writeFileSync(path.join(folder, '.craftorio', 'project.yaml'), text);
     }
     return '';
   };
@@ -219,10 +219,10 @@ function stubGlobalFetch(t, fn) {
 
 test('#486 projects:manifest { url } of a public self-hosted repository reads the raw manifest through fetch', async (t) => {
   const { api } = service(t);
-  const urls = stubGlobalFetch(t, async (url) => (/\.multiagent\/project\.yaml$/.test(url) ? response(200, MANIFEST) : response(404, 'Not Found')));
+  const urls = stubGlobalFetch(t, async (url) => (/\.craftorio\/project\.yaml$/.test(url) ? response(200, MANIFEST) : response(404, 'Not Found')));
   const out = await api['projects:manifest']({ url: 'https://git.example.test/o/r.git' });
   assert.deepEqual(names(out), MANIFEST_NAMES);
-  assert.deepEqual(urls, ['https://git.example.test/o/r/-/raw/HEAD/.multiagent/project.yaml']);
+  assert.deepEqual(urls, ['https://git.example.test/o/r/-/raw/HEAD/.craftorio/project.yaml']);
 });
 
 test('#486 projects:manifest { url } that cannot be read (offline) says it will be read after cloning', async (t) => {

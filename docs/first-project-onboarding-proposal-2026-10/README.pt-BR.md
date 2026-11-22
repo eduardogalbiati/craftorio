@@ -61,7 +61,7 @@ As peças para um bom onboarding existem, mas estão espalhadas. O Setup só abr
 | **Architecture › City** (#373): feita pelo workflow `project-map` (o plano do cartógrafo, validado por regras, depois a análise do Oracle) num run só. | **Refactor** (#357): propostas vindas dos achados da arquitetura, ranqueadas pelo Product Owner, cada uma com "Add to roadmap", e a cadência. |
 
 Reaproveitado como está:
-- `createProject` e o manifesto `.multiagent/project.yaml` (#486);
+- `createProject` e o manifesto `.craftorio/project.yaml` (#486);
 - o seed `ways-of-working` e o caminho determinístico que ele já tem (o que o modo simulado roda);
 - o `workflow-compose.js` e os fragments (#487);
 - o `project-map` (#372, #381);
@@ -246,7 +246,7 @@ Pipelines, de 6 para 5:
 - Alternativas:
   - Renomear de uma vez: quebra manifestos de repositórios e roadmaps salvos.
   - Manter os 15 e esconder alguns: não reduz nada do que precisa ser mantido.
-- **Onde ficam os fluxos de um projeto:** por padrão o projeto só referencia as variantes bundled (no JSON dele, no workspace), e nada é escrito no repositório durante o onboarding. "Customize" escreve em `.multiagent/`, como o "Write to the repository" do Ways of working faz hoje, sem commit.
+- **Onde ficam os fluxos de um projeto:** por padrão o projeto só referencia as variantes bundled (no JSON dele, no workspace), e nada é escrito no repositório durante o onboarding. "Customize" escreve em `.craftorio/`, como o "Write to the repository" do Ways of working faz hoje, sem commit.
 
 ## Alinhamento com o AI-native SDLC da Anthropic
 
@@ -436,7 +436,7 @@ Cada uma tem um padrão recomendado.
 
 - **Q-1.** O passo Workflows do Setup some? Padrão: **sim**. O Definitions continua servindo para esconder workflows.
 - **Q-2.** Repo privado sem `gh` ou `glab`? Padrão: **oferecer o login do provedor da URL no Next**. Um git credential helper que já funcione também serve.
-- **Q-3.** O onboarding escreve arquivos no repositório do usuário? Padrão: **não**. "Customize" escreve em `.multiagent/`, sem commit.
+- **Q-3.** O onboarding escreve arquivos no repositório do usuário? Padrão: **não**. "Customize" escreve em `.craftorio/`, sem commit.
 - **Q-4.** As análises com modelo vêm marcadas? Padrão: **sim, com o total visível e "Skip, analyze later"**. No modo simulado, tudo é simulado.
 - **Q-5.** "Create new project" cria repo remoto por padrão? Padrão: **só com o `gh` ou o `glab` logado, privado, e desmarcado na primeira vez**.
 - **Q-6.** Por quanto tempo os nomes antigos funcionam? Padrão: **duas versões**, com aviso no Start e uma linha nas notas de release.

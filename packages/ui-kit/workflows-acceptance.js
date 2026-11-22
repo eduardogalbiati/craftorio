@@ -1,5 +1,5 @@
 // #794: the current project's repository workflows not accepted at its HEAD (a change to
-// .multiagent/workflows/*.yaml asks for acceptance per commit, #485), as an orange count on the
+// .craftorio/workflows/*.yaml asks for acceptance per commit, #485), as an orange count on the
 // sidebar's Workflows › Definitions entry, on its folded group and on the screen's Definitions tab
 // (every .acceptance-count). Read again when the project changes (current-project.js refresh/set),
 // the window takes the focus (once per FOCUS_GAP: the read runs git in the service's process), a

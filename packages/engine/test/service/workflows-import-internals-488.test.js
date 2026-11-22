@@ -88,7 +88,7 @@ test('#488 requiresProblem: null when absent or satisfied, the reason otherwise,
   assert.match(requiresProblem('1.2.0', 'soon'), /not a version range/);
   const { errors } = parseManifest('requires: ">=9.0"\n', { appVersion: '1.2.0' });
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /^\.multiagent\/project\.yaml: requires app version >=9\.0, this app is 1\.2\.0\.$/);
+  assert.match(errors[0], /^\.craftorio\/project\.yaml: requires app version >=9\.0, this app is 1\.2\.0\.$/);
 });
 
 test('#488 summarize flattens nested tool lists and lists the steps\' own tools', () => {

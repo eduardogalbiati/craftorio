@@ -10,7 +10,7 @@ the state is saved, and an event later brings it back. ([factor 6](https://githu
 
 - **Launch.** A run starts from the app, from the CLI (`npm run run -- --file <wf> --input ...`),
   from the engine server in a browser (`npm run serve`), from a roadmap stage, from another run's
-  `then:` (chaining, #134) or from a repository's `.multiagent/project.yaml`. All go through the same
+  `then:` (chaining, #134) or from a repository's `.craftorio/project.yaml`. All go through the same
   service channels (`src/service/channels/`).
 - **Pause after the current turn** (#368, `decisions.md` 2026-10-13). `run:pause` sets `pausing`;
   nothing is aborted. The turns in progress and any running command finish, the step loop ends the

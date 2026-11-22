@@ -1,6 +1,6 @@
 /* global api */
 // #486: the "Workflows" block of a project's page (Projects › Overview, views/project/project.js), with
-// the repository manifest's errors (.multiagent/project.yaml, api.projectManifest). #741: the old Create
+// the repository manifest's errors (.craftorio/project.yaml, api.projectManifest). #741: the old Create
 // Project dialog's block went with the dialog (creating is the wizard only, its step 3 suggests the workflows).
 // #729: the Overview shows only the project's workflows, one card each (pj-wf-card: name, category,
 // the wizard's variant and CI pick, a clamped description, the Default badge, Make default / Remove),
@@ -142,7 +142,7 @@ window.ProjectWorkflows = (() => {
     const def = DefaultWorkflow.projectDefault(p, manifest?.default);
     const mine = (p.workflows || []).filter((w) => bare(w?.name));
     const on = new Set(mine.map((w) => bare(w.name)));
-    // #487: the workflows the repository's .multiagent/ declares, not on the project
+    // #487: the workflows the repository's .craftorio/ declares, not on the project
     const repo = [...new Set((manifest?.workflows || []).map((w) => bare(w?.name)).filter((n) => n && !on.has(n)))];
     const addBtn = `<button type="button" class="btn sm ghost pj-wf-add" data-testid="pj-wf-add">${t('projects.workflows_add')}</button>`;
     box.innerHTML = `

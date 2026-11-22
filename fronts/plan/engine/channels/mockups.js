@@ -212,14 +212,14 @@ module.exports = (ctx) => {
   }
 
   // #836 a screen of the running app recreated with the project's kit: needs Run App / Local preview (the
-  // project's localPreview, else the repository's .multiagent/local-preview.yaml); simulated, a draft at
+  // project's localPreview, else the repository's .craftorio/local-preview.yaml); simulated, a draft at
   // once; real, a mockup-generate run in mode 'recreate' with the app's url
   async function recreate({ projectId, title, url = '' }) {
     const name = titleOf(title);
     const project = projectOf(projectId);
     const repo = project?.folder ? localPreview.readRepoConfig(project.folder) : null;
     const config = localPreview.resolveConfig(project, null, repo?.error ? null : repo);
-    if (!config) throw clientError('Set Run App (Projects › Local preview or .multiagent/local-preview.yaml) to recreate a screen of the running app.');
+    if (!config) throw clientError('Set Run App (Projects › Local preview or .craftorio/local-preview.yaml) to recreate a screen of the running app.');
     const appUrl = String(url || '').trim() || String(config.url || '');
     return newScreen({
       projectId,

@@ -4,7 +4,7 @@ summary: How the project is worked on (local merge or pull requests, release sty
 needs:
   - the repository's history (git log, merges, tags)
   - the CI configuration files and the project's test and build scripts
-  - the project's Architecture facts (languages, layout) and an existing .multiagent/ manifest
+  - the project's Architecture facts (languages, layout) and an existing .craftorio/ manifest
 produces:
   - html
   - json
@@ -42,7 +42,7 @@ settle it: the interview asks the owner what stays `null`, so a guess costs more
   What the CI checks (`ci`): `none` (no CI files), `release` (CI on the main branch or tags only),
   `pr+release` (CI on pull requests too).
 - **What it is written in** (`languages`): the Architecture facts' languages, else the file
-  extensions; an existing `.multiagent/project.yaml` is reported as is (what to keep).
+  extensions; an existing `.craftorio/project.yaml` is reported as is (what to keep).
 - Never copy a secret, a token, an e-mail address or an environment value into the result: count
   authors, never name them.
 

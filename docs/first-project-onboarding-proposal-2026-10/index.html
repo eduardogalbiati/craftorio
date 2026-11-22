@@ -363,7 +363,7 @@ table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:
 </tbody></table>
 <p>Reused as they are:</p>
 <ul>
-<li><code>createProject</code> and the <code>.multiagent/project.yaml</code> manifest (#486);</li>
+<li><code>createProject</code> and the <code>.craftorio/project.yaml</code> manifest (#486);</li>
 <li>the <code>ways-of-working</code> seed and its existing deterministic path (what simulation mode runs);</li>
 <li><code>workflow-compose.js</code> and the step fragments (#487);</li>
 <li><code>project-map</code> (#372, #381);</li>
@@ -688,7 +688,7 @@ Today <code>ai-development-local-hero</code> writes the tests before the code an
 <li>Keep all 15 and hide some: reduces nothing that has to be maintained.</li>
 </ul>
 </li>
-<li><strong>Where a project&#39;s workflows live:</strong> by default the project only references bundled variants (in its JSON, in the workspace), and nothing is written to the repository at onboarding. &quot;Customize&quot; writes to <code>.multiagent/</code>, as Ways of working&#39;s &quot;Write to the repository&quot; does today, uncommitted.</li>
+<li><strong>Where a project&#39;s workflows live:</strong> by default the project only references bundled variants (in its JSON, in the workspace), and nothing is written to the repository at onboarding. &quot;Customize&quot; writes to <code>.craftorio/</code>, as Ways of working&#39;s &quot;Write to the repository&quot; does today, uncommitted.</li>
 </ul>
 <h2>Alignment with Anthropic&#39;s AI-native SDLC</h2>
 <p>In August 2026 Anthropic published the <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">AI-native SDLC playbook</a>: six stages in a loop, each ending in a version-controlled artifact a person approves and the next stage reads. The app already has most of the pieces; what is missing is treating the documents as stage artifacts, with a format and a place set per project.</p>
@@ -980,7 +980,7 @@ Today <code>ai-development-local-hero</code> writes the tests before the code an
 <ul>
 <li><strong>Q-1.</strong> Does Setup&#39;s Workflows step go away? Default: <strong>yes</strong>. Definitions stays for hiding workflows.</li>
 <li><strong>Q-2.</strong> A private repository with no <code>gh</code> or <code>glab</code>? Default: <strong>offer the URL&#39;s provider sign-in on Next</strong>. A working git credential helper is fine too.</li>
-<li><strong>Q-3.</strong> Does onboarding write files to the user&#39;s repository? Default: <strong>no</strong>. &quot;Customize&quot; writes to <code>.multiagent/</code>, uncommitted.</li>
+<li><strong>Q-3.</strong> Does onboarding write files to the user&#39;s repository? Default: <strong>no</strong>. &quot;Customize&quot; writes to <code>.craftorio/</code>, uncommitted.</li>
 <li><strong>Q-4.</strong> Do the model analyses come checked? Default: <strong>yes, with the total shown and &quot;Skip, analyze later&quot;</strong>. In simulation mode everything is simulated.</li>
 <li><strong>Q-5.</strong> Does &quot;Create new project&quot; create a remote repository by default? Default: <strong>only with <code>gh</code> or <code>glab</code> signed in, private, and unchecked the first time</strong>.</li>
 <li><strong>Q-6.</strong> How long do old names keep working? Default: <strong>two releases</strong>, with a notice in Start and a line in the release notes.</li>

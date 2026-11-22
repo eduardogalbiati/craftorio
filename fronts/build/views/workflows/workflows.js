@@ -112,7 +112,7 @@ const WF_SECTIONS = {
 const wfDefs = { section: 'all', query: '', open: new Set(), pipelines: [], pipelinesError: null, repository: [], manifestErrors: [] };
 const wfSectionOf = (category) => (category && Object.hasOwn(WF_SECTIONS, category) ? category : 'other');
 const wfSectionName = (key) => CATEGORIES[key] || { intake: t('workflows.section_intake'), solo: t('workflows.section_solo'), team: t('workflows.section_team'), release: t('workflows.section_release') }[key] || t('workflows.section_other');
-const isManifestError = (w) => w.origin === 'repository' && w.error && w.name === '.multiagent/project.yaml';
+const isManifestError = (w) => w.origin === 'repository' && w.error && w.name === '.craftorio/project.yaml';
 const wfByFile = (file) => state.workflows.find((w) => w.file === file);
 // A pipeline sits in its own category's section, else in its first workflow's.
 const pipeSection = (p) => wfSectionOf(p.category || wfByFile(p.stages[0]?.workflow)?.category);

@@ -55,7 +55,7 @@ module.exports = (ctx) => [
   // #733: the running interview's state ({ running: { since, items, last } | null, error }), for the drawer's loader; #781: and its phases, for the wizard
   { channel: 'workflows:interviewState', method: 'workflowInterviewState', params: 'opts', schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowInterviewState({ projectId: requireId(opts?.projectId, 'project id') }) },
   // #487: the workflow set composed from the profile and the answers; write: into the project's
-  // .multiagent/ (not committed) and its workflow set, else nothing is written
+  // .craftorio/ (not committed) and its workflow set, else nothing is written
   { channel: 'workflows:compose', method: 'workflowCompose', params: 'opts', schema: { params: args({ projectId: PROJECT_ID, answers: orNone(OBJECT), write: FLAG }, ['projectId']), result: OBJECT }, fn: (opts) => ctx.workflowCompose({ projectId: requireId(opts?.projectId, 'project id'), answers: opts.answers || {}, write: !!opts.write }) },
   // → { file, mode, problems, spec }: the workflow as the builder edits it
   { channel: 'builder:load', method: 'loadBuilderWorkflow', params: 'file', schema: { params: WORKFLOW_FILE, result: shape({ file: STRING, mode: STRING, problems: listOf(ANY), spec: OBJECT }, ['spec']) }, fn: (file) => ctx.loadBuilderWorkflow(requireId(file, 'workflow file')) },

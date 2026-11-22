@@ -23,7 +23,7 @@ const { makeService, until } = require('@craftorio/engine/test/service/helpers')
 const H = require('../roadmap-status-helpers');
 
 const HERO = 'ai-development-remote-hero.yaml';
-const HERO_FILE = path.join(__dirname, '..', '..', '..', '..', '.multiagent', 'workflows', HERO);
+const HERO_FILE = path.join(__dirname, '..', '..', '..', '..', '.craftorio', 'workflows', HERO);
 const FEATURE = 'feature.yaml';
 const FIX = 'fix.yaml';
 const PR_STATION = /^(Abrir PR|Open PR|Pull request)$/;

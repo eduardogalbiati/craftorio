@@ -12,7 +12,7 @@ profile, and **Edit profile** overrides any inferred field (team, merge, release
 check commands, languages). The proposed set (intake, development in the chosen style, release in
 the chosen style) is composed from the step fragments with the project's facts in the prompts.
 **Open in Builder** opens the development workflow unsaved; **Write to the repository** puts the
-files under `.multiagent/workflows/` and merges them into `.multiagent/project.yaml` (other
+files under `.craftorio/workflows/` and merges them into `.craftorio/project.yaml` (other
 entries are kept), uncommitted: you commit them.
 
 The way changes land is one of three modes:

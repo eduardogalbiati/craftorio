@@ -8,7 +8,7 @@ The default development workflow (the one a plan, Split + roadmap, Create + road
 dialog and Fix the base use when nothing is picked) comes from the project, never from a global
 setting: the project's own default (the Workflows block of its page), then the repository manifest's
 `default`, then the first build workflow of the project's set, then `feature`. A project imported
-from a repository whose `.multiagent/project.yaml` declares `default: <name>` gets it at once.
+from a repository whose `.craftorio/project.yaml` declares `default: <name>` gets it at once.
 
 The manifest's `kinds` map names the workflow, and the inputs, of each kind of issue, which the
 import saves on the project and the project's page lets you change (its Feature and Fix workflows):

@@ -61,7 +61,7 @@ The pieces for a good onboarding exist, but they are scattered. Setup only opens
 | **Architecture › City** (#373): made by the `project-map` workflow (the cartographer's plan, validated by rules, then the Oracle's analysis) in one run. | **Refactor** (#357): proposals from the architecture findings, ranked by the Product Owner, each with "Add to roadmap", plus the cadence. |
 
 Reused as they are:
-- `createProject` and the `.multiagent/project.yaml` manifest (#486);
+- `createProject` and the `.craftorio/project.yaml` manifest (#486);
 - the `ways-of-working` seed and its existing deterministic path (what simulation mode runs);
 - `workflow-compose.js` and the step fragments (#487);
 - `project-map` (#372, #381);
@@ -246,7 +246,7 @@ Pipelines, 6 → 5:
 - Alternatives:
   - Rename at once: breaks repository manifests and saved roadmaps.
   - Keep all 15 and hide some: reduces nothing that has to be maintained.
-- **Where a project's workflows live:** by default the project only references bundled variants (in its JSON, in the workspace), and nothing is written to the repository at onboarding. "Customize" writes to `.multiagent/`, as Ways of working's "Write to the repository" does today, uncommitted.
+- **Where a project's workflows live:** by default the project only references bundled variants (in its JSON, in the workspace), and nothing is written to the repository at onboarding. "Customize" writes to `.craftorio/`, as Ways of working's "Write to the repository" does today, uncommitted.
 
 ## Alignment with Anthropic's AI-native SDLC
 
@@ -436,7 +436,7 @@ Each has a recommended default.
 
 - **Q-1.** Does Setup's Workflows step go away? Default: **yes**. Definitions stays for hiding workflows.
 - **Q-2.** A private repository with no `gh` or `glab`? Default: **offer the URL's provider sign-in on Next**. A working git credential helper is fine too.
-- **Q-3.** Does onboarding write files to the user's repository? Default: **no**. "Customize" writes to `.multiagent/`, uncommitted.
+- **Q-3.** Does onboarding write files to the user's repository? Default: **no**. "Customize" writes to `.craftorio/`, uncommitted.
 - **Q-4.** Do the model analyses come checked? Default: **yes, with the total shown and "Skip, analyze later"**. In simulation mode everything is simulated.
 - **Q-5.** Does "Create new project" create a remote repository by default? Default: **only with `gh` or `glab` signed in, private, and unchecked the first time**.
 - **Q-6.** How long do old names keep working? Default: **two releases**, with a notice in Start and a line in the release notes.

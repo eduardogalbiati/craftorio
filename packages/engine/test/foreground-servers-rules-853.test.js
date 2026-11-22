@@ -55,7 +55,7 @@ test('§1 says its long timeout is for commands that end, never for servers', ()
   assert.match(s, /never for (dev )?servers|not for (dev )?servers/i);
 });
 
-for (const rel of ['workflows/feature.yaml', '.multiagent/workflows/ai-development-local-hero.yaml']) {
+for (const rel of ['workflows/feature.yaml', '.craftorio/workflows/ai-development-local-hero.yaml']) {
   test(`${rel}: the developer's prompt says never to run a dev server or watcher in the foreground (see long-commands)`, () => {
     const develop = loadWorkflow(path.join(ROOT, rel)).steps.find((s) => s.id === 'develop');
     assert.ok(develop, 'a develop step');

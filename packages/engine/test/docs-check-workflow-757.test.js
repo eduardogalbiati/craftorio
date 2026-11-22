@@ -13,8 +13,8 @@ const { render, evalExpr } = require('../engine/run/templates');
 const ROOT = path.join(__dirname, '..', '..', '..');
 const WORKFLOWS = [
   'workflows/feature.yaml',
-  '.multiagent/workflows/ai-development-local-hero.yaml',
-  '.multiagent/workflows/ai-development-remote-hero.yaml',
+  '.craftorio/workflows/ai-development-local-hero.yaml',
+  '.craftorio/workflows/ai-development-remote-hero.yaml',
 ];
 const STEP = 'docs_check';
 const gotos = (step) => (step.transitions || []).map((tr) => tr.goto).filter(Boolean);

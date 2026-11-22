@@ -3,7 +3,7 @@
 // embedded terminal (packages/engine/domains/machine/terminals.js) and stops it when the gate is answered or the run ends; this
 // module holds what does not need the service:
 // - which config applies: the project's override (Projects › Local preview), else the repository's
-//   .multiagent/local-preview.yaml, else the workflow's orchestrator.local_preview
+//   .craftorio/local-preview.yaml, else the workflow's orchestrator.local_preview
 //   ({ install, command, url, cwd, env }), else a suggestion detected from the folder (#115);
 // - the fingerprint of a config the owner confirmed (a changed declared command asks again);
 // - whether `install` must run first: dependencies missing, or the lockfile changed since the last
@@ -40,7 +40,9 @@ const COPIED = ['agents', 'settings.json', 'skills', 'workflows'];
 const isRemote = (repo) => /^([a-z][a-z0-9+.-]*:\/\/|[^@\s/\\]+@[^:\s]+:)/i.test(String(repo || ''));
 
 // The file a repository declares how it runs with (#115), committed by its owner
-const REPO_FILES = ['.multiagent/local-preview.yaml', '.multiagent/local-preview.yml'];
+const { projectDirName, projectFiles } = require('@craftorio/shared/project-dir');
+// T2c: .craftorio/ first, then .multiagent/ (a repository set up before the rename to Craftorio)
+const REPO_FILES = [...projectFiles('local-preview.yaml'), ...projectFiles('local-preview.yml')];
 
 // { install, command, url, cwd, env } with empty fields dropped; null without a command. cwd: a
 // folder of the repository (a monorepo's app); env: extra variables (strings).
@@ -57,7 +59,7 @@ function cleanConfig(v) {
   return out;
 }
 
-// .multiagent/local-preview.yaml in the folder: the declared config with `from`, { error } when the
+// .craftorio/local-preview.yaml in the folder: the declared config with `from`, { error } when the
 // file is not valid, null when there is none.
 function readRepoConfig(dir) {
   if (!dir) return null;
@@ -75,7 +77,7 @@ function readRepoConfig(dir) {
 function writeRepoConfig(dir, config) {
   const cfg = cleanConfig(config);
   if (!cfg) throw new Error('No command to write.');
-  const file = path.join(dir, REPO_FILES[0]);
+  const file = path.join(dir, projectDirName((name) => fs.existsSync(path.join(dir, name))), 'local-preview.yaml');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const header = '# How this repository runs locally (Run App in the Craftorio).\n';
   fs.writeFileSync(file, header + yaml.dump(cfg, { lineWidth: -1 }));
@@ -83,7 +85,7 @@ function writeRepoConfig(dir, config) {
 }
 
 // Which config applies, in order: the project's override (Projects › Local preview), the
-// repository's .multiagent/local-preview.yaml, the workflow's orchestrator.local_preview.
+// repository's .craftorio/local-preview.yaml, the workflow's orchestrator.local_preview.
 // { config, source: 'project' | 'repo' | 'workflow', from } or null.
 function resolveSource(project, wf, repo = null) {
   // stored cleaned already (packages/engine/domains/project/projects.js)

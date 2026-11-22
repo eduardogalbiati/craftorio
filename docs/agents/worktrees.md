@@ -120,7 +120,7 @@ actions, or any code that deletes or checks out branches.
   at quit); it never answers the gate. `local_preview.started` / `local_preview.stopped` events land
   in the run's history and chat. Mock runs have no worktree: `work_dir` is `repo_path`.
 - **Run App's config (#115)**: `gateRunConfig` (service) resolves project `localPreview` >
-  `.multiagent/local-preview.yaml` read from the gate's `work_dir` (the run's branch, so a run that
+  `.craftorio/local-preview.yaml` read from the gate's `work_dir` (the run's branch, so a run that
   edits it sees its own version) > `orchestrator.local_preview` > the gate's; `suggestConfig`
   detects from `work_dir` only when none applies. A non-project config runs only after the owner's
   one click (`localPreview:start` with `confirm`), which stores its fingerprint as the project's

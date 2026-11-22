@@ -15,8 +15,8 @@ const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 // every bundled workflow with a Warm Up step (feature.yaml and the two AI Development heroes)
 const WORKFLOWS = [
   path.join(ROOT, 'workflows', 'feature.yaml'),
-  path.join(ROOT, '.multiagent', 'workflows', 'ai-development-local-hero.yaml'),
-  path.join(ROOT, '.multiagent', 'workflows', 'ai-development-remote-hero.yaml'),
+  path.join(ROOT, '.craftorio', 'workflows', 'ai-development-local-hero.yaml'),
+  path.join(ROOT, '.craftorio', 'workflows', 'ai-development-remote-hero.yaml'),
 ].filter((f) => fs.existsSync(f) && /\bwarm_up\b/.test(fs.readFileSync(f, 'utf8')));
 
 const REUSE = [

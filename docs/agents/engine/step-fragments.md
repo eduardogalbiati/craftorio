@@ -31,7 +31,7 @@ from the registry (`packages/shared/providers`), and no `ship:` (a repository wo
 rigour always, the team, release and merge styles when the profile leaves them `null`. An answer
 named after a profile field (`PROFILE_FIELDS`: team, merge, release, ci, testCommand, checkCommand,
 languages) overrides the inferred value (`withOverrides`; the drawer's "Edit profile").
-`composeWorkflowSet` is pure (YAML texts and the `.multiagent/project.yaml` manifest);
+`composeWorkflowSet` is pure (YAML texts and the `.craftorio/project.yaml` manifest);
 `workflows:compose` (`packages/engine/service/areas/workflow-interview.js`) writes them into the project's
 folder only with `write: true`, uncommitted, merging the manifest into the existing one
 (`mergeManifest`: composed entries replace those of the same name, other entries, `version` and

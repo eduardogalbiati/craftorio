@@ -40,11 +40,30 @@ test('readRepoConfig / writeRepoConfig: a repository can declare how it runs (#1
   const dir = tmp(t);
   assert.equal(lp.readRepoConfig(dir), null, 'nothing declared yet');
   const file = lp.writeRepoConfig(dir, { command: 'npm start', install: 'npm ci', url: 'http://localhost:3000', cwd: 'apps/web' });
-  assert.equal(file, path.join(dir, '.multiagent', 'local-preview.yaml'));
+  assert.equal(file, path.join(dir, '.craftorio', 'local-preview.yaml'));
   const read = lp.readRepoConfig(dir);
   assert.equal(read.command, 'npm start');
   assert.equal(read.cwd, 'apps/web');
-  assert.equal(read.from, '.multiagent/local-preview.yaml');
+  assert.equal(read.from, '.craftorio/local-preview.yaml');
+});
+
+test('T2c a repository set up before the rename keeps its .multiagent/local-preview.yaml: read from there, and written back there', (t) => {
+  const dir = tmp(t);
+  fs.mkdirSync(path.join(dir, '.multiagent'));
+  fs.writeFileSync(path.join(dir, '.multiagent', 'local-preview.yaml'), 'command: npm run dev\nurl: http://localhost:5173\n');
+  assert.equal(lp.readRepoConfig(dir).from, '.multiagent/local-preview.yaml');
+  const file = lp.writeRepoConfig(dir, { command: 'npm start', url: 'http://localhost:3000' });
+  assert.equal(file, path.join(dir, '.multiagent', 'local-preview.yaml'));
+  assert.equal(fs.existsSync(path.join(dir, '.craftorio')), false, 'no second folder');
+});
+
+test('T2c with both folders, .craftorio/ wins', (t) => {
+  const dir = tmp(t);
+  for (const [d, cmd] of [['.multiagent', 'old'], ['.craftorio', 'new']]) {
+    fs.mkdirSync(path.join(dir, d));
+    fs.writeFileSync(path.join(dir, d, 'local-preview.yaml'), `command: ${cmd}\n`);
+  }
+  assert.equal(lp.readRepoConfig(dir).command, 'new');
 });
 
 test('readRepoConfig: invalid YAML or a file without a command is reported as an error, not silently ignored or run as is', (t) => {

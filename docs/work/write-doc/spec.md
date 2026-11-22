@@ -40,7 +40,7 @@ Each `.md` has a front matter (`item`, `issue`, `stage`, `status`, `approver`, `
 **R6. Document types.** Two skills: `intent-writing` and `spec-writing`. The spec carries the format of this series' proposals (requirements, before/after, decisions with options and a recommendation, phases, costs, questions with defaults). RFC, PRD and design sketch become spec templates.
 
 **R7. Evidence without running anything.** The writer names the screens; a machine step captures them into `images/`, from, in order:
-1. the project's screenshot command (`npm run screenshot` here, `.multiagent/screenshot.yaml` elsewhere), "before" with `--ref <base>`;
+1. the project's screenshot command (`npm run screenshot` here, `.craftorio/screenshot.yaml` elsewhere), "before" with `--ref <base>`;
 2. a capture through Run App (local preview + headless browser);
 3. a manual attachment.
 

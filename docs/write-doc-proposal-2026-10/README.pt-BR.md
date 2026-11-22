@@ -174,7 +174,7 @@ Quem escreve um plano ou uma proposta muitas vezes não é técnico e não conse
 
 | Ordem | Fonte | Antes | Depois |
 |---|---|---|---|
-| 1 | **O comando de screenshot do projeto**: o `npm run screenshot` deste app, ou o comando do próprio projeto (`.multiagent/screenshot.yaml`) | a base, com dados simulados (`--ref <base>`) | o mesmo comando na branch do run |
+| 1 | **O comando de screenshot do projeto**: o `npm run screenshot` deste app, ou o comando do próprio projeto (`.craftorio/screenshot.yaml`) | a base, com dados simulados (`--ref <base>`) | o mesmo comando na branch do run |
 | 2 | **Captura pelo Run App**: o local preview sobe o front em sandbox, e um browser headless tira as URLs pedidas | as telas de hoje | a branch do run |
 | 3 | **Anexo manual**: imagens coladas ou anexadas (#130), no "New item" ou no chat da edição | o que você colar | o que você colar |
 

@@ -62,7 +62,7 @@ commit (saying it is an agent) and goes back to the monitor; resolving the threa
 reviewer. A fix that pushes nothing stops at a gate that says why. A run takes at most 5 fix rounds,
 then asks you before each one; the card shows the tokens each round spent.
 
-1. Add your clone as a project in the app. The repository's manifest (`.multiagent/project.yaml`)
+1. Add your clone as a project in the app. The repository's manifest (`.craftorio/project.yaml`)
    names `ai-development-remote-hero` as the project's default workflow and as the workflow of a
    Feature: the import sets both, nothing to configure by hand.
 2. On the Workflows screen, accept `ai-development-remote-hero`. Accept it again whenever the file changes.

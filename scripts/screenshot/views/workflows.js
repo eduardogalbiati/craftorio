@@ -116,7 +116,7 @@ function demoRunHistory(ws, projectId) {
 }
 
 // Repository workflows (#485): the project's folder is a git repository whose committed
-// .multiagent/project.yaml names a bundled flow (team) and its own copy of the retrospective
+// .craftorio/project.yaml names a bundled flow (team) and its own copy of the retrospective
 // (intake), not accepted yet, so Workflows › Definitions shows "repository @ <sha>" with Accept.
 function demoRepositoryWorkflows(project, appDir) {
   if (!project.folder) return;

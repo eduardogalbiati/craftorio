@@ -169,7 +169,7 @@ test('#485 without a policy, the default policy applies: a bundled-like workflow
 
 test('#485 this repository\'s own ai-development-local-hero copy loads once accepted, under the default policy', () => {
   const { loadRepositoryWorkflow } = load();
-  const file = path.join(__dirname, '..', '..', '..', '.multiagent', 'workflows', 'ai-development-local-hero.yaml');
+  const file = path.join(__dirname, '..', '..', '..', '.craftorio', 'workflows', 'ai-development-local-hero.yaml');
   const wf = loadRepositoryWorkflow(file, { accepted: true });
   assert.equal(wf.metadata.name, 'ai-development-local-hero');
   assert.throws(() => loadRepositoryWorkflow(file, { accepted: false }), (e) => /not accepted/i.test(e.message) && /ai-development-local-hero/.test(e.message));

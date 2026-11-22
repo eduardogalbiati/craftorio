@@ -46,7 +46,7 @@ const WEB_DEPS = ['@angular/core', '@sveltejs/kit', 'next', 'nuxt', 'preact', 'r
 const SERVER_DEPS = ['@hapi/hapi', '@nestjs/core', 'express', 'fastify', 'hono', 'koa', 'next', 'nuxt'];
 const E2E_CONFIGS = ['cypress.config.js', 'cypress.config.ts', 'playwright.config.js', 'playwright.config.ts', 'playwright.config.mjs'];
 const UI_FILE = /\.(html|jsx|tsx|vue|svelte)$/i;
-const SKIP_DIRS = new Set(['.git', '.github', '.multiagent', 'build', 'coverage', 'dist', 'docs', 'e2e', 'features', 'node_modules', 'out', 'target', 'test', 'tests', 'vendor']);
+const SKIP_DIRS = new Set(['.git', '.craftorio', '.github', '.multiagent', 'build', 'coverage', 'dist', 'docs', 'e2e', 'features', 'node_modules', 'out', 'target', 'test', 'tests', 'vendor']);
 // folders that hold several apps: the UI folder is one level deeper (apps/web/)
 const CONTAINERS = new Set(['apps', 'packages', 'services']);
 const STEPS_FOLDERS = ['features/steps', 'e2e/steps', 'tests/e2e/steps'];

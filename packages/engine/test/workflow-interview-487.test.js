@@ -11,8 +11,8 @@
 //     workflowCompose({ projectId, answers, write }) -> Promise<{ workflows: [{ name, path, yaml }],
 //       manifest: { path, yaml } }>: composeWorkflowSet over the project's latest interview profile
 //       (its last ways-of-working run) and the answers. Without `write: true` nothing is written;
-//       with it, each file is written under the project's folder (.multiagent/workflows/<name>.yaml,
-//       .multiagent/project.yaml) and nothing is committed.
+//       with it, each file is written under the project's folder (.craftorio/workflows/<name>.yaml,
+//       .craftorio/project.yaml) and nothing is committed.
 //   }
 //   ctx: { ws, host, oracleService, events, notify } as the service gives its areas.
 //   Channels: workflows:interview ({ projectId }) and workflows:compose ({ projectId, answers, write }).
@@ -119,11 +119,11 @@ test('#487 compose without write returns the files and writes nothing into the p
   await area.workflowInterview({ projectId: project.id });
   const out = await area.workflowCompose({ projectId: project.id, answers: { validate: true } });
   assert.equal(out.workflows.length >= 3, true);
-  assert.equal(out.manifest.path, '.multiagent/project.yaml');
-  assert.equal(fs.existsSync(path.join(repo.dir, '.multiagent')), false);
+  assert.equal(out.manifest.path, '.craftorio/project.yaml');
+  assert.equal(fs.existsSync(path.join(repo.dir, '.craftorio')), false);
 });
 
-test('#487 compose with write writes the workflows and the manifest under the project\'s .multiagent', async (t) => {
+test('#487 compose with write writes the workflows and the manifest under the project\'s .craftorio', async (t) => {
   const { area, project, repo } = await setup(t);
   await area.workflowInterview({ projectId: project.id });
   const out = await area.workflowCompose({ projectId: project.id, answers: {}, write: true });
@@ -132,7 +132,7 @@ test('#487 compose with write writes the workflows and the manifest under the pr
     assert.equal(fs.existsSync(file), true, f.path);
     assert.equal(fs.readFileSync(file, 'utf8'), f.yaml, f.path);
   }
-  assert.equal(fs.existsSync(path.join(repo.dir, '.multiagent', 'project.yaml')), true);
+  assert.equal(fs.existsSync(path.join(repo.dir, '.craftorio', 'project.yaml')), true);
 });
 
 test('#487 compose with write commits nothing: the files stay untracked', async (t) => {
@@ -141,7 +141,7 @@ test('#487 compose with write commits nothing: the files stay untracked', async 
   const head = repo.git('rev-parse', 'HEAD');
   await area.workflowCompose({ projectId: project.id, answers: {}, write: true });
   assert.equal(repo.git('rev-parse', 'HEAD'), head);
-  assert.equal(repo.git('status', '--porcelain', '--', '.multiagent'), '?? .multiagent/');
+  assert.equal(repo.git('status', '--porcelain', '--', '.craftorio'), '?? .craftorio/');
 });
 
 test('#487 the service registers workflows:interview and workflows:compose', (t) => {

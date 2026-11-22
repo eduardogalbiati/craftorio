@@ -9,8 +9,8 @@
 //     merge); a field the profile leaves null is asked. validate, budget, screenshots and review are
 //     never settled by the profile.
 //   - composeWorkflowSet({ profile, answers, facts }) -> { workflows: [{ name, path, yaml }],
-//     manifest: { path: '.multiagent/project.yaml', yaml } }; each path is
-//     `.multiagent/workflows/<name>.yaml`; pure (returns strings, writes nothing).
+//     manifest: { path: '.craftorio/project.yaml', yaml } }; each path is
+//     `.craftorio/workflows/<name>.yaml`; pure (returns strings, writes nothing).
 //   profile (the ways-of-working seed's model.profile): { team: 'solo'|'team', merge: 'local'|'pr',
 //     release: 'milestone'|'per-merge'|'train'|'rc-stable'|null, testCommand, ci, languages: [] }.
 //   answers: { <question id>: value } override the profile's fields (answers.merge over profile.merge).
@@ -25,7 +25,7 @@
 //   Every file loads with the engine's loadWorkflow (fragments/ resolved), opens in the Builder
 //   (full: fromWorkflow without problems; else fixed: describeWorkflow) and loads again after the
 //   Builder writes it back. Development workflows also load as accepted repository workflows
-//   (loadRepositoryWorkflow), since they live under .multiagent/workflows/.
+//   (loadRepositoryWorkflow), since they live under .craftorio/workflows/.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -64,7 +64,7 @@ function writeSet(t, out) {
     fs.writeFileSync(file, w.yaml);
   }
   const byCategory = {};
-  for (const e of manifestParser().parseManifest(out.manifest.yaml).workflows) byCategory[e.category] = path.join(dir, '.multiagent', ...String(e.file).split('/'));
+  for (const e of manifestParser().parseManifest(out.manifest.yaml).workflows) byCategory[e.category] = path.join(dir, '.craftorio', ...String(e.file).split('/'));
   return byCategory;
 }
 const devFile = (files) => files.feature;
@@ -109,13 +109,13 @@ test('#487 every open question has a question text and a default', () => {
 
 // ---- composeWorkflowSet ----------------------------------------------------------------------------
 
-test('#487 composeWorkflowSet returns YAML strings under .multiagent/workflows/<name>.yaml and the manifest\'s path', () => {
+test('#487 composeWorkflowSet returns YAML strings under .craftorio/workflows/<name>.yaml and the manifest\'s path', () => {
   const out = compose(profileOf());
-  assert.equal(out.manifest.path, '.multiagent/project.yaml');
+  assert.equal(out.manifest.path, '.craftorio/project.yaml');
   assert.equal(typeof out.manifest.yaml, 'string');
   assert.equal(out.workflows.length >= 3, true);
   for (const w of out.workflows) {
-    assert.equal(w.path, `.multiagent/workflows/${w.name}.yaml`);
+    assert.equal(w.path, `.craftorio/workflows/${w.name}.yaml`);
     assert.equal(typeof w.yaml, 'string');
   }
 });
@@ -126,7 +126,7 @@ test('#487 the manifest parses without errors and lists every composed file with
   const parsed = manifestParser().parseManifest(out.manifest.yaml);
   assert.deepEqual(parsed.errors, []);
   assert.deepEqual(parsed.workflows.map((e) => e.category).sort(), ['feature', 'fix', 'release']);
-  assert.deepEqual(parsed.workflows.map((e) => `.multiagent/${e.file}`).sort(), out.workflows.map((w) => w.path).sort());
+  assert.deepEqual(parsed.workflows.map((e) => `.craftorio/${e.file}`).sort(), out.workflows.map((w) => w.path).sort());
 });
 
 test('#487 a pull-request profile still files its development workflow under the feature category', () => {
@@ -152,7 +152,7 @@ test('#487 each release style composes its own release workflow', () => {
   const texts = styles.map((release) => {
     const out = compose(profileOf({ release }));
     const entry = manifestParser().parseManifest(out.manifest.yaml).workflows.find((e) => e.category === 'release');
-    return out.workflows.find((w) => w.path === `.multiagent/${entry.file}`).yaml;
+    return out.workflows.find((w) => w.path === `.craftorio/${entry.file}`).yaml;
   });
   assert.equal(new Set(texts).size, 4);
 });

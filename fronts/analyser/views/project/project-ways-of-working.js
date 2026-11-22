@@ -6,7 +6,7 @@
 // its default from the profile), and the proposed set (workflows:compose, recomposed on every answer).
 // "Edit profile" lets the owner override any inferred field (answers named after the profile's fields).
 // "Open in Builder" opens the development workflow in the Builder unsaved (window.openSpecInBuilder);
-// "Write to the repository" writes the set to the project's .multiagent/ (uncommitted) and reloads the
+// "Write to the repository" writes the set to the project's .craftorio/ (uncommitted) and reloads the
 // page's Workflows block. Nothing is written before "Write".
 // #733: the drawer opens on the project's last analysis when it has one (workflows:interviewLast: the
 // onboarding's profile job or an earlier Analyze), dated, with its cost, the project's chosen workflows as

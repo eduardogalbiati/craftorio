@@ -174,7 +174,7 @@ Whoever writes a plan or a proposal is often not technical and cannot run the pr
 
 | Order | Source | Before | After |
 |---|---|---|---|
-| 1 | **The project's screenshot command**: this app's `npm run screenshot`, or a project's own command (`.multiagent/screenshot.yaml`) | the base, with simulated data (`--ref <base>`) | the same command on the run's branch |
+| 1 | **The project's screenshot command**: this app's `npm run screenshot`, or a project's own command (`.craftorio/screenshot.yaml`) | the base, with simulated data (`--ref <base>`) | the same command on the run's branch |
 | 2 | **A capture through Run App**: the local preview starts the front in a sandbox, and a headless browser takes the requested URLs | today's screens | the run's branch |
 | 3 | **A manual attachment**: images pasted or attached (#130), in "New item" or in the editing chat | what you paste | what you paste |
 

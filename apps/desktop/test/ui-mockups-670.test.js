@@ -13,7 +13,7 @@ const path = require('path');
 const { loadWorkflow, evalExpr } = require('@craftorio/engine/engine/workflow');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const DIRS = [path.join(ROOT, 'workflows'), path.join(ROOT, '.multiagent', 'workflows')];
+const DIRS = [path.join(ROOT, 'workflows'), path.join(ROOT, '.craftorio', 'workflows')];
 
 const stepAgents = (s) => [].concat(s.agents || [], s.agent || []);
 // every Code & Build workflow file (one with a develop step) with a step the ui_reviewer runs in:
@@ -40,7 +40,7 @@ function uiReviewerPrompt(step) {
 
 test('#670 the bundled workflows with a ui_reviewer are found (ai-development-local-hero among them)', () => {
   assert.equal(UI_WORKFLOWS.some((x) => rel(x.file) === 'workflows/feature.yaml'), true);
-  assert.equal(UI_WORKFLOWS.some((x) => rel(x.file) === '.multiagent/workflows/ai-development-local-hero.yaml'), true);
+  assert.equal(UI_WORKFLOWS.some((x) => rel(x.file) === '.craftorio/workflows/ai-development-local-hero.yaml'), true);
 });
 
 test('#670 the ui_reviewer\'s prompt carries the issue\'s mockups', () => {

@@ -40,7 +40,7 @@ Oracle's read-only `ci_runs` tool (`packages/engine/domains/oracle/oracle-tools.
 
 `seeds/ways-of-working/seed.md` reads how a repository is worked on (authors per month, merges vs
 commits straight to main, tags and their cadence, CI files, test and build scripts, the Architecture
-facts' languages, an existing `.multiagent/`) and answers a fixed model: `profile` (`team`:
+facts' languages, an existing `.craftorio/`) and answers a fixed model: `profile` (`team`:
 solo|team, `merge`: local|pr, `release`: milestone|per-merge|train|rc-stable, `testCommand`,
 `checkCommand`, `ci`, `languages`) and `evidence` per field (`numbers` and `commits`). A field the
 history cannot settle is `null`: the interview asks it. It is not listed only in the Seeds section:

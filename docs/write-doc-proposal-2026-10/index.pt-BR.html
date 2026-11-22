@@ -541,7 +541,7 @@ date: 2026-10-31
   <div class="scroll"><table class="t">
     <thead><tr><th>Ordem</th><th>Fonte</th><th>Antes</th><th>Depois</th><th>Depende de</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td><b>O contrato de screenshot do projeto</b>: o <code>npm run screenshot</code> deste app, ou o comando do próprio projeto (<code>.multiagent/screenshot.yaml</code>)</td><td>a base, com dados simulados (<code>--ref &lt;base&gt;</code>)</td><td>as telas de depois, capturadas pelo mesmo comando na branch do run</td><td>existe neste app; nos outros projetos, quando eles têm um (o cartão "Investigate screenshots" do onboarding cria esse spike)</td></tr>
+      <tr><td>1</td><td><b>O contrato de screenshot do projeto</b>: o <code>npm run screenshot</code> deste app, ou o comando do próprio projeto (<code>.craftorio/screenshot.yaml</code>)</td><td>a base, com dados simulados (<code>--ref &lt;base&gt;</code>)</td><td>as telas de depois, capturadas pelo mesmo comando na branch do run</td><td>existe neste app; nos outros projetos, quando eles têm um (o cartão "Investigate screenshots" do onboarding cria esse spike)</td></tr>
       <tr><td>2</td><td><b>Captura pelo Run App</b>: o local preview sobe o front em sandbox e um browser headless tira as URLs pedidas</td><td>as telas de hoje</td><td>as telas de depois, na branch do run</td><td>o local preview configurado no projeto</td></tr>
       <tr><td>3</td><td><b>Anexo manual</b>: imagens coladas ou anexadas (#130), no "New item" ou no chat da edição</td><td>o que você colar</td><td>o que você colar</td><td>nada; funciona hoje</td></tr>
     </tbody>
@@ -824,7 +824,7 @@ date: 2026-10-31
     <h4>O que muda no engine</h4>
     <ul style="font-size:14px;padding-left:18px">
       <li><b>Passo <code>human_edit</code>:</b> um gate que aceita pedidos enquanto espera. Cada pedido vira um turno do agente indicado, e o gate só sai com a resposta do dono. Fica na mesma lista de gates protegidos (automação nunca responde).</li>
-      <li><b>Passo de captura</b> (máquina): usa o contrato de screenshot do projeto (<code>scripts/screenshot.js</code> aqui, <code>.multiagent/screenshot.yaml</code> nos outros), senão a captura do Run App, e grava em <code>images/</code>; as imagens coladas entram pelo mesmo caminho.</li>
+      <li><b>Passo de captura</b> (máquina): usa o contrato de screenshot do projeto (<code>scripts/screenshot.js</code> aqui, <code>.craftorio/screenshot.yaml</code> nos outros), senão a captura do Run App, e grava em <code>images/</code>; as imagens coladas entram pelo mesmo caminho.</li>
       <li><b>Lint de documento</b> (máquina): o front-matter, as seções obrigatórias da skill, âncoras únicas, cada decisão com uma linha "Recommended", imagens que existem.</li>
       <li><b>Nenhum renderer novo:</b> o editor e os workflows usam o leitor de documentos (prototipado numa sessão à parte, "Leitor dos documentos").</li>
     </ul>

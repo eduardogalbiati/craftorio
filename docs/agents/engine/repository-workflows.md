@@ -1,10 +1,10 @@
 # Repository workflows (#485)
 
-A repository's `.multiagent/project.yaml`: the workflows a project is worked on with, how a name resolves, and why a repository's own workflow is accepted per commit and capped.
+A repository's `.craftorio/project.yaml`: the workflows a project is worked on with, how a name resolves, and why a repository's own workflow is accepted per commit and capped.
 
 - **The manifest** (`packages/engine/domains/project/project-manifest.js`, pure): `workflows: [{ name, file?, category?, description? }]`,
   `version`, `requires` (an app version range, e.g. `>=1.2`). `{ name }` names a bundled or workspace
-  workflow; `{ name, file: workflows/<x>.yaml }` the repository's own copy in `.multiagent/workflows/`
+  workflow; `{ name, file: workflows/<x>.yaml }` the repository's own copy in `.craftorio/workflows/`
   (a file outside that folder is an error). `category` is `intake`, `solo`, `team`, `release` or a
   bundled one (`plan`, `build`, `monitor`). Invalid YAML, a non-list `workflows`, an entry without a
   name, a duplicate name, an unknown category or an unmet `requires` make the manifest malformed: the

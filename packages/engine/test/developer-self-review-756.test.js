@@ -22,8 +22,8 @@ const WORKFLOWS = [
   'workflows/refactor.yaml',
   'workflows/release.yaml',
   'workflows/test-backfill.yaml',
-  '.multiagent/workflows/ai-development-local-hero.yaml',
-  '.multiagent/workflows/ai-development-remote-hero.yaml',
+  '.craftorio/workflows/ai-development-local-hero.yaml',
+  '.craftorio/workflows/ai-development-remote-hero.yaml',
 ];
 
 const developerSkills = (file) => {

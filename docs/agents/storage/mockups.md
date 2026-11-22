@@ -88,7 +88,7 @@ The handoff only prepares work: no channel here starts a development run or file
   violations, layout findings from the model turn. Simulated: $0, no workflow run. A designer turn never
   reviews.
 - `mockups:recreate` creates a screen from a page of the running app (D5): refused without Run App / Local
-  preview (the project's `localPreview`, then `.multiagent/local-preview.yaml`); its estimate
+  preview (the project's `localPreview`, then `.craftorio/local-preview.yaml`); its estimate
   (`recreate-screen`) is shown first. Real: `mockup-generate` with `mode: recreate` and `app_url`;
   simulated: a draft screen that links the kit, no workflow run.
 

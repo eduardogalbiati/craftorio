@@ -1,7 +1,7 @@
-// A repository's workflows manifest (#485): `.multiagent/project.yaml`, committed by the project's
-// owner next to `.multiagent/local-preview.yaml` (packages/engine/domains/local/local-preview.js). It lists the workflows the
+// A repository's workflows manifest (#485): `.craftorio/project.yaml`, committed by the project's
+// owner next to `.craftorio/local-preview.yaml` (packages/engine/domains/local/local-preview.js). It lists the workflows the
 // project is worked on with: `{ name }` for a bundled or workspace workflow, `{ name, file:
-// workflows/<x>.yaml }` for the repository's own copy under `.multiagent/workflows/`, each with an
+// workflows/<x>.yaml }` for the repository's own copy under `.craftorio/workflows/`, each with an
 // optional `category` (intake, solo, team, release, or a bundled one) and `description`; `version`
 // and `requires` (the app versions it needs, e.g. `>=1.2`). Pure: parsing and checks only. What the
 // repository's files may do (accepted per commit, capped) is packages/engine/engine/run/load.js's
@@ -22,8 +22,17 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { WORKFLOW_CATEGORIES } = require('../workflow/workflow-categories');
+const {
+  LEGACY_PROJECT_DIR,
+  projectDirName,
+  projectFiles,
+} = require('@craftorio/shared/project-dir');
 
-const MANIFEST_FILE = '.multiagent/project.yaml';
+const MANIFEST_FILE = '.craftorio/project.yaml';
+// T2c: a repository set up before the rename to Craftorio keeps its manifest here
+const LEGACY_MANIFEST_FILE = `${LEGACY_PROJECT_DIR}/project.yaml`;
+// the project's folder of Craftorio files on disk: .craftorio, or .multiagent when only that one exists
+const projectDirOf = (folder) => projectDirName((name) => fs.existsSync(path.join(String(folder), name)));
 
 // The Workflows screen's sections a repository files its workflows under
 // (#630: feature and fix, the composed set's)
@@ -31,7 +40,7 @@ const CATEGORIES = ['intake', 'solo', 'team', 'feature', 'fix', 'release'];
 // the bundled workflows' own metadata.category values
 const BUNDLED_CATEGORIES = WORKFLOW_CATEGORIES;
 
-// a repository's own workflow: one YAML file right under .multiagent/workflows/
+// a repository's own workflow: one YAML file right under .craftorio/workflows/
 const REPO_FILE = /^workflows\/[^/\\]+\.ya?ml$/i;
 
 // '1.2' -> '1.2.0' (the parts a range leaves out are 0), a leading `v` and a pre-release dropped
@@ -69,7 +78,7 @@ function parseEntry(entry, i) {
   if (!name) errors.push(`${at}: an entry needs a name.`);
   const file = str(entry.file)?.replace(/\\/g, '/') ?? null;
   if (file != null && (!REPO_FILE.test(file) || file.split('/').includes('..'))) {
-    errors.push(`${at}: file "${entry.file}" must be a .yaml file right under .multiagent/workflows/ (workflows/<name>.yaml).`);
+    errors.push(`${at}: file "${entry.file}" must be a .yaml file right under .craftorio/workflows/ (workflows/<name>.yaml).`);
   }
   const category = str(entry.category);
   if (category && !CATEGORIES.includes(category) && !BUNDLED_CATEGORIES.includes(category)) {
@@ -195,17 +204,25 @@ function parseManifest(text, { appVersion } = {}) {
 /** The manifest of a project's folder; none: no workflows, no default, no kinds and no error. */
 function readManifest(projectDir, opts = {}) {
   let text;
-  try { text = fs.readFileSync(path.join(projectDir, ...MANIFEST_FILE.split('/')), 'utf8'); } catch {
-    return EMPTY();
+  let from;
+  for (const rel of projectFiles('project.yaml')) {
+    try { text = fs.readFileSync(path.join(projectDir, ...rel.split('/')), 'utf8'); from = rel; break; } catch { /* the next one */ }
   }
-  return parseManifest(text, opts);
+  if (text == null) return EMPTY();
+  const out = parseManifest(text, opts);
+  if (from === MANIFEST_FILE) return out;
+  // T2c: the old folder's file, named as it is in the messages
+  const named = (list) => (list || []).map((e) => (e.startsWith(MANIFEST_FILE) ? from + e.slice(MANIFEST_FILE.length) : e));
+  return { ...out, errors: named(out.errors), ...(out.triggerErrors ? { triggerErrors: named(out.triggerErrors) } : {}) };
 }
 
 module.exports = {
   BUNDLED_CATEGORIES,
   CATEGORIES,
+  LEGACY_MANIFEST_FILE,
   MANIFEST_FILE,
   parseManifest,
+  projectDirOf,
   readManifest,
   requiresProblem,
   satisfies,

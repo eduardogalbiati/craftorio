@@ -344,7 +344,7 @@ function setRunPreview(runId, preview) {
 const runAppCommandHtml = (c) => `${c.install ? `<code>${esc(c.install)}</code> + ` : ''}<code>${esc(c.command)}</code>${c.cwd ? t('gate_panel.in_folder', { folder: `<code>${esc(c.cwd)}</code>` }) : ''}`;
 
 // Run App's one-click confirmation (#115), a popover over the gate (never above its choices): a
-// declared command (the repository's .multiagent/local-preview.yaml or the workflow's) the owner has
+// declared command (the repository's .craftorio/local-preview.yaml or the workflow's) the owner has
 // not confirmed for this project yet, or changed since; or one detected from the worktree
 // (localPreview:info → suggestConfig in packages/engine/domains/local/local-preview.js), saved as the project's Local preview
 // on Run. A monorepo's apps: the owner picks one (stored as cwd). Everything that will run is shown
@@ -378,7 +378,7 @@ function runAppInstallHtml(info) {
 }
 
 // Run App's fields (Edit, or nothing found): install / command / URL / folder, saved as the
-// project's Local preview and optionally written to the repository's .multiagent/local-preview.yaml.
+// project's Local preview and optionally written to the repository's .craftorio/local-preview.yaml.
 function runAppSetupHtml(info, cfg = {}) {
   const input = (k, label, ph, hint = '') => `<label class="small">${label}<input data-setup="${k}" value="${esc(cfg[k] || '')}" placeholder="${esc(ph)}" spellcheck="false">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
   const found = cfg.from ? t('gate_panel.from_source', { from: esc(cfg.from) }) : info.suggestion || info.config ? '' : t('gate_panel.nothing_found_in_the_worktree');

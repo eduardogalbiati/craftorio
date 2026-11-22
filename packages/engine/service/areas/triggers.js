@@ -1,5 +1,5 @@
 // Service area: platform triggers (#568, packages/engine/domains/triggers/triggers.js). The rules are the
-// `triggers:` of a project's `.multiagent/project.yaml` at the checkout's HEAD (accepted per commit, as
+// `triggers:` of a project's `.craftorio/project.yaml` at the checkout's HEAD (accepted per commit, as
 // the repository workflows: areas/repository-workflows.js headManifest), never an uncommitted edit. A
 // project polls only when the owner turned it on in Settings (settings.triggers.enabled[<id>]) and the
 // interval (settings.triggers.intervalMinutes, default 2, 0 = off) is set: one watcher per project,

@@ -1,6 +1,6 @@
 /* global api */
 // #568: the "Platform triggers" card of a project's page (Projects › Overview, views/project/project.js).
-// The rules are the `triggers:` of the repository's .multiagent/project.yaml at HEAD (accepted per commit,
+// The rules are the `triggers:` of the repository's .craftorio/project.yaml at HEAD (accepted per commit,
 // packages/engine/domains/triggers/triggers.js), read with api.triggersStatus (service/areas/triggers.js)
 // with the owner's switch (Settings › Execution › Platform triggers), the last event seen and the runs the
 // triggers started. A refused rule (an unknown workflow, a missing label...) is listed apart as ignored.

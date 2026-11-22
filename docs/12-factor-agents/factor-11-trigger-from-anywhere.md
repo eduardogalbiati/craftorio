@@ -16,9 +16,9 @@ someone remembers to open it. ([factor 11](https://github.com/humanlayer/12-fact
   (`src/service/channels/`, the manifest in `src/service/manifest.js`).
 - **Runs trigger runs.** A finished run hands its declared `outputs:` to the next one with `then:`
   (chaining, #134); a `type: workflow` step starts a child run and waits for it.
-- **A repository can bring its own workflows.** `.multiagent/project.yaml` names the workflows a
+- **A repository can bring its own workflows.** `.craftorio/project.yaml` names the workflows a
   project is worked on with; opening the clone in the app shows them (#485).
-- **Platform events start runs** (#568). A `triggers:` rule in `.multiagent/project.yaml` ("an issue
+- **Platform events start runs** (#568). A `triggers:` rule in `.craftorio/project.yaml` ("an issue
   labelled `ready` starts `feature`", "an `@orchestrator` comment on a pull request starts `fix`", "a
   failed CI on `main` starts `fix`") is polled with `gh api` / `glab api` every 2 minutes once the owner
   turns the project on in Settings; each new event starts one run, which comments back on the issue or

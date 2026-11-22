@@ -124,7 +124,7 @@ test('#485 readManifest: a project without .multiagent/project.yaml declares not
 
 test('#485 readManifest: reads .multiagent/project.yaml of the folder; a malformed one is reported', (t) => {
   const { readManifest, MANIFEST_FILE } = load();
-  assert.equal(MANIFEST_FILE, '.multiagent/project.yaml');
+  assert.equal(MANIFEST_FILE, '.craftorio/project.yaml'); // T2c: .multiagent/ (below) is still read
   const dir = tempDir(t, 'manifest-read-485-');
   fs.mkdirSync(path.join(dir, '.multiagent'));
   fs.writeFileSync(path.join(dir, '.multiagent', 'project.yaml'), VALID.replace('>=1.2', `>=${APP_VERSION}`));
@@ -139,7 +139,7 @@ test('#485 readManifest: reads .multiagent/project.yaml of the folder; a malform
 
 // ---- this repository's own manifest -------------------------------------------------------------
 
-const OWN = path.join(ROOT, '.multiagent', 'project.yaml');
+const OWN = path.join(ROOT, '.craftorio', 'project.yaml');
 
 test('#485 this repository\'s .multiagent/project.yaml declares the four flows with their categories, valid for this app version', () => {
   const { parseManifest } = load();
@@ -165,8 +165,8 @@ test('#485 this repository keeps its own ai-development-local-hero copy, without
   const own = m.workflows.find((w) => w.name === 'ai-development-local-hero');
   assert.ok(own, 'ai-development-local-hero is declared');
   assert.equal(own.file, 'workflows/ai-development-local-hero.yaml');
-  const copy = path.join(ROOT, '.multiagent', 'workflows', 'ai-development-local-hero.yaml');
-  assert.ok(fs.existsSync(copy), '.multiagent/workflows/ai-development-local-hero.yaml exists');
+  const copy = path.join(ROOT, '.craftorio', 'workflows', 'ai-development-local-hero.yaml');
+  assert.ok(fs.existsSync(copy), '.craftorio/workflows/ai-development-local-hero.yaml exists');
   const wf = loadWorkflow(copy);
   // #630: the bundled copy is feature.yaml now, which added agents (second_reviewer, ci_pusher): the
   // copy's own agents run on the bundled provider / model / effort

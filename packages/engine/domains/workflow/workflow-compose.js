@@ -8,7 +8,7 @@
 // release-pipeline): feature and fix in the chosen mode (Local ends with push_main) and release in the
 // chosen release style (waiting for the release CI when the CI runs on tags), with the project's facts
 // (test, E2E and check commands, languages, language skills) in the agents' prompts, and the
-// `.multiagent/project.yaml` manifest that lists them (packages/engine/domains/project/project-manifest.js),
+// `.craftorio/project.yaml` manifest that lists them (packages/engine/domains/project/project-manifest.js),
 // merged into the one the repository already has (mergeManifest). Pure: it returns YAML texts;
 // writing them into the project is the service's, on the owner's click.
 

@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const path = require('path');
 const yaml = require('js-yaml');
 const { seedBundle, bundleStatus, restoreBundled } = require('../seed/seed');
-const { MANIFEST_FILE, readManifest } = require('../project/project-manifest');
+const { projectDirOf, readManifest } = require('../project/project-manifest');
 const { bundledDir } = require('../workspace/app-root');
 const { aliasOf } = require('@craftorio/shared/default-workflow');
 
@@ -103,7 +103,7 @@ function addedGates(srcDir, destDir, file) {
 /**
  * Finds a workflow file. Absolute paths are used as they are; a name or relative path is looked up
  * in the folders in order (workspace first, then the bundled defaults).
- * #485: with `repo` (a checkout of the project), a workflow its .multiagent/project.yaml declares
+ * #485: with `repo` (a checkout of the project), a workflow its .craftorio/project.yaml declares
  * with a `file` wins (origin 'repository'), then the folders; a malformed manifest is ignored.
  * @returns {{ file: string, dir: string|null, fallback: boolean, origin?: string, entry?: object }}
  *   fallback: found only in a later folder (e.g. the user deleted the workspace copy). origin (with
@@ -124,7 +124,7 @@ function resolveWorkflow(file, dirs, { repo = null, preferRepository = false } =
   const edited = entry && !preferRepository ? editedWorkspaceCopy([file, `${file}.yaml`, path.posix.basename(entry.file)], dirs) : null;
   if (edited) return { file: path.join(dirs[0], edited), dir: dirs[0], fallback: false, origin: 'workspace' };
   if (entry) {
-    const dir = path.join(repo, path.dirname(MANIFEST_FILE));
+    const dir = path.join(repo, projectDirOf(repo));
     return { file: path.join(dir, ...entry.file.split('/')), dir, fallback: false, origin: 'repository', entry };
   }
   const list = dirs.filter(Boolean);

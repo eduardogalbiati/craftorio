@@ -400,7 +400,7 @@ table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:
   <figure><img src="images/city.jpg" alt="Aba Architecture, vista City" loading="lazy"><figcaption><b>Architecture › City</b> (#373): a cidade do projeto, feita pelo workflow <code>project-map</code> (o cartógrafo escreve o plano, regras validam, depois o Oracle analisa), tudo num run só.</figcaption></figure>
   <figure><img src="images/refactor.jpg" alt="Aba Refactor" loading="lazy"><figcaption><b>Refactor</b> (#357): as propostas vindas dos achados da análise de arquitetura, ranqueadas pelo Product Owner, com "Add to roadmap" por linha e a cadência automática.</figcaption></figure>
 </div>
-<p class="note">O que a proposta reaproveita sem mudar: <code>createProject</code> e o manifesto <code>.multiagent/project.yaml</code> (#486), o seed <code>ways-of-working</code> e o caminho determinístico que ele já tem no modo simulado, <code>workflow-compose.js</code> e os fragments (#487), o <code>project-map</code> (#372, #381), o <code>refactor:prioritize</code> e o <code>refactor:addToRoadmap</code> (#357, #435), e os botões ▶ Install / ▶ Sign in do Setup.</p>
+<p class="note">O que a proposta reaproveita sem mudar: <code>createProject</code> e o manifesto <code>.craftorio/project.yaml</code> (#486), o seed <code>ways-of-working</code> e o caminho determinístico que ele já tem no modo simulado, <code>workflow-compose.js</code> e os fragments (#487), o <code>project-map</code> (#372, #381), o <code>refactor:prioritize</code> e o <code>refactor:addToRoadmap</code> (#357, #435), e os botões ▶ Install / ▶ Sign in do Setup.</p>
 
 <h2 id="fluxo">Fluxo ponta a ponta</h2>
 <p>Do primeiro clique ao roadmap. Os passos com decisão têm cartões com opções, prós e contras e a recomendação em verde.</p>
@@ -701,7 +701,7 @@ table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:
     <div class="opt"><b>B · Renomear de uma vez</b><p class="pro">Código limpo.</p><p class="con">Quebra manifestos de repositórios e o roadmap salvo.</p></div>
     <div class="opt"><b>C · Manter os 15 e só esconder</b><p class="pro">Nenhuma migração.</p><p class="con">Não reduz nada que precisa ser mantido; só esconde.</p></div>
   </div>
-  <p class="why"><b>Onde os fluxos do projeto ficam:</b> por padrão o projeto só referencia as variantes bundled (no JSON do projeto, no workspace); nada é escrito no repositório no cadastro. "Customize" escreve em <code>.multiagent/</code>, como o "Write to the repository" do Ways of working faz hoje, sem commit.</p>
+  <p class="why"><b>Onde os fluxos do projeto ficam:</b> por padrão o projeto só referencia as variantes bundled (no JSON do projeto, no workspace); nada é escrito no repositório no cadastro. "Customize" escreve em <code>.craftorio/</code>, como o "Write to the repository" do Ways of working faz hoje, sem commit.</p>
 </div>
 
 <!-- sdlc -->
@@ -966,7 +966,7 @@ table.t td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:
 <div class="qa">
   <div class="q"><b>Q1. O passo Workflows do Setup some?</b><p><span class="def">Padrão: sim.</span> Os fluxos passam a ser escolhidos por projeto; Definitions continua para quem quer esconder workflows.</p></div>
   <div class="q"><b>Q2. Repo privado sem <code>gh</code> ou <code>glab</code>?</b><p><span class="def">Padrão: oferecer "Sign in" do provedor da URL no Next</span> (o ▶ do Setup roda <code>gh auth login</code> ou <code>glab auth login</code>); um git credential helper que já funcione também vale.</p></div>
-  <div class="q"><b>Q3. O cadastro escreve arquivos no repositório do usuário?</b><p><span class="def">Padrão: não.</span> Os fluxos ficam referenciados no workspace; "Customize" escreve em <code>.multiagent/</code> sem commit.</p></div>
+  <div class="q"><b>Q3. O cadastro escreve arquivos no repositório do usuário?</b><p><span class="def">Padrão: não.</span> Os fluxos ficam referenciados no workspace; "Customize" escreve em <code>.craftorio/</code> sem commit.</p></div>
   <div class="q"><b>Q4. As análises com modelo vêm marcadas?</b><p><span class="def">Padrão: sim, com o total visível e "Skip, analyze later".</span> No modo simulado tudo é simulado.</p></div>
   <div class="q"><b>Q5. "Create new project" cria repo remoto por padrão?</b><p><span class="def">Padrão: só com o <code>gh</code> ou o <code>glab</code> logado, privado</span>, e a caixa vem desmarcada na primeira vez.</p></div>
   <div class="q"><b>Q6. Por quanto tempo os nomes antigos funcionam?</b><p><span class="def">Padrão: duas versões, com aviso no Start</span> e uma linha nas notas de release.</p></div>

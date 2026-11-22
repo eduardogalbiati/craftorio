@@ -13,7 +13,7 @@ module.exports = (ctx) => {
   const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }
 
   // The config a gate runs, read now (a Local preview saved while the gate waits applies at once):
-  // the project's, else the repository's .multiagent/local-preview.yaml (in the run's folder), else
+  // the project's, else the repository's .craftorio/local-preview.yaml (in the run's folder), else
   // the workflow's, else the one the gate was opened with.
   // confirmed: the owner typed it (the project's) or confirmed this exact command for the project.
   function gateRunConfig(run, gate) {
@@ -67,7 +67,7 @@ module.exports = (ctx) => {
   }
 
   // Run App's Save (#115): the gate's config becomes the project's Local preview; writeRepoFile also
-  // writes it to the project folder's .multiagent/local-preview.yaml (a change the owner commits).
+  // writes it to the project folder's .craftorio/local-preview.yaml (a change the owner commits).
   function saveLocalPreview({ runId, approvalId, config, writeRepoFile = false }) {
     const { run } = openRunAppGate({ runId, approvalId });
     const cfg = localPreview.cleanConfig(config);

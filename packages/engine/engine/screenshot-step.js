@@ -16,8 +16,8 @@
 // Each capture waits for the machine-wide screenshot slot (#199): one Electron screenshot at a time.
 // #649 (write-doc in another project): the source of the captures, in this order (captureSource):
 //   1. the project's own command: `npm run screenshot` (package.json), else the `command:` of the
-//      repository's .multiagent/screenshot.yaml, run as `<command> -- <args>` with the same options;
-//   2. Run App: the local preview of .multiagent/local-preview.yaml, captured by `capturePreview`
+//      repository's .craftorio/screenshot.yaml, run as `<command> -- <args>` with the same options;
+//   2. Run App: the local preview of .craftorio/local-preview.yaml, captured by `capturePreview`
 //      ({ entry, side, ref, out, name, cwd, config, env, signal, timeoutMs }; the machine gives
 //      packages/engine/engine/preview-capture.js; ref is the base on the original side, null on the modified);
 //   3. a manual attachment: nothing is taken and the reason asks the owner to attach the screenshots.
@@ -51,7 +51,9 @@ const NAME = /^[\w.-]+$/;
 const NOTHING_MATCHES = /^screenshot: nothing matches (.+)$/;
 const NPM_COMMAND = 'npm run screenshot';
 // #649: the screenshot command of a project without a package.json script, committed by its owner
-const SCREENSHOT_FILES = ['.multiagent/screenshot.yaml', '.multiagent/screenshot.yml'];
+const { projectFiles } = require('@craftorio/shared/project-dir');
+// T2c: .craftorio/ first, then .multiagent/ (a repository set up before the rename to Craftorio)
+const SCREENSHOT_FILES = [...projectFiles('screenshot.yaml'), ...projectFiles('screenshot.yml')];
 
 // "--view run --click \"[data-x] .y\"" → ['--view', 'run', '--click', '[data-x] .y'] (a list stays a list)
 function splitArgs(v) {
@@ -76,7 +78,7 @@ function checkEntry(e, i) {
   return { name, caption: String(e.caption || '').trim() || name, args };
 }
 
-// #649: the `command:` of the repository's .multiagent/screenshot.yaml, trimmed; null when there is
+// #649: the `command:` of the repository's .craftorio/screenshot.yaml, trimmed; null when there is
 // none, it is not valid YAML or it has no command
 function yamlCommand(dir) {
   for (const rel of SCREENSHOT_FILES) {
@@ -89,7 +91,7 @@ function yamlCommand(dir) {
 }
 
 // The project's screenshot command: 'npm run screenshot' (a `screenshot` script in the worktree's
-// package.json), else the command of .multiagent/screenshot.yaml (#649), else null
+// package.json), else the command of .craftorio/screenshot.yaml (#649), else null
 function screenshotCommand(dir) {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
@@ -99,7 +101,7 @@ function screenshotCommand(dir) {
 }
 
 // #649: how the evidence of the worktree is taken → { kind: 'command', command } | { kind: 'run-app',
-// ...the .multiagent/local-preview.yaml config } | { kind: 'manual' } (an invalid preview file too)
+// ...the .craftorio/local-preview.yaml config } | { kind: 'manual' } (an invalid preview file too)
 function captureSource(dir) {
   const command = dir ? screenshotCommand(dir) : null;
   if (command) return { kind: 'command', command };
@@ -199,7 +201,7 @@ function openShotLog(logFile, runDir, command, onLog) {
   return { line: (text) => fs.appendFileSync(logFile, text), opts: { logFile } };
 }
 
-const MANUAL_REASON = 'the project has no screenshot command (package.json or .multiagent/screenshot.yaml) and no local preview (.multiagent/local-preview.yaml): attach the screenshots by hand';
+const MANUAL_REASON = 'the project has no screenshot command (package.json or .craftorio/screenshot.yaml) and no local preview (.craftorio/local-preview.yaml): attach the screenshots by hand';
 
 // Why nothing is captured, in the order the owner fixes it; null: capture
 function skipReason({ valid, mock, runDir, cwd, source }) {

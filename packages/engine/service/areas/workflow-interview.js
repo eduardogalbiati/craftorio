@@ -9,8 +9,8 @@
 // style), and the fields git settles keep git's value. Under CRAFTORIO_SIMULATION_ONLY, or with no
 // field left open, no model is called (the seed's simulated run is saved) and the open fields stay open.
 // workflowCompose builds the workflow set from the last profile and the owner's answers, its manifest
-// merged into the repository's .multiagent/project.yaml; only with write: true are the files written to
-// the project's .multiagent/ (never committed: the owner commits) and the project's set updated.
+// merged into the repository's .craftorio/project.yaml; only with write: true are the files written to
+// the project's .craftorio/ (never committed: the owner commits) and the project's set updated.
 // #733: workflowInterviewLast reads the last saved run (the onboarding's profile job is the same
 // interview) without running anything; workflowInterviewState is the running seed's state (seed-runs.js
 // runState) the drawer's loader polls.
@@ -38,7 +38,12 @@ const { detectE2eCommand, projectFacts } = require('../../domains/project/projec
 const { detectTestCommand } = require('../../engine/suite-step');
 const { firstBuild } = require('@craftorio/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
-const { MANIFEST_FILE, readManifest } = require('../../domains/project/project-manifest');
+const {
+  MANIFEST_FILE,
+  projectDirOf,
+  readManifest,
+} = require('../../domains/project/project-manifest');
+const { inProjectDir } = require('@craftorio/shared/project-dir');
 const { TESTS_PATHS, globMatcher } = require('@craftorio/shared/globs');
 const { clientError } = require('../common');
 
@@ -271,8 +276,9 @@ module.exports = (ctx) => {
     const set = compose.composeWorkflowSet({ profile: found.profile, answers: answers || {}, existing });
     const workflows = set.workflows.map((w) => ({ ...w, ...builderSpec(w.yaml) }));
     if (!write) return { workflows, manifest: set.manifest, written: false };
+    const dir = projectDirOf(p.folder);
     for (const f of [...set.workflows, set.manifest]) {
-      const file = path.join(p.folder, ...f.path.split('/'));
+      const file = path.join(p.folder, ...inProjectDir(f.path, dir).split('/'));
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, f.yaml);
     }

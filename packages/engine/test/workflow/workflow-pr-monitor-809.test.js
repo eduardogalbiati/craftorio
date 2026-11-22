@@ -6,7 +6,7 @@
 // - fragments/pr-pipeline.yaml has a step `pr_monitor` whose `type` is a step type without an agent
 //   (load.js MACHINE_STEP_TYPES, not human_approval), with no prompt and no agent: no tokens, no Approve.
 // - It has no `pr_review` step any more; workflows/feature.yaml, workflows/fix.yaml and
-//   .multiagent/workflows/ai-development-remote-hero.yaml use `pr_monitor` instead (steps, goto,
+//   .craftorio/workflows/ai-development-remote-hero.yaml use `pr_monitor` instead (steps, goto,
 //   on_exhausted, groups), and nothing in them goes to `pr_review`.
 // - The monitor never touches the PR: none of its transitions runs an action, a merge, a precheck or a ship
 //   (stopping it or ending it leaves the PR as it is); one of them ends the run as failed (PR closed).
@@ -41,7 +41,7 @@ test('#809 pr-pipeline fragment: the monitor never touches the PR (no action, me
   assert.deepEqual([ts.length > 0, touching, failed], [true, 0, true]);
 });
 
-const WORKFLOWS = ['workflows/feature.yaml', 'workflows/fix.yaml', '.multiagent/workflows/ai-development-remote-hero.yaml'];
+const WORKFLOWS = ['workflows/feature.yaml', 'workflows/fix.yaml', '.craftorio/workflows/ai-development-remote-hero.yaml'];
 const targetsOf = (wf) => wf.steps.flatMap((s) => [
   ...(s.transitions || []).flatMap((t) => [t.goto, t.on_exhausted, t.on_error]),
   s.goal?.on_exhausted, s.on_exhausted,

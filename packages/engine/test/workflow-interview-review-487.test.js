@@ -68,7 +68,7 @@ async function setup(t, { folder = null, simulated = false, gate = null } = {}) 
   return { ctx, area: workflowInterview(ctx), project, dir, oracle };
 }
 
-const manifestFile = (dir) => path.join(dir, '.multiagent', 'project.yaml');
+const manifestFile = (dir) => path.join(dir, '.craftorio', 'project.yaml');
 function writeManifest(dir, text) {
   fs.mkdirSync(path.dirname(manifestFile(dir)), { recursive: true });
   fs.writeFileSync(manifestFile(dir), text);
@@ -108,11 +108,11 @@ test('#487 a repository manifest with errors is refused and nothing is written',
   writeManifest(dir, 'version: 1\nworkflows: 5\n');
   await assert.rejects(area.workflowCompose({ projectId: project.id, answers: {}, write: true }), (e) => {
     assert.equal(e.status, 400);
-    assert.match(e.message, /Fix \.multiagent\/project\.yaml first/);
+    assert.match(e.message, /Fix \.craftorio\/project\.yaml first/);
     return true;
   });
   assert.equal(fs.readFileSync(manifestFile(dir), 'utf8'), 'version: 1\nworkflows: 5\n');
-  assert.equal(fs.existsSync(path.join(dir, '.multiagent', 'workflows')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.craftorio', 'workflows')), false);
 });
 
 test('#487 a second analysis while the first runs is refused as busy and seeds:list shows it running', async (t) => {
