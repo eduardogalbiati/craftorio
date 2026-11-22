@@ -17,7 +17,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // the machine slot the paid jobs take: a folder of this file, never the machine's
-process.env.MULTIAGENT_LOCKS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'findings-730-locks-'));
+process.env.CRAFTORIO_LOCKS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'findings-730-locks-'));
 
 const ORACLE_PROMPT = 'Architecture analysis of the project';
 
@@ -84,9 +84,9 @@ function fakeOracle() {
 }
 
 function areaWith(t, oracle) {
-  const prev = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (prev === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = prev; });
+  const prev = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (prev === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = prev; });
   const { setupWorkspace } = require('../domains/workspace/workspace');
   const ws = setupWorkspace(tmp(t, 'findings-730-ws-'), { persist: false });
   const { EventEmitter } = require('events');

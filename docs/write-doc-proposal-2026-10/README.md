@@ -364,7 +364,7 @@ Write doc brings the markdown renderer (the document reader); the Mockups add a 
 
 ## Cost of real-model calls
 
-**D14.** These are orders of magnitude, not measured. All development runs on the mock provider (`MULTIAGENT_SIMULATION_ONLY=1`). Every action shows its cost first and counts toward the daily budget (#206).
+**D14.** These are orders of magnitude, not measured. All development runs on the mock provider (`CRAFTORIO_SIMULATION_ONLY=1`). Every action shows its cost first and counts toward the daily budget (#206).
 
 | Action | Default model | Estimate |
 |---|---|---|

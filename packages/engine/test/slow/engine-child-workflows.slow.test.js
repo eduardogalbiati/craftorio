@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../../engine/workflow');
 const evidence = require('../../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { tempWorkflow, runWith, until, CHILD_ECHO_YAML, CHILD_FAIL_YAML, CHILD_GATE_YAML } = require('../engine-helpers');
 
 test('type: workflow step: without foreach, the output is { status, run_id, outputs } from the child\'s declared outputs', async (t) => {
@@ -269,7 +269,7 @@ steps:
     return sent.prompt;
   };
   const prompt = await promptOf(3);
-  assert.match(prompt, /MULTIAGENT_TEST_WORKERS=3/);
-  assert.match(prompt, /MULTIAGENT_E2E_WORKERS=3/);
-  assert.doesNotMatch(await promptOf(null), /MULTIAGENT_TEST_WORKERS=/);
+  assert.match(prompt, /CRAFTORIO_TEST_WORKERS=3/);
+  assert.match(prompt, /CRAFTORIO_E2E_WORKERS=3/);
+  assert.doesNotMatch(await promptOf(null), /CRAFTORIO_TEST_WORKERS=/);
 });

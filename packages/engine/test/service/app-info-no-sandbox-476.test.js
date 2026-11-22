@@ -1,20 +1,20 @@
-// #476 (SEC-11): the Linux AppImage's launcher sets MULTIAGENT_NO_SANDBOX=1 when it falls back to
+// #476 (SEC-11): the Linux AppImage's launcher sets CRAFTORIO_NO_SANDBOX=1 when it falls back to
 // --no-sandbox; app:info.noSandbox tells the renderer, so Settings › About shows the warning.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeService } = require('./helpers');
 
 function withEnv(t, value) {
-  const before = process.env.MULTIAGENT_NO_SANDBOX;
-  if (value === undefined) delete process.env.MULTIAGENT_NO_SANDBOX;
-  else process.env.MULTIAGENT_NO_SANDBOX = value;
+  const before = process.env.CRAFTORIO_NO_SANDBOX;
+  if (value === undefined) delete process.env.CRAFTORIO_NO_SANDBOX;
+  else process.env.CRAFTORIO_NO_SANDBOX = value;
   t.after(() => {
-    if (before === undefined) delete process.env.MULTIAGENT_NO_SANDBOX;
-    else process.env.MULTIAGENT_NO_SANDBOX = before;
+    if (before === undefined) delete process.env.CRAFTORIO_NO_SANDBOX;
+    else process.env.CRAFTORIO_NO_SANDBOX = before;
   });
 }
 
-test('#476 app:info says the app runs without the sandbox when the launcher set MULTIAGENT_NO_SANDBOX=1', async (t) => {
+test('#476 app:info says the app runs without the sandbox when the launcher set CRAFTORIO_NO_SANDBOX=1', async (t) => {
   withEnv(t, '1');
   const { api } = makeService(t);
   assert.equal((await api['app:info']()).noSandbox, true);
@@ -24,7 +24,7 @@ test('#476 app:info says the sandbox is on without the variable, or with another
   withEnv(t, undefined);
   const { api } = makeService(t);
   assert.equal((await api['app:info']()).noSandbox, false);
-  process.env.MULTIAGENT_NO_SANDBOX = '0';
+  process.env.CRAFTORIO_NO_SANDBOX = '0';
   assert.equal((await api['app:info']()).noSandbox, false);
 });
 

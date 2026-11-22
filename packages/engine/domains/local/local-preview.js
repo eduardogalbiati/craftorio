@@ -262,14 +262,14 @@ function worktreeAppScratch(appDir) {
 
 // The environment of the preview: always simulation only; the scratch workspace unless the owner
 // chose the real one (with a warning in the UI). When the command starts this app: no sign-in
-// (MULTIAGENT_AUTH=off, as the screenshot and smoke scripts; a copy in simulation only has nothing
-// to sign in for), and the screen the change is about (MULTIAGENT_START_VIEW). Both are this app's
+// (CRAFTORIO_AUTH=off, as the screenshot and smoke scripts; a copy in simulation only has nothing
+// to sign in for), and the screen the change is about (CRAFTORIO_START_VIEW). Both are this app's
 // own variables: other projects' commands ignore them.
 // extra: the config's own env (it never overrides the simulation guard).
 function previewEnv(base, { workspace, userData }, extra = null, { view = null } = {}) {
-  const env = { ...base, ...extra, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: workspace, MULTIAGENT_AUTH: 'off' };
-  if (userData) env.MULTIAGENT_USER_DATA = userData;
-  if (view) env.MULTIAGENT_START_VIEW = view;
+  const env = { ...base, ...extra, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_WORKSPACE: workspace, CRAFTORIO_AUTH: 'off' };
+  if (userData) env.CRAFTORIO_USER_DATA = userData;
+  if (view) env.CRAFTORIO_START_VIEW = view;
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.CLAUDECODE;
   return env;

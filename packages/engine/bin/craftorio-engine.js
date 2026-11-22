@@ -13,13 +13,13 @@
 //
 // The token is full control of this machine (a shell, gate approval, paid runs, #479): the banner
 // says so and prints the URL that carries it once (clear it from the shell history).
-// The token comes from MULTIAGENT_SERVER_TOKEN, else a random one is generated; open the printed
+// The token comes from CRAFTORIO_SERVER_TOKEN, else a random one is generated; open the printed
 // URL (it carries the token once, then a cookie keeps it). A desktop app saves the token: set
-// MULTIAGENT_SERVER_TOKEN so it stays the same across restarts. Same workspace as the app unless
+// CRAFTORIO_SERVER_TOKEN so it stays the same across restarts. Same workspace as the app unless
 // --workspace is given; like the app, the server locks its workspace (#112): it refuses to start on a
 // workspace the desktop app (or another server) has open. Runs need the same account as the app: sign in from the browser UI (the
-// sign-in page opens on this machine) or set MULTIAGENT_AUTH=off. A desktop app on another computer
-// cannot sign this server in (the sign-in page would open here): it uses MULTIAGENT_AUTH=off.
+// sign-in page opens on this machine) or set CRAFTORIO_AUTH=off. A desktop app on another computer
+// cannot sign this server in (the sign-in page would open here): it uses CRAFTORIO_AUTH=off.
 //
 // --host tailscale listens on this computer's Tailscale address only (100.64.0.0/10), not on the
 // local network. Outside 127.0.0.1 the traffic is plain HTTP: put it behind a reverse proxy with TLS
@@ -33,6 +33,7 @@
 // read at start, and --allow-host <name> (repeatable) adds names. The banner lists them; without
 // Tailscale the server starts with the loopback names only and says so.
 
+require('../domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -132,11 +133,11 @@ if (!lock.ok) {
 // The account session of the server lives next to the user's home, readable only by this user
 // (there is no OS encryption here as in the desktop app).
 const accountFile = path.join(os.homedir(), '.multiagent-orchestrator', 'server-account.json');
-const authOff = !authConfig.enabled || process.env.MULTIAGENT_AUTH === 'off';
+const authOff = !authConfig.enabled || process.env.CRAFTORIO_AUTH === 'off';
 const storage = fileStorage(accountFile);
 const auth = createAuth({
-  url: authOff ? '' : process.env.MULTIAGENT_SUPABASE_URL || authConfig.url,
-  key: authOff ? '' : process.env.MULTIAGENT_SUPABASE_KEY || authConfig.publishableKey,
+  url: authOff ? '' : process.env.CRAFTORIO_SUPABASE_URL || authConfig.url,
+  key: authOff ? '' : process.env.CRAFTORIO_SUPABASE_KEY || authConfig.publishableKey,
   providers: authConfig.providers,
   required: !authOff,
   storage: {
@@ -167,7 +168,7 @@ service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.mes
 setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.message)), 30 * 60 * 1000).unref();
 service.clearPastedImages();
 
-const token = process.env.MULTIAGENT_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');
+const token = process.env.CRAFTORIO_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');
 // a loopback server answers only the loopback names and these (#541); another address answers any Host
 const loopback = isLoopback(listen.host);
 let server = null;
@@ -180,7 +181,7 @@ function printRemoteAccess(host, port) {
   for (const a of addrs) console.log(`  reachable at http://${at(a)}:${port}${a.tailscale ? '  (Tailscale: this machine\'s MagicDNS name works too)' : ''}`);
   const first = addrs[0] ? `${at(addrs[0])}:${port}` : `<this machine>:${port}`;
   console.log(`Desktop app on another computer: Settings › Execution › Engine › Change… › Remote engine, address ${first}, and the token.`);
-  if (!process.env.MULTIAGENT_SERVER_TOKEN) console.warn('The token changes at every start: set MULTIAGENT_SERVER_TOKEN to keep it (the desktop app saves it).');
+  if (!process.env.CRAFTORIO_SERVER_TOKEN) console.warn('The token changes at every start: set CRAFTORIO_SERVER_TOKEN to keep it (the desktop app saves it).');
   if (!addrs.every((a) => a.tailscale)) console.warn('Listening beyond this machine over plain HTTP (--insecure-http): only behind a VPN or a reverse proxy with TLS.');
   if (addrs.some((a) => a.tailscale)) console.log('On a tailnet WireGuard encrypts the traffic; `tailscale serve` adds HTTPS.');
 }

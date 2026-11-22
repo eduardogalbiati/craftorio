@@ -1,10 +1,10 @@
 // #235: packages/engine/service/channels/product-owner.js po:ask plans for the workflow the owner chose in the
 // drawer. New payload fields: `workflow` (a workflow file that takes a task) and `inputs` (the
 // owner's choices for its inputs, merged into every proposed group's inputs).
-// The test workspace always runs with MULTIAGENT_SIMULATION_ONLY=1 (docs/agents/testing.md): po:ask
+// The test workspace always runs with CRAFTORIO_SIMULATION_ONLY=1 (docs/agents/testing.md): po:ask
 // answers from the simulated Product Owner, whose groups use the default development workflow
 // (software-development-local-hero.yaml) unless the chosen one is honoured: no model is called.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeService, roadmapProject } = require('./helpers');

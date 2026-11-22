@@ -15,7 +15,7 @@
 // run starts, claimEvent). A start that waits (budget, a busy slot) is tried on the next poll; one that
 // throws is logged, kept in the state's lastError and dropped after MAX_ATTEMPTS. A rate limit (HTTP 403/429) backs off. It
 // never answers a gate and never merges: a trigger starts work, never ships it. Off until the owner turns
-// it on in Settings; under MULTIAGENT_SIMULATION_ONLY=1 every run it starts is a mock run.
+// it on in Settings; under CRAFTORIO_SIMULATION_ONLY=1 every run it starts is a mock run.
 //
 // Decision (docs/agents/decisions.md): polling first, the rules in the repository. A webhook receiver
 // later would feed the same events to the same rules: `POST /hooks/triggers/<project>?key=<key>` on the
@@ -239,7 +239,7 @@ function createTriggerWatcher({ project, rules = [], readEvents, startRun, comme
     const seen = new Set(state.seen);
     const started = [];
     const errors = [];
-    const mock = process.env.MULTIAGENT_SIMULATION_ONLY === '1';
+    const mock = process.env.CRAFTORIO_SIMULATION_ONLY === '1';
     let dirty = false;
     let held = false;
     for (const event of events || []) {

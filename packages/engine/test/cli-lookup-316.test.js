@@ -50,7 +50,7 @@ function lookup({ names, env, platform = 'linux' }) {
     process.stdout.write('\\n@@' + JSON.stringify({ results, path: process.env.PATH, ms: Date.now() - t0 }));
   `;
   const out = execFileSync(process.execPath, ['-e', script], {
-    env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', ...env },
+    env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', ...env },
     encoding: 'utf8', timeout: 60000, windowsHide: true,
   });
   return JSON.parse(out.slice(out.lastIndexOf('\n@@') + 3));
@@ -179,7 +179,7 @@ test('Settings › Agents & CLIs (Linux): a CLI that is not installed shows no p
     }, (e) => { process.stdout.write('\\n@@' + JSON.stringify({ error: e.message })); });
   `;
   const out = execFileSync(process.execPath, ['-e', script], {
-    env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', ...baseEnv(path.join(dir, 'home'), empty) },
+    env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', ...baseEnv(path.join(dir, 'home'), empty) },
     encoding: 'utf8', timeout: 60000, windowsHide: true,
   });
   const list = JSON.parse(out.slice(out.lastIndexOf('\n@@') + 3));

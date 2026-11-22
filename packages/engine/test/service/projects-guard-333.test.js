@@ -14,7 +14,7 @@ const { createService } = require('../../service');
 // A workspace at base/ws (projects in base/ws/projects) and a victim.json at base, where
 // '../../victim' + '.json' lands from the projects folder.
 function nestedService(t) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'projects-333-'));
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   // the service closes its index before the folder goes (hooks run in the order they are added)

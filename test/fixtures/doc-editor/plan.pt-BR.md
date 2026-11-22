@@ -52,7 +52,7 @@ Escopo desta fase: R1, R2, R3, R5, R7 (com os workflows de hoje), R10 e R11 (sem
 
 - **Corrida entre o clone e as análises:** nenhuma análise começa antes de o clone terminar (testado com um clone lento falso).
 - **Projeto meio criado:** se o app fecha durante o clone, ao reabrir ele aparece `failed`, com Retry, nunca como `ready`.
-- **Custo inesperado:** em simulação nada chama modelo (`MULTIAGENT_SIMULATION_ONLY=1`); no real, a análise só começa com o clique, e o custo vem do `seeds:estimate`.
+- **Custo inesperado:** em simulação nada chama modelo (`CRAFTORIO_SIMULATION_ONLY=1`); no real, a análise só começa com o clique, e o custo vem do `seeds:estimate`.
 - **Setup em workspaces antigos:** `setupDone` existente nunca reabre o Setup; o passo Workflows some sem apagar o `hiddenWorkflows` de ninguém.
 
 ## Prova

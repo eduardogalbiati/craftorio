@@ -6,7 +6,7 @@
 // Everything the change creates (tools, exports, channels) is looked up inside each test, so this
 // file loads before the code exists and each test fails on its own. gh is never started: the tools
 // take an injected runner (ctx.execCli), the system boundary. No model is called (mock / simulation).
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
@@ -37,7 +37,7 @@ function scratchDir(t, prefix) {
 
 // A service on a workspace folder (a second call on the same folder = the app started again).
 function startService(t, dir) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   // #408: an empty CLI home, never the machine's transcripts
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, cliHome: path.join(dir, 'cli-home') } });
   let stopped = false;
@@ -484,7 +484,7 @@ test('issue cards: an issue.file card says whether a duplicate was searched', ()
 
 const ENV_CHECK = `const test = require('node:test');
 const assert = require('node:assert');
-test('check runs in simulation only', () => assert.equal(process.env.MULTIAGENT_SIMULATION_ONLY, '1'));
+test('check runs in simulation only', () => assert.equal(process.env.CRAFTORIO_SIMULATION_ONLY, '1'));
 `;
 const FAILING = `const test = require('node:test');
 const assert = require('node:assert');
@@ -496,12 +496,12 @@ async function checkOn(t, file, body) {
   const folder = tmpRepo(t);
   branchWithTest(folder, 'feature', file, body);
   const project = await api['projects:create']({ name: 'Check project', folder });
-  // MULTIAGENT_SIMULATION_ONLY stays set (never lifted in a test); mock: true keeps the delegation simulated
+  // CRAFTORIO_SIMULATION_ONLY stays set (never lifted in a test); mock: true keeps the delegation simulated
   const out = await api['oracle:delegate']({ to: 'checker', question: `Does ${file} pass on feature?`, projectId: project.id, branch: 'feature', command: `node --test ${file}`, mock: true });
   return { out, folder };
 }
 
-test('check: the checker runs a test file on a scratch checkout of the branch, with MULTIAGENT_SIMULATION_ONLY=1, and returns the result with its evidence', async (t) => {
+test('check: the checker runs a test file on a scratch checkout of the branch, with CRAFTORIO_SIMULATION_ONLY=1, and returns the result with its evidence', async (t) => {
   assert.ok(loadTools().DELEGATES.includes('checker'), 'checker is one of the Oracle\'s delegates');
   const { out, folder } = await checkOn(t, 'check.test.js', ENV_CHECK);
   assert.equal(out.error, false, out.text);

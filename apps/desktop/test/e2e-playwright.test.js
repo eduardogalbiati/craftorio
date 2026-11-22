@@ -2,7 +2,7 @@
 // (features/*.feature, steps in features/steps/), deterministically, with role/test-id assertions
 // and committed visual baselines. These checks read the repository (package.json, the Playwright
 // config, the feature files, the renderer and the skills); only the last one opens the app, with
-// MULTIAGENT_UI_TESTS=1.
+// CRAFTORIO_UI_TESTS=1.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -108,8 +108,8 @@ test('the app is launched with Playwright\'s _electron in simulation, on a scrat
   const sources = [file ? read(file) : '', ...walk('features', ['.js', '.cjs', '.mjs', '.ts']).map((f) => read(f))].join('\n');
   assert.match(sources, /_electron/, '_electron from playwright / @playwright/test');
   assert.match(sources, /\.launch\(/, '_electron.launch(...)');
-  assert.match(sources, /MULTIAGENT_SIMULATION_ONLY/, 'the app runs with MULTIAGENT_SIMULATION_ONLY=1');
-  assert.match(sources, /MULTIAGENT_WORKSPACE/, 'a fresh scratch workspace');
+  assert.match(sources, /CRAFTORIO_SIMULATION_ONLY/, 'the app runs with CRAFTORIO_SIMULATION_ONLY=1');
+  assert.match(sources, /CRAFTORIO_WORKSPACE/, 'a fresh scratch workspace');
   assert.match(sources, /ELECTRON_RUN_AS_NODE/, 'ELECTRON_RUN_AS_NODE is removed from the launched environment');
 });
 
@@ -163,7 +163,7 @@ test('the ui-conventions skill and the JS/TS code-review rules ask for data-test
 });
 
 // CI-like run on this machine: the @smoke subset, then its JSON results (opens the app).
-const skip = process.env.MULTIAGENT_UI_TESTS !== '1' ? 'set MULTIAGENT_UI_TESTS=1 to open the app' : false;
+const skip = process.env.CRAFTORIO_UI_TESTS !== '1' ? 'set CRAFTORIO_UI_TESTS=1 to open the app' : false;
 test('npm run test:e2e runs the @smoke subset green and writes JSON results', { skip, timeout: 900000 }, async () => {
   const config = await loadConfig();
   const json = (Array.isArray(config.reporter) ? config.reporter : []).find((r) => Array.isArray(r) && r[0] === 'json');
@@ -171,7 +171,7 @@ test('npm run test:e2e runs the @smoke subset green and writes JSON results', { 
   assert.ok(outputFile, 'the json reporter writes to a file');
   const out = path.resolve(root, outputFile);
   fs.rmSync(out, { force: true });
-  const env = { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1' };
+  const env = { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1' };
   delete env.ELECTRON_RUN_AS_NODE;
   const r = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'test:e2e', '--', '--grep', '@smoke'], { cwd: root, env, encoding: 'utf8', shell: process.platform === 'win32', timeout: 840000 });
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`.slice(-4000));

@@ -8,9 +8,9 @@ used_by: "test writer, E2E runner"
 
 # E2E scenarios: JavaScript / TypeScript
 
-**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+**Test workers (#367)**: a run gets `CRAFTORIO_TEST_WORKERS` (and `CRAFTORIO_E2E_WORKERS`) in its
 environment, the workers this machine gives each run so parallel runs do not overload it. Read it
-from the variables line of the command guide (`MULTIAGENT_TEST_WORKERS=<n>`) and pass the number to the runner you call: Playwright `--workers=<n>` (this repository's playwright.config.js already reads MULTIAGENT_E2E_WORKERS).
+from the variables line of the command guide (`CRAFTORIO_TEST_WORKERS=<n>`) and pass the number to the runner you call: Playwright `--workers=<n>` (this repository's playwright.config.js already reads CRAFTORIO_E2E_WORKERS).
 Unset: leave the runner's default.
 
 ## Framework and commands (never switch frameworks)

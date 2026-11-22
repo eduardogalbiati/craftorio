@@ -16,9 +16,9 @@ function tmp(t, prefix) {
 }
 
 async function lastOf(t, ...items) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = '0';
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = '0';
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
   const ws = setupWorkspace(tmp(t, 'seed-781-ws-'), { persist: false });
   seeds.seedSeeds(seeds.BUNDLED_SEEDS_DIR, ws.seeds);
   const project = await projects.createProject(ws.projects, { name: 'demo', folder: tmp(t, 'seed-781-repo-') });

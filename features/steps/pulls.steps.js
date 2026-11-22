@@ -31,7 +31,7 @@ const { Given, When, Then } = require('./fixtures');
 const { LOAD_TIMEOUT, escapeRe } = require('../support/run-screen');
 const workflows = require('../support/workflows');
 
-const PR_FILE = 'pull-requests.json'; // in the launch's scratch folder (MULTIAGENT_E2E_PR_FILE)
+const PR_FILE = 'pull-requests.json'; // in the launch's scratch folder (CRAFTORIO_E2E_PR_FILE)
 const READ_TIMEOUT = 60000;
 const MINUTE = 60000;
 
@@ -120,7 +120,7 @@ function writeRunOf(e2e, pull, index) {
 // | number | title | author | state | run (yes/no) | base | head |: the platform's open pull requests; a
 // "yes" run is written as the run that opened it
 Given('the app is open with these pull requests open on the platform:', async ({ e2e }, table) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_PR_FILE: PR_FILE } });
+  await e2e.open({ env: { CRAFTORIO_E2E_PR_FILE: PR_FILE } });
   const rows = table.hashes();
   const pulls = rows.map((row) => pullOf(e2e, row));
   writePulls(e2e, pulls);
@@ -130,7 +130,7 @@ Given('the app is open with these pull requests open on the platform:', async ({
 });
 
 Given('the app is open with no pull request open on the platform', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_PR_FILE: PR_FILE } });
+  await e2e.open({ env: { CRAFTORIO_E2E_PR_FILE: PR_FILE } });
   writePulls(e2e, []);
   e2e.pulls = [];
   await reloadWithPulls(e2e);

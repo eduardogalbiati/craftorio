@@ -7,12 +7,13 @@
 //   npm run test:e2e -w fronts/analyser           one front's features (`node scripts/e2e.js --front analyser`)
 //   node scripts/e2e.js --front build -- --grep @smoke
 // --front <id> names a front of scripts/source-tree.js (an unknown id is an error) and is passed to
-// playwright.config.js as MULTIAGENT_E2E_FRONT, which then reads only `fronts/<id>/features/`; every
+// playwright.config.js as CRAFTORIO_E2E_FRONT, which then reads only `fronts/<id>/features/`; every
 // steps folder stays loaded (the fronts share the shell's steps). What follows `--` (or any other
 // argument) goes to `playwright test` as is. The binaries are node_modules/.bin's, run through
 // runShim (packages/engine/domains/machine/shell.js: a .cmd shim on Windows needs cmd.exe, #218).
 
 'use strict';
+require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 
 const path = require('path');
 const { runShim } = require('@craftorio/engine/domains/machine/shell');
@@ -48,8 +49,8 @@ async function main(argv = process.argv.slice(2)) {
       console.error(front ? `e2e: unknown front "${front}" (fronts: ${known.join(', ') || 'none installed'})` : `e2e: --front needs a front id (fronts: ${known.join(', ') || 'none installed'})`);
       return 2;
     }
-    env.MULTIAGENT_E2E_FRONT = front;
-  } else delete env.MULTIAGENT_E2E_FRONT;
+    env.CRAFTORIO_E2E_FRONT = front;
+  } else delete env.CRAFTORIO_E2E_FRONT;
   const gen = await run('bddgen', [], env);
   if (gen !== 0) return gen;
   return run('playwright', ['test', ...args], env);

@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../../engine/workflow');
 const evidence = require('../../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root } = require('../engine-helpers');
 
 test('release workflow: a simulated E2E suite fails once, the developer fixes it, both suites pass again, the review writes the summary and the run ships', { timeout: 60000 }, async () => {

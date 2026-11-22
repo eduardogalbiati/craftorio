@@ -6,14 +6,14 @@
 // The Oracle: the app-wide master agent's persistent conversation, its memory,
 // its state (busy, paused by budget, owning process) and its read-only tools (packages/engine/domains/oracle/oracle-tools.js,
 // served over its own bridge). One Oracle per workspace root. `mock` (the drawer's developer mode)
-// and MULTIAGENT_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost.
+// and CRAFTORIO_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost.
 // Its spend counts in the monthly budgets with the runs' and the Product Owner's.
 // Part 2 (#123):
 // - wake-ups: the service's run events (packages/engine/domains/oracle/oracle-wake.js) wake it in batches; a run of this
 //   workspace seen in progress in another app process wakes it too (checked every minute). A
 //   simulated batch (every run in it simulated, or simulation only) gets the simulated Oracle.
 // - actions: its cards (packages/engine/domains/oracle/oracle-actions.js) run here with the app's own functions, only from
-//   oracle:act (the owner's "Do it") or under the Night watch. Under MULTIAGENT_SIMULATION_ONLY the
+//   oracle:act (the owner's "Do it") or under the Night watch. Under CRAFTORIO_SIMULATION_ONLY the
 //   actions that reach outside the workspace (issues, git commits, stopping processes) only preview.
 //   Every backup is a copy in <oracle dir>/backups/ (Undo puts it back).
 // - delegation: the Product Owner (a plan, an issue draft), the supervisor (a run diagnosis) and a
@@ -429,7 +429,7 @@ module.exports = (ctx) => {
         if (!runId) throw new Error('Say which run (runId) to analyze.');
         out = analyzeRunUse(runId);
       } else if (to === 'checker') {
-        // #184: no model; a test command runs with MULTIAGENT_SIMULATION_ONLY=1, stopped after ~2 min
+        // #184: no model; a test command runs with CRAFTORIO_SIMULATION_ONLY=1, stopped after ~2 min
         const res = await check({ projectId, branch, command }, oracleCheck.QUICK_MS);
         out = { text: res.text, costUsd: 0, model: null, error: false, ref: `a check of ${branch}` };
       } else throw new Error(`Unknown agent: ${to}`);

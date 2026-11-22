@@ -72,8 +72,8 @@ function verdict(r) {
 async function main() {
   const [wsDir, outsideAbs, fromArg] = process.argv.slice(2);
   const from = Number(fromArg) || 0;
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // never a real run, provider or CLI terminal
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // never a real run, provider or CLI terminal
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
   // the CLIs' config folders (packages/engine/domains/cli/cli-config-dirs.js) inside the scratch workspace: the usage
   // channels (analytics:*) read empty folders instead of this machine's logs in the home folder
   process.env.CLAUDE_CONFIG_DIR = path.join(path.resolve(wsDir), 'cli-config', 'claude');

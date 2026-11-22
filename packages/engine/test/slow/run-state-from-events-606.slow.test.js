@@ -4,7 +4,7 @@
 // test/run-state-606.js; the hand-written logs are in test/run/run-state-from-events-606.test.js.
 // This file: a small inline workflow (vars, a gate answered or left open by a pause) and the bundled
 // workflows that need no repository; run-state-from-events-dev-606.slow.test.js has the ones that do.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

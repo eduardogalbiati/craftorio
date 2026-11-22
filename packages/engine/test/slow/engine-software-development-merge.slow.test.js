@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root, runSoftwareDevelopment, GROUP } = require('../engine-helpers');
 
 const REMOTE = { file: 'feature.yaml' };

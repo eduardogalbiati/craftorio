@@ -7,7 +7,7 @@
 // validateSchema (#338): an invalid answer is an error, never half a report. It never edits code
 // and never prescribes a fix to a run (the supervisor rule): #730 the owner files a finding as an issue
 // from the Health tab (filed.json: the issue of each finding filed, by findingKey). The turn runs on the Oracle's model in its daily budget
-// (packages/engine/domains/oracle/oracle.js oneTurn / budgetRefusal); simulated (mock, MULTIAGENT_SIMULATION_ONLY): a report
+// (packages/engine/domains/oracle/oracle.js oneTurn / budgetRefusal); simulated (mock, CRAFTORIO_SIMULATION_ONLY): a report
 // derived from the facts, no model, no cost.
 // Reports are saved per project as <workspace>/architecture/<project id>/<stamp>.json
 // ({ id, date, project_id, head, costUsd, tokens, simulated, report }); compareReports marks each

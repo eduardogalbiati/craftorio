@@ -13,7 +13,7 @@
 // docs/work/write-doc/spec.md's convention). The spec's "Phases" section names, per phase, the
 // mockups it delivers; "Later phases" names the out-of-scope ones; a mockup no phase names is in scope
 // and uncovered.
-// Assumption (the seam): the simulated Product Owner (MULTIAGENT_SIMULATION_ONLY, no model call)
+// Assumption (the seam): the simulated Product Owner (CRAFTORIO_SIMULATION_ONLY, no model call)
 // proposes one issue per phase of the "Phases" section, titled with the phase's name, covering the
 // mockups that phase names; the coverage is computed from the spec and the proposed issues.
 //

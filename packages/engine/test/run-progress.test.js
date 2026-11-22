@@ -10,7 +10,7 @@ const runs = require('../domains/run/runs');
 const { WorkflowRun } = require('../engine/workflow');
 const { Recorder } = require('../engine/recorder');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 let seq = 0;
 const ev = (type, data = {}) => ({ seq: ++seq, ts: `2026-09-29T10:00:${String(seq % 60).padStart(2, '0')}Z`, type, ...data });

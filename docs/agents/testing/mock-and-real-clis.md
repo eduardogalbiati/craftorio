@@ -41,7 +41,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   adapter, nor the reverse. The run modules call `this.machine.*` and read `this.machine.simulated`
   for what is not a machine action (retry delays, budgets, deps); no `this.mock` is left in
   `packages/engine/engine/run/` (`test/simulation-adapters-353.test.js` counts them).
-- The safety rule is not in the adapter: under `MULTIAGENT_SIMULATION_ONLY=1` the real adapter's
+- The safety rule is not in the adapter: under `CRAFTORIO_SIMULATION_ONLY=1` the real adapter's
   provider is still refused by `providers.runTurn` (see the guard below).
 - A run built without its constructor (`Object.create(WorkflowRun.prototype)` or a plain object
   passed to a method) sets `machine` itself.
@@ -87,7 +87,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   combination with `inputs: { unit_tests, e2e_tests }` and `tests_status: ['pass']`.
 - **One Electron screenshot at a time (#199)**: `scripts/screenshot.js` and the screenshots step
   take the machine-wide slot of `packages/engine/engine/machine-slot.js` (`<os tmp>/multiagent-orchestrator/locks/screenshot.slot`,
-  or `MULTIAGENT_LOCKS_DIR`): a second capture waits ("waiting for the screenshot slot"), a dead
+  or `CRAFTORIO_LOCKS_DIR`): a second capture waits ("waiting for the screenshot slot"), a dead
   holder's slot is freed. Tests use their own `dir`.
 - **Dependencies (#198)**: run worktrees get `node_modules` linked from `<workspace>/cache/deps`
   (`packages/engine/engine/deps-cache.js`); tests of it pass a fake `run` (the installer and `--version`) and
@@ -99,7 +99,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   a duplicate, a large draft, a long attachments list, applied and partly applied groups, a large
   answer, an error). Ignored for a real call.
   Settings `developerMode` (replaces `mockByDefault`) shows the `.dev-only` Simulation checkboxes,
-  checked by default; off = real runs. Simulated `/loop` waits scale with `MULTIAGENT_MOCK_DELAY_SCALE`.
+  checked by default; off = real runs. Simulated `/loop` waits scale with `CRAFTORIO_MOCK_DELAY_SCALE`.
 - To check the flags a real turn gets without a model, point a provider at `node` +
   `packages/engine/test/fixtures/fake-claude.js` (it answers with its own arguments; `test/capabilities.test.js`).
 
@@ -107,10 +107,10 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
 
 - Never open real CLI terminals or start real runs in automated checks (they cost money).
 - **Workflow agents never prefix it**: the engine starts every agent process with
-  `MULTIAGENT_SIMULATION_ONLY=1` already set (`AGENT_ENV` in `packages/engine/engine/capabilities.js`), so
+  `CRAFTORIO_SIMULATION_ONLY=1` already set (`AGENT_ENV` in `packages/engine/engine/capabilities.js`), so
   `npm test` and `node --test …` run as they are; a `VAR=value` prefix makes Claude Code refuse
   the command headless (see [capabilities.md](../capabilities.md)).
-- **Simulation-only guard**: `MULTIAGENT_SIMULATION_ONLY=1` (`packages/engine/engine/simulation.js`) makes real
+- **Simulation-only guard**: `CRAFTORIO_SIMULATION_ONLY=1` (`packages/engine/engine/simulation.js`) makes real
   runs impossible: `run:start`/`runs:resume` (and its alias `supervisor:resume`)/`backlog:assign` refuse `mock: false` (never
   downgraded to a simulation), CLI terminals (`term:open` cli/cli-new/cli-resume/supervisor, the
   external console) are refused, and `providers.runTurn` refuses every non-mock provider. The UI
@@ -118,7 +118,7 @@ the simulated adapter gives every agent `{ type: 'mock' }`, its session records 
   (`npm test`), `scripts/smoke.js` (which also uses a scratch temporary workspace and fails unless
   every session was `mock`), the CI workflows and the tests' `makeService`/server helpers. A test
   that drives a real provider type at a fake CLI (`fake-claude.js`) lifts it for its duration.
-  On macOS a simulation on a throwaway user data folder (`MULTIAGENT_USER_DATA`, which the smoke, the
+  On macOS a simulation on a throwaway user data folder (`CRAFTORIO_USER_DATA`, which the smoke, the
   screenshots and the E2E launches set) also runs with Chromium's mock keychain (`--use-mock-keychain`,
   set by `apps/desktop/host/main.js` in a development checkout): safeStorage never asks for "Chromium
   Safe Storage", a dialog that blocked those runs until dismissed; the owner's own user data keeps the

@@ -112,39 +112,39 @@ test('portInUse: true once something listens on the port, false once it stops (r
 });
 
 test('previewEnv: always simulation only, the target workspace/user-data, and never the app\'s own CLI markers', () => {
-  const base = { PATH: '/usr/bin', ELECTRON_RUN_AS_NODE: '1', CLAUDECODE: '1', MULTIAGENT_WORKSPACE: '/real' };
+  const base = { PATH: '/usr/bin', ELECTRON_RUN_AS_NODE: '1', CLAUDECODE: '1', CRAFTORIO_WORKSPACE: '/real' };
   const env = lp.previewEnv(base, { workspace: '/scratch/workspace', userData: '/scratch/user-data' });
-  assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1');
-  assert.equal(env.MULTIAGENT_WORKSPACE, '/scratch/workspace');
-  assert.equal(env.MULTIAGENT_USER_DATA, '/scratch/user-data');
+  assert.equal(env.CRAFTORIO_SIMULATION_ONLY, '1');
+  assert.equal(env.CRAFTORIO_WORKSPACE, '/scratch/workspace');
+  assert.equal(env.CRAFTORIO_USER_DATA, '/scratch/user-data');
   assert.equal(env.PATH, '/usr/bin');
   assert.equal('ELECTRON_RUN_AS_NODE' in env, false);
   assert.equal('CLAUDECODE' in env, false);
 
   const real = lp.previewEnv(base, { workspace: '/real', userData: null });
-  assert.equal('MULTIAGENT_USER_DATA' in real, false);
-  assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1', 'still simulation only even on the real workspace');
+  assert.equal('CRAFTORIO_USER_DATA' in real, false);
+  assert.equal(env.CRAFTORIO_SIMULATION_ONLY, '1', 'still simulation only even on the real workspace');
 });
 
 // ---- #119: no sign-in and the right screen in a Run App copy of this app ----------------------
 
-test('previewEnv: MULTIAGENT_AUTH=off always, even on the real workspace (still simulation only); MULTIAGENT_START_VIEW only with a view', () => {
+test('previewEnv: CRAFTORIO_AUTH=off always, even on the real workspace (still simulation only); CRAFTORIO_START_VIEW only with a view', () => {
   const base = { PATH: '/usr/bin' };
   const scratch = lp.previewEnv(base, { workspace: '/scratch/workspace', userData: '/scratch/user-data' });
-  assert.equal(scratch.MULTIAGENT_AUTH, 'off');
-  assert.equal('MULTIAGENT_START_VIEW' in scratch, false, 'no view: nothing to open on');
+  assert.equal(scratch.CRAFTORIO_AUTH, 'off');
+  assert.equal('CRAFTORIO_START_VIEW' in scratch, false, 'no view: nothing to open on');
 
   const real = lp.previewEnv(base, { workspace: '/real', userData: null });
-  assert.equal(real.MULTIAGENT_AUTH, 'off', 'the real workspace is still simulation only: no sign-in either');
+  assert.equal(real.CRAFTORIO_AUTH, 'off', 'the real workspace is still simulation only: no sign-in either');
 
   const withView = lp.previewEnv(base, { workspace: '/scratch/workspace', userData: '/scratch/user-data' }, null, { view: 'backlog' });
-  assert.equal(withView.MULTIAGENT_START_VIEW, 'backlog');
+  assert.equal(withView.CRAFTORIO_START_VIEW, 'backlog');
 });
 
 test('previewEnv: an extra env from the config never overrides the simulation guard', () => {
-  const env = lp.previewEnv({}, { workspace: '/scratch' }, { MULTIAGENT_SIMULATION_ONLY: '0', MULTIAGENT_AUTH: 'on' });
-  assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1');
-  assert.equal(env.MULTIAGENT_AUTH, 'off');
+  const env = lp.previewEnv({}, { workspace: '/scratch' }, { CRAFTORIO_SIMULATION_ONLY: '0', CRAFTORIO_AUTH: 'on' });
+  assert.equal(env.CRAFTORIO_SIMULATION_ONLY, '1');
+  assert.equal(env.CRAFTORIO_AUTH, 'off');
 });
 
 test('startView: the most touched view under a page layer\'s views/<view>/ (the UI kit, a front, the page folder) or a layer\'s <view>*.{js,css}; null without a match', () => {

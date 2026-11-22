@@ -456,9 +456,9 @@ test('#632 a missing CLI explains that it is not installed', async (t) => {
 });
 
 test('#632 machineRemote in a simulated run creates nothing and answers ok: false', async (t) => {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
   const folder = tmp(t);
   for (const provider of ['github', 'gitlab']) {
     const out = await loadArea().machineRemote(provider, { name: 'field-notes', folder });

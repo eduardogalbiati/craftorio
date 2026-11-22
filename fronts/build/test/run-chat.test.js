@@ -10,7 +10,7 @@ const { Recorder } = require('@craftorio/engine/engine/recorder');
 const { runEvents } = require('@craftorio/engine/domains/run/runs');
 const { RunChatModel, splitAnswer, providerType } = require('../views/runchat/run-chat-model.js');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 // Runs a workflow in simulation and returns its events; gates get answers[step] (default: the
 // first choice) with feedback[step].

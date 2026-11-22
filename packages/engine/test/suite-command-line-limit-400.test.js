@@ -9,7 +9,7 @@
 //   is `blocked` ("could not run", with the log's last line), not `fail` with 0 failing tests.
 // #553 (acceptance tests written before the code): a selection too long for the command line no longer
 // runs the whole suite when the test command can take a list: the files go in a list file named by
-// MULTIAGENT_TEST_FILES (one path per line) and the round stays `scope: files`, with the whole list in
+// CRAFTORIO_TEST_FILES (one path per line) and the round stays `scope: files`, with the whole list in
 // `selection.files`, without the machine-wide suite slot (#455). A runner that cannot take the list
 // (here `npm test` running mocha) falls back to the whole suite as #400 did, and says why.
 // Machine-independent: the platform is injected (`platform`), the child-process boundary (`run`) is
@@ -23,7 +23,7 @@ const { runSuite, checkOnBase, suiteMessage } = require('../engine/suite-step');
 const { SUITE_SLOT_ENV } = require('../engine/machine-slot');
 
 const WIN_LIMIT = 8191;
-const LIST_ENV = 'MULTIAGENT_TEST_FILES';
+const LIST_ENV = 'CRAFTORIO_TEST_FILES';
 
 function tmp(t, prefix = 'suite-400-') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

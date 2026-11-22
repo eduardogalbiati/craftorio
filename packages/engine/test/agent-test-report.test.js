@@ -117,24 +117,24 @@ test('the agent reporter: a skipped test counts as skipped, not as passed or fai
   assert.equal(r.failed, 0);
 });
 
-test('isAgentMode: MULTIAGENT_AGENT_MODE=1 is an agent and =0 is a human, whatever else is set', () => {
-  assert.equal(isAgentMode({ MULTIAGENT_AGENT_MODE: '1' }, { isTTY: true }), true);
-  assert.equal(isAgentMode({ MULTIAGENT_AGENT_MODE: 'true', CI: '1' }), true);
-  assert.equal(isAgentMode({ MULTIAGENT_AGENT_MODE: '0', MULTIAGENT_SIMULATION_ONLY: '1' }), false);
-  assert.equal(isAgentMode({ MULTIAGENT_AGENT_MODE: 'off', CLAUDECODE: '1' }, { isTTY: false }), false);
+test('isAgentMode: CRAFTORIO_AGENT_MODE=1 is an agent and =0 is a human, whatever else is set', () => {
+  assert.equal(isAgentMode({ CRAFTORIO_AGENT_MODE: '1' }, { isTTY: true }), true);
+  assert.equal(isAgentMode({ CRAFTORIO_AGENT_MODE: 'true', CI: '1' }), true);
+  assert.equal(isAgentMode({ CRAFTORIO_AGENT_MODE: '0', CRAFTORIO_SIMULATION_ONLY: '1' }), false);
+  assert.equal(isAgentMode({ CRAFTORIO_AGENT_MODE: 'off', CLAUDECODE: '1' }, { isTTY: false }), false);
 });
 
 test('isAgentMode: a terminal or CI stays human, without an explicit setting', () => {
-  assert.equal(isAgentMode({ CI: 'true', MULTIAGENT_SIMULATION_ONLY: '1' }), false);
+  assert.equal(isAgentMode({ CI: 'true', CRAFTORIO_SIMULATION_ONLY: '1' }), false);
   assert.equal(isAgentMode({ CLAUDECODE: '1' }, { isTTY: true }), false);
   assert.equal(isAgentMode({}, { isTTY: false }), false);
 });
 
 test('isAgentMode: the orchestrator variable or an agent CLI marker means an agent', () => {
-  assert.equal(isAgentMode({ MULTIAGENT_SIMULATION_ONLY: '1' }, { isTTY: false }), true);
+  assert.equal(isAgentMode({ CRAFTORIO_SIMULATION_ONLY: '1' }, { isTTY: false }), true);
   assert.equal(isAgentMode({ CLAUDECODE: '1' }, { isTTY: false }), true);
   assert.equal(isAgentMode({ CODEX_SANDBOX: 'seatbelt' }, { isTTY: false }), true);
-  assert.equal(isAgentMode({ MULTIAGENT_SIMULATION_ONLY: '' }, { isTTY: false }), false, 'an empty variable is not set');
+  assert.equal(isAgentMode({ CRAFTORIO_SIMULATION_ONLY: '' }, { isTTY: false }), false, 'an empty variable is not set');
 });
 
 test('parseAgentReport: finds the JSON line among the npm noise of a suite output', () => {
@@ -157,7 +157,7 @@ test('scripts/test.js in agent mode with a focused file list: stdout is one JSON
     'bad.test.js': "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('two', () => {\n  assert.equal(1, 2);\n});\n",
   });
   const log = path.join(dir, 'human.log');
-  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: log };
+  const env = { ...process.env, CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: log };
   delete env.NODE_TEST_CONTEXT;
   const r = spawnSync(process.execPath, ['scripts/test.js', path.join(dir, 'ok.test.js'), path.join(dir, 'bad.test.js')], { cwd: root, encoding: 'utf8', env });
   const lines = r.stdout.trim().split(/\r?\n/);

@@ -22,7 +22,7 @@ const TOKEN = 'test-token-479-0123456789abcdef';
 
 async function start(t, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'server-479-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const service = createService({ host: { trashItem: async () => {}, appVersion: '1.2.3', isPackaged: false } });
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   const server = createServer({ service, token: TOKEN, ...options });

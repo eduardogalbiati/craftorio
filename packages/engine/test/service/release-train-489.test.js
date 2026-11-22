@@ -50,10 +50,10 @@ function trainSetup(t, { base = null, folder = null } = {}) {
 
 // simulation-only decides whether a promotion pushes a real tag: set or cleared for one test
 function simulation(t, on) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  if (on) process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  else delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  if (on) process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  else delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
 }
 
 test('#489 train: with promote-release allowed and the base green on the last candidate, it is promoted to the stable version', async (t) => {

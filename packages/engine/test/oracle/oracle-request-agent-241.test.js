@@ -26,8 +26,8 @@
 // - Its old write path is gone: an owner's kind proposed through the Oracle's own action cards
 //   (oracle:propose + oracle:act) is either refused as an unknown action, or routed to the owner (the
 //   owner's conversation holds a request from the Oracle); it never writes directly.
-// Everything runs simulated (MULTIAGENT_SIMULATION_ONLY=1): no model, no gh, no real run.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+// Everything runs simulated (CRAFTORIO_SIMULATION_ONLY=1): no model, no gh, no real run.
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

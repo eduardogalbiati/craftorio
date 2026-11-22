@@ -6,9 +6,9 @@
 // Acceptance tests, written before the code. Everything the change may create is loaded inside each test.
 //
 // Two seams:
-// - the whole service in a simulation (test/service/helpers.js makeService, MULTIAGENT_SIMULATION_ONLY=1):
+// - the whole service in a simulation (test/service/helpers.js makeService, CRAFTORIO_SIMULATION_ONLY=1):
 //   onboarding:start on a local git repository (a real clone, no network), onboarding:analyze, then
-//   architecture:city / architecture:reports. The E2E hook MULTIAGENT_E2E_CITY_PLAN_FAIL=1
+//   architecture:city / architecture:reports. The E2E hook CRAFTORIO_E2E_CITY_PLAN_FAIL=1
 //   (features/steps/onboarding.steps.js, #731) makes the simulated city plan throw
 //   "The simulated city plan failed (e2e).".
 // - the area itself with a fake ctx and no simulation, the model turns mocked at their boundary.
@@ -28,7 +28,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // the machine slot the paid jobs take: a folder of this file, never the machine's
-process.env.MULTIAGENT_LOCKS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'city-plan-731-locks-'));
+process.env.CRAFTORIO_LOCKS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'city-plan-731-locks-'));
 
 const ORACLE_PROMPT = 'Architecture analysis of the project';
 const PLAN_COST = 0.3;
@@ -115,9 +115,9 @@ function fakeTurns() {
 
 // the area with a fake ctx (no simulation: the turns are the fakes)
 function areaWith(t, oracle) {
-  const prev = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (prev === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = prev; });
+  const prev = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (prev === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = prev; });
   const { setupWorkspace } = require('../domains/workspace/workspace');
   const ws = setupWorkspace(tmp(t, 'city-plan-731-ws-'), { persist: false });
   const { EventEmitter } = require('events');
@@ -303,8 +303,8 @@ test('#731 (service, simulated) after the onboarding architecture:city is groupe
 test('#731 (service, simulated) a failed city plan fails the job with its reason; Retry fails it again and the Oracle\'s report is not paid twice', { timeout: 90000 }, async (t) => {
   const { makeService } = require('./service/helpers');
   const { api } = makeService(t);
-  process.env.MULTIAGENT_E2E_CITY_PLAN_FAIL = '1';
-  t.after(() => { delete process.env.MULTIAGENT_E2E_CITY_PLAN_FAIL; });
+  process.env.CRAFTORIO_E2E_CITY_PLAN_FAIL = '1';
+  t.after(() => { delete process.env.CRAFTORIO_E2E_CITY_PLAN_FAIL; });
   const { id, end, status } = await serviceOnboarded(t, api, repoWith(t));
   const job = end.jobs.projectMap;
   assert.equal(job.status, 'failed', `the projectMap job: ${JSON.stringify(job)}`);

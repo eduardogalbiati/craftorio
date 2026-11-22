@@ -2,19 +2,19 @@
 // `electron features/support/electron-main.js` with Playwright's _electron, on a scratch workspace
 // it has already seeded. This file only sets what has to happen inside Electron, then loads the
 // real app (apps/desktop/host/main.js):
-// - the theme Electron reports (MULTIAGENT_E2E_THEME: light | dark), for the visual baselines;
-// - a fixed window content size (MULTIAGENT_E2E_SIZE, default 1400x900);
+// - the theme Electron reports (CRAFTORIO_E2E_THEME: light | dark), for the visual baselines;
+// - a fixed window content size (CRAFTORIO_E2E_SIZE, default 1400x900);
 // - the channels that would call a model (Product Owner, Oracle, supervisor chat, analysis) answer
 //   with simulated data or previews, as in scripts/screenshot.js;
-// - the window stays off-screen, so a run never takes the owner's screen (MULTIAGENT_E2E_SHOW=1
+// - the window stays off-screen, so a run never takes the owner's screen (CRAFTORIO_E2E_SHOW=1
 //   shows it, e.g. to watch a scenario); Chromium keeps painting it (no occlusion throttling);
-// - the main process's clock starts at MULTIAGENT_E2E_NOW (ms) when set: the visual scenarios
+// - the main process's clock starts at CRAFTORIO_E2E_NOW (ms) when set: the visual scenarios
 //   render at a fixed instant (#362, features/support/fixed-clock.js);
 // - the locale is en-US, so the interface is English until a scenario chooses another (#329);
 // - the service's base-health area (packages/engine/service/areas/base-health.js) is kept in
 //   global.multiagentE2E.baseHealth when the service loads it, so a step can start the base check a
 //   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527);
-// - with MULTIAGENT_E2E_PR_FILE (a file name in the launch's scratch folder, which does not exist
+// - with CRAFTORIO_E2E_PR_FILE (a file name in the launch's scratch folder, which does not exist
 //   before the launch), a run's PR is read from that JSON file on each call, at the service's
 //   host.readPrJson: gh's answer, or { fail: message } for a read that fails. Sync then reaches the
 //   real backlog:sync, with only its read of the platform's issues replaced by the cached ones, and
@@ -27,15 +27,15 @@ const path = require('path');
 const { app, ipcMain, nativeTheme } = require('electron');
 const { shiftClock } = require('./fixed-clock');
 
-if (process.env.MULTIAGENT_E2E_NOW) shiftClock(Number(process.env.MULTIAGENT_E2E_NOW));
+if (process.env.CRAFTORIO_E2E_NOW) shiftClock(Number(process.env.CRAFTORIO_E2E_NOW));
 // the helpers only: scripts/screenshot.js runs its own capture in an Electron main process otherwise
 global.multiagentScreenshotHelpers = true;
 const { simulateChannels } = require('../../scripts/screenshot');
 
-const theme = process.env.MULTIAGENT_E2E_THEME;
+const theme = process.env.CRAFTORIO_E2E_THEME;
 if (theme) nativeTheme.themeSource = theme;
-const [width, height] = String(process.env.MULTIAGENT_E2E_SIZE || '1400x900').split('x').map(Number);
-const show = process.env.MULTIAGENT_E2E_SHOW === '1';
+const [width, height] = String(process.env.CRAFTORIO_E2E_SIZE || '1400x900').split('x').map(Number);
+const show = process.env.CRAFTORIO_E2E_SHOW === '1';
 
 // an off-screen or covered window must keep rendering: the steps and the screenshots read it
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
@@ -69,9 +69,9 @@ require.cache[baseHealthArea].exports = (ctx) => {
 // #797: the PR's answers, and a sync that reads them (simulateChannels answers it with backlog:get, which
 // reads no PR). The host is completed in place: it has getters to read later (locale). main.js requires
 // the service by its package name, which resolves to this same file
-if (process.env.MULTIAGENT_E2E_PR_FILE) {
+if (process.env.CRAFTORIO_E2E_PR_FILE) {
   const engine = path.join(__dirname, '..', '..', 'packages', 'engine');
-  const answers = path.resolve(path.dirname(process.env.MULTIAGENT_WORKSPACE), process.env.MULTIAGENT_E2E_PR_FILE);
+  const answers = path.resolve(path.dirname(process.env.CRAFTORIO_WORKSPACE), process.env.CRAFTORIO_E2E_PR_FILE);
   const readAnswer = () => JSON.parse(fs.readFileSync(answers, 'utf8'));
   let threadsOf = null; // #811: the PR number the review threads were last read for
   // #810: the repository's permissions (bypass only with the file's viewerCanBypass) and the signed-in account

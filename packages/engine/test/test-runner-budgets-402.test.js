@@ -1,6 +1,6 @@
 // #402: a hung unit test fails in about a minute, by name, instead of timing out the whole suite
 // round. The default per-test budget is short for test/*.test.js and longer for the slow files
-// (test/slow/ or *.slow.test.js); MULTIAGENT_TEST_TIMEOUT_MS still overrides it. The agent report
+// (test/slow/ or *.slow.test.js); CRAFTORIO_TEST_TIMEOUT_MS still overrides it. The agent report
 // names a timed-out test with its file and "timed out after N s", and the round's other files still
 // report. The suite step's timeout stays a backstop: always above the largest per-test budget.
 // Seams: packages/engine/engine/test-timeouts.js's testTimeoutMs(file, env) (created by the change: loaded
@@ -37,12 +37,12 @@ test('#402 a slow file (test/slow/ or *.slow.test.js) gets a longer budget than 
   assert.equal(testTimeoutMs('test\\slow\\worktree-engine.slow.test.js', {}), testTimeoutMs('test/slow/worktree-engine.slow.test.js', {}));
 });
 
-test('#402 MULTIAGENT_TEST_TIMEOUT_MS overrides the budget of every file; blank or invalid keeps the default', () => {
+test('#402 CRAFTORIO_TEST_TIMEOUT_MS overrides the budget of every file; blank or invalid keeps the default', () => {
   const { testTimeoutMs } = budgets();
-  for (const file of [UNIT, ...SLOW_FILES]) assert.equal(testTimeoutMs(file, { MULTIAGENT_TEST_TIMEOUT_MS: '2000' }), 2000, file);
-  assert.equal(testTimeoutMs(UNIT, { MULTIAGENT_TEST_TIMEOUT_MS: ' ' }), testTimeoutMs(UNIT, {}));
-  assert.equal(testTimeoutMs(UNIT, { MULTIAGENT_TEST_TIMEOUT_MS: 'abc' }), testTimeoutMs(UNIT, {}));
-  assert.equal(testTimeoutMs(UNIT, { MULTIAGENT_TEST_TIMEOUT_MS: '-5' }), testTimeoutMs(UNIT, {}));
+  for (const file of [UNIT, ...SLOW_FILES]) assert.equal(testTimeoutMs(file, { CRAFTORIO_TEST_TIMEOUT_MS: '2000' }), 2000, file);
+  assert.equal(testTimeoutMs(UNIT, { CRAFTORIO_TEST_TIMEOUT_MS: ' ' }), testTimeoutMs(UNIT, {}));
+  assert.equal(testTimeoutMs(UNIT, { CRAFTORIO_TEST_TIMEOUT_MS: 'abc' }), testTimeoutMs(UNIT, {}));
+  assert.equal(testTimeoutMs(UNIT, { CRAFTORIO_TEST_TIMEOUT_MS: '-5' }), testTimeoutMs(UNIT, {}));
 });
 
 test('#402 the suite step\'s timeout is never under the largest per-test budget plus a margin', () => {
@@ -73,7 +73,7 @@ test('#402 a hung test is reported by name and file, "timed out after N s", and 
     '',
   ].join('\n'));
   const files = ['okfx-alpha', 'hungfx-bravo', 'redfx-charlie'].map((n) => path.join(dir, `${n}.test.js`));
-  const env = { ...process.env, MULTIAGENT_TEST_CONCURRENCY: '3', MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: path.join(dir, 'human.log'), MULTIAGENT_TEST_TIMEOUT_MS: '2000' };
+  const env = { ...process.env, CRAFTORIO_TEST_CONCURRENCY: '3', CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: path.join(dir, 'human.log'), CRAFTORIO_TEST_TIMEOUT_MS: '2000' };
   delete env.NODE_TEST_CONTEXT;
   const started = Date.now();
   const r = spawnSync(process.execPath, ['scripts/test.js', ...files], { cwd: root, encoding: 'utf8', env, timeout: 35000 });
@@ -120,9 +120,9 @@ function twoGroups(t) {
   fs.writeFileSync(path.join(dir, 'slow', 'slowfx.slow.test.js'), testFile('slow', '../slowlib402.js'));
   const files = [path.join(dir, 'unitfx.test.js'), path.join(dir, 'slow', 'slowfx.slow.test.js')];
   const humanLog = path.join(dir, 'human.log');
-  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: humanLog };
+  const env = { ...process.env, CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: humanLog };
   delete env.NODE_TEST_CONTEXT;
-  delete env.MULTIAGENT_TEST_TIMEOUT_MS;
+  delete env.CRAFTORIO_TEST_TIMEOUT_MS;
   return { dir, trace, files, humanLog, env };
 }
 const runRunner = (files, env, extra = []) => spawnSync(process.execPath, ['scripts/test.js', ...extra, ...files], { cwd: root, encoding: 'utf8', env, timeout: 120000 });
@@ -130,7 +130,7 @@ const runRunner = (files, env, extra = []) => spawnSync(process.execPath, ['scri
 test('#402 at concurrency 1 the unit files and the slow files run as two groups, one after the other, each with its own budget', { timeout: 150000 }, (t) => {
   const g = twoGroups(t);
   const { testTimeoutMs } = budgets();
-  const r = runRunner(g.files, { ...g.env, MULTIAGENT_TEST_CONCURRENCY: '1' });
+  const r = runRunner(g.files, { ...g.env, CRAFTORIO_TEST_CONCURRENCY: '1' });
   assert.equal(r.error?.code, undefined);
   assert.equal(r.status, 0, r.stdout.slice(-2000));
   const report = JSON.parse(r.stdout.trim().split(/\r?\n/).pop());
@@ -149,7 +149,7 @@ test('#402 at concurrency 1 the unit files and the slow files run as two groups,
 test('#402 with coverage the unit and slow groups each print a coverage table, and the merged summary sees the files of both', { timeout: 150000 }, (t) => {
   const g = twoGroups(t);
   const { parseNodeCoverage } = require('../domains/evidence/coverage-summary');
-  const r = runRunner(g.files, { ...g.env, MULTIAGENT_TEST_CONCURRENCY: '2' }, ['--experimental-test-coverage']);
+  const r = runRunner(g.files, { ...g.env, CRAFTORIO_TEST_CONCURRENCY: '2' }, ['--experimental-test-coverage']);
   assert.equal(r.error?.code, undefined);
   assert.equal(r.status, 0, r.stdout.slice(-2000));
   const human = fs.readFileSync(g.humanLog, 'utf8');

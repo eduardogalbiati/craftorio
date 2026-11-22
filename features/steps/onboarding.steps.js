@@ -26,7 +26,7 @@
 // - data-testid="project-next-steps": the card on the project page, its entries links or buttons named by
 //   what they do (the refactors to the roadmap, the first idea, the refactor cadence); next-steps-dismiss.
 // An analysis still running: another holder of the analysis slot (packages/engine/engine/machine-slot.js) in
-// a folder of the scenario's own (MULTIAGENT_LOCKS_DIR), so the project map waits and the analysis stays on.
+// a folder of the scenario's own (CRAFTORIO_LOCKS_DIR), so the project map waits and the analysis stays on.
 
 const fs = require('fs');
 const os = require('os');
@@ -183,7 +183,7 @@ Given("the app is open while another analysis holds the machine's analysis slot"
   const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-locks-'));
   const slots = require('@craftorio/engine/engine/machine-slot');
   fs.writeFileSync(slots.slotFile(slots.ANALYSIS_SLOT, locks), JSON.stringify({ pid: process.pid, host: os.hostname(), token: 'e2e-642', started: Date.now(), holder: 'another analysis (e2e)' }));
-  await e2e.open({ env: { MULTIAGENT_LOCKS_DIR: locks } });
+  await e2e.open({ env: { CRAFTORIO_LOCKS_DIR: locks } });
   const close = e2e.close;
   e2e.close = async () => { await close(); fs.rmSync(locks, { recursive: true, force: true }); };
 });
@@ -505,7 +505,7 @@ Then('the wizard shows the ways of working profile', async ({ e2e }) => {
 // - data-testid="wizard-question" data-question="mode|ci|release": a question group, its title ("Where
 //   changes land", "CI", "How you release") and its chips (class wizard-chip, role button, the chosen one
 //   aria-pressed="true"), each chip reading its label first ("Local: merge here, push main").
-// The repository is made in the scratch workspace (MULTIAGENT_WORKSPACE, features/support/app.js).
+// The repository is made in the scratch workspace (CRAFTORIO_WORKSPACE, features/support/app.js).
 
 const question = (page, title) => wizard(page).getByTestId('wizard-question').filter({ hasText: title });
 // the chip whose text starts with the label: "Local" never matches "Local + remote"
@@ -609,10 +609,10 @@ Then("the workspace's {string} has no remote", async ({ e2e }, rel) => {
 // - wizard-next: the footer's Continue to the review, enabled all along step 3; wizard-analyze is gone.
 //
 // E2E HOOKS THE DEVELOPER MUST ADD (none exists yet), read by the simulated onboarding's jobs
-// (packages/engine/service/areas/project-onboarding.js, its `jobs`, only when MULTIAGENT_SIMULATION_ONLY=1):
-// - MULTIAGENT_E2E_ONBOARDING_HOLD=<job>[,<job>]: that job stays `running` until the app closes (a promise
+// (packages/engine/service/areas/project-onboarding.js, its `jobs`, only when CRAFTORIO_SIMULATION_ONLY=1):
+// - CRAFTORIO_E2E_ONBOARDING_HOLD=<job>[,<job>]: that job stays `running` until the app closes (a promise
 //   that never settles), so its in-progress look can be checked and screenshotted;
-// - MULTIAGENT_E2E_ONBOARDING_FAIL=<job>[,<job>]: that job throws "The simulated <job> failed (e2e)."
+// - CRAFTORIO_E2E_ONBOARDING_FAIL=<job>[,<job>]: that job throws "The simulated <job> failed (e2e)."
 //   so it ends `failed` with that error as its reason (a Retry fails again the same way).
 
 // the analyses in the owner's words → the onboarding's job ids
@@ -632,16 +632,16 @@ const workflowsColumn = (page) => wizard(page).getByTestId('wizard-workflows-col
 const jobRow = (page, words) => wizard(page).getByTestId('wizard-cost').locator(`[data-part="${jobId(words)}"]`);
 
 Given('the app is open while the {string} analysis keeps running', async ({ e2e }, words) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: jobId(words) } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ONBOARDING_HOLD: jobId(words) } });
 });
 
-// #852: two jobs held at once (MULTIAGENT_E2E_ONBOARDING_HOLD takes a comma-separated list)
+// #852: two jobs held at once (CRAFTORIO_E2E_ONBOARDING_HOLD takes a comma-separated list)
 Given('the app is open while the {string} and {string} analyses keep running', async ({ e2e }, a, b) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: [jobId(a), jobId(b)].join(',') } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ONBOARDING_HOLD: [jobId(a), jobId(b)].join(',') } });
 });
 
 Given('the app is open where the {string} analysis fails', async ({ e2e }, words) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_FAIL: jobId(words) } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ONBOARDING_FAIL: jobId(words) } });
 });
 
 Then("the wizard's suggested workflows offer {string} and {string} and no workflow yet", async ({ e2e }, a, b) => {
@@ -868,9 +868,9 @@ Then('the suggested {string} workflow still has {string} picked', async ({ e2e }
 // The tray (onboarding-tray) is hidden while the wizard is open, whatever the imports' states.
 //
 // The E2E hooks of the clone, read by the simulated onboarding (packages/engine/service/areas/
-// project-onboarding.js, only when MULTIAGENT_SIMULATION_ONLY=1):
-// - MULTIAGENT_E2E_ONBOARDING_HOLD=clone: the clone stays running (status cloning) until the app closes;
-// - MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS=<ms>: the clone waits that long, then runs as usual.
+// project-onboarding.js, only when CRAFTORIO_SIMULATION_ONLY=1):
+// - CRAFTORIO_E2E_ONBOARDING_HOLD=clone: the clone stays running (status cloning) until the app closes;
+// - CRAFTORIO_E2E_ONBOARDING_CLONE_DELAY_MS=<ms>: the clone waits that long, then runs as usual.
 
 const CLONING = (name) => new RegExp(`Cloning\\s+${escapeRe(name)}\\s*(…|\\.\\.\\.)`);
 // the size of the wizard's panel, unchanged to the pixel
@@ -878,11 +878,11 @@ const SIZE_TOLERANCE = 1;
 const panel = (page) => wizard(page).getByTestId('wizard-panel');
 
 Given('the app is open while the clone of an import keeps running', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_HOLD: 'clone' } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ONBOARDING_HOLD: 'clone' } });
 });
 
 Given('the app is open where the clone of an import takes {int} seconds', async ({ e2e }, seconds) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS: String(seconds * 1000) } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ONBOARDING_CLONE_DELAY_MS: String(seconds * 1000) } });
 });
 
 Then('the progress tray is not shown', async ({ e2e }) => {
@@ -1011,7 +1011,7 @@ Then('the wizard shows no import status card and its repository fields are read-
 //   offered with a plan too, its title the refresh one ("a refresh keeps the names you saw").
 //
 // E2E HOOK THE DEVELOPER MUST ADD, read by the simulated onboarding's projectMap job only when
-// MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_CITY_PLAN_FAIL=1 makes drawing the city plan throw
+// CRAFTORIO_SIMULATION_ONLY=1: CRAFTORIO_E2E_CITY_PLAN_FAIL=1 makes drawing the city plan throw
 // "The simulated city plan failed (e2e)." so the job ends `failed` with that reason (a Retry fails again).
 
 // #730: the City is a tab of its own (#project-panel-city); the Architecture tab is gone
@@ -1019,7 +1019,7 @@ const architectureTab = (page) => projectPage(page).locator('#project-panel-arch
 const cityPart = (page, id) => architectureTab(page).getByTestId(id).filter({ visible: true }).first();
 
 Given('the app is open where drawing the city plan fails', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_CITY_PLAN_FAIL: '1' } });
+  await e2e.open({ env: { CRAFTORIO_E2E_CITY_PLAN_FAIL: '1' } });
 });
 
 When('I open the city from the review', async ({ e2e }) => {
@@ -1176,8 +1176,8 @@ Then('every disabled step of the Next steps card says why, in its tooltip and in
 // - data-testid="wizard-way-of-working": in step 3's suggested workflows column, the chosen way of working
 //   ("Local", "Remote" or "Fork + PR"; Local says "no pull request").
 //
-// E2E HOOK THE DEVELOPER MUST ADD, read only when MULTIAGENT_SIMULATION_ONLY=1 (the simulated onboarding,
-// packages/engine/service/areas/project-onboarding.js): MULTIAGENT_E2E_REPO_PUSH=0|1 stands for gh's answer
+// E2E HOOK THE DEVELOPER MUST ADD, read only when CRAFTORIO_SIMULATION_ONLY=1 (the simulated onboarding,
+// packages/engine/service/areas/project-onboarding.js): CRAFTORIO_E2E_REPO_PUSH=0|1 stands for gh's answer
 // (permissions.push false | true) for the imported repository, a local file:// one included, without calling
 // gh; with 0 "Create a fork" is simulated (no gh repo fork, no network): the project's origin becomes the
 // simulated fork and upstream the original.
@@ -1186,11 +1186,11 @@ const forkNotice = (page) => wizard(page).getByTestId('wizard-fork-notice');
 const FORK_CHOICE = { 'Create a fork': 'wizard-create-fork', 'Work locally': 'wizard-work-locally' };
 
 Given("the app is open where I can't push to the repositories I import", async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_REPO_PUSH: '0' } });
+  await e2e.open({ env: { CRAFTORIO_E2E_REPO_PUSH: '0' } });
 });
 
 Given('the app is open where I can push to the repositories I import', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_REPO_PUSH: '1' } });
+  await e2e.open({ env: { CRAFTORIO_E2E_REPO_PUSH: '1' } });
 });
 
 Then('the wizard suggests creating a fork to contribute, or working locally', async ({ e2e }) => {
@@ -1376,8 +1376,8 @@ Then('no second run of the workflow {string} has started', async ({ e2e }, name)
 // data-repo="owner/name" each) shows the repositories whose owner/name holds what the field holds (any case), at most
 // 5; an empty field shows the 5 newest; no match shows no list (the typed URL is still imported by Next).
 //
-// E2E HOOK THE DEVELOPER MUST ADD, read only when MULTIAGENT_SIMULATION_ONLY=1 (the simulated onboarding,
-// packages/engine/service/areas/project-onboarding.js): MULTIAGENT_E2E_GITHUB_REPOS=<JSON array of { name:
+// E2E HOOK THE DEVELOPER MUST ADD, read only when CRAFTORIO_SIMULATION_ONLY=1 (the simulated onboarding,
+// packages/engine/service/areas/project-onboarding.js): CRAFTORIO_E2E_GITHUB_REPOS=<JSON array of { name:
 // 'owner/repo', private, updatedAt }>, newest first, stands for gh: onboardingAccounts answers GitHub installed and
 // signed in (account e2e-owner) and onboardingRepos('github') answers that array, without calling gh.
 const repoOptions = (page) => wizard(page).getByTestId('wizard-repo-list').getByTestId('wizard-repo-option');
@@ -1385,7 +1385,7 @@ const repoOptions = (page) => wizard(page).getByTestId('wizard-repo-list').getBy
 // a table | repository | updated |, newest first (updated: a date, YYYY-MM-DD)
 Given('the app is open where my GitHub account has the repositories:', async ({ e2e }, table) => {
   const repos = table.hashes().map((r) => ({ name: String(r.repository).trim(), private: false, updatedAt: `${String(r.updated).trim()}T10:00:00Z` }));
-  await e2e.open({ env: { MULTIAGENT_E2E_GITHUB_REPOS: JSON.stringify(repos) } });
+  await e2e.open({ env: { CRAFTORIO_E2E_GITHUB_REPOS: JSON.stringify(repos) } });
 });
 
 When('I clear the repository field in the wizard', async ({ e2e }) => {
@@ -1420,7 +1420,7 @@ Then('the wizard shows no repository list', async ({ e2e }) => {
 // A network or auth failure keeps today's failed line (wizard-review-backlog-activity data-state="failed") with its
 // reason and wizard-review-backlog-retry.
 //
-// E2E HOOK THE DEVELOPER MUST ADD, read only when MULTIAGENT_SIMULATION_ONLY=1: MULTIAGENT_E2E_ISSUES_FAIL=
+// E2E HOOK THE DEVELOPER MUST ADD, read only when CRAFTORIO_SIMULATION_ONLY=1: CRAFTORIO_E2E_ISSUES_FAIL=
 // disabled|network stands for gh issue list on any project's backlog read (the review's getBacklog / syncBacklog and
 // the Backlog screen's sync), a local file:// import included, which then stands for the GitHub repository
 // https://github.com/e2e-owner/<the local folder's name>; without calling gh the read fails as gh does:
@@ -1430,11 +1430,11 @@ const ISSUES_DISABLED = 'Issues are turned off in this repository';
 const reviewBacklog = (page) => review(page).getByTestId('wizard-review-backlog');
 
 Given('the app is open where the GitHub repositories I import have their Issues turned off', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ISSUES_FAIL: 'disabled' } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ISSUES_FAIL: 'disabled' } });
 });
 
 Given('the app is open where reading GitHub issues fails because the network is down', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_ISSUES_FAIL: 'network' } });
+  await e2e.open({ env: { CRAFTORIO_E2E_ISSUES_FAIL: 'network' } });
 });
 
 Then("the review's Backlog card says {string} without a Retry", async ({ e2e }, text) => {

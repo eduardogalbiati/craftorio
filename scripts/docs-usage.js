@@ -3,7 +3,7 @@
 // run and session, the .md files under docs/agents/ and skills/ and AGENTS.md the agent read (its
 // Read tool calls), the files it edited (city-agents' touchOf: its change tools), the topic docs of
 // the folders it edited without reading them (TOPICS), and the rules the commands and edits show
-// broken (a shared list edited, a push to main, a real run attempted: under MULTIAGENT_SIMULATION_ONLY
+// broken (a shared list edited, a push to main, a real run attempted: under CRAFTORIO_SIMULATION_ONLY
 // the engine refuses it, so the stream shows the try, not a run); then the reads per doc, the
 // docs no session read and the rules the data cannot show (NOT_MEASURED).
 // Runs are <workspace>/runs/<id> read through readRunRecord (the record upgrade on read, #350), so
@@ -13,7 +13,7 @@
 //   node scripts/docs-usage.js [--workspace <dir>] [--root <repo>] [--project <id>] [--since YYYY-MM-DD] [--json]
 //   npm run docs:usage -- --project craftorio --since 2026-09-26
 //
-// Defaults: $MULTIAGENT_WORKSPACE (else ~/multiagent-workspace), this repository, its project id
+// Defaults: $CRAFTORIO_WORKSPACE (else ~/multiagent-workspace), this repository, its project id
 // and the last 30 days.
 
 const fs = require('fs');
@@ -41,7 +41,7 @@ const RULES = ['shared_list_edit', 'push_to_main', 'real_run_in_check'];
 
 const NOT_MEASURED = [
   'a shared name list kept one item per line and sorted (npm run lint:lists checks the files, not the sessions)',
-  'a command run with a VAR= prefix that MULTIAGENT_SIMULATION_ONLY already covers',
+  'a command run with a VAR= prefix that CRAFTORIO_SIMULATION_ONLY already covers',
   'a commit to the default branch that was never pushed',
   'the decision a change of behaviour needed, read in docs/agents/decisions.md before the change',
   'docs and skills given in the prompt instead of read (a step\'s skills, AGENTS.md loaded by the CLI through CLAUDE.md)',
@@ -136,7 +136,7 @@ function sessionsOfRun(summary, events) {
 
 /** `{ markdown, model }` over the runs of `project` started since `since` (YYYY-MM-DD). */
 function docsUsage({
-  workspace = process.env.MULTIAGENT_WORKSPACE || path.join(os.homedir(), 'multiagent-workspace'),
+  workspace = process.env.CRAFTORIO_WORKSPACE || path.join(os.homedir(), 'multiagent-workspace'),
   root = path.join(__dirname, '..'),
   project = 'craftorio',
   since = new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10),
@@ -198,7 +198,7 @@ function markdownOf(model) {
     `# Docs usage: ${model.project} since ${model.since}`,
     `${model.runs.length} runs, ${sessions} sessions.`,
     '## Broken rules',
-    '`real_run_in_check` counts the attempts (a run command without `--mock`); the engine refuses a real run under `MULTIAGENT_SIMULATION_ONLY`.',
+    '`real_run_in_check` counts the attempts (a run command without `--mock`); the engine refuses a real run under `CRAFTORIO_SIMULATION_ONLY`.',
     table(['Rule', 'Times', 'Runs'], byCount(model.rules_broken).map(([rule, n]) => [`\`${rule}\``, n, runsBroken(rule).join(', ') || '-'])),
     '## Topic docs skipped (folder edited, doc not read in the session)',
     table(['Topic doc', 'Sessions'], byCount(model.skipped_by_topic).map(([d, n]) => [d, n])),

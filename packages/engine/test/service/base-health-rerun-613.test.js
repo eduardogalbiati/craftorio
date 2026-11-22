@@ -22,9 +22,9 @@ const FLAKY = 'flaky passes on its second run';
 const BROKEN = 'broken always fails';
 
 let saved;
-test.beforeEach(() => { saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
+test.beforeEach(() => { saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
@@ -74,7 +74,7 @@ function nodeProject(t) {
 
 test('#613 the service re-runs only the failed files in one command: red twice is recorded, red then green is a flaky sighting', async (t) => {
   const { service, api } = makeService(t);
-  process.env.MULTIAGENT_LOCKS_DIR = tmp(t, 'bh613s-locks-');
+  process.env.CRAFTORIO_LOCKS_DIR = tmp(t, 'bh613s-locks-');
   const repo = nodeProject(t);
   const project = await api['projects:create']({ name: 'bh613', folder: repo });
   const logs = [];

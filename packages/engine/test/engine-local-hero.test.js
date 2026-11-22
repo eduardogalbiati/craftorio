@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../engine/workflow');
 const evidence = require('../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root } = require('./engine-helpers');
 
 // ---- software-development-local-hero: local worktree, automatic local merge, no CI/PR --------

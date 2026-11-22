@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../engine/workflow');
 const evidence = require('../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root, until } = require('./engine-helpers');
 
 test('extractJson takes the last ```json block of the response', () => {

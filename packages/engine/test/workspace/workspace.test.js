@@ -47,16 +47,16 @@ test('a registered path that disappeared is reported to warn the user', (t) => {
   assert.equal(r.registered, gone);
 });
 
-test('MULTIAGENT_WORKSPACE overrides without querying the registry', (t) => {
+test('CRAFTORIO_WORKSPACE overrides without querying the registry', (t) => {
   const home = tmpHome(t);
   const store = { get() { throw new Error('should not read'); }, set() { throw new Error('should not write'); } };
-  const r = resolveWorkspace({ store, env: { MULTIAGENT_WORKSPACE: path.join(home, 'env') }, home });
+  const r = resolveWorkspace({ store, env: { CRAFTORIO_WORKSPACE: path.join(home, 'env') }, home });
   assert.deepEqual([r.source, r.dir], ['env', path.join(home, 'env')]);
 });
 
-// #120: an agent's own check (MULTIAGENT_SIMULATION_ONLY=1) that was not given its run's scratch
+// #120: an agent's own check (CRAFTORIO_SIMULATION_ONLY=1) that was not given its run's scratch
 // workspace must never fall back to the owner's registered or default workspace.
-test('simulation only (MULTIAGENT_SIMULATION_ONLY=1) without MULTIAGENT_WORKSPACE never returns the registered or the default workspace', (t) => {
+test('simulation only (CRAFTORIO_SIMULATION_ONLY=1) without CRAFTORIO_WORKSPACE never returns the registered or the default workspace', (t) => {
   const home = tmpHome(t);
   const registered = path.join(home, 'registered');
   fs.mkdirSync(registered);
@@ -64,7 +64,7 @@ test('simulation only (MULTIAGENT_SIMULATION_ONLY=1) without MULTIAGENT_WORKSPAC
   const store = { get() { throw new Error('should not read the registry in simulation only'); }, set() { throw new Error('should not write it either'); } };
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-sim-'));
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
-  const r = resolveWorkspace({ store, env: { MULTIAGENT_SIMULATION_ONLY: '1' }, home, tmp: tmpDir });
+  const r = resolveWorkspace({ store, env: { CRAFTORIO_SIMULATION_ONLY: '1' }, home, tmp: tmpDir });
   assert.equal(r.source, 'simulation');
   assert.equal(r.dir, path.join(tmpDir, 'multiagent-simulation', 'workspace'));
   assert.notEqual(r.dir, registered);
@@ -72,9 +72,9 @@ test('simulation only (MULTIAGENT_SIMULATION_ONLY=1) without MULTIAGENT_WORKSPAC
   assert.equal(r.registered, null);
 });
 
-test('MULTIAGENT_WORKSPACE (an agent\'s own run scratch workspace, set by the engine) still wins over simulation only', (t) => {
+test('CRAFTORIO_WORKSPACE (an agent\'s own run scratch workspace, set by the engine) still wins over simulation only', (t) => {
   const home = tmpHome(t);
-  const r = resolveWorkspace({ store: memStore(), env: { MULTIAGENT_WORKSPACE: path.join(home, 'scratch'), MULTIAGENT_SIMULATION_ONLY: '1' }, home });
+  const r = resolveWorkspace({ store: memStore(), env: { CRAFTORIO_WORKSPACE: path.join(home, 'scratch'), CRAFTORIO_SIMULATION_ONLY: '1' }, home });
   assert.deepEqual([r.source, r.dir], ['env', path.join(home, 'scratch')]);
 });
 

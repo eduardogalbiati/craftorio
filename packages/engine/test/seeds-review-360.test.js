@@ -3,7 +3,7 @@
 // boundary) and answers the parsed runs; issues.cliTargetOrName takes a repository URL or an owner/name
 // and refuses anything else; two seed runs saved in the same millisecond get two folders (-1 suffix).
 // No model is called and gh/glab are never started.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -17,7 +17,7 @@ const issues = require('../domains/backlog/issues');
 const { runSeed, listSeedRuns } = require('../domains/oracle/oracle-seeds');
 
 function makeCtx(t, execCli) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seeds-review-360-ws-'));
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   t.after(() => service.shutdown());

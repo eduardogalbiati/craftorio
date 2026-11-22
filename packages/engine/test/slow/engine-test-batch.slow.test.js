@@ -10,7 +10,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..', '..', '..', '..');
 
 async function runTestBatch({ mockSequences, answers = {}, inputs = {}, issues } = {}) {

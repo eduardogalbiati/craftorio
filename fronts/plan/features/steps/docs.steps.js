@@ -1,7 +1,7 @@
 // Steps of fronts/plan/features/docs.feature (#647, write doc phase 1): Plan & Design > Documents, the
 // editor of an item's intent and spec with the writer's chat, the changes by request, the unreviewed
 // queue and the SDLC gates (docs/work/write-doc/spec.md R1, R8-R13). Opening the screen reuses
-// app.steps.js ("I open {string} in the sidebar"). The run is simulated (MULTIAGENT_SIMULATION_ONLY):
+// app.steps.js ("I open {string} in the sidebar"). The run is simulated (CRAFTORIO_SIMULATION_ONLY):
 // the writer's draft, its turns and the review come from the mock provider.
 //
 // Assumes these data-testids (the developer adds them; skills/ui-conventions):

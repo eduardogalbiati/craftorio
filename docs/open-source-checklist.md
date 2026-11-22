@@ -34,7 +34,7 @@ Audit of `main` (d19a24c) on 2026-10-22, before making the repository public. St
 ## C. Already in place (verified)
 
 - MIT `LICENSE` (2026, Eduardo Galbiati), consistent with `package.json`, `native/Cargo.toml` and README.
-- `CONTRIBUTING.md` builds from a clean clone: `.nvmrc` 24, `npm install`, `npm start`, Rust optional with a JS fallback, `MULTIAGENT_AUTH=off`.
+- `CONTRIBUTING.md` builds from a clean clone: `.nvmrc` 24, `npm install`, `npm start`, Rust optional with a JS fallback, `CRAFTORIO_AUTH=off`.
 - `SECURITY.md`, issue templates (bug, feature, config with security link), PR template.
 - CI is fork-safe: `pull_request` (not `pull_request_target`), no `secrets.*` in any workflow, status steps guarded by same-repo check; `preview.yml` is dispatch-only; least-privilege `permissions:`.
 - No secrets in the working tree or in history (grep for `sk-ant-`, `ghp_`, `github_pat_`, `eyJhbGci`, `AKIA`, `sb_secret_`, `service_role`: only a redaction regex and fake test tokens). `.env*`, `runs/`, `build/`, `dist/`, `generated/`, test output all gitignored.

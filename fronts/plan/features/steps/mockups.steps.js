@@ -14,7 +14,7 @@
 //   mockup-selection-chip        in the chat's composer, one per selected element
 // "New mockup" opens a dialog (role=dialog, named "New mockup") with a "Title" textbox, a textbox for
 // the prompt (named "Prompt" or "Describe the screen") and a "Create" / "Generate" button; the
-// simulated designer (MULTIAGENT_SIMULATION_ONLY) writes the screen.
+// simulated designer (CRAFTORIO_SIMULATION_ONLY) writes the screen.
 // A seeded mockup is written in the scratch workspace through the mockups domain
 // (fronts/plan/engine/domains/mockups.js createScreen), required inside the step. The editor window
 // is found among the app's windows (e2e.app.windows()) by its root and kept as e2e.mockupWindow; the

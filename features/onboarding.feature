@@ -50,7 +50,7 @@ Feature: Bring a project in with a guided wizard
     # #724: once the wizard closes the tray keeps only the imports running or failed; this one is cloned
     And the progress tray does not list the project "tray-641"
 
-  # The simulated analysis (MULTIAGENT_SIMULATION_ONLY=1) maps the sample repository's code without a model
+  # The simulated analysis (CRAFTORIO_SIMULATION_ONLY=1) maps the sample repository's code without a model
   # call. #730: the review no longer ranks refactors to pick (its findings are filed one by one, see below).
   @issue-642 @issue-730
   Scenario: The review shows the city and the backlogs, and Finish keeps the idea
@@ -120,7 +120,7 @@ Feature: Bring a project in with a guided wizard
     Then the project page of "dismiss-642" is open
     And the project page does not show the Next steps card
 
-  # #644 (onboarding step 7): the whole journey of a first start, simulated (MULTIAGENT_SIMULATION_ONLY=1,
+  # #644 (onboarding step 7): the whole journey of a first start, simulated (CRAFTORIO_SIMULATION_ONLY=1,
   # the mock provider). A new workspace has no project, so Home shows its empty state; its "Create a
   # project" opens the wizard (until #644 it opened the old New project dialog). The sample repository is
   # a local git repository with some code in the scenario's scratch folder, imported by its file:// URL.
@@ -395,7 +395,7 @@ Feature: Bring a project in with a guided wizard
   # Oracle. Once it is done the project's City is grouped by the plan's districts, never "No city plan yet",
   # and "Analyze again" (#782: "Analyze this project" only for a stale or moved plan) only refreshes the plan.
   # The review's "Open the city" finishes the wizard and lands on that City. The simulated plan is drawn
-  # without a model call (MULTIAGENT_SIMULATION_ONLY=1).
+  # without a model call (CRAFTORIO_SIMULATION_ONLY=1).
   @issue-731 @quarantine
   Scenario: Open the city after the analysis lands on the project's City drawn from its plan, and Analyze only refreshes it
     Given the app is open
@@ -696,7 +696,7 @@ Feature: Bring a project in with a guided wizard
 
   # #781: the analysis says what it is doing and what it found, one activity line per phase. The sample
   # repository has 4 commits and JavaScript files. The simulated analysis makes no model call
-  # (MULTIAGENT_SIMULATION_ONLY=1), so the Oracle's phase reads "not needed". The line of a phase while it runs
+  # (CRAFTORIO_SIMULATION_ONLY=1), so the Oracle's phase reads "not needed". The line of a phase while it runs
   # (the Oracle's reading and elapsed time) needs a held turn: the unit tests cover it.
   @issue-781
   Scenario: Step 3 shows the analysis phases ending done with what they found, and Continue stays available

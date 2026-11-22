@@ -24,6 +24,8 @@ const RUNNER = [
   'packages/engine/engine/suite-command-line.js',
   // #695: affected-tests.js reads the tests' file reads and shares the comment remover
   'packages/engine/engine/source-text.js', 'packages/engine/engine/test-reads.js',
+  // T2b: the runner bridges the old MULTIAGENT_* names first
+  'packages/engine/domains/workspace/legacy-env.js',
 ];
 
 const PROBE = `const test = require('node:test');
@@ -66,8 +68,8 @@ test('#528 an agent\'s whole npm test lends its suite slot to the test files it 
   const locks = path.join(dir, 'locks');
   const env = {
     ...process.env,
-    MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_CONCURRENCY: '1', MULTIAGENT_TEST_TIMEOUT_MS: '30000',
-    MULTIAGENT_TEST_HUMAN_LOG: path.join(dir, 'human.log'), MULTIAGENT_LOCKS_DIR: locks, PROBE_OUT: out,
+    CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_CONCURRENCY: '1', CRAFTORIO_TEST_TIMEOUT_MS: '30000',
+    CRAFTORIO_TEST_HUMAN_LOG: path.join(dir, 'human.log'), CRAFTORIO_LOCKS_DIR: locks, PROBE_OUT: out,
   };
   delete env.NODE_TEST_CONTEXT;
   delete env[SUITE_SLOT_ENV]; // this test may itself run inside a suite step or a base check

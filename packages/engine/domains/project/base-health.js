@@ -11,7 +11,7 @@
 // - runBaseCheck: once per roadmap stage, after a merge outside the roadmap (#749), and at once after
 //   a merge "not tested green"; skipped (no suite) when nothing a test reads merged since the last
 //   green check (the tip is lastGreen's commit, or only docs/** and *.md changed). The whole suite runs on a clean detached checkout of the base tip (<workspace>/worktrees/
-//   base-check-<project>), with no agent, in simulation (MULTIAGENT_SIMULATION_ONLY=1), one check at
+//   base-check-<project>), with no agent, in simulation (CRAFTORIO_SIMULATION_ONLY=1), one check at
 //   a time, deferred while a release run holds the base. A red test files a bug issue naming the
 //   commit range (last green, first red) and the log; with Settings › Execution's onRed 'fix' a
 //   fix item, mode auto, goes in a new stage before the roadmap's current one (packages/engine/domains/roadmap/roadmap.js

@@ -26,7 +26,7 @@ const commits = (n) => `${n} commit${n === 1 ? '' : 's'}`;
 
 // the scenario's scratch folder (the workspace is <scratch>/workspace)
 function scratchOf(e2e) {
-  const scratch = e2e.scratch || (process.env.MULTIAGENT_WORKSPACE && path.dirname(process.env.MULTIAGENT_WORKSPACE));
+  const scratch = e2e.scratch || (process.env.CRAFTORIO_WORKSPACE && path.dirname(process.env.CRAFTORIO_WORKSPACE));
   if (!scratch) throw new Error('no scratch folder: open the app first');
   return scratch;
 }

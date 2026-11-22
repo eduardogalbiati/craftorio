@@ -1,5 +1,5 @@
 // Steps of features/account.feature (#315): the account only counts the people using the app (no
-// trial, no plan). The E2E app runs with sign-in off (MULTIAGENT_AUTH=off), so the steps push, from
+// trial, no plan). The E2E app runs with sign-in off (CRAFTORIO_AUTH=off), so the steps push, from
 // the Electron main process, the account state apps/desktop/host/main.js broadcasts on `auth:changed`
 // ({ user, required, configured, providers, signingIn }), as a real sign-in would. A state pushed
 // before the window's first authState() answer could be overwritten by it: a push is retried until

@@ -29,6 +29,6 @@ allowlisted environment: cloud keys, API keys and the SSH agent stay out; GitHub
 only agents allowed to run `gh`/`glab`. A workflow lists any other variable its tests need in
 `env: { passthrough: [...] }`.
 
-Running from source, `MULTIAGENT_AUTH=off` skips the sign-in (development, tests, screenshots, the
+Running from source, `CRAFTORIO_AUTH=off` skips the sign-in (development, tests, screenshots, the
 local preview and `npm run serve`). An app showing a remote engine (Settings › Execution › Engine)
-cannot sign that engine's server in yet: the server runs with `MULTIAGENT_AUTH=off`. The account's database is defined in `supabase/migrations/`.
+cannot sign that engine's server in yet: the server runs with `CRAFTORIO_AUTH=off`. The account's database is defined in `supabase/migrations/`.

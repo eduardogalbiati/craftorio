@@ -1,7 +1,7 @@
 // Agent inboxes (#240), service level, beyond the acceptance tests (agent-inbox-240.test.js): each
 // owner's other request kinds and their refusals, through po:request / supervisor:request. Everything
-// runs simulated (MULTIAGENT_SIMULATION_ONLY=1): no model, no gh, no real run.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+// runs simulated (CRAFTORIO_SIMULATION_ONLY=1): no model, no gh, no real run.
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -3,7 +3,7 @@
 // While another run holds the machine-wide `suite` slot, the service's base check
 // (packages/engine/service/areas/base-health.js afterBaseMerge) waits: its suite does not start, and the Roadmap is
 // told "base check waiting for the suite slot" (a `baseCheck:changed` push).
-// Contract: the area's check takes the slot in machine-slot slotDir() (MULTIAGENT_LOCKS_DIR when set,
+// Contract: the area's check takes the slot in machine-slot slotDir() (CRAFTORIO_LOCKS_DIR when set,
 // else the machine folder; the test points it at a temp folder); the waiting push has status 'waiting'
 // or a string field matching /waiting for the suite slot/; no 'running' push before the slot is free.
 //
@@ -25,7 +25,7 @@
 // - The dispatcher skips such an item: the roadmap stays 'running' (no pausedBy, no error), the item
 //   reads 'skipped'.
 // - runBaseCheck takes the suite slot (base-health-slot-527.test.js): the slot folder is a temp
-//   MULTIAGENT_LOCKS_DIR here.
+//   CRAFTORIO_LOCKS_DIR here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -42,9 +42,9 @@ const loadRoadmap = () => require('../../domains/roadmap/roadmap');
 const RED = { test: 'cart totals include tax', file: 'test/cart.test.js', error: 'expected 110, got 100' };
 
 let saved;
-test.beforeEach(() => { saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
+test.beforeEach(() => { saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
@@ -52,7 +52,7 @@ test.afterEach(() => {
 function tmpLocks(t) {
   const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'bh527c-locks-'));
   t.after(() => fs.rmSync(locks, { recursive: true, force: true, maxRetries: 3 }));
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   return locks;
 }
 

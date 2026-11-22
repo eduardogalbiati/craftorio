@@ -7,7 +7,7 @@
 // and every agent gets the mock provider. Each adapter says what it is in `simulated`.
 // WorkflowRun takes one as its `machine` option (the one matching `mock` when none is given) and
 // refuses a mismatch: a real run never takes the simulated adapter, nor the reverse. The safety rule
-// (MULTIAGENT_SIMULATION_ONLY refuses real providers, packages/engine/engine/providers.js) is not here: a real
+// (CRAFTORIO_SIMULATION_ONLY refuses real providers, packages/engine/engine/providers.js) is not here: a real
 // adapter under simulation-only is still refused where it was.
 
 'use strict';

@@ -73,7 +73,7 @@ function writeFinishedRun(e2e, issue) {
 }
 
 Given('the app is open with the pull request #{int} open on the platform', async ({ e2e }, number) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_PR_FILE: PR_FILE } });
+  await e2e.open({ env: { CRAFTORIO_E2E_PR_FILE: PR_FILE } });
   e2e.pullRequest = { number, url: `${e2e.project.repo}/pull/${number}` };
   answerPr(e2e, number, OPEN);
 });

@@ -9,7 +9,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 

@@ -14,9 +14,9 @@ test('a turn with two result events whose first carries US$ 15 counts toward max
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cost-limit-277-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   const fake = path.join(__dirname, 'fixtures', 'fake-claude-multi-result.js').replace(/\\/g, '/');
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, [

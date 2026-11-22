@@ -8,7 +8,7 @@
 //   not applied to ai-development-local-hero.yaml (tests first: its tests are always written), and
 //   the plan's summary names no Cost step; software-development-local-hero.yaml keeps it as today;
 // - skills/backlog-product-owner/SKILL.md says the workflow is fixed by the owner.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

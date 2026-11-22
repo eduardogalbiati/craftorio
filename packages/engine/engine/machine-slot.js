@@ -5,7 +5,7 @@
 //
 // A slot is a file <dir>/<name>.slot created exclusively, holding { pid, host, token, started,
 // holder }. It is freed by its holder (release), or taken over when its process is gone (same host)
-// or it is older than maxHoldMs (a holder that hung). dir: MULTIAGENT_LOCKS_DIR, else the OS temp
+// or it is older than maxHoldMs (a holder that hung). dir: CRAFTORIO_LOCKS_DIR, else the OS temp
 // folder (shared by every workspace and every run's scratch workspace on this machine).
 // A child process started by the holder (the screenshots step runs `npm run screenshot`) inherits
 // the slot: the holder passes its token in SCREENSHOT_SLOT_ENV, and the child does not wait for it.
@@ -19,17 +19,17 @@ const path = require('path');
 const crypto = require('crypto');
 
 const SCREENSHOT_SLOT = 'screenshot';
-const SCREENSHOT_SLOT_ENV = 'MULTIAGENT_SCREENSHOT_SLOT';
+const SCREENSHOT_SLOT_ENV = 'CRAFTORIO_SCREENSHOT_SLOT';
 const MAX_HOLD_MS = 15 * 60e3;
 const WAIT_MS = 20 * 60e3;
 const SUITE_SLOT = 'suite';
-const SUITE_SLOT_ENV = 'MULTIAGENT_SUITE_SLOT';
+const SUITE_SLOT_ENV = 'CRAFTORIO_SUITE_SLOT';
 // suite-step's MAX_TIMEOUT_MS (3 h) plus a margin for its grace and reruns (not imported: a cycle)
 const SUITE_MAX_HOLD_MS = 3 * 60 * 60e3 + 15 * 60e3;
 // #640: the onboarding's project map and refactor ranking (service/areas/project-onboarding.js), held
 // once per job; above the two Oracle / Product Owner turns (15 min each) with a margin
 const ANALYSIS_SLOT = 'analysis';
-const ANALYSIS_SLOT_ENV = 'MULTIAGENT_ANALYSIS_SLOT';
+const ANALYSIS_SLOT_ENV = 'CRAFTORIO_ANALYSIS_SLOT';
 const ANALYSIS_MAX_HOLD_MS = 45 * 60e3;
 
 const SLOT_DEFAULTS = {
@@ -39,10 +39,10 @@ const SLOT_DEFAULTS = {
 };
 const defaultsOf = (name) => SLOT_DEFAULTS[name] || SLOT_DEFAULTS[SCREENSHOT_SLOT];
 
-// The machine-wide folder, whatever MULTIAGENT_LOCKS_DIR says (a suite step sets its own): the E2E
+// The machine-wide folder, whatever CRAFTORIO_LOCKS_DIR says (a suite step sets its own): the E2E
 // suite's Electron launches take the slot here, so they wait for every other run's captures
 const machineSlotDir = () => path.join(os.tmpdir(), 'craftorio', 'locks');
-const slotDir = () => process.env.MULTIAGENT_LOCKS_DIR || machineSlotDir();
+const slotDir = () => process.env.CRAFTORIO_LOCKS_DIR || machineSlotDir();
 const slotFile = (name, dir = slotDir()) => path.join(dir, `${name}.slot`);
 
 function pidAlive(pid) {

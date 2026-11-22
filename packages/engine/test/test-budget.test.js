@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun, attemptSummary } = require('../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..', '..', '..');
 
 // An agent's fully resolved options: what the engine builds before every turn (workflow.js's own

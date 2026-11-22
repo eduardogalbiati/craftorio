@@ -3,7 +3,7 @@
 // reason and a complexity from 1 to 5 (PRIORITY_SCHEMA, checked with packages/engine/domains/workspace/json-schema.js). It reads
 // the Danger Zone scores of the Architecture tab (value), the conflict map and its hot spots (risk)
 // and the roadmap's unfinished items: a proposal on files such an item will change goes later (#150).
-// `mock` (and MULTIAGENT_SIMULATION_ONLY, decided by the service) answers with mockPriority: no model
+// `mock` (and CRAFTORIO_SIMULATION_ONLY, decided by the service) answers with mockPriority: no model
 // call, no cost. Kept out of packages/engine/domains/po/product-owner.js (at its size ceiling): the turn copies callAgent's
 // shape and records its usage with the Product Owner's (recordUsage, checkBudget).
 // rankProject assembles what the turn reads from the workspace and saves the ranking: the Refactor

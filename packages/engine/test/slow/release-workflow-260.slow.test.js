@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'release.yaml');
 const load = () => loadWorkflow(WORKFLOW);

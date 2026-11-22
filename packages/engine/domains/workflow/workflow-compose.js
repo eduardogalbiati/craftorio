@@ -25,7 +25,7 @@ const {
 } = require('@craftorio/shared/onboarding-model');
 const { MANIFEST_FILE } = require('../project/project-manifest');
 
-const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
+const CRAFTORIO_DIR = path.posix.dirname(MANIFEST_FILE);
 
 // #630 (spec R6): local merges into the local base and pushes main as the workflow's last step;
 // remote opens a pull request. ci: what the CI runs on. tests: E2E first when the project has an E2E suite.
@@ -443,7 +443,7 @@ function composeWorkflowSet({ profile, answers, facts, existing } = {}) {
   const workflows = set.map(({ category, doc }) => ({
     name: doc.metadata.name,
     category,
-    path: `${MULTIAGENT_DIR}/workflows/${doc.metadata.name}.yaml`,
+    path: `${CRAFTORIO_DIR}/workflows/${doc.metadata.name}.yaml`,
     yaml: dump(doc),
   }));
   const manifest = mergeManifest(existing, set.map(({ category, doc }) => ({ name: doc.metadata.name, file: `workflows/${doc.metadata.name}.yaml`, category, description: doc.metadata.description })));

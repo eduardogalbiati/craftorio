@@ -417,13 +417,13 @@ Then('the window refuses the dropped file', async ({ e2e }) => {
 });
 
 // ---- started without Chromium's sandbox (#476) --------------------------------------------------------
-// The Linux AppImage's launcher sets MULTIAGENT_NO_SANDBOX=1 when it falls back to --no-sandbox; the
+// The Linux AppImage's launcher sets CRAFTORIO_NO_SANDBOX=1 when it falls back to --no-sandbox; the
 // scenario sets it the same way. Settings › About's warning: data-testid="settings-sandbox-warning".
 
 const sandboxWarning = (page) => page.getByTestId('settings-sandbox-warning');
 
 Given('the app was started without the Chromium sandbox', async ({ e2e }) => {
-  await e2e.open({ env: { MULTIAGENT_NO_SANDBOX: '1' } });
+  await e2e.open({ env: { CRAFTORIO_NO_SANDBOX: '1' } });
 });
 
 Then('Settings warns that the app runs without the sandbox', async ({ e2e }) => {

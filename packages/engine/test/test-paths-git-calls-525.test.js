@@ -33,7 +33,7 @@ const path = require('path');
 const { snapshot, changedTestFiles, existingRefs } = require('../engine/test-paths');
 const { WorkflowRun } = require('../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 // fixtures run git outside the counting window
 const git = (cwd, ...args) => childProcess.execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();

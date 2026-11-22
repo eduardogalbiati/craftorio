@@ -62,7 +62,7 @@ function project(ev, dirs) {
 
 // The whole simulated run (test/engine-helpers.js's runSoftwareDevelopment), its events projected.
 async function simulatedSoftwareDevelopmentEvents() {
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.02';
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.02';
   const { runSoftwareDevelopment } = require('./engine-helpers');
   const { events, finished } = await runSoftwareDevelopment({});
   const dirs = [[root, '<repo>'], [os.tmpdir(), '<tmp>'], [os.homedir(), '<home>']];

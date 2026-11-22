@@ -4,7 +4,7 @@
 // ~800 characters). error_max_turns keeps its #302 handling (not an error for the engine).
 // Seams: the Claude adapter's parse (registry.byId('claude').parse, what the engine feeds each
 // stream-json event to) and providers.runTurn on test/fixtures/fake-claude-during-execution.js (a
-// local script, calls no model). runTurn refuses a real provider under MULTIAGENT_SIMULATION_ONLY,
+// local script, calls no model). runTurn refuses a real provider under CRAFTORIO_SIMULATION_ONLY,
 // so each runTurn test lifts the guard and restores it after (like refactor-priority-real-turn-728).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -32,10 +32,10 @@ function parseResult(ev) {
 // runs one turn on the fake CLI with `flags`; resolves with the error it fails with (or null)
 async function failedTurn(t, flags = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-error-860-'));
-  const sim = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  const sim = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
   t.after(() => {
-    if (sim === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = sim;
+    if (sim === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = sim;
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
   });
   const { runTurn } = loadProviders();
@@ -145,7 +145,7 @@ test('#860 workflow: a step whose Claude turn fails during execution records the
   const { WorkflowRun } = require('../engine/workflow');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-error-wf-860-'));
   const saved = {};
-  for (const k of ['MULTIAGENT_SIMULATION_ONLY', 'MULTIAGENT_WORKSPACE', 'MULTIAGENT_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
+  for (const k of ['CRAFTORIO_SIMULATION_ONLY', 'CRAFTORIO_WORKSPACE', 'CRAFTORIO_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
   t.after(() => {
     for (const [k, v] of Object.entries(saved)) { if (v !== undefined) process.env[k] = v; }
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
@@ -174,7 +174,7 @@ test('#860 workflow: a step whose Claude turn fails during execution records the
 });
 
 test('#860 runTurn: the message adds nothing from the engine\'s environment', { timeout: 60000 }, async (t) => {
-  const key = 'MULTIAGENT_TEST_SECRET_860';
+  const key = 'CRAFTORIO_TEST_SECRET_860';
   process.env[key] = 'sk-secret-value-860';
   t.after(() => { delete process.env[key]; });
   const err = await failedTurn(t);

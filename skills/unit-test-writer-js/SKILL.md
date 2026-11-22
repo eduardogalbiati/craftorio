@@ -8,9 +8,9 @@ used_by: "test writer"
 
 # Unit tests: JavaScript / TypeScript
 
-**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+**Test workers (#367)**: a run gets `CRAFTORIO_TEST_WORKERS` (and `CRAFTORIO_E2E_WORKERS`) in its
 environment, the workers this machine gives each run so parallel runs do not overload it. Read it
-from the variables line of the command guide (`MULTIAGENT_TEST_WORKERS=<n>`) and pass the number to the runner you call: Jest `--maxWorkers=<n>`, Vitest `--maxWorkers=<n>`, node:test `--test-concurrency=<n>`, Mocha `--parallel --jobs <n>`.
+from the variables line of the command guide (`CRAFTORIO_TEST_WORKERS=<n>`) and pass the number to the runner you call: Jest `--maxWorkers=<n>`, Vitest `--maxWorkers=<n>`, node:test `--test-concurrency=<n>`, Mocha `--parallel --jobs <n>`.
 Unset: leave the runner's default.
 
 ## Framework and commands (never switch frameworks)
@@ -89,8 +89,8 @@ screenshot slot (one Electron screenshot at a time across all runs): waiting is 
   project has one.
 - UI checks never call real (paid) models: run them through the project's own check scripts
   (`scripts/smoke.js` when it has one), with its simulation-only switch set if it has one
-  (`MULTIAGENT_SIMULATION_ONLY=1`: set in the environment, never as a `VAR=` prefix, which headless
-  CLIs refuse) and a scratch workspace (this orchestrator: the run's own, `MULTIAGENT_WORKSPACE`,
+  (`CRAFTORIO_SIMULATION_ONLY=1`: set in the environment, never as a `VAR=` prefix, which headless
+  CLIs refuse) and a scratch workspace (this orchestrator: the run's own, `CRAFTORIO_WORKSPACE`,
   already set; never a path under the owner's workspace `runs/`); never a hand-written script that
   launches the app's main process directly.
 - Run them in the **foreground** with a command timeout (`npx electron check.js`). Never start them in

@@ -31,18 +31,18 @@ const { fixture, git, commit } = require('../worktree-helpers');
 const load = () => require('../../domains/project/base-health');
 const loadRoadmap = () => require('../../domains/roadmap/roadmap');
 
-// #528: runBaseCheck takes the `suite` slot (#527) in MULTIAGENT_LOCKS_DIR; each test gets its own
+// #528: runBaseCheck takes the `suite` slot (#527) in CRAFTORIO_LOCKS_DIR; each test gets its own
 // folder, so it never waits for a whole suite holding the machine's slot (the one running this file)
 let savedSlot;
 test.beforeEach(() => {
-  savedSlot = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env.MULTIAGENT_SUITE_SLOT };
-  delete process.env.MULTIAGENT_SUITE_SLOT;
+  savedSlot = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env.CRAFTORIO_SUITE_SLOT };
+  delete process.env.CRAFTORIO_SUITE_SLOT;
   const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'bh405-locks-'));
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   savedSlot.dir = locks;
 });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', savedSlot.locks], ['MULTIAGENT_SUITE_SLOT', savedSlot.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', savedSlot.locks], ['CRAFTORIO_SUITE_SLOT', savedSlot.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
   fs.rmSync(savedSlot.dir, { recursive: true, force: true, maxRetries: 3 });
@@ -355,7 +355,7 @@ test('#405 runBaseCheck runs the suite on a clean checkout of the base tip, in s
     seen.head = git(cwd, 'rev-parse', 'HEAD');
     seen.untracked = fs.existsSync(path.join(cwd, 'untracked-405.txt'));
     seen.tracked = fs.existsSync(path.join(cwd, 'b.txt'));
-    seen.sim = env?.MULTIAGENT_SIMULATION_ONLY;
+    seen.sim = env?.CRAFTORIO_SIMULATION_ONLY;
     return { failures: [], log: 'green' };
   };
   const r = await runBaseCheck(ws, { ...checkArgs(f), runSuite, exec: fx.exec });

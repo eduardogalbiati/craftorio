@@ -12,7 +12,7 @@ const { correctSessions, runCosts } = require('../../domains/run/run-costs');
 const { parseClaude } = require('../../engine/providers');
 const { WorkflowRun } = require('../../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 const at = (min) => new Date(Date.parse('2026-09-20T10:00:00.000Z') + min * 60e3).toISOString();
 const received = (min, turn, cost, cli) => ({

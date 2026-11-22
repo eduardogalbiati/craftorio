@@ -16,7 +16,7 @@ async function fakeRun(t, fixture, agent) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'budget-claude-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const saved = {};
-  for (const k of ['MULTIAGENT_SIMULATION_ONLY', 'MULTIAGENT_WORKSPACE', 'MULTIAGENT_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
+  for (const k of ['CRAFTORIO_SIMULATION_ONLY', 'CRAFTORIO_WORKSPACE', 'CRAFTORIO_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v !== undefined) process.env[k] = v; } });
   const fake = path.join(__dirname, 'fixtures', fixture).replace(/\\/g, '/');
   const file = path.join(dir, 'wf.yaml');

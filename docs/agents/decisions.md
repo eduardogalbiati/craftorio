@@ -100,7 +100,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   screenshots come in a later phase). Setup loses its Workflows step. Phase 1 covers spec R1, R2,
   R3, R5, R7 (today's workflows), R10, R11; create new, the revisited profile, the work model and the
   Monitor are later phases. Done as the plan's 7 steps, one run each, in order, each recorded in the
-  plan's Progress table, checked simulated only (`MULTIAGENT_SIMULATION_ONLY=1`, the mock provider,
+  plan's Progress table, checked simulated only (`CRAFTORIO_SIMULATION_ONLY=1`, the mock provider,
   `npm run screenshot`), no real model call. Why: the first project is the first impression, and
   nothing costs money nor fails silently in it. Spec and plan: `docs/work/first-project-onboarding/`.
 - **2026-10-31** (#489 of 2026-10-22, then the owner session of 2026-10-31): releases are "rc +
@@ -157,7 +157,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   root of `src/` made every later step costlier.
 - **2026-10-23** (#476): the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
   kernel forbids unprivileged user namespaces (Ubuntu 23.10+), but only as a last resort and never
-  silently: the launcher warns on stderr and sets `MULTIAGENT_NO_SANDBOX=1`, Settings › About shows
+  silently: the launcher warns on stderr and sets `CRAFTORIO_NO_SANDBOX=1`, Settings › About shows
   the warning, and the README gives the user's own alternative (the sysctl
   `kernel.apparmor_restrict_unprivileged_userns=0`, with its system-wide trade-off). An AppArmor
   profile shipped with the app needs root to install, which an AppImage cannot do; a `.deb` whose

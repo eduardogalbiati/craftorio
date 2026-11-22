@@ -13,7 +13,7 @@ const releases = require('../../domains/releases/releases');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
 const machineActions = require('../../engine/machine-actions');
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 // No user git config (identity, hooks, aliases), as on CI.
 const emptyConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gitcfg-')), 'config');

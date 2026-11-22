@@ -166,7 +166,7 @@ const SIGN_IN_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"
 <form method="post" action="/session" style="display: grid; gap: 8px; width: 320px">
 <label for="token">Engine token</label>
 <input id="token" name="token" type="password" autocomplete="off" required autofocus>
-<small>MULTIAGENT_SERVER_TOKEN on the engine's computer, or the token= part of the URL it printed. It is full control of that machine.</small>
+<small>CRAFTORIO_SERVER_TOKEN on the engine's computer, or the token= part of the URL it printed. It is full control of that machine.</small>
 <button type="submit">Sign in</button>
 </form></body></html>`;
 

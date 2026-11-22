@@ -20,7 +20,7 @@ const os = require('os');
 const path = require('path');
 const yaml = require('js-yaml');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');
 const HERO = path.join(WORKFLOWS, 'feature.yaml');

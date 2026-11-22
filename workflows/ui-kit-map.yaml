@@ -14,7 +14,7 @@
 # (`inferences`); the service (mockups.applyKitMap, #835) writes them into kit/components.css,
 # kit/components.html (the live gallery) and kit/kit.json (sources and inferences), one commit. It never writes to the
 # project's repository and records its assumptions instead of asking: no human_approval, the kit is
-# reviewed in the Mockups screen, not at a gate. Simulated (MULTIAGENT_SIMULATION_ONLY) the service
+# reviewed in the Mockups screen, not at a gate. Simulated (CRAFTORIO_SIMULATION_ONLY) the service
 # keeps the machine step only and does not start this workflow.
 # =============================================================================
 

@@ -18,7 +18,7 @@
 //   only when confirmedOnBase lists it (same test + file); otherwise it counts as the run's failure.
 //   When it is absent (null/undefined: no project), the #211 behaviour is unchanged.
 // - runBaseCheck takes runAlone and the suite slot (see the other #527 files); the slot folder is a temp
-//   MULTIAGENT_LOCKS_DIR here.
+//   CRAFTORIO_LOCKS_DIR here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -37,8 +37,8 @@ const PROJECT = 'proj-527-pre';
 const SLOW = { test: 'renders the big board', file: 'test/board.test.js', error: 'test timed out after 30000ms' };
 
 let savedLocks;
-test.beforeEach(() => { savedLocks = process.env.MULTIAGENT_LOCKS_DIR; });
-test.afterEach(() => { if (savedLocks === undefined) delete process.env.MULTIAGENT_LOCKS_DIR; else process.env.MULTIAGENT_LOCKS_DIR = savedLocks; });
+test.beforeEach(() => { savedLocks = process.env.CRAFTORIO_LOCKS_DIR; });
+test.afterEach(() => { if (savedLocks === undefined) delete process.env.CRAFTORIO_LOCKS_DIR; else process.env.CRAFTORIO_LOCKS_DIR = savedLocks; });
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -51,7 +51,7 @@ function tmpWs(t) {
   fs.mkdirSync(path.join(ws, 'backlog'), { recursive: true });
   const locks = path.join(ws, 'locks');
   fs.mkdirSync(locks, { recursive: true });
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   return { ws, locks };
 }
 

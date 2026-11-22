@@ -140,7 +140,7 @@ Every one of these has to learn about packages, once, in the phase that moves th
   `node_modules` holds symlinks (junctions on Windows) to the packages; the packager and the asar
   need to be checked with them, and `node-pty` stays a native module of the desktop app.
 - `scripts/ci-plan.js` (which OS runs what), `scripts/smoke.js`, the screenshot runner, the
-  `MULTIAGENT_SIMULATION_ONLY` guard, the `__dirname` rule for bundled defaults
+  `CRAFTORIO_SIMULATION_ONLY` guard, the `__dirname` rule for bundled defaults
   (`workflows/`, `skills/`…).
 - The hard rules in `AGENTS.md` that name folders (`src/service/channels/`, `src/renderer/views/`,
   `src/shared/`), the discovery-by-folder mechanisms (channels, areas, views, screenshot seeds) and

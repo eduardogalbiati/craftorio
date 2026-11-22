@@ -10,7 +10,7 @@
 //   keeps them as `inputReasons`, also for a key left out of `inputs`;
 // - ask's `mode: 'auto'` (the drawer, no toggle): the model's answer says `intent` ('plan' | 'register');
 //   an explicit 'plan' or 'issue' stays what it is. `intent` is optional: no intent is a plan.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

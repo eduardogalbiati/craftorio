@@ -400,7 +400,7 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'delegate',
-      description: 'Asks another agent and returns only its answer and cost (its reading stays out of your context). to: product-owner (a backlog analysis or a roadmap proposal; projectId), issue-draft (the Product Owner drafts an issue; projectId), supervisor (a run diagnosis or a gate recommendation, never the gate\'s answer; runId), analyzer (a run\'s tool-call and cost breakdown, read-only, no model call; runId), checker (runs a test file or test command on a scratch checkout of a branch with MULTIAGENT_SIMULATION_ONLY=1 and returns the result with its evidence, no model call, stopped after ~2 min; projectId, branch, command). Each call by a model costs money: say so.',
+      description: 'Asks another agent and returns only its answer and cost (its reading stays out of your context). to: product-owner (a backlog analysis or a roadmap proposal; projectId), issue-draft (the Product Owner drafts an issue; projectId), supervisor (a run diagnosis or a gate recommendation, never the gate\'s answer; runId), analyzer (a run\'s tool-call and cost breakdown, read-only, no model call; runId), checker (runs a test file or test command on a scratch checkout of a branch with CRAFTORIO_SIMULATION_ONLY=1 and returns the result with its evidence, no model call, stopped after ~2 min; projectId, branch, command). Each call by a model costs money: say so.',
       inputSchema: obj({
         to: { type: 'string', enum: DELEGATES },
         question: str('What to ask, in English'),

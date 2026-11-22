@@ -182,7 +182,7 @@ test('bundled workflows are seeded into the CLI workspace and the workspace copy
   // a user file with a bundled name: kept by the seeding and used by the CLI
   write(wfDir, 'feature.yaml', yamlOf('from-workspace', '1.0.0', 'workspace_step'));
   const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'run.js'), '--mock', '--auto-approve', '--task', 'cli test'], {
-    cwd: root, encoding: 'utf8', env: { ...process.env, MULTIAGENT_WORKSPACE: wsDir, MULTIAGENT_MOCK_DELAY_SCALE: '0.05' },
+    cwd: root, encoding: 'utf8', env: { ...process.env, CRAFTORIO_WORKSPACE: wsDir, CRAFTORIO_MOCK_DELAY_SCALE: '0.05' },
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /workspace_step/);

@@ -1,6 +1,6 @@
 // #333: every service channel survives hostile arguments. The sweep enumerates the manifest (no
 // hand-written list: a new channel is swept automatically) and calls each channel's function in a
-// scratch workspace (MULTIAGENT_SIMULATION_ONLY=1) with a fixed set of hostile values: the whole
+// scratch workspace (CRAFTORIO_SIMULATION_ONLY=1) with a fixed set of hostile values: the whole
 // argument hostile, then each named parameter hostile on its own (missing, null, a number, an array,
 // an object, '', '../../outside', an absolute path outside the workspace, both again ending at an
 // existing sentinel file ('../../outside/sentinel'), a 1 MB string, an object
@@ -66,7 +66,7 @@ function runSegment(wsDir, outsideAbs, from) {
   return new Promise((resolve) => {
     const events = [];
     const child = spawn(process.execPath, [RUNNER, wsDir, outsideAbs, String(from)], {
-      env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1' },
+      env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1' },
       stdio: ['ignore', 'pipe', 'ignore'],
       windowsHide: true,
     });

@@ -9,7 +9,7 @@
 // The commitment point (#258, packages/engine/domains/discovery/discovery-commit.js): discovery:commit-proposal asks the Product
 // Owner how a Ready card splits into issues, discovery:commit files the split the owner confirmed
 // on the project's synced repository and commits the card; the board lists the committed cards
-// with their delivery (`committed`). Under MULTIAGENT_SIMULATION_ONLY the proposal is the
+// with their delivery (`committed`). Under CRAFTORIO_SIMULATION_ONLY the proposal is the
 // rule-based one and the issues only join the workspace's synced backlog: never gh/glab, no model.
 // `preview` (the screen's developer mode, like po:file and po:split): the rule-based proposal, and a
 // commit that only answers with the commands it would run.

@@ -19,8 +19,8 @@ Feature: Settings › Agents & CLIs manages the CLIs, outside the first-run Setu
     And Agents & CLIs has a close button
     And Agents & CLIs shows no setup stepper and no Next or Skip
 
-  # Assumes a simulated machine can lack a CLI: MULTIAGENT_E2E_CLI_MISSING=glab (simulation only, like
-  # the other MULTIAGENT_E2E_* hooks) makes the engine's probes find no glab. The GitLab URL cannot be
+  # Assumes a simulated machine can lack a CLI: CRAFTORIO_E2E_CLI_MISSING=glab (simulation only, like
+  # the other CRAFTORIO_E2E_* hooks) makes the engine's probes find no glab. The GitLab URL cannot be
   # reached (the access error shows too); the CLI check runs anyway and warns that glab is missing.
   @issue-740
   Scenario: The wizard's CLI warning opens Agents & CLIs on the missing CLI, and closing it returns to the wizard's step

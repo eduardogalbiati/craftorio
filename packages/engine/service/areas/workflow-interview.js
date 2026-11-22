@@ -6,7 +6,7 @@
 // field and the questions the profile leaves open (packages/engine/domains/workflow/workflow-compose.js openQuestions).
 // #640: the free profile is always read first from the project's git history (authors, merges) and files
 // (test and check commands, languages); the model only fills the fields it leaves null (the release
-// style), and the fields git settles keep git's value. Under MULTIAGENT_SIMULATION_ONLY, or with no
+// style), and the fields git settles keep git's value. Under CRAFTORIO_SIMULATION_ONLY, or with no
 // field left open, no model is called (the seed's simulated run is saved) and the open fields stay open.
 // workflowCompose builds the workflow set from the last profile and the owner's answers, its manifest
 // merged into the repository's .multiagent/project.yaml; only with write: true are the files written to

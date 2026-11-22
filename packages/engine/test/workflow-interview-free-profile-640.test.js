@@ -1,5 +1,5 @@
 // #640 (onboarding step 3): the Ways of working profile from git is always computed for free; the model
-// is asked only for the fields it leaves null, and never under MULTIAGENT_SIMULATION_ONLY=1.
+// is asked only for the fields it leaves null, and never under CRAFTORIO_SIMULATION_ONLY=1.
 // Acceptance tests, written before the code.
 //
 // Spec (the interface these tests assume): require('../service/areas/workflow-interview')(ctx)
@@ -34,9 +34,9 @@ function tmp(t, prefix) {
 }
 
 function simulation(t, value) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = value;
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = value;
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
 }
 
 // a repository with one author, one commit, no merge, no tag, and an npm test script
@@ -95,7 +95,7 @@ test('#630 the model\'s team and merge never enter the profile (evidence only)',
   assert.equal(out.profile.mode, 'local', 'the model\'s merge: pr does not turn the project remote');
 });
 
-test('#640 under MULTIAGENT_SIMULATION_ONLY=1 the free profile comes back and no model is called', async (t) => {
+test('#640 under CRAFTORIO_SIMULATION_ONLY=1 the free profile comes back and no model is called', async (t) => {
   simulation(t, '1');
   const { area, project, oracle } = await setup(t);
   const out = await area.workflowInterview({ projectId: project.id });

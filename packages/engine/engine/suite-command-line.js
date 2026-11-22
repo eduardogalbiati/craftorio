@@ -20,7 +20,7 @@ const COMMAND_LINE_LIMITS = {
 const COMMAND_LINE_MARGIN = 100;
 // #553: the environment variable naming a file of test paths (one per line) the runner runs instead
 // of files on its command line (scripts/test.js), for a selection over the command-line limit
-const TEST_FILES_ENV = 'MULTIAGENT_TEST_FILES';
+const TEST_FILES_ENV = 'CRAFTORIO_TEST_FILES';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 

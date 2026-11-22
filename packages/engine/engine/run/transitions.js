@@ -252,7 +252,7 @@ const methods = {
       if (next) return next;
       // simulation: at most 3s, scaled like the mock's delays (as loopWait)
       const pace = prMonitorIntervalMs(Date.now() - (this.prMonitorChangedAt || Date.now()));
-      const interval = Math.min(pace, this.machine.simulated ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
+      const interval = Math.min(pace, this.machine.simulated ? 3000 * +(process.env.CRAFTORIO_MOCK_DELAY_SCALE ?? 1) : Infinity);
       if (interval !== this.prMonitorWait) this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
       this.prMonitorWait = interval;
       this.setStatus(this.orchestrator, 'waiting');
@@ -657,7 +657,7 @@ const methods = {
       return exhausted;
     }
     // simulation: at most 3s, scaled like the mock's delays (tests run with a small scale)
-    const interval = Math.min(parseDuration(cfg.interval, 60000), this.machine.simulated ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
+    const interval = Math.min(parseDuration(cfg.interval, 60000), this.machine.simulated ? 3000 * +(process.env.CRAFTORIO_MOCK_DELAY_SCALE ?? 1) : Infinity);
     this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
     this.setStatus(this.orchestrator, 'waiting');
     await sleep(interval, this.abort.signal);

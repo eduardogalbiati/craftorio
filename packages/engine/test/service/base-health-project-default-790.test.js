@@ -12,13 +12,13 @@ const { ISSUE_WORKFLOW, makeService, gitRepo } = require('./helpers');
 
 let saved;
 test.beforeEach(() => {
-  saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env.MULTIAGENT_SUITE_SLOT };
-  delete process.env.MULTIAGENT_SUITE_SLOT;
+  saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env.CRAFTORIO_SUITE_SLOT };
+  delete process.env.CRAFTORIO_SUITE_SLOT;
   saved.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bh790-locks-'));
-  process.env.MULTIAGENT_LOCKS_DIR = saved.dir;
+  process.env.CRAFTORIO_LOCKS_DIR = saved.dir;
 });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], ['MULTIAGENT_SUITE_SLOT', saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], ['CRAFTORIO_SUITE_SLOT', saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
   fs.rmSync(saved.dir, { recursive: true, force: true, maxRetries: 3 });

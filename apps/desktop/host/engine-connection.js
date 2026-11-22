@@ -170,12 +170,12 @@ const connectionView = (c, { tokenStorage: storage } = {}) => {
  *   { mode: 'local' }                                         this computer (the default)
  *   { mode: 'remote', url, host, token, address }             a window onto that engine
  *   { mode: 'remote', error, address }                        remote, but the setting is unusable
- * MULTIAGENT_ENGINE=local forces this computer. Under MULTIAGENT_SIMULATION_ONLY=1 only an engine on
+ * CRAFTORIO_ENGINE=local forces this computer. Under CRAFTORIO_SIMULATION_ONLY=1 only an engine on
  * this computer (127.0.0.1) is used: a check must never drive an engine that can start real runs.
  * An unencrypted address without the insecure opt-in is unusable (#480): no token is handed out.
  */
 function decideMode({ connection, env = {} }) {
-  if (env.MULTIAGENT_ENGINE === 'local') return { mode: 'local', reason: 'MULTIAGENT_ENGINE=local' };
+  if (env.CRAFTORIO_ENGINE === 'local') return { mode: 'local', reason: 'CRAFTORIO_ENGINE=local' };
   const c = normalizeConnection(connection);
   if (c.mode !== 'remote') return { mode: 'local' };
   const parsed = parseAddress(c.address);
@@ -183,7 +183,7 @@ function decideMode({ connection, env = {} }) {
   const insecure = insecureAddress(parsed);
   if (insecure && !c.insecure) return { mode: 'remote', address: c.address, url: parsed.url, error: insecure };
   if (!c.token) return { mode: 'remote', address: c.address, url: parsed.url, error: 'No token is saved for the remote engine: type it again.' };
-  if (env.MULTIAGENT_SIMULATION_ONLY === '1' && !isLoopback(parsed.hostname)) {
+  if (env.CRAFTORIO_SIMULATION_ONLY === '1' && !isLoopback(parsed.hostname)) {
     return { mode: 'local', reason: 'Simulation only: a remote engine is used only on this computer (127.0.0.1).' };
   }
   return { mode: 'remote', address: c.address, url: parsed.url, host: parsed.host, token: c.token };
@@ -217,7 +217,7 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
   if (parsed.error) return { ok: false, reason: 'address', message: parsed.error };
   const tok = String(token || parsed.token || '').trim();
   const where = { url: parsed.url, host: parsed.host };
-  if (!tok) return { ok: false, reason: 'token', ...where, message: 'Type the engine\'s token: MULTIAGENT_SERVER_TOKEN on the engine\'s computer, or the token= part of the URL it printed.' };
+  if (!tok) return { ok: false, reason: 'token', ...where, message: 'Type the engine\'s token: CRAFTORIO_SERVER_TOKEN on the engine\'s computer, or the token= part of the URL it printed.' };
   let res;
   try {
     res = await fetchImpl(`${parsed.url}/api/version`, {
@@ -228,7 +228,7 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
   } catch (e) {
     return { ok: false, reason: 'unreachable', ...where, message: unreachableMessage(e, parsed, timeoutMs) };
   }
-  if (res.status === 401) return { ok: false, reason: 'token', ...where, status: 401, message: `${parsed.host} refused the token: copy MULTIAGENT_SERVER_TOKEN from the engine's computer again.` };
+  if (res.status === 401) return { ok: false, reason: 'token', ...where, status: 401, message: `${parsed.host} refused the token: copy CRAFTORIO_SERVER_TOKEN from the engine's computer again.` };
   let body = null;
   try { body = await res.json(); } catch { /* not JSON: not an engine */ }
   if (res.status === 404 || (res.ok && (typeof body?.app !== 'string' || typeof body?.contract !== 'string'))) {

@@ -12,7 +12,7 @@
 //   (<workspace>/discovery, ws.discovery), whose title or document names the finding. The seam used is the
 //   service's run:event, as packages/engine/test/service/self-healing-live-278.test.js drives it: under
 //   Self-healing (the standing watch) a run's workflow.started (project_id) then a process.killed is a
-//   memory finding of that project. The service runs with MULTIAGENT_SIMULATION_ONLY=1; no model is asked.
+//   memory finding of that project. The service runs with CRAFTORIO_SIMULATION_ONLY=1; no model is asked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -17,7 +17,7 @@ const MANIFEST = 'version: 1\ndefault: hero\nworkflows:\n  - name: hero\n    cat
 // A workspace of an older version. open() opens it as a new start of the app; everything is shut and
 // removed at the end of the test, the services first.
 function oldWorkspace(t, { setting = 'legacy-flow.yaml' } = {}) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-790-'));
   const cliHome = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-790-home-'));
   const folders = [];

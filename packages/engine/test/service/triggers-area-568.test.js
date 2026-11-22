@@ -2,7 +2,7 @@
 // and a faked `gh` (issues.execCli, the system boundary): a rule naming a repository workflow not accepted
 // at HEAD is refused and starts nothing; an issue event's run gets its issue (`issues:`), a PR comment's
 // none; the run's meta.json gets `trigger`; the issue or PR is commented once, when the run reaches its
-// first human gate or ends, never under MULTIAGENT_SIMULATION_ONLY=1.
+// first human gate or ends, never under CRAFTORIO_SIMULATION_ONLY=1.
 // Seams: the area's triggersStatus and watchTriggers (driven by its timer, mocked), the files it writes.
 
 const test = require('node:test');
@@ -25,9 +25,9 @@ const LABELED = { id: 9001, event: 'labeled', label: { name: 'ready' }, created_
 const MENTION = { id: 5001, body: 'hey @orchestrator, fix the lint', html_url: 'https://github.com/acme/app/pull/7#issuecomment-5001', issue_url: 'https://api.github.com/repos/acme/app/issues/7', created_at: FUTURE, user: { login: 'eduardo' } };
 
 function simulationOnly(t, value) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  if (value == null) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = value;
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  if (value == null) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = value;
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
 }
 
 // a workspace with project acme-app (GitHub), its triggers on, a fake gh and a ctx recording the starts

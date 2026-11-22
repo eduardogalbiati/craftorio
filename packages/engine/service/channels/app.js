@@ -88,14 +88,14 @@ module.exports = (ctx) => [
       // Settings › Execution gives the memory guard's limit in GB for this machine (#276)
       totalMemoryBytes: os.totalmem(),
       // the screen a Run App copy opens on (#119, set by packages/engine/domains/local/local-preview.js); simulation-only copies only
-      startView: simulation.simulationOnly() ? process.env.MULTIAGENT_START_VIEW || null : null,
+      startView: simulation.simulationOnly() ? process.env.CRAFTORIO_START_VIEW || null : null,
       // run from source or packaged: the Findings button shows from source (#361, findings-model.js)
       isPackaged: Boolean(ctx.host.isPackaged),
       // a scripts/screenshot.js capture: the Findings button stays hidden unless the setting is on
-      screenshot: process.env.MULTIAGENT_SCREENSHOT === '1',
+      screenshot: process.env.CRAFTORIO_SCREENSHOT === '1',
       // the Linux AppImage's launcher started the app without Chromium's sandbox (#476,
       // scripts/release-assets.js APP_RUN): Settings › About warns and gives the alternative
-      noSandbox: process.env.MULTIAGENT_NO_SANDBOX === '1',
+      noSandbox: process.env.CRAFTORIO_NO_SANDBOX === '1',
     }),
   },
   // the engine's version and the contract its channels declare (#339): what GET /api/version answers

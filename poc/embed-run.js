@@ -5,7 +5,7 @@
 //
 //   node poc/embed-run.js <run id> [<run id> ...]      the first one is the run the page opens with
 //
-// Workspace: MULTIAGENT_WORKSPACE, or <home>/multiagent-workspace.
+// Workspace: CRAFTORIO_WORKSPACE, or <home>/multiagent-workspace.
 // What a replay keeps of a run: its steps and their outcomes, every agent turn (cost, tokens), the
 // agents' tool calls and messages (shortened), handoff notes, gates, supervisor calls and the merge.
 // A wait at a human gate longer than a minute is cut to 45 s of replay (`skips` holds what was cut).
@@ -14,7 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const WORKSPACE = process.env.MULTIAGENT_WORKSPACE || path.join(os.homedir(), 'multiagent-workspace');
+const WORKSPACE = process.env.CRAFTORIO_WORKSPACE || path.join(os.homedir(), 'multiagent-workspace');
 const PAGE = path.join(__dirname, 'run-3d.html');
 const OPEN = '<script id="run-data" type="application/json">', CLOSE = '</script>';
 const GATE_WAIT_MS = 45000;

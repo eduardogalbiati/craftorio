@@ -115,10 +115,10 @@ Every tool call re-reads your whole context, so exploring is what makes this ste
   code and the lines that matter.
 - **log**: run the project's simulated/mock mode when it has one (this orchestrator:
   `npm run run -- --file <workflow> --mock --auto-approve …`; the run already sets
-  `MULTIAGENT_SIMULATION_ONLY=1` in your environment, never prefix it), then
+  `CRAFTORIO_SIMULATION_ONLY=1` in your environment, never prefix it), then
   quote the log or event lines that show the new behaviour.
 - This orchestrator's own repository: simulated runs you start land in the run's scratch workspace
-  (`MULTIAGENT_WORKSPACE`, already set; its `runs/`), and `npm run screenshot -- --run <dir>` takes
+  (`CRAFTORIO_WORKSPACE`, already set; its `runs/`), and `npm run screenshot -- --run <dir>` takes
   a run folder from there. Never pass, read or write a path under the owner's workspace `runs/`.
   Copy what you keep (logs, PNGs) to `<run_dir>/logs/` and your round folder (`evidence_dir`): the
   scratch workspace is removed with the run's worktree.

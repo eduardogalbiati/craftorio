@@ -1,7 +1,7 @@
 // #327 acceptance test (written before the code): a whole simulated software-development run with the
 // AI agents in Português (Brasil). Every step's output still parses (no invalid output, no step that
 // ends in error) and every agent prompt carries the pt-BR [Language] line once.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -135,7 +135,7 @@
 //   --timeout <ms>     hard limit: the app exits with code 1 after it (default 90000)
 //
 // Always a scratch workspace in the temp folder, removed at the end: simulated runs only
-// (MULTIAGENT_AUTH=off, developer mode on), no sign-in, and HOME/USERPROFILE/APPDATA/GH_CONFIG_DIR
+// (CRAFTORIO_AUTH=off, developer mode on), no sign-in, and HOME/USERPROFILE/APPDATA/GH_CONFIG_DIR
 // point inside it, so the screens never show this machine's CLI sessions, usage or accounts. Demo
 // data: a project `demo-app` with a few issues (the Backlog's sync never calls gh), then what the
 // view's seed module writes (#249): one file per view, scripts/screenshot/views/<view>.js, found by
@@ -155,6 +155,7 @@
 // The Playwright E2E suite (features/support/app.js, #222) seeds its scratch workspaces with the same
 // demo data: the helpers exported at the end (plain Node, no Electron needed).
 
+require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -408,16 +409,16 @@ function main() {
   const wsDir = path.join(scratch, 'workspace');
   for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   Object.assign(process.env, {
-    MULTIAGENT_AUTH: 'off',
-    MULTIAGENT_WORKSPACE: wsDir,
-    MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
+    CRAFTORIO_AUTH: 'off',
+    CRAFTORIO_WORKSPACE: wsDir,
+    CRAFTORIO_MOCK_DELAY_SCALE: '0.02',
     // app:info's `screenshot`: the Findings button (#361) is hidden unless the setting is on
-    MULTIAGENT_SCREENSHOT: '1',
+    CRAFTORIO_SCREENSHOT: '1',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   });
-  process.env.MULTIAGENT_USER_DATA = path.join(scratch, 'user-data'); // a throwaway user data folder (the host reads it, main.js)
-  app.setPath('userData', process.env.MULTIAGENT_USER_DATA);
+  process.env.CRAFTORIO_USER_DATA = path.join(scratch, 'user-data'); // a throwaway user data folder (the host reads it, main.js)
+  app.setPath('userData', process.env.CRAFTORIO_USER_DATA);
   if (args.theme) nativeTheme.themeSource = args.theme;
 
   let appDir = repo;

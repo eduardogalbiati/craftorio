@@ -124,10 +124,10 @@ test('#314: every skill or workflow adapted from an MIT project is named in THIR
 
 // ---- #314: contributor files ---------------------------------------------------------------------
 
-test('#314: CONTRIBUTING.md explains the setup and the checks (.nvmrc, npm install, npm start, MULTIAGENT_AUTH=off, npm test, AGENTS.md, docs/agents)', () => {
+test('#314: CONTRIBUTING.md explains the setup and the checks (.nvmrc, npm install, npm start, CRAFTORIO_AUTH=off, npm test, AGENTS.md, docs/agents)', () => {
   assert.ok(exists('CONTRIBUTING.md'), 'CONTRIBUTING.md exists');
   const text = read('CONTRIBUTING.md');
-  for (const s of ['.nvmrc', 'npm install', 'npm start', 'MULTIAGENT_AUTH=off', 'npm test', 'AGENTS.md', 'docs/agents']) assert.ok(text.includes(s), s);
+  for (const s of ['.nvmrc', 'npm install', 'npm start', 'CRAFTORIO_AUTH=off', 'npm test', 'AGENTS.md', 'docs/agents']) assert.ok(text.includes(s), s);
   // #331: the agents' instructions are AGENTS.md; CONTRIBUTING links it, not CLAUDE.md
   assert.ok(text.includes('](AGENTS.md)'), 'CONTRIBUTING.md does not link AGENTS.md');
   assert.equal(text.includes('](CLAUDE.md)'), false, 'CONTRIBUTING.md still links CLAUDE.md');
@@ -293,7 +293,7 @@ test('#315: no renderer file mentions a trial (account.js, style.css .pill-trial
   assert.deepEqual(hits, []);
 });
 
-test('#315: the README account section tells what is stored and what is not, and MULTIAGENT_AUTH=off', () => {
+test('#315: the README account section tells what is stored and what is not, and CRAFTORIO_AUTH=off', () => {
   // the section (under any `## ` heading) that holds the privacy note: it names "last seen"
   const section = read('README.md').split(/^(?=## )/m).find((p) => /last seen/i.test(p));
   assert.ok(section, 'a README section with the account\'s privacy note (what is stored: ... last seen ...)');
@@ -303,7 +303,7 @@ test('#315: the README account section tells what is stored and what is not, and
   })) assert.match(text, re, `stored: ${what}`);
   for (const [what, re] of Object.entries({ code: /\bcode\b/i, prompts: /\bprompts?\b/i, runs: /\bruns?\b/i })) assert.match(text, re, `not stored: ${what}`);
   assert.match(text, /not store|never store|does not (keep|send|store)|nothing (else|of your)/i, 'says what is not stored');
-  assert.ok(text.includes('MULTIAGENT_AUTH=off'), 'MULTIAGENT_AUTH=off');
+  assert.ok(text.includes('CRAFTORIO_AUTH=off'), 'CRAFTORIO_AUTH=off');
 });
 
 test('#315: scripts/docs.js no longer describes the migrations as "trial and plan"', () => {
@@ -443,7 +443,7 @@ test('#482: CONTRIBUTING.md names the good first issue and help wanted labels, h
 test('#482: an environment-variable table (CONTRIBUTING.md or docs/agents/environment.md) lists the variables a contributor sets', () => {
   const rows = ['CONTRIBUTING.md', 'docs/agents/environment.md'].filter(exists)
     .flatMap((f) => read(f).split('\n')).filter((l) => l.trim().startsWith('|'));
-  const vars = ['MULTIAGENT_AUTH', 'MULTIAGENT_SUPABASE_URL', 'MULTIAGENT_SUPABASE_KEY', 'MULTIAGENT_WORKSPACE', 'MULTIAGENT_USER_DATA', 'MULTIAGENT_SIMULATION_ONLY', 'MULTIAGENT_SERVER_TOKEN', 'MULTIAGENT_E2E_WORKERS'];
+  const vars = ['CRAFTORIO_AUTH', 'CRAFTORIO_SUPABASE_URL', 'CRAFTORIO_SUPABASE_KEY', 'CRAFTORIO_WORKSPACE', 'CRAFTORIO_USER_DATA', 'CRAFTORIO_SIMULATION_ONLY', 'CRAFTORIO_SERVER_TOKEN', 'CRAFTORIO_E2E_WORKERS'];
   const missing = vars.filter((v) => !rows.some((r) => new RegExp(`\\b${v}\\b`).test(r)));
   assert.deepEqual(missing, [], 'variables without a table row');
 });

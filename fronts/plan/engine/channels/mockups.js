@@ -4,7 +4,7 @@
 // - mockups:estimate: the D15 estimate of an action (shown before every real action);
 // - mockups:build-kit: the deterministic machine step (CSS custom properties and fonts of the project's
 //   stylesheets → kit/tokens.css, free), then, real only, the ui-kit-map workflow for the components (D2);
-// - mockups:create-screen: from a prompt (or a Discovery card's text); simulated (MULTIAGENT_SIMULATION_ONLY)
+// - mockups:create-screen: from a prompt (or a Discovery card's text); simulated (CRAFTORIO_SIMULATION_ONLY)
 //   the simulated designer writes MockupModel.draftScreen at once, real a mockup-generate run writes it;
 // - mockups:chat: one designer turn (MockupModel.buildChatMessage: selection, refs, message) in the screen's
 //   persistent designer session (D8, ../domains/mockup-designer.js, no workflow run), kept in

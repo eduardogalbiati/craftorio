@@ -113,7 +113,7 @@ jobs:
       - run: npm test
         if: steps.plan.outputs.tested != 'true'
         env:
-          MULTIAGENT_SIMULATION_ONLY: "1"   # automated checks never call real models
+          CRAFTORIO_SIMULATION_ONLY: "1"   # automated checks never call real models
       # node-pty has no Linux prebuild: npm ci compiled it for Node; build it again for Electron's ABI
       - name: node-pty for Electron (Linux)
         if: runner.os == 'Linux'
@@ -133,12 +133,12 @@ jobs:
       - name: Smoke test of the packaged app
         if: runner.os != 'Linux'
         env:
-          MULTIAGENT_SIMULATION_ONLY: "1"
+          CRAFTORIO_SIMULATION_ONLY: "1"
         run: node scripts/smoke-package.js
       - name: Smoke test of the packaged app (AppImage, xvfb-run)
         if: runner.os == 'Linux'
         env:
-          MULTIAGENT_SIMULATION_ONLY: "1"
+          CRAFTORIO_SIMULATION_ONLY: "1"
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: xvfb-run -a node scripts/smoke-package.js Craftorio-linux-x64.AppImage
       - uses: actions/upload-artifact@v7

@@ -4,7 +4,7 @@
 // Seam: createOracle's ask / wake with mock: false, its CLI (PROVIDERS.claude, the provider the Oracle
 // uses) pointed at this node + test/fixtures/fake-claude-during-execution.js for the test and
 // restored after (like refactor-priority-real-turn-728); the fake calls no model. runTurn refuses a
-// real provider under MULTIAGENT_SIMULATION_ONLY, so the guard is lifted for each test and restored.
+// real provider under CRAFTORIO_SIMULATION_ONLY, so the guard is lifted for each test and restored.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -24,8 +24,8 @@ function makeOracle(t, flags = []) {
   const saved = { command: claude.command, args: claude.args };
   claude.command = process.execPath;
   claude.args = [FAKE, ...flags];
-  const sim = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  const sim = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
   const o = oracle.createOracle({
     dir: () => dir,
     tools: () => [],
@@ -41,7 +41,7 @@ function makeOracle(t, flags = []) {
     o.release();
     claude.command = saved.command;
     claude.args = saved.args;
-    if (sim === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = sim;
+    if (sim === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = sim;
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
   });
   return o;

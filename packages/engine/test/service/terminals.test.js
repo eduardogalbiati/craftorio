@@ -1,6 +1,6 @@
 // packages/engine/service/areas/terminals.js: the 'command' terminal kind (#147) — commandSpec builds the
 // shell invocation for a command the app itself suggests (an install command, gh's billing scope
-// hint); openTerminal refuses any other string and, under MULTIAGENT_SIMULATION_ONLY, opens a simulated
+// hint); openTerminal refuses any other string and, under CRAFTORIO_SIMULATION_ONLY, opens a simulated
 // (virtual) terminal instead of a real process (#783).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -118,9 +118,9 @@ test("term:open kind command: refuses a command the app doesn't suggest, before 
   assert.throws(() => api['term:open']({ kind: 'command', command: 'rm -rf /' }), /Only the commands the app suggests can run in a command terminal\./);
 });
 
-// #783: under MULTIAGENT_SIMULATION_ONLY an allowed command opens a simulated (virtual) terminal, never
+// #783: under CRAFTORIO_SIMULATION_ONLY an allowed command opens a simulated (virtual) terminal, never
 // a real process: the browser UI's ▶ can be checked end to end.
-test('term:open kind command (#783): an allowed command opens a simulated terminal under MULTIAGENT_SIMULATION_ONLY, never a real process', async (t) => {
+test('term:open kind command (#783): an allowed command opens a simulated terminal under CRAFTORIO_SIMULATION_ONLY, never a real process', async (t) => {
   const { api } = makeService(t);
   const opened = api['term:open']({ kind: 'command', command: SCOPE_HINT });
   assert.equal(typeof opened.id, 'string');

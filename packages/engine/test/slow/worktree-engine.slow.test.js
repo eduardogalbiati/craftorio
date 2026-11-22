@@ -126,15 +126,15 @@ test('engine: a cancelled run leaves no worktree folder and no scratch, its bran
 });
 
 // #120: an agent of a run with a worktree never writes a simulated run or a screenshot into the
-// owner's own workspace: it gets MULTIAGENT_WORKSPACE pointing at a scratch workspace of its own,
+// owner's own workspace: it gets CRAFTORIO_WORKSPACE pointing at a scratch workspace of its own,
 // under the run's folder, created on the first agent turn and removed with the worktree.
-test('engine: an agent of a run with a worktree gets MULTIAGENT_WORKSPACE in its environment, pointing at the run\'s own scratch workspace; removed once the worktree is removed', { timeout: 30000 }, async (t) => {
+test('engine: an agent of a run with a worktree gets CRAFTORIO_WORKSPACE in its environment, pointing at the run\'s own scratch workspace; removed once the worktree is removed', { timeout: 30000 }, async (t) => {
   const f = fixture(t);
   const runsDir = path.join(f.tmp, 'runs');
   // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   const fake = path.join(__dirname, '..', 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(f.tmp, 'wf.yaml');
   fs.writeFileSync(file, [
@@ -158,7 +158,7 @@ test('engine: an agent of a run with a worktree gets MULTIAGENT_WORKSPACE in its
 
   const scratchWorkspaceDir = path.join(run.runDir, 'scratch', 'workspace');
   const received = events.find((e) => e.type === 'session.message_received');
-  assert.ok(received.text.includes(`MULTIAGENT_WORKSPACE: ${scratchWorkspaceDir}`), received.text);
+  assert.ok(received.text.includes(`CRAFTORIO_WORKSPACE: ${scratchWorkspaceDir}`), received.text);
   // the scratch workspace goes with the worktree once the run succeeds (never left for the owner to find)
   assert.ok(!fs.existsSync(path.join(run.runDir, 'scratch')));
 });

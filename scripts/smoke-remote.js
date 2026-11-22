@@ -8,7 +8,7 @@
 // HTTP: a project created through it is the engine's), say "remote" in Settings › Execution ›
 // Engine, open the connection page from Change… (its Cancel closes it), and, once the engine stops,
 // replace its window with the connection page and the reason (its close button then reads Quit). Saves remote.png, connection.png and unreachable.png in
-// <out-dir>. Never calls a model: MULTIAGENT_SIMULATION_ONLY=1 (decideMode only uses an engine on
+// <out-dir>. Never calls a model: CRAFTORIO_SIMULATION_ONLY=1 (decideMode only uses an engine on
 // 127.0.0.1 under it) and the engine runs in simulation. Built like scripts/smoke.js: never a
 // hand-written script that launches apps/desktop/host/main.
 
@@ -20,16 +20,16 @@ const { spawn } = require('child_process');
 const { app, BrowserWindow } = require('electron');
 const { FILE } = require('@craftorio/desktop/host/engine-connection');
 
-process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 const out = path.resolve(process.argv.slice(2).find((a) => !a.startsWith('-') && !a.endsWith('.js')) || 'smoke-remote');
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-remote-'));
 const appWorkspace = path.join(scratch, 'app-workspace');
 const userData = path.join(scratch, 'user-data');
 for (const d of [appWorkspace, userData, path.join(scratch, 'engine-workspace'), path.join(scratch, 'home')]) fs.mkdirSync(d, { recursive: true });
 // the app's own workspace: remote mode must leave it empty (no lock, no index, no seeded workflows)
-process.env.MULTIAGENT_WORKSPACE = appWorkspace;
+process.env.CRAFTORIO_WORKSPACE = appWorkspace;
 // before the app is ready (its sessions live there); apps/desktop/host/main is required once the engine listens
-process.env.MULTIAGENT_USER_DATA = userData; // a throwaway user data folder (the host reads it, main.js)
+process.env.CRAFTORIO_USER_DATA = userData; // a throwaway user data folder (the host reads it, main.js)
 app.setPath('userData', userData);
 const token = crypto.randomBytes(24).toString('base64url');
 let engine = null;
@@ -48,10 +48,10 @@ function startEngine() {
   fs.writeFileSync(path.join(scratch, 'engine-workspace', 'settings.json'), JSON.stringify({ setupDone: true }));
   const home = path.join(scratch, 'home');
   const env = {
-    ...process.env, ELECTRON_RUN_AS_NODE: '1', MULTIAGENT_AUTH: 'off', MULTIAGENT_SERVER_TOKEN: token, MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
-    MULTIAGENT_USER_DATA: path.join(scratch, 'engine-user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
+    ...process.env, ELECTRON_RUN_AS_NODE: '1', CRAFTORIO_AUTH: 'off', CRAFTORIO_SERVER_TOKEN: token, CRAFTORIO_MOCK_DELAY_SCALE: '0.02',
+    CRAFTORIO_USER_DATA: path.join(scratch, 'engine-user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_WORKSPACE;
   engine = spawn(process.execPath, [path.join(__dirname, '..', 'packages', 'engine', 'bin', 'craftorio-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],

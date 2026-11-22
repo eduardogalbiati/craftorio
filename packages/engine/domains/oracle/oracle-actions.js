@@ -40,7 +40,7 @@ const ACTIONS = {
     label: 'Run a check',
     night: () => false,
     check: (p) => need(p, ['projectId', 'branch', 'command']),
-    describe: (p) => ({ title: `Run \`${s(p.command)}\` on ${s(p.branch)}`, change: `Runs \`${s(p.command)}\` on a scratch checkout of branch ${s(p.branch)} with MULTIAGENT_SIMULATION_ONLY=1 (up to 20 min) and posts the result with its evidence.`, where: `A scratch checkout of project ${s(p.projectId)}, removed afterwards (the project's own checkout is untouched)`, backup: 'Nothing changes: the checkout is removed after the check.' }),
+    describe: (p) => ({ title: `Run \`${s(p.command)}\` on ${s(p.branch)}`, change: `Runs \`${s(p.command)}\` on a scratch checkout of branch ${s(p.branch)} with CRAFTORIO_SIMULATION_ONLY=1 (up to 20 min) and posts the result with its evidence.`, where: `A scratch checkout of project ${s(p.projectId)}, removed afterwards (the project's own checkout is untouched)`, backup: 'Nothing changes: the checkout is removed after the check.' }),
   },
   'dispatch.restart': {
     label: 'Restart the dispatch',

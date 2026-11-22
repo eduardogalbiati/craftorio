@@ -29,7 +29,7 @@ steps:
 
 function makeCtx(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-tools-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   // #408: an empty CLI home, never the machine's transcripts
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, cliHome: path.join(dir, 'cli-home') } });
   t.after(async () => {

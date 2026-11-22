@@ -24,9 +24,9 @@ const CLI_COST = 0.185271;
 async function runFake(t, { model, unrecognized = true, tier = '1h', prices, maxCost = null }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unknown-model-369-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   const fake = path.join(__dirname, 'fixtures', 'fake-claude-unrecognized-model.js').replace(/\\/g, '/');
   const args = [fake, '-p', '--model', '{{ model }}', '--tier', tier, ...(unrecognized ? ['--unrecognized'] : [])];
   const file = path.join(dir, 'wf.yaml');

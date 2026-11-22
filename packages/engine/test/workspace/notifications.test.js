@@ -232,7 +232,7 @@ steps:
 
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-ws-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false } });
   // shutdown first (closes the index.db handle): rmSync right after would otherwise find it still
   // open and fail with EPERM on Windows. node:test runs t.after hooks in registration order.

@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../../engine/workflow');
 const evidence = require('../../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { tempWorkflow, runWith } = require('../engine-helpers');
 
 // #144: a `type: screenshots` step (`from` a step whose output lists the screens) never blocks the

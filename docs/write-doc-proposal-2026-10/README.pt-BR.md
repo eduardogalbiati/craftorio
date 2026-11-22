@@ -364,7 +364,7 @@ O write doc traz o renderizador de markdown (o leitor de documentos); os Mockups
 
 ## Custo das chamadas reais
 
-**D14.** São ordens de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (`MULTIAGENT_SIMULATION_ONLY=1`). Cada ação mostra o custo antes e conta no orçamento diário (#206).
+**D14.** São ordens de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (`CRAFTORIO_SIMULATION_ONLY=1`). Cada ação mostra o custo antes e conta no orçamento diário (#206).
 
 | Ação | Modelo padrão | Estimativa |
 |---|---|---|

@@ -56,10 +56,10 @@ function serve(t, workspace) {
   const home = path.join(path.dirname(workspace), 'home');
   fs.mkdirSync(home, { recursive: true });
   const env = {
-    ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_AUTH: 'off', MULTIAGENT_SERVER_TOKEN: 'serve-lock-test-0123456789',
-    MULTIAGENT_USER_DATA: path.join(home, 'user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
+    ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_AUTH: 'off', CRAFTORIO_SERVER_TOKEN: 'serve-lock-test-0123456789',
+    CRAFTORIO_USER_DATA: path.join(home, 'user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
   const child = spawn(process.execPath, [path.join(__dirname, '..', '..', '..', '..', 'packages', 'engine', 'bin', 'craftorio-engine.js'), '--port', '0', '--workspace', workspace], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let text = '';

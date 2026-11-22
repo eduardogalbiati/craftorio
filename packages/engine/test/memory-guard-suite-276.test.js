@@ -27,7 +27,7 @@
 //     first rerun of visit 1); only the last result is routed. mockSequences.suite.<step> is then
 //     indexed by execution (a visit plus its environment reruns), not by visit.
 //   A failure with no incident in its window routes as today (environment_reruns absent or 0).
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

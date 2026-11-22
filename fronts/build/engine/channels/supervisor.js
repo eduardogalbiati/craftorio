@@ -134,7 +134,7 @@ module.exports = (ctx) => {
     { event: 'supervisor:watch', method: 'onWatch' },
     // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model, run }
     // (#409 run: the run a run card's Send to supervisor attached). `mock` and
-    // MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
+    // CRAFTORIO_SIMULATION_ONLY answer from the simulated supervisor (no model call).
     {
       channel: 'supervisor:chat',
       method: 'askSupervisorChat',

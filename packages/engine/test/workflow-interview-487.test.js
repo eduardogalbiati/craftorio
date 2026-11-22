@@ -16,7 +16,7 @@
 //   }
 //   ctx: { ws, host, oracleService, events, notify } as the service gives its areas.
 //   Channels: workflows:interview ({ projectId }) and workflows:compose ({ projectId, answers, write }).
-//   MULTIAGENT_SIMULATION_ONLY is off in the area tests so the stubbed Oracle answers (no real model:
+//   CRAFTORIO_SIMULATION_ONLY is off in the area tests so the stubbed Oracle answers (no real model:
 //   the Oracle is the fake below).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -49,9 +49,9 @@ function tmp(t, prefix) {
 }
 
 function simulationOff(t) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = '0';
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = '0';
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
 }
 
 // a repository with one commit, git run with no global or system config

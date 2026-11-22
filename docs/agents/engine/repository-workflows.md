@@ -71,5 +71,5 @@ A repository's `.multiagent/project.yaml`: the workflows a project is worked on 
   `<id>.reports.json`, posted through the platform adapter's `issueSaveCommand` / `prCommentCommand`).
   A start that throws is logged, shown on the card and retried 3 times, then dropped; a per-event claim
   file keeps two apps from starting it twice. It keeps the seen ids in `<workspace>/backlog/triggers/<id>.json`. A trigger never
-  answers a gate or merges; under `MULTIAGENT_SIMULATION_ONLY=1` it neither reads nor writes the
+  answers a gate or merges; under `CRAFTORIO_SIMULATION_ONLY=1` it neither reads nor writes the
   platform. Channel `triggers:status { projectId }` feeds the project page's Triggers card.

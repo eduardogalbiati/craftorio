@@ -18,7 +18,7 @@ orchestrator:
 
 It runs in the run's worktree in an embedded terminal (the dock, labelled with the run's issues),
 with **■ Stop**, and stops by itself when the gate is answered or the run ends. It never answers the
-gate. The copy runs in simulation only (`MULTIAGENT_SIMULATION_ONLY=1`) on a scratch workspace
+gate. The copy runs in simulation only (`CRAFTORIO_SIMULATION_ONLY=1`) on a scratch workspace
 (`<workspace>/local-previews/<run>/`: a copy of your projects, agents, skills, workflows and
 settings, never your runs) with its own user-data folder, so trying this app can't spend on real
 models or touch your workspace; **real workspace** (with a warning) points it at yours instead.

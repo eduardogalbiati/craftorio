@@ -15,9 +15,9 @@ const { SUITE_SLOT_ENV } = require('../../engine/machine-slot');
 const { runBaseCheck } = require('../../domains/project/base-health');
 
 let saved;
-test.beforeEach(() => { saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
+test.beforeEach(() => { saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
@@ -58,7 +58,7 @@ test('#527 the dispatcher skips a base-health fix item whose issue has an ended 
   const ws = service.workspace();
   const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'bh527k-locks-'));
   t.after(() => fs.rmSync(locks, { recursive: true, force: true, maxRetries: 3 }));
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
   const p = await roadmapProject(api, ws, t, [1, 2], 'kept527');
   await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] }] });

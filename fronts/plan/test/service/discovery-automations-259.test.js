@@ -1,4 +1,4 @@
-// #259 Column automations through the service, simulated (MULTIAGENT_SIMULATION_ONLY: the run uses
+// #259 Column automations through the service, simulated (CRAFTORIO_SIMULATION_ONLY: the run uses
 // the mock provider). The contract these tests assume:
 //   discovery:set-automation (projectId, column, mode) → the board shows columns[].on_enter.mode
 //   discovery:move → the result gains `automation`: an 'ask' column → { status: 'proposed', column,

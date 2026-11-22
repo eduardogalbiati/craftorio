@@ -12,7 +12,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun, loadWorkflow, evalExpr } = require('../engine/workflow');
 const caps = require('../engine/capabilities');
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');

@@ -8,7 +8,7 @@
 //   path in APPIMAGETOOL). The AppImage's AppRun turns Chromium's sandbox off only when the kernel
 //   refuses unprivileged user namespaces (Ubuntu 23.10+): the setuid chrome-sandbox cannot work from
 //   the AppImage's read-only mount. Then it says so (#476): a warning on stderr, and
-//   MULTIAGENT_NO_SANDBOX=1 for the app (Settings › About shows the warning, app:info noSandbox).
+//   CRAFTORIO_NO_SANDBOX=1 for the app (Settings › About shows the warning, app:info noSandbox).
 // Every asset carries the native sidecars package.js built for its target (resources/bin/, #341).
 // Exports APP_RUN and assetNames for the tests; builds the assets only when run directly.
 
@@ -27,7 +27,7 @@ const APP_RUN = `#!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
 if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ] || [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null)" = "0" ]; then
   echo "Craftorio: starting WITHOUT Chromium's sandbox: this system forbids unprivileged user namespaces. To keep the sandbox on, allow them (your choice, it applies to the whole system): sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 (see the README, Install)." >&2
-  export MULTIAGENT_NO_SANDBOX=1
+  export CRAFTORIO_NO_SANDBOX=1
   exec "$HERE/app/${NAME}" --no-sandbox "$@"
 fi
 exec "$HERE/app/${NAME}" "$@"

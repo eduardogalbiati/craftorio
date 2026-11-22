@@ -82,9 +82,9 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle 
       });
     }
     if (channel === 'run:diffFile') return handle(channel, (e, arg) => demoRunDiffFile(arg?.file));
-    // a sync only reads the demo backlog, except under #845's MULTIAGENT_E2E_ISSUES_FAIL hook: the real sync
+    // a sync only reads the demo backlog, except under #845's CRAFTORIO_E2E_ISSUES_FAIL hook: the real sync
     // (packages/engine/service/channels/backlog.js e2eIssuesFail) answers the issue read as gh does
-    if (channel === 'backlog:sync') return handle(channel, (e, arg) => (process.env.MULTIAGENT_E2E_ISSUES_FAIL ? fn(e, arg) : handlers['backlog:get'](e, { projectId: arg?.projectId })));
+    if (channel === 'backlog:sync') return handle(channel, (e, arg) => (process.env.CRAFTORIO_E2E_ISSUES_FAIL ? fn(e, arg) : handlers['backlog:get'](e, { projectId: arg?.projectId })));
     return handle(channel, fn);
   };
 }

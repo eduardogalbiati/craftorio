@@ -123,8 +123,8 @@ steps:
 function makeService(t, { fronts, installed, ...hostExtra } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
   const cliHome = fs.mkdtempSync(path.join(os.tmpdir(), 'service-cli-home-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
   const trashed = [];
   const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false, cliHome, ...hostExtra }, fronts, installed });
   t.after(async () => {
@@ -255,8 +255,8 @@ function roadmapProject(api, ws, t, numbers, name) {
 // test only; simulation-only comes back after the test.
 function allowRealRuns(t, api) {
   api['settings:set']({ memoryGuard: { enabled: false, limitPercent: 25, floorPercent: 0 } });
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { process.env.CRAFTORIO_SIMULATION_ONLY = '1'; });
 }
 
 module.exports = {

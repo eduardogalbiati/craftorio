@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..', '..', '..', '..');
 
 // A valid, minimal 1x1 PNG (its first 8 bytes are the real PNG signature sniffImage checks).

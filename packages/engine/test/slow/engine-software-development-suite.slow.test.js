@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const evidence = require('../../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { runSoftwareDevelopment } = require('../engine-helpers');
 
 test('feature.yaml (remote): a failing suite goes back to the test writer once with the failures, then passes; summary.suite_runs counts the engine\'s runs', { timeout: 120000 }, async () => {

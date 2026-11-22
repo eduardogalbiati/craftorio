@@ -136,10 +136,10 @@ test('the default is this computer; a remote setting gives the engine\'s URL and
   });
 });
 
-test('MULTIAGENT_ENGINE=local forces this computer', () => {
-  const d = conn.decideMode({ connection: REMOTE, env: { MULTIAGENT_ENGINE: 'local' } });
+test('CRAFTORIO_ENGINE=local forces this computer', () => {
+  const d = conn.decideMode({ connection: REMOTE, env: { CRAFTORIO_ENGINE: 'local' } });
   assert.equal(d.mode, 'local');
-  assert.match(d.reason, /MULTIAGENT_ENGINE=local/);
+  assert.match(d.reason, /CRAFTORIO_ENGINE=local/);
 });
 
 test('a remote setting that cannot be used stays remote with the reason (the connection page shows it)', () => {
@@ -153,7 +153,7 @@ test('a remote setting that cannot be used stays remote with the reason (the con
 });
 
 test('simulation only: a remote engine is used only on this computer', () => {
-  const env = { MULTIAGENT_SIMULATION_ONLY: '1' };
+  const env = { CRAFTORIO_SIMULATION_ONLY: '1' };
   const away = conn.decideMode({ connection: REMOTE, env });
   assert.equal(away.mode, 'local');
   assert.match(away.reason, /Simulation only/);
@@ -213,7 +213,7 @@ test('the test fails with a reason: bad address, no token, refused token, not an
   assert.deepEqual([address.ok, address.reason], [false, 'address']);
   const noToken = await conn.testConnection({ address: 'my-pc', token: '  ', fetch: never });
   assert.deepEqual([noToken.ok, noToken.reason], [false, 'token']);
-  assert.match(noToken.message, /MULTIAGENT_SERVER_TOKEN/);
+  assert.match(noToken.message, /CRAFTORIO_SERVER_TOKEN/);
   assert.equal(called, 0, 'nothing is asked without an address and a token');
 
   const refused = await conn.testConnection({ address: 'my-pc', token: 't', fetch: answer(401, { error: 'Missing or invalid token' }) });

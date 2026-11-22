@@ -36,7 +36,7 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   (`UNTESTED` in `domains/project/base-health.js`), never for `not-green`. The docs skip trusts the
   run's own suite (#736) for the tests that read docs (`test/docs-*.test.js`, `test/agents-md-331.test.js`). Otherwise the base check runs the whole suite on a
   clean detached checkout of the local base tip (`worktrees/base-check-<project>`), with no agent,
-  `MULTIAGENT_SIMULATION_ONLY=1`, its own lock folder, the suite timeout from the project's recent
+  `CRAFTORIO_SIMULATION_ONLY=1`, its own lock folder, the suite timeout from the project's recent
   durations, one check at a time. While a release run holds the base it is deferred, and runs when
   that release run ends. The check takes the machine-wide `suite` slot (#527, like a run's
   whole-suite round, #455) before its `npm test` and frees it on every exit (green, red, error);
@@ -76,7 +76,7 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   It never pushes, never answers a gate and never changes a running item. The Roadmap bar shows
   "N known failures on the base" (`backlog:get` `baseFailures`). The
   suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
-  workspace, its own `MULTIAGENT_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
+  workspace, its own `CRAFTORIO_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
   median of the project's recent durations (`cache/suite-durations.json`, min 10 min, 30 min with no
   history), and a timeout names the test files still running. A timed-out round is checked like a
   failure (#396, `rerunAlone`): each file still running reruns alone on the branch and, when it hangs
@@ -124,11 +124,11 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
     suite-command-line.js: Windows `cmd.exe` 8,191 characters, Linux 128 KiB, macOS 256 KiB, minus
     a 100-character margin; the platform is `runSuite`'s `platform`): a filtered command over it,
     coverage and workers wrappers included, gives its files through a list file named by
-    `MULTIAGENT_TEST_FILES` (#553, one path per line, `files_list` in the output) when the npm
+    `CRAFTORIO_TEST_FILES` (#553, one path per line, `files_list` in the output) when the npm
     script is `node <file>` and that file reads the variable (scripts/test.js), and stays
     `scope: files`; any other runner runs the whole suite instead, `selection.why` and the message
     saying "319 test files would put the command over the Windows command-line limit of 8,191
-    characters, and `npm test` cannot read the list of MULTIAGENT_TEST_FILES: the whole suite ran".
+    characters, and `npm test` cannot read the list of CRAFTORIO_TEST_FILES: the whole suite ran".
     The same holds for every caller: the base check of more files than fit is
     skipped with that reason, and a timed-out file reruns alone (always short). A round the shell
     refused ("The command line is too long.", "Argument list too long": the log's last line, no test

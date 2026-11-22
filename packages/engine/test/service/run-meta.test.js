@@ -67,7 +67,7 @@ test('runs:prState reads a run\'s PR with host.readPrJson (also for a mock run, 
 test('runs:setTitle persists the owner\'s title in meta.json (never touching events.jsonl), across a service restart, and emits run:meta', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const host = { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false };
   let service = createService({ host });
   service.setWorkspace(setupWorkspace(dir, { persist: false }));

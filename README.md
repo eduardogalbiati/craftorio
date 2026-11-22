@@ -85,7 +85,7 @@ are marked as set up.
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost (and for a Claude model the installed Claude Code does not know: its turns are estimated from tokens, marked "estimated from tokens" in the run lists and on the Run screen, or "no price for <model>" when it has no price, #369), recent runs, and the GitHub Actions minutes of the month against the included quota (warning at 80%, see CI/CD). The topbar widget shows this month's total; click it for a per-provider popover. The top bar (#412) reads: the brand, the Project select, the **24/7** chip and this usage widget, then at the right end the Oracle's button, the notifications bell and the account chip (its pop-up opens aligned to the right edge). A run's status, cost, Stop and Pause live on its Run screen, not in the top bar |
 | Night watch | The Oracle's night shift (#172). It leads with the switch: **Off**, or **On until 07:30** with who turned it on and when (an end time is required, at most 24 hours; a preset sets 8 h from now). The owner's checklist says what the Oracle may do **without asking** while it is on (retry a failed roadmap item, skip an item, regroup or reorder planned items, start from scratch over kept work, refresh issue text, restore a workflow or skill default, append low-complexity issues, restart the dispatch, commit a workflow or skill fix to the local main, file an issue, promote a release: push the stable tag of the last release candidate, #489), each with what it does and its undo; defaults: retry and refresh. Answering a human gate, any other push, closing issues, deleting data and paid calls outside the plan are shown locked, never allowed. Each night is measured from the Oracle's own log (`oracle/night-log.jsonl`) and the runs' events: incidents by kind, autonomy, escalation, resolution, TTD and TTR (median, p90), idle hours by cause, hours saved (an estimate), work unblocked, gate wait, precision (undone actions), loops, false alarms, the watch's cost, the night's yield and the safety counters (a red alarm when a gate was crossed or a never-allowed action ran), a timeline, the actions with their permission, backup and Undo, and a table to compare nights against the baseline night. While the watch is on, the sidebar entry shows a moon and the runs it watches; when it ends, a notification and a card on Home's Overview give the morning summary. Simulated mode can replay a sample night. While **Self-healing** is on (#278, Settings › Execution › Oracle) the watch has no end time: the screen says **Self-healing is on** in place of the end time, its switch is the setting (turned off in Settings), the same checklist applies by day, and each Self-healing day (UTC) is a window of the report with its own counts: detected, repaired alone, waiting for you, and the Oracle's cost with tokens |
-| Settings | Workspace, voice input (**General › Voice input**: OS dictation, the whisper.cpp CLI, model download and language, see Voice input below), CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). There is no global default workflow (#790): the workflow used wherever one is not picked by hand (the Product Owner's plans, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered, Fix the base) is the project's own default, from its page or its repository's `.multiagent/project.yaml`; an older `defaultWorkflow` setting is copied once to the projects without one and then dropped. **General › Language** (#327, #328, #329), next to the time zone: **Interface** (#329; English or Português (Brasil), the languages with a translation) sets the language of every screen (#330: Home, Inbox, Discovery, Backlog and Roadmap, Run, Sessions, Releases, Projects, Workflows, Agents, Skills, Analytics, Usage, Night watch, the Oracle, Product Owner and Supervisor drawers and the Agents window), the First-run setup, OS notifications and desktop dialogs, with dates, numbers and percentages in that language and costs in US$ with its separators ("US$ 6,48"); until you choose one it follows the computer's language when the app has it, else English, and a change redraws every open window at once, without a restart (your content, workflow texts, agents' messages and logs are not translated; to add a language, copy `packages/shared/i18n/en.json` to `<lang>.json`, translate its values and add it to `PAGE_LANGUAGES` in `packages/shared/i18n.js`; a key it lacks shows the English text); **AI agents** ("Same as the interface", the default, which follows the Interface language; or English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어) sets the language of every chat reply (Oracle, Product Owner, Supervisor, Grill me), step summary, handoff note, decision log and generated document; **Issues** (English by default, same list) sets the language of issue titles and bodies, issue comments, PR/MR descriptions and review replies, and the commit messages agents write, with the headings the app writes itself (`## Tasks`, `Related:`, `Decision (owner):`) translated where the language has them. Each agent turn carries one Language line naming both; JSON keys and enum values, paths, branches, labels, `- [ ]` checkboxes, `#n` references and closing keywords (`Closes #n`) never change, and code comments follow the project. A change applies from each session's next turn. **Execution › Keep awake**: the switch of the Workflows screen (see Workflows), off by default: no sleep while runs, a roadmap or a queue have work to do. **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. **Machine profile** (#367): Concurrent runs shows one line sizing the runs from this machine ("This machine: 20 threads, 32 GB → up to 5 runs at once, 1 test worker per run": runs = min(threads ÷ 4, GB ÷ 6), between 1 and 6; the test workers are the machine's divided by the runs), with its state: **Auto** (the maximum and the **test workers per run** follow the machine), **Manual** (a value you typed wins, stays as it is on another machine; **back to auto** drops it) or **Unknown** (the machine could not be read: 2 runs, 2 workers). **Use these values** turns concurrent runs on with the machine's values. Every run gets its test workers as `MULTIAGENT_TEST_WORKERS` / `MULTIAGENT_E2E_WORKERS`. When the memory guard held or stopped runs on 2 or more days of the last 7, it suggests one run fewer, with the days and runs, and changes nothing until you click **Apply** (Undo in its toast). **Execution › Memory guard** (#276): on by default; a process a real run started (a test, a build, a script, a suite or a screenshot capture) that uses more than the **limit** (25% of the RAM by default, 5–90; the hint gives it in GB for this machine) is stopped with its children within seconds, and suites and new real runs wait while less than the **floor** of the memory is free (10% by default, 0–50, 0 = no hold); the agent CLI itself, the app and your other programs are never stopped. **Execution › Oracle › Self-healing** (#278): off by default; on, the Oracle watches every run and roadmap day and night, with no end time, and repairs what its permissions allow (**What it may do alone (3 of 10)** opens the Night watch's checklist, one list for both); it never answers a gate, pushes, closes an issue or deletes data, and the row is disabled with the reason while the Oracle cannot start in the workspace. A value out of its range is marked and not saved; turning it off applies to the runs started afterwards. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen; a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
+| Settings | Workspace, voice input (**General › Voice input**: OS dictation, the whisper.cpp CLI, model download and language, see Voice input below), CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). There is no global default workflow (#790): the workflow used wherever one is not picked by hand (the Product Owner's plans, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered, Fix the base) is the project's own default, from its page or its repository's `.multiagent/project.yaml`; an older `defaultWorkflow` setting is copied once to the projects without one and then dropped. **General › Language** (#327, #328, #329), next to the time zone: **Interface** (#329; English or Português (Brasil), the languages with a translation) sets the language of every screen (#330: Home, Inbox, Discovery, Backlog and Roadmap, Run, Sessions, Releases, Projects, Workflows, Agents, Skills, Analytics, Usage, Night watch, the Oracle, Product Owner and Supervisor drawers and the Agents window), the First-run setup, OS notifications and desktop dialogs, with dates, numbers and percentages in that language and costs in US$ with its separators ("US$ 6,48"); until you choose one it follows the computer's language when the app has it, else English, and a change redraws every open window at once, without a restart (your content, workflow texts, agents' messages and logs are not translated; to add a language, copy `packages/shared/i18n/en.json` to `<lang>.json`, translate its values and add it to `PAGE_LANGUAGES` in `packages/shared/i18n.js`; a key it lacks shows the English text); **AI agents** ("Same as the interface", the default, which follows the Interface language; or English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어) sets the language of every chat reply (Oracle, Product Owner, Supervisor, Grill me), step summary, handoff note, decision log and generated document; **Issues** (English by default, same list) sets the language of issue titles and bodies, issue comments, PR/MR descriptions and review replies, and the commit messages agents write, with the headings the app writes itself (`## Tasks`, `Related:`, `Decision (owner):`) translated where the language has them. Each agent turn carries one Language line naming both; JSON keys and enum values, paths, branches, labels, `- [ ]` checkboxes, `#n` references and closing keywords (`Closes #n`) never change, and code comments follow the project. A change applies from each session's next turn. **Execution › Keep awake**: the switch of the Workflows screen (see Workflows), off by default: no sleep while runs, a roadmap or a queue have work to do. **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. **Machine profile** (#367): Concurrent runs shows one line sizing the runs from this machine ("This machine: 20 threads, 32 GB → up to 5 runs at once, 1 test worker per run": runs = min(threads ÷ 4, GB ÷ 6), between 1 and 6; the test workers are the machine's divided by the runs), with its state: **Auto** (the maximum and the **test workers per run** follow the machine), **Manual** (a value you typed wins, stays as it is on another machine; **back to auto** drops it) or **Unknown** (the machine could not be read: 2 runs, 2 workers). **Use these values** turns concurrent runs on with the machine's values. Every run gets its test workers as `CRAFTORIO_TEST_WORKERS` / `CRAFTORIO_E2E_WORKERS`. When the memory guard held or stopped runs on 2 or more days of the last 7, it suggests one run fewer, with the days and runs, and changes nothing until you click **Apply** (Undo in its toast). **Execution › Memory guard** (#276): on by default; a process a real run started (a test, a build, a script, a suite or a screenshot capture) that uses more than the **limit** (25% of the RAM by default, 5–90; the hint gives it in GB for this machine) is stopped with its children within seconds, and suites and new real runs wait while less than the **floor** of the memory is free (10% by default, 0–50, 0 = no hold); the agent CLI itself, the app and your other programs are never stopped. **Execution › Oracle › Self-healing** (#278): off by default; on, the Oracle watches every run and roadmap day and night, with no end time, and repairs what its permissions allow (**What it may do alone (3 of 10)** opens the Night watch's checklist, one list for both); it never answers a gate, pushes, closes an issue or deletes data, and the row is disabled with the reason while the Oracle cannot start in the workspace. A value out of its range is marked and not saved; turning it off applies to the runs started afterwards. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen; a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
 | Oracle | The Oracle's one conversation for the whole app (see The Oracle below): docked on Home (its Overview tab), and a drawer on every other screen from the **Oracle** button at the top right of the header (#254, next to the notifications bell), whose badge counts the answers that arrived while it was closed. The Oracle, the Product Owner and the Supervisor also open in their own **Agents window** (#263: each drawer's **Open in a window** button, or Ctrl+Shift+A): a rail on the left with the three agents (an unread count, busy while one answers) and the selected one's conversation, the same as in its drawer; the window remembers its size and position and the last agent shown. Answers render Markdown and tables, with their time, model, cost and tokens; run ids, issues and run files open in the app; pasted screenshots are sent with the question; **Memory** edits its standing decisions and **New session** starts over from a handoff note. The footer shows today's spend against the daily budget (Settings › Execution); paused by budget or answering in another app process, the input is replaced by a notice. While it answers, the chat shows what it is doing (an activity line with a timer, its last steps), then the answer as it is written; **Stop** ends the turn and keeps what was written, marked Stopped (#180) |
 | Setup | The first-run Setup (#319), a large modal that opens once per workspace after the workspace folder and the sign-in (Settings › Agents & CLIs › **Run setup again** reopens it): a stepper **Agents · Try it safely · Workflows · First project** with Back / Next / Skip (Enter = Next, Esc = Skip after a confirm). **Agents**: one row per CLI with its status (Ready / Not signed in / Not installed / Checking…), version, account and what it is for, and one action (**▶ Install** or **▶ Sign in**, run in the terminal dock; the row checks again when that terminal ends, and **Check again** checks them all). **Try it safely**: **Show simulation mode** (Developer mode, on by default here), and the machine profile's line (#367: how many runs at once and test workers per run this machine allows, set in Settings › Execution › Concurrent runs). **Workflows**: the bundled workflows by category with their requirement badges ("Needs Codex") and Ready / Missing state; the ready ones are picked, the others are hidden from Start and Home (`hiddenWorkflows` in `settings.json`). **First project**: the New project dialog; **Finish** opens Start on the first picked workflow. Finish or Skip records `setupDone` in `settings.json`, so it never opens by itself again; workspaces created before Setup existed count as set up. |
 <!-- /generated:screens -->
@@ -172,7 +172,7 @@ and starts paid runs, as you would in the desktop app. Share it only with yourse
 Runs the engine without Electron and serves the same UI to a browser: open the printed
 `http://…/?token=…` URL (shown once: clear it from the shell history and the scrollback if others
 can read them), or open the server's address and type the token in its sign-in form (`POST /session`,
-the token stays out of the address bar). The token (from `MULTIAGENT_SERVER_TOKEN`, else random) is
+the token stays out of the address bar). The token (from `CRAFTORIO_SERVER_TOKEN`, else random) is
 then kept in an HttpOnly, SameSite=Strict cookie for a week (`Secure` when the request came over
 HTTPS, e.g. `X-Forwarded-Proto: https` from a TLS proxy); API clients send
 `Authorization: Bearer <token>`. On `127.0.0.1` the server answers only requests whose `Host` is
@@ -189,7 +189,7 @@ Tailscale is not running). A proxy in front must send one of these names as `Hos
 - Requests from another origin are refused. Beyond `127.0.0.1` the traffic is plain HTTP: put the
   server behind a reverse proxy with TLS.
 - The server asks for the same account as the app (sign in from the browser UI; the sign-in page
-  opens on the server machine). `MULTIAGENT_AUTH=off` disables it in development.
+  opens on the server machine). `CRAFTORIO_AUTH=off` disables it in development.
 
 ### The app on one computer, the engine on another
 
@@ -200,14 +200,14 @@ computers on the same [Tailscale](https://tailscale.com) tailnet.
 On the computer that runs the engine (a source checkout), in PowerShell:
 
 ```powershell
-$env:MULTIAGENT_SERVER_TOKEN = "<a long random secret, at least 16 characters>"
-$env:MULTIAGENT_AUTH = "off"
+$env:CRAFTORIO_SERVER_TOKEN = "<a long random secret, at least 16 characters>"
+$env:CRAFTORIO_AUTH = "off"
 npm run serve -- --host tailscale --port 7300
 ```
 
 Close the desktop app on that computer first: like the app, the server locks its workspace (one
 engine per workspace) and refuses to start on a workspace the app has open (or pass
-`--workspace <another folder>`). Keep `MULTIAGENT_SERVER_TOKEN` the same: the app saves the token,
+`--workspace <another folder>`). Keep `CRAFTORIO_SERVER_TOKEN` the same: the app saves the token,
 and without the variable the server makes a new one at every start. `--host tailscale` keeps the engine off the local network;
 `--host 0.0.0.0 --insecure-http` listens everywhere over plain HTTP (only behind a VPN or a TLS proxy).
 
@@ -226,7 +226,7 @@ with the token encrypted by the OS, never in the workspace. A computer that offe
   refuses the token, the app shows the connection page with the reason: **Retry**, **Change the
   address** or **Use this computer**.
 - Back to this computer: Settings › Execution › Engine › Change… › **This computer** (the address
-  and token stay saved for later). `MULTIAGENT_ENGINE=local` forces this computer for one start.
+  and token stay saved for later). `CRAFTORIO_ENGINE=local` forces this computer for one start.
 - On the engine's computer, not in the window: the CLIs and their sign-ins, the terminals (shown
   in the window, running there), files and folders (type that computer's paths: the folder picker is
   not available), desktop notifications, Keep awake, the control channel, the ↗ external terminal
@@ -235,7 +235,7 @@ with the token encrypted by the OS, never in the workspace. A computer that offe
   computer's language, but the AI agents ("Same as the interface") follow the engine's computer's
   language, where they run. To make them agree, choose Interface or AI agents there.
 - **Sign-in**: a remote app cannot sign the server in yet (the provider's page would open on the
-  engine's computer), so the server runs with `MULTIAGENT_AUTH=off`; the account only counts users.
+  engine's computer), so the server runs with `CRAFTORIO_AUTH=off`; the account only counts users.
 - Plain HTTP over Tailscale is encrypted by WireGuard. For HTTPS, leave `npm run serve` on
   `127.0.0.1` and put `tailscale serve` in front of it on that computer:
 
@@ -360,9 +360,9 @@ allowlisted environment: cloud keys, API keys and the SSH agent stay out; GitHub
 only agents allowed to run `gh`/`glab`. A workflow lists any other variable its tests need in
 `env: { passthrough: [...] }`.
 
-Running from source, `MULTIAGENT_AUTH=off` skips the sign-in (development, tests, screenshots, the
+Running from source, `CRAFTORIO_AUTH=off` skips the sign-in (development, tests, screenshots, the
 local preview and `npm run serve`). An app showing a remote engine (Settings › Execution › Engine)
-cannot sign that engine's server in yet: the server runs with `MULTIAGENT_AUTH=off`. The account's database is defined in `supabase/migrations/`.
+cannot sign that engine's server in yet: the server runs with `CRAFTORIO_AUTH=off`. The account's database is defined in `supabase/migrations/`.
 
 ## Workflows, skills and seeds are code
 
@@ -597,7 +597,7 @@ and the file's path.
   - `runs:resume` `{ runId, step }` resumes a run as the Resume dialog does; `runs:resumeOptions`
     `{ runId }` lists the steps it offers. A resume that would go past a gate the previous run decided
     gets the dialog's refusal. A real (non-mock) `runs:resume` costs the owner's money, like
-    `roadmap:start`; it is refused under `MULTIAGENT_SIMULATION_ONLY`. `inputs` is refused (#799): only
+    `roadmap:start`; it is refused under `CRAFTORIO_SIMULATION_ONLY`. `inputs` is refused (#799): only
     the owner changes a run's inputs, in the dialog.
   - `workflows:restore` puts a workspace copy back to its bundled default, the old copy to the trash.
     Through this channel it is refused, naming the steps, when the copy has a `human_approval` step its
@@ -616,7 +616,7 @@ and the file's path.
 Calling a channel (`POST /api/<channel>`, body `{ "arg": ... }`, answer `{ "result": ... }` or
 `{ "error": "..." }`). With the client shipped next to the app, `craftorio-ctl` (#342, no Node
 needed; Settings › Execution shows its path to copy while the switch is on: `resources/bin/` in
-the installed app). It reads `endpoint.json` from `MULTIAGENT_WORKSPACE` or `--workspace <dir>`,
+the installed app). It reads `endpoint.json` from `CRAFTORIO_WORKSPACE` or `--workspace <dir>`,
 checks the app's contract version (`GET /api/version`) and prints the result as JSON:
 
 ```
@@ -678,7 +678,7 @@ orchestrator:
 
 It runs in the run's worktree in an embedded terminal (the dock, labelled with the run's issues),
 with **■ Stop**, and stops by itself when the gate is answered or the run ends. It never answers the
-gate. The copy runs in simulation only (`MULTIAGENT_SIMULATION_ONLY=1`) on a scratch workspace
+gate. The copy runs in simulation only (`CRAFTORIO_SIMULATION_ONLY=1`) on a scratch workspace
 (`<workspace>/local-previews/<run>/`: a copy of your projects, agents, skills, workflows and
 settings, never your runs) with its own user-data folder, so trying this app can't spend on real
 models or touch your workspace; **real workspace** (with a warning) points it at yours instead.
@@ -1011,7 +1011,7 @@ issue again (new body, task progress, labels), and the run records the save (`is
 text sent in `issue-save.md`), shown in Details and Artifacts. A failure (no auth, issue closed or
 deleted, network) shows the CLI's message; the document stays in `document.md`. Agents and the
 supervisor never save to an issue. A simulated run only shows the preview, and
-`MULTIAGENT_SIMULATION_ONLY=1` refuses every real save, so automated checks never call `gh`/`glab`.
+`CRAFTORIO_SIMULATION_ONLY=1` refuses every real save, so automated checks never call `gh`/`glab`.
 
 ## Issue (`workflows/issue.yaml`)
 
@@ -1209,7 +1209,7 @@ The run comments once on the issue or pull request with its id, counts in the da
 budgets, waits for a free slot and the merge queue like a roadmap run, and its gates ask you: a
 trigger starts work, it never merges. A rule that names a workflow outside the manifest or misses a
 field is shown as "ignored" on the project's **Triggers** card, with the last event seen and the
-runs started. Under `MULTIAGENT_SIMULATION_ONLY=1` the platform is neither read nor written.
+runs started. Under `CRAFTORIO_SIMULATION_ONLY=1` the platform is neither read nor written.
 Details: [`docs/agents/engine/repository-workflows.md`](docs/agents/engine/repository-workflows.md).
 
 ## Ways of working: an interview that writes your workflows
@@ -1594,7 +1594,7 @@ The button's badge counts the answers that arrived while the conversation was ou
   through gh / glab, read-only. An issue card uses existing labels and says whether a duplicate
   was searched.
 - **Verify by running**: the `checker` runs a test file or command on a scratch checkout of a
-  branch with `MULTIAGENT_SIMULATION_ONLY=1` and returns the result with its evidence (the checkout
+  branch with `CRAFTORIO_SIMULATION_ONLY=1` and returns the result with its evidence (the checkout
   is removed after). A check that costs money or takes longer than ~2 min is a **Run a check** card.
 - **Small context**: besides the 150k-token context threshold, an answer that re-read more than
   1M tokens of cache over its tool calls makes the next question start a fresh session
@@ -2602,7 +2602,7 @@ Everything the app produces lives in a local workspace folder:
 - Settings shows the current workspace, with **Open** and **Change…**.
 - The `repo_path` input accepts a git URL (`https://…` or `git@…`): the app clones it into
   `repos/<owner>-<repo>` (or runs `git fetch` if already cloned) and runs the workflow on that copy.
-- `MULTIAGENT_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
+- `CRAFTORIO_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.
 <!-- /generated:workspace -->
 

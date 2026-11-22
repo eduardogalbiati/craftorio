@@ -50,7 +50,7 @@
     "cleanupWorktrees: a worktree still there after removal (locked by a process) keeps the run\\'s scratch workspace and is not reported as removed",
     "engine (${spelling} paths): agents work in the run worktree; removed on success; on failure the folder goes and the branch stays, and a resume recreates the folder from it",
     "engine: a cancelled run leaves no worktree folder and no scratch, its branch has the WIP commit; Resume recreates the folder with that work and continues",
-    "engine: an agent of a run with a worktree gets MULTIAGENT_WORKSPACE in its environment, pointing at the run\\'s own scratch workspace; removed once the worktree is removed",
+    "engine: an agent of a run with a worktree gets CRAFTORIO_WORKSPACE in its environment, pointing at the run\\'s own scratch workspace; removed once the worktree is removed",
     "engine: `goto: end` + `status` sets the outcome; a rejected failure gate is failed, its worktree folder goes and its branch stays",
     "engine: processes left in the worktree are stopped after each agent step and before the worktree is removed",
     "engine: processes left in the worktree are also stopped after a delegation",

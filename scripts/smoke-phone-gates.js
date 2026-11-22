@@ -111,7 +111,7 @@ async function scenarios(win, fixture, out) {
 }
 
 async function run() {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const out = path.resolve(process.argv.slice(process.argv.indexOf('--phone-gates') + 1)[0] || 'phone-gates-captures');
   const fixture = await phoneGatesFixture();
   const userData = path.join(require('os').tmpdir(), `phone-gates-user-data-${process.pid}`);

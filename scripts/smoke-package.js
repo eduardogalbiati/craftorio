@@ -1,6 +1,6 @@
 // Smoke test of a packaged app (the release jobs in deploy.yml and preview.yml): starts it in simulation
-// (MULTIAGENT_SIMULATION_ONLY=1) on a scratch workspace and checks that its window loads and that it
-// quits by itself (apps/desktop/host/main.js writes MULTIAGENT_SMOKE_FILE, then quits). Exits 1 otherwise. On Linux,
+// (CRAFTORIO_SIMULATION_ONLY=1) on a scratch workspace and checks that its window loads and that it
+// quits by itself (apps/desktop/host/main.js writes CRAFTORIO_SMOKE_FILE, then quits). Exits 1 otherwise. On Linux,
 // an AppImage the kernel makes start without Chromium's sandbox must warn about it on stderr (#476).
 //   node scripts/smoke-package.js [executable or AppImage]   (default: this machine's build in dist/)
 // Linux needs a display: run it under xvfb-run.
@@ -28,13 +28,13 @@ const expectSandboxWarning = process.platform === 'linux' && /\.AppImage$/i.test
 let stderr = '';
 
 console.log(`Smoke: starting ${exe} on ${workspace}`);
-// A packaged app ignores MULTIAGENT_USER_DATA: Chromium's --user-data-dir keeps its user data (sign-in,
+// A packaged app ignores CRAFTORIO_USER_DATA: Chromium's --user-data-dir keeps its user data (sign-in,
 // window state) away from the machine's real install; on macOS, Chromium's --use-mock-keychain keeps
 // safeStorage away from the machine's keychain (#623)
 const args = [`--user-data-dir=${path.join(scratch, 'user-data')}`, ...(process.platform === 'darwin' ? ['--use-mock-keychain'] : [])];
 const child = spawn(exe, args, {
   stdio: expectSandboxWarning ? ['inherit', 'inherit', 'pipe'] : 'inherit',
-  env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: workspace, MULTIAGENT_SMOKE_FILE: report },
+  env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_WORKSPACE: workspace, CRAFTORIO_SMOKE_FILE: report },
 });
 if (expectSandboxWarning) child.stderr.on('data', (d) => { stderr += d; process.stderr.write(d); });
 const fail = (why) => {

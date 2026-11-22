@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'context-budget.yaml');
 const argAfter = (args, flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
@@ -58,7 +58,7 @@ test('claude-code gets --max-turns <max_requests>; an agent without a budget get
   const dir = tmp(t, 'budget-cli-');
   // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
   const saved = {};
-  for (const k of ['MULTIAGENT_SIMULATION_ONLY', 'MULTIAGENT_WORKSPACE', 'MULTIAGENT_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
+  for (const k of ['CRAFTORIO_SIMULATION_ONLY', 'CRAFTORIO_WORKSPACE', 'CRAFTORIO_USER_DATA']) { saved[k] = process.env[k]; delete process.env[k]; }
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v !== undefined) process.env[k] = v; } });
   const fake = path.join(__dirname, 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(dir, 'wf.yaml');

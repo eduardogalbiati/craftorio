@@ -30,8 +30,8 @@ const untilIdle = (service) => waitFor(() => service.api['runs:active']().length
 function scratch(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'recover-ws-'));
   const cliHome = fs.mkdtempSync(path.join(os.tmpdir(), 'recover-cli-home-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
   const services = [];
   t.after(async () => {
     for (const s of services) {

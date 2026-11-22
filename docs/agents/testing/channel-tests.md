@@ -6,7 +6,7 @@ The channel sweep (#333), the channel contract (#338) and the contract tests ove
 
 `packages/engine/test/slow/service-channel-sweep-333.slow.test.js` enumerates the service's manifest (no
 hand-written list: a new channel is swept by itself) and calls every channel in a scratch
-workspace, under `MULTIAGENT_SIMULATION_ONLY`, with hostile values: the whole argument, then each
+workspace, under `CRAFTORIO_SIMULATION_ONLY`, with hostile values: the whole argument, then each
 named param on its own, missing, `null`, a number, a list, an object, `''`, `../../outside`, an
 absolute path outside the workspace, a 1 MB string and an object with a `__proto__` key. Each call
 has 4 s. It passes when every call answers or rejects with an `Error` that names the problem
@@ -55,7 +55,7 @@ result against the engine's own `schema.result` (from `GET /api/manifest`) and a
 argument. The JS engine's answers are the reference a second engine (the Rust phases) must match.
 
 - **Which engine**: `ENGINE_URL` (+ `ENGINE_TOKEN`, the server's token) names one, e.g.
-  `npm run serve -- --port 7300` with `MULTIAGENT_SERVER_TOKEN` set, then
+  `npm run serve -- --port 7300` with `CRAFTORIO_SERVER_TOKEN` set, then
   `ENGINE_URL=http://127.0.0.1:7300 ENGINE_TOKEN=<token> node --test packages/engine/test/contract/`. Without it the
   suite starts `node packages/engine/bin/craftorio-engine.js` itself on a scratch workspace in simulation, with no account,
   and stops it after; that is how it runs in `npm test` (about 10 s). Never point it at a workspace

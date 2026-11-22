@@ -42,7 +42,7 @@ function screens(dir, PATH) {
   const home = path.join(dir, 'home');
   fs.mkdirSync(home, { recursive: true });
   const out = execFileSync(process.execPath, ['-e', script], {
-    env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', HOME: home, USERPROFILE: home, PATH, SHELL: path.join(home, 'no-such-shell') },
+    env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', HOME: home, USERPROFILE: home, PATH, SHELL: path.join(home, 'no-such-shell') },
     encoding: 'utf8', timeout: 60000, windowsHide: true,
   });
   const r = JSON.parse(out.slice(out.lastIndexOf('\n@@') + 3));

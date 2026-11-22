@@ -3,7 +3,7 @@
 // supervisor.js), the way the drawer and the Supervisor page call it.
 // Live progress (#180): supervisor:chat's turn is pushed on chat:progress and chat:cancel stops it;
 // mockSteps' delays are scaled down (like the mock provider) so these tests stay fast.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -15,7 +15,7 @@ const { createSupervisorChat, questionText } = require('../../domains/supervisor
 
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-chat-ws-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   t.after(() => service.shutdown());
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -45,7 +45,7 @@ test('supervisor:chat with mock: a user message (carrying the screen) and a simu
   assert.deepEqual(out.messages, lines);
 });
 
-test('supervisor:chat without mock, under MULTIAGENT_SIMULATION_ONLY (set in the test env): answers from the simulated supervisor too, no model call', async (t) => {
+test('supervisor:chat without mock, under CRAFTORIO_SIMULATION_ONLY (set in the test env): answers from the simulated supervisor too, no model call', async (t) => {
   const { api } = makeService(t);
   const out = await api['supervisor:chat']({ question: 'How much did I spend?', screen: '' });
   assert.equal(out.message.role, 'supervisor');
@@ -126,7 +126,7 @@ test('createSupervisorChat: without mock, outside a mocked run, refuseReal is co
     mcpCommand: () => { throw new Error('mcpCommand() should not be called'); },
     skillsDirs: () => [],
     resolveCommand: () => { throw new Error('resolveCommand() should not be called'); },
-    refuseReal: () => { throw new Error('Simulation only (MULTIAGENT_SIMULATION_ONLY=1): refusing to start the supervisor\'s CLI (claude).'); },
+    refuseReal: () => { throw new Error('Simulation only (CRAFTORIO_SIMULATION_ONLY=1): refusing to start the supervisor\'s CLI (claude).'); },
   });
   const { message } = await chat.ask({ question: 'Start a real run', mock: false });
   assert.equal(message.role, 'system');

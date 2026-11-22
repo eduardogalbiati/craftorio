@@ -4,7 +4,7 @@
 // neither CI's UTC nor the owner's UTC-3, so a cut in either fails. Driven through the service
 // (oracle:state, oracle:ask with mock, analytics:agents) with Date faked to a fixed instant; usage.jsonl
 // lines keep UTC stamps.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

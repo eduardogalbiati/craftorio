@@ -28,7 +28,7 @@ and the file's path.
   - `runs:resume` `{ runId, step }` resumes a run as the Resume dialog does; `runs:resumeOptions`
     `{ runId }` lists the steps it offers. A resume that would go past a gate the previous run decided
     gets the dialog's refusal. A real (non-mock) `runs:resume` costs the owner's money, like
-    `roadmap:start`; it is refused under `MULTIAGENT_SIMULATION_ONLY`. `inputs` is refused (#799): only
+    `roadmap:start`; it is refused under `CRAFTORIO_SIMULATION_ONLY`. `inputs` is refused (#799): only
     the owner changes a run's inputs, in the dialog.
   - `workflows:restore` puts a workspace copy back to its bundled default, the old copy to the trash.
     Through this channel it is refused, naming the steps, when the copy has a `human_approval` step its
@@ -47,7 +47,7 @@ and the file's path.
 Calling a channel (`POST /api/<channel>`, body `{ "arg": ... }`, answer `{ "result": ... }` or
 `{ "error": "..." }`). With the client shipped next to the app, `craftorio-ctl` (#342, no Node
 needed; Settings › Execution shows its path to copy while the switch is on: `resources/bin/` in
-the installed app). It reads `endpoint.json` from `MULTIAGENT_WORKSPACE` or `--workspace <dir>`,
+the installed app). It reads `endpoint.json` from `CRAFTORIO_WORKSPACE` or `--workspace <dir>`,
 checks the app's contract version (`GET /api/version`) and prints the result as JSON:
 
 ```

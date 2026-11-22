@@ -15,6 +15,7 @@
 // language and test workers come from packages/engine/engine/run-settings.js, shared with the app.
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
+require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 const path = require('path');
 const { aliasInputs } = require('@craftorio/shared/default-workflow');
 const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
@@ -86,9 +87,9 @@ function withProjectDefaults(file, typed, project) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-// Same workspace as the app (MULTIAGENT_WORKSPACE > registered path > ~/multiagent-workspace).
+// Same workspace as the app (CRAFTORIO_WORKSPACE > registered path > ~/multiagent-workspace).
 // With no interactive terminal, creates the default folder if none exists. An agent's check
-// (MULTIAGENT_SIMULATION_ONLY=1) gets its run's scratch workspace or a temporary one, never the owner's (#120).
+// (CRAFTORIO_SIMULATION_ONLY=1) gets its run's scratch workspace or a temporary one, never the owner's (#120).
 const found = resolveWorkspace();
 const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' && found.source !== 'simulation' });
 // Same defaults as the app: bundled skills and workflows are seeded into the workspace.

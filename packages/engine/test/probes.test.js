@@ -6,7 +6,7 @@ const path = require('path');
 const { parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, withQuota, runProbe } = require('../engine/probes');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.05';
 
 test('parseTarget reads GitHub and GitLab PR/MR and run URLs', () => {
   assert.deepEqual(parseTarget('https://github.com/acme/app/pull/42'), { platform: 'gh', host: 'github.com', repo: 'acme/app', kind: 'pr', id: 42 });

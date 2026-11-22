@@ -5,7 +5,7 @@
 // questionText, 5th argument `language`) and the engine-side supervisor prompts (packages/engine/domains/supervisor/supervisor.js,
 // field `language`), which no longer pin English when the agents write Português.
 // A run's chat shows the run's own agent turns: those are covered by test/language-engine-327.test.js.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

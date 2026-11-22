@@ -7,7 +7,7 @@
 // schema names them and ask for prose in the agents language. Unset: English, as today.
 // Tiny inline workflows with the mock provider (about a second each); the simulated run gives every
 // agent the mock provider, so the prompt sent is the one each CLI (claude, codex, grok) would get.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -1,6 +1,6 @@
 // The Oracle's checker (#184): verify a claim by running it. Runs one test file or test command on a
 // scratch checkout of a project's branch (a detached git worktree under <workspace>/oracle/checks/,
-// removed afterwards: the project's own checkout is never touched) with MULTIAGENT_SIMULATION_ONLY=1,
+// removed afterwards: the project's own checkout is never touched) with CRAFTORIO_SIMULATION_ONLY=1,
 // and returns the result with its evidence (exit code, duration, the failing tests, the output's
 // tail). No model call. The command is parsed here, never given to a shell as written: one program
 // of CHECK_PROGRAMS and plain arguments (no pipes, redirections, chains or inline code). A quick check
@@ -112,7 +112,7 @@ const git = (cwd, args) => new Promise((resolve, reject) => {
 // runs argv in cwd → { code, output, timedOut, durationMs }
 function runCommand(argv, cwd, timeoutMs) {
   return new Promise((resolve) => {
-    const env = { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', CI: process.env.CI || '1' };
+    const env = { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CI: process.env.CI || '1' };
     delete env.NODE_TEST_CONTEXT; // a check started from a node:test process reports like a top-level run
     const resolved = resolveCommand(argv[0]) || { file: argv[0], shell: false };
     const started = Date.now();
@@ -182,7 +182,7 @@ async function runCheck({ folder, branch, command, checksDir, timeoutMs = QUICK_
     : ok ? 'pass' : `fail (exit code ${res.code})`;
   const tail = res.output.length > TAIL_CHARS ? `…${res.output.slice(-TAIL_CHARS)}` : res.output;
   const text = [
-    `Check of ${ref} (${commit.slice(0, 12)}): \`${argv.join(' ')}\` with MULTIAGENT_SIMULATION_ONLY=1, on a scratch checkout (removed).`,
+    `Check of ${ref} (${commit.slice(0, 12)}): \`${argv.join(' ')}\` with CRAFTORIO_SIMULATION_ONLY=1, on a scratch checkout (removed).`,
     `Result: ${verdict}, ${(res.durationMs / 1000).toFixed(1)} s.`,
     failures.length ? `Failing tests:\n${failures.map((f) => `- ${f}`).join('\n')}` : '',
     `Output (end):\n${tail.trim() || '(none)'}`,

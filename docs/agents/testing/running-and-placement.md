@@ -41,7 +41,7 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   its result, so only the latest run counts). Tests that pass
   locally can still fail on another OS: CI is the judge.
 - The Electron part of `test/screenshot.test.js` (every view of `scripts/screenshot.js` opens and
-  quits by itself, ~1 min, ~25 windows) only runs with `MULTIAGENT_UI_TESTS=1`: CI's Windows and
+  quits by itself, ~1 min, ~25 windows) only runs with `CRAFTORIO_UI_TESTS=1`: CI's Windows and
   Ubuntu jobs have a step for it, with the E2E smoke (after `node node_modules/electron/install.js`;
   the matrix sets `ELECTRON_SKIP_BINARY_DOWNLOAD`; Ubuntu under `xvfb-run`, with unprivileged user
   namespaces allowed for Chromium's sandbox). Run it locally when you change the script or add a view.
@@ -52,7 +52,7 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   a front's in `fronts/<id>/features/`; one per area, every scenario `@issue-<n>`), steps next to them
   (`<folder>/steps/`, every steps folder loaded whatever runs), the launch in
   `features/support/app.js` (`_electron` on a fresh demo workspace seeded with scripts/screenshot.js's
-  data, simulation only, window off-screen; `MULTIAGENT_E2E_SHOW=1` shows it). Steps assert through
+  data, simulation only, window off-screen; `CRAFTORIO_E2E_SHOW=1` shows it). Steps assert through
   `getByRole` / `getByTestId` (the renderer's `data-testid`s). Visual baselines:
   `features/__screenshots__/<name>-<platform>.png`, committed, `maxDiffPixelRatio` in
   `playwright.config.js`; rewrite one on purpose only (`npm run test:e2e:update -- --grep @visual`).
@@ -64,22 +64,22 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   screencast: Playwright's recordVideo stalls Electron 44) and `failure.png` under
   `.test-output/e2e/artifacts/` (`npx playwright show-trace <zip>`). CI's Windows job runs `@smoke`.
   Two lanes (#365, Playwright projects in `playwright.config.js`): `behaviour` runs every scenario
-  that is neither `@visual` nor `@serial` in `MULTIAGENT_E2E_WORKERS` workers, fully
+  that is neither `@visual` nor `@serial` in `CRAFTORIO_E2E_WORKERS` workers, fully
   parallel, without the machine's screenshot slot; `visual` runs the `@visual` (and `@serial`)
   scenarios one at a time, each launch holding the screenshot slot (#199), so a run capturing
   screenshots elsewhere still makes it wait. A scenario that shares state with another one (a fixed
-  file, port or the clipboard) gets `@serial` with the reason in a comment; `MULTIAGENT_E2E_WORKERS=1`
+  file, port or the clipboard) gets `@serial` with the reason in a comment; `CRAFTORIO_E2E_WORKERS=1`
   is the old serial suite. One lane only: `npm run test:e2e -- --project behaviour`.
   Workers (#366): unset or `auto` sizes the behaviour lane from the machine,
   `clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5)))` (20 threads and 11 GB free give 2,
   a 4-vCPU runner 1; constants and measurements in `scripts/e2e-workers.js`); a number forces it, an
   invalid value falls back to auto with a warning. The suite's first line says the choice
   ("E2E: 2 workers (auto: 20 threads, 11.2 GB free)"). On a slow machine, or when scenarios time out
-  while other work runs, set `MULTIAGENT_E2E_WORKERS=1`; on a big idle one, a number above auto.
+  while other work runs, set `CRAFTORIO_E2E_WORKERS=1`; on a big idle one, a number above auto.
   The app is dark-only today: the light and dark baselines guard `prefers-color-scheme` both ways.
   E2E visual scenarios render at a fixed clock, never the real one (#362): `the app is open in the
   <theme> theme` seeds the workspace and starts the app's main process at `VISUAL_NOW`
-  (`features/support/fixed-clock.js`, MULTIAGENT_E2E_NOW), so a baseline with days or hours (the
+  (`features/support/fixed-clock.js`, CRAFTORIO_E2E_NOW), so a baseline with days or hours (the
   hours heatmap) passes at any hour; never fix a clock-dependent diff by raising the limit. A step
   that searches or filters waits for the filtered list itself (no row left from before), never for a
   row that was already there or a fixed sleep (`I search the runs for`).

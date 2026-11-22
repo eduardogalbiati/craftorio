@@ -8,7 +8,7 @@
 //   like the Monitor's webhook): GET answers 200 text/html, the screen's html, with a Content-Security-Policy
 //   that forbids the network (`connect-src 'none'`, no http(s) or `*` source) and no window.api / preload
 //   bridge (no api-http.js); any other method is 405; an unknown or expired token is 404.
-// Simulated (MULTIAGENT_SIMULATION_ONLY=1, set by makeService): no model, no run.
+// Simulated (CRAFTORIO_SIMULATION_ONLY=1, set by makeService): no model, no run.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');

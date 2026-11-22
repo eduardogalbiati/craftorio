@@ -25,7 +25,7 @@ Eduardo Galbiati (`eduardogalbiati/craftorio`, branch `main`).
 - **Branch + PR**, never commit to `main`; the owner merges, then asks to "go back to main and
   pull". Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Real-model calls cost the owner's money: say so and keep them minimal.
-- **Never start real runs in automated checks**: they run with `MULTIAGENT_SIMULATION_ONLY=1`
+- **Never start real runs in automated checks**: they run with `CRAFTORIO_SIMULATION_ONLY=1`
   (the engine refuses real runs, real providers and CLI terminals). Workflow agents already have
   it in their environment: run `npm test` / `node --test …` without a `VAR=` prefix. UI checks go through
   `scripts/smoke.js` (scratch workspace), never a hand-written script that launches `apps/desktop/host/main`.

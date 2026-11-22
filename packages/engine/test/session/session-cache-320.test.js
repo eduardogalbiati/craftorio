@@ -22,7 +22,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
 const { Recorder } = require('../../engine/recorder');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const load = () => require('../../domains/session/session-cache');
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'cache-state.yaml');
 const MIN = 60e3;

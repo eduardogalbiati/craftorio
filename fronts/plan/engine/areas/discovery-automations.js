@@ -10,7 +10,7 @@
 // check (`check: 'clarity'`) is no run: it asks the card's next open point in its thread (Grill me),
 // which waits for the person. An automation never moves or commits a card and never answers a gate
 // of a real run: the card shows it running while the gate waits for the owner. Under
-// MULTIAGENT_SIMULATION_ONLY the run is a simulation (the mock provider, no cost) and its gates take
+// CRAFTORIO_SIMULATION_ONLY the run is a simulation (the mock provider, no cost) and its gates take
 // their first choice, answered as 'auto' like `npm run run -- --mock --auto-approve` (#260: a ship
 // transition never follows), so a simulated automation ends by itself.
 // The automations in progress are kept in memory; a card left 'running' by a previous session of the

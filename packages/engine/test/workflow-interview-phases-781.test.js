@@ -38,9 +38,9 @@ function tmp(t, prefix) {
 }
 
 function simulation(t, value) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = value;
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = value;
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
 }
 
 // three commits (one a merge), one tag, one author, an npm test script, no CI

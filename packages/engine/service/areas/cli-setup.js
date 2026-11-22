@@ -9,7 +9,7 @@
 //   device) runs; the others (claude /login's TUI, codex / grok / glab, whose web sign-in waits for a
 //   browser on this machine) are not started: the job says what to run on the server ('manual').
 // - The channels (channels/cli-setup.js) are behind the server's token like every channel (#479).
-// - With MULTIAGENT_SIMULATION_ONLY=1 nothing is installed: a simulated process writes a few lines and
+// - With CRAFTORIO_SIMULATION_ONLY=1 nothing is installed: a simulated process writes a few lines and
 //   leaves a CLI the E2E hook made missing installed (packages/engine/domains/machine/simulated-clis.js).
 // createCliSetup({ spawn, check, emit, platform }) is the job runner without the service (the tests' seam).
 
@@ -133,7 +133,7 @@ function createCliSetup({ spawn, check, emit, platform = process.platform, cwd =
   return { start, status };
 }
 
-// a process that installs nothing (MULTIAGENT_SIMULATION_ONLY=1): a few lines, exit 0, and the CLI the
+// a process that installs nothing (CRAFTORIO_SIMULATION_ONLY=1): a few lines, exit 0, and the CLI the
 // E2E hook made missing is found afterwards
 function simulatedSpawn(file, args, options, { id, action } = {}) {
   const child = new EventEmitter();

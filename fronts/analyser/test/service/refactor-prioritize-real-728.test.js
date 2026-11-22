@@ -3,7 +3,7 @@
 // and the refactor-proposals workflow's prioritize step use) carry no onItem, which crashed the turn with
 // "onItem is not a function". The CLI is stubbed: PROVIDERS.claude gets this node's absolute path and
 // packages/engine/test/fixtures/fake-claude-ranking.js for the test (restored after), never a `claude`
-// found on PATH (the owner's real, paid CLI). MULTIAGENT_SIMULATION_ONLY is lifted for the test only.
+// found on PATH (the owner's real, paid CLI). CRAFTORIO_SIMULATION_ONLY is lifted for the test only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -19,12 +19,12 @@ function realClaudeStub(t, marker) {
   const saved = { command: claude.command, args: claude.args };
   claude.command = process.execPath;
   claude.args = [STUB, marker];
-  const sim = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  const sim = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
   t.after(() => {
     claude.command = saved.command;
     claude.args = saved.args;
-    if (sim === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = sim;
+    if (sim === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = sim;
   });
 }
 

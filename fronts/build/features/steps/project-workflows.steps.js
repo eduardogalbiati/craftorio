@@ -10,7 +10,7 @@
 // - data-testid="project-default-workflow": in the Overview's block, the project's default workflow's name.
 //
 // The folders are made under the scenario's scratch folder (e2e.scratch, next to the workspace that
-// MULTIAGENT_WORKSPACE points to); a repository one is a git repository (fixed identity, no machine
+// CRAFTORIO_WORKSPACE points to); a repository one is a git repository (fixed identity, no machine
 // config) with one commit holding the manifest.
 
 const fs = require('fs');
@@ -28,7 +28,7 @@ const blockIn = (scope) => scope.getByTestId('project-workflows-block').first();
 const overviewBlock = (page) => blockIn(projectOverview(page));
 // the scenario's scratch folder (the workspace is <scratch>/workspace)
 function scratchOf(e2e) {
-  const scratch = e2e.scratch || (process.env.MULTIAGENT_WORKSPACE && path.dirname(process.env.MULTIAGENT_WORKSPACE));
+  const scratch = e2e.scratch || (process.env.CRAFTORIO_WORKSPACE && path.dirname(process.env.CRAFTORIO_WORKSPACE));
   if (!scratch) throw new Error('no scratch folder: open the app first');
   return scratch;
 }

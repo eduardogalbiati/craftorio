@@ -401,7 +401,7 @@ function initNotifications() {
 
 // Developer mode (Settings › Execution): the Simulation checkboxes (.dev-only) are shown and checked
 // by default; without it they are hidden and every run is real. Simulation only (automated checks,
-// MULTIAGENT_SIMULATION_ONLY) behaves as developer mode: the engine refuses real runs anyway.
+// CRAFTORIO_SIMULATION_ONLY) behaves as developer mode: the engine refuses real runs anyway.
 const devMode = () => !!state.settings.developerMode || !!state.simulationOnly;
 // Whether a start is simulated, from its Simulation checkbox. Checked while it can't apply (developer
 // mode off) fails instead of silently starting a real run.

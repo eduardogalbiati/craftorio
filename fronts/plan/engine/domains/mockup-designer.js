@@ -8,7 +8,7 @@
 // read-only) and answers its reply plus the whole new screen in one ```html block
 // (MockupModel.parseDesignerReply), which the domain commits (one commit per turn, D10) and lints (D11).
 // Each turn's cost goes on the assistant's chat entry (costUsd, Q-8) and in chat/usage.jsonl (agent
-// designer, packages/engine/domains/agents/agents-usage.js). Simulated (MULTIAGENT_SIMULATION_ONLY): the
+// designer, packages/engine/domains/agents/agents-usage.js). Simulated (CRAFTORIO_SIMULATION_ONLY): the
 // same session bookkeeping, a marked turn and no model call, $0.
 // designerTurn({ workspace, projectId, slug, payload, projectFolder, model, skillsDirs, simulated, now, runTurn })
 //   → { commit, problems, reply, costUsd, sessionId, startReason, totalUsd }.

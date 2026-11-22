@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('@craftorio/engine/engine/workflow');
 const evidence = require('@craftorio/engine/domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root } = require('@craftorio/engine/test/engine-helpers');
 
 test('the renderer shuffle (arena-shuffle.js) gives the same order as the engine filter', () => {

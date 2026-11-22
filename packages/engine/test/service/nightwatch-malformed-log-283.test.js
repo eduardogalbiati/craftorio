@@ -2,7 +2,7 @@
 // the #278 tests logged in the first minute of a UTC day, or a clock moved back) does not break the
 // Night watch: nightwatch:report and nightwatch:morning (packages/engine/service/channels/nightwatch.js) and
 // night.nightMetrics / selfHealingDays (packages/engine/domains/night/night-watch.js) answer without throwing.
-// The service runs with MULTIAGENT_SIMULATION_ONLY=1; no model is asked.
+// The service runs with CRAFTORIO_SIMULATION_ONLY=1; no model is asked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');

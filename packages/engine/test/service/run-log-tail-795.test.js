@@ -34,22 +34,22 @@ test('#795 runs:logTail: the last bytes of a step log, from a whole line; a miss
 });
 
 test('#795 e2eSuiteDelay: only in a simulation, for the named step, with a positive delay; stopped by the signal', async () => {
-  const env = { MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_E2E_SUITE_DELAY_MS: '20', MULTIAGENT_E2E_SUITE_DELAY_STEP: 'suite' };
+  const env = { CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_E2E_SUITE_DELAY_MS: '20', CRAFTORIO_E2E_SUITE_DELAY_STEP: 'suite' };
   assert.equal(e2eSuiteDelay('e2e', null, env), null);
   assert.equal(e2eSuiteDelay(null, null, env), null);
-  assert.equal(e2eSuiteDelay('suite', null, { ...env, MULTIAGENT_SIMULATION_ONLY: '' }), null);
-  assert.equal(e2eSuiteDelay('suite', null, { ...env, MULTIAGENT_E2E_SUITE_DELAY_MS: '0' }), null);
+  assert.equal(e2eSuiteDelay('suite', null, { ...env, CRAFTORIO_SIMULATION_ONLY: '' }), null);
+  assert.equal(e2eSuiteDelay('suite', null, { ...env, CRAFTORIO_E2E_SUITE_DELAY_MS: '0' }), null);
   const t0 = Date.now();
   await e2eSuiteDelay('suite', null, env);
   assert.ok(Date.now() - t0 >= 15);
   const ac = new AbortController();
-  const long = e2eSuiteDelay('suite', ac.signal, { ...env, MULTIAGENT_E2E_SUITE_DELAY_MS: '60000' });
+  const long = e2eSuiteDelay('suite', ac.signal, { ...env, CRAFTORIO_E2E_SUITE_DELAY_MS: '60000' });
   ac.abort();
   await long;
 });
 
 test('#795 e2eSuiteDelay: a signal already aborted before the step resolves at once', async () => {
-  const env = { MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_E2E_SUITE_DELAY_MS: '60000', MULTIAGENT_E2E_SUITE_DELAY_STEP: 'suite' };
+  const env = { CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_E2E_SUITE_DELAY_MS: '60000', CRAFTORIO_E2E_SUITE_DELAY_STEP: 'suite' };
   const ac = new AbortController();
   ac.abort();
   const t0 = Date.now();

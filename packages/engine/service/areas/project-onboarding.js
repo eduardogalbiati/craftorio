@@ -98,11 +98,11 @@ function failureOf(e) {
 const listed = (name) => String(process.env[name] || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 // #725: the E2E hooks of a simulated run (features/steps/onboarding.steps.js): the jobs named in
-// MULTIAGENT_E2E_ONBOARDING_HOLD never end, those in MULTIAGENT_E2E_ONBOARDING_FAIL throw
+// CRAFTORIO_E2E_ONBOARDING_HOLD never end, those in CRAFTORIO_E2E_ONBOARDING_FAIL throw
 function e2eJobs(jobs) {
   if (!simulation.simulationOnly()) return jobs;
-  const hold = listed('MULTIAGENT_E2E_ONBOARDING_HOLD');
-  const fail = listed('MULTIAGENT_E2E_ONBOARDING_FAIL');
+  const hold = listed('CRAFTORIO_E2E_ONBOARDING_HOLD');
+  const fail = listed('CRAFTORIO_E2E_ONBOARDING_FAIL');
   if (!hold.length && !fail.length) return jobs;
   return Object.fromEntries(Object.entries(jobs).map(([name, run]) => [name, async (input) => {
     if (hold.includes(name)) return new Promise(() => {});
@@ -111,18 +111,18 @@ function e2eJobs(jobs) {
   }]));
 }
 
-// #731: the E2E hook of a simulated run (features/steps/onboarding.steps.js): MULTIAGENT_E2E_CITY_PLAN_FAIL=1
+// #731: the E2E hook of a simulated run (features/steps/onboarding.steps.js): CRAFTORIO_E2E_CITY_PLAN_FAIL=1
 // makes the projectMap job's city plan throw before the Oracle's report
 function e2eCityPlan() {
-  if (simulation.simulationOnly() && process.env.MULTIAGENT_E2E_CITY_PLAN_FAIL === '1') throw new Error('The simulated city plan failed (e2e).');
+  if (simulation.simulationOnly() && process.env.CRAFTORIO_E2E_CITY_PLAN_FAIL === '1') throw new Error('The simulated city plan failed (e2e).');
 }
 
 // #724 #743: the clone is not one of those jobs (follow() awaits projects.cloneJob): in a simulated run
-// MULTIAGENT_E2E_ONBOARDING_HOLD=clone keeps it cloning, MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS slows it
+// CRAFTORIO_E2E_ONBOARDING_HOLD=clone keeps it cloning, CRAFTORIO_E2E_ONBOARDING_CLONE_DELAY_MS slows it
 function e2eCloneWait() {
   if (!simulation.simulationOnly()) return null;
-  if (listed('MULTIAGENT_E2E_ONBOARDING_HOLD').includes('clone')) return new Promise(() => {});
-  const ms = Number(process.env.MULTIAGENT_E2E_ONBOARDING_CLONE_DELAY_MS);
+  if (listed('CRAFTORIO_E2E_ONBOARDING_HOLD').includes('clone')) return new Promise(() => {});
+  const ms = Number(process.env.CRAFTORIO_E2E_ONBOARDING_CLONE_DELAY_MS);
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : null;
 }
 
@@ -147,13 +147,13 @@ const machineCli = (provider) => toolSignIn(issues.PLATFORMS[provider].cli);
 const cliAccounts = (cli = accountsCli) => Promise.all(Platforms.PLATFORMS.filter((p) => p.cli)
   .map(async (p) => ({ provider: p.id, cli: p.cli, ...(await cli(p.id)) })));
 
-// #848: the E2E hook of a simulated run (features/steps/onboarding.steps.js): MULTIAGENT_E2E_GITHUB_REPOS=<JSON
+// #848: the E2E hook of a simulated run (features/steps/onboarding.steps.js): CRAFTORIO_E2E_GITHUB_REPOS=<JSON
 // array of { name, private, updatedAt }, newest first> stands for gh on the repository step: GitHub signed in as
 // e2e-owner and that list, without calling gh. null without the hook (or with no JSON array)
 function e2eGithubRepos() {
-  if (!simulation.simulationOnly() || !process.env.MULTIAGENT_E2E_GITHUB_REPOS) return null;
+  if (!simulation.simulationOnly() || !process.env.CRAFTORIO_E2E_GITHUB_REPOS) return null;
   try {
-    const repos = JSON.parse(process.env.MULTIAGENT_E2E_GITHUB_REPOS);
+    const repos = JSON.parse(process.env.CRAFTORIO_E2E_GITHUB_REPOS);
     return Array.isArray(repos) ? repos : null;
   } catch { return null; }
 }
@@ -209,13 +209,13 @@ async function machineRemote(provider, { name, folder }) {
   return { ok: true, url };
 }
 
-// #738: the simulated gh of an E2E run (features/steps/onboarding.steps.js): MULTIAGENT_E2E_REPO_PUSH=0|1 is
+// #738: the simulated gh of an E2E run (features/steps/onboarding.steps.js): CRAFTORIO_E2E_REPO_PUSH=0|1 is
 // the imported repository's permissions.push, whatever its host (a local file:// one too); with it, the
 // signed-in user is e2e-owner, who has no fork yet, and `gh repo fork` answers a fork URL without the network.
 // Without the hook a simulated run reads nothing (null: unknown).
 const E2E_LOGIN = 'e2e-owner';
 function e2ePlatformCli(args) {
-  const hook = process.env.MULTIAGENT_E2E_REPO_PUSH;
+  const hook = process.env.CRAFTORIO_E2E_REPO_PUSH;
   if (hook !== '0' && hook !== '1') return null;
   const a = args.map(String);
   const api = a[0] === 'api' ? a.find((x, i) => i > 0 && !x.startsWith('-')) || '' : null;
@@ -431,7 +431,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   // without push the state suggests a fork (the wizard's notice). Not read on another host nor when the CLI
   // does not answer; never fails the import. A simulated run's E2E hook stands for gh on any host.
   async function readPush(id, repo) {
-    const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.MULTIAGENT_E2E_REPO_PUSH);
+    const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.CRAFTORIO_E2E_REPO_PUSH);
     const platform = Platforms.findPlatform(providerOf(repo) || (e2e ? Platforms.DEFAULT_PLATFORM : null));
     if (!platform) return;
     const name = forkNameOf(platform, repo);

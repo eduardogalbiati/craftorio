@@ -14,8 +14,8 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
 const root = path.join(__dirname, '..', '..', '..', '..');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
-process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.05';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
 
 function writeTmp(t, yaml) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ask-human-'));

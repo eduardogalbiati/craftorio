@@ -33,14 +33,14 @@ const loadStore = () => require('../../engine/base-health-store');
 
 let savedSlot;
 test.beforeEach(() => {
-  savedSlot = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env.MULTIAGENT_SUITE_SLOT };
-  delete process.env.MULTIAGENT_SUITE_SLOT;
+  savedSlot = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env.CRAFTORIO_SUITE_SLOT };
+  delete process.env.CRAFTORIO_SUITE_SLOT;
   const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'bh749s-locks-'));
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   savedSlot.dir = locks;
 });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', savedSlot.locks], ['MULTIAGENT_SUITE_SLOT', savedSlot.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', savedSlot.locks], ['CRAFTORIO_SUITE_SLOT', savedSlot.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
   fs.rmSync(savedSlot.dir, { recursive: true, force: true, maxRetries: 3 });

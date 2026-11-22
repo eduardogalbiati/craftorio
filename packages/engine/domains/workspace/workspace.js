@@ -3,8 +3,8 @@
 // the skills (skills/), the agents (agents/), the workflows (workflows/) and the app preferences (settings.json).
 //
 // Resolution order:
-//   1. MULTIAGENT_WORKSPACE environment variable (tests/CI, an agent's run scratch workspace; not persisted)
-//   *. simulation only (MULTIAGENT_SIMULATION_ONLY=1) without it: a scratch workspace in the OS temp
+//   1. CRAFTORIO_WORKSPACE environment variable (tests/CI, an agent's run scratch workspace; not persisted)
+//   *. simulation only (CRAFTORIO_SIMULATION_ONLY=1) without it: a scratch workspace in the OS temp
 //      folder (simulationWorkspace), never the registered one, so an agent's check that missed its
 //      run's scratch workspace can't write to the owner's (#120); not persisted
 //   2. registered path (Windows: HKCU\Software\Craftorio\WorkspacePath;
@@ -29,7 +29,7 @@ const {
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\Craftorio';
 const REG_VALUE = 'WorkspacePath';
-const ENV_VAR = 'MULTIAGENT_WORKSPACE';
+const ENV_VAR = 'CRAFTORIO_WORKSPACE';
 
 const defaultWorkspace = (home = os.homedir()) => path.join(home, DEFAULT_NAME);
 // Where a simulation-only process given no workspace works: { workspace, userData } (#120)

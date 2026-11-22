@@ -143,7 +143,7 @@ test('captureScreenshots: a successful command that writes the image is counted 
 
 // ---- captureScreenshots: the machine-wide screenshot slot (#199) -----------------------------
 
-test('captureScreenshots: takes the slot, gives its token to run via MULTIAGENT_SCREENSHOT_SLOT, and releases it', async (t) => {
+test('captureScreenshots: takes the slot, gives its token to run via CRAFTORIO_SCREENSHOT_SLOT, and releases it', async (t) => {
   let released = false;
   let seenName;
   const slot = async (name) => { seenName = name; return { token: 'tok-123', release: () => { released = true; } }; };

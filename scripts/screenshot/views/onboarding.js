@@ -12,10 +12,10 @@
 //   analysis      a local git repository imported (file://, no network): the jobs and the cost, before the click
 //   review        that repository analysed (simulated) and the review step
 // --review issues-off (with --mode review, #845): a repository with Issues turned off, its Backlog card says so,
-// no Retry (the simulation-only hook MULTIAGENT_E2E_ISSUES_FAIL answers the issue read as gh does)
+// no Retry (the simulation-only hook CRAFTORIO_E2E_ISSUES_FAIL answers the issue read as gh does)
 // --review running (with --mode review, #852): the project map still running, City and Findings with the same
 // running indicator, the languages bar's loading placeholder
-// Nothing reaches the network nor a model (MULTIAGENT_SIMULATION_ONLY).
+// Nothing reaches the network nor a model (CRAFTORIO_SIMULATION_ONLY).
 
 const fs = require('fs');
 const path = require('path');
@@ -76,7 +76,7 @@ function seed({ args, ws, project, projects, workspace }) {
   fs.rmSync(path.join(ws.backlog, `${project.id}.json`), { force: true });
   workspace.writeSettings(ws, { lastProject: null });
   reachableRepo = null;
-  if (args.review === 'issues-off') process.env.MULTIAGENT_E2E_ISSUES_FAIL = 'disabled';
+  if (args.review === 'issues-off') process.env.CRAFTORIO_E2E_ISSUES_FAIL = 'disabled';
   if (['analysis', 'review'].includes(args.mode)) {
     const folder = path.join(ws.root, 'onboarding-demo', 'billing-api');
     fs.rmSync(folder, { recursive: true, force: true });

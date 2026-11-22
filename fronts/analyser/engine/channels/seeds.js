@@ -2,7 +2,7 @@
 // each one's last run, its recorded tool and the commits since (seeds:list); the cost estimate
 // (free with a tool; else the mean of the seed's last real runs); a run (packages/engine/domains/oracle/oracle-seeds.js: one
 // Oracle turn read-only in its daily budget, or the project's tool, simulated under mock or
-// MULTIAGENT_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
+// CRAFTORIO_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
 // interview: packages/engine/service/seed-runs.js); the history and one result
 // (<workspace>/architecture/<project id>/seeds/<seed id>/<stamp>/); the tool command recorded in the
 // project's settings (seedTools); and "Make it a tool" (fronts/analyser/engine/domains/seed-tool-issue.js: an issue in the

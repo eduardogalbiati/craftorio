@@ -273,7 +273,7 @@ Feature: Settings
     Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Issue + fix item" selected
 
   # #476 (SEC-11): the Linux AppImage's launcher starts the app without Chromium's sandbox when the
-  # system forbids it, and then sets MULTIAGENT_NO_SANDBOX=1 (the scenario sets it as the launcher
+  # system forbids it, and then sets CRAFTORIO_NO_SANDBOX=1 (the scenario sets it as the launcher
   # would). Assumes Settings › About gets data-testid="settings-sandbox-warning": that the app runs
   # without the sandbox, with the documented alternative, the sysctl
   # kernel.apparmor_restrict_unprivileged_userns=0 (README, Install on Linux)

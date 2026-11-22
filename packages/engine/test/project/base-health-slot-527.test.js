@@ -9,8 +9,8 @@
 //
 // Contract assumed for the developer:
 // - runBaseCheck(ws, { ..., slot: { dir, holder, onWait, pollMs } }): the same shape as runSuite's `slot`
-//   (#455). `dir` defaults to machine-slot slotDir() (MULTIAGENT_LOCKS_DIR when set, else the machine
-//   folder); these tests pass `slot.dir` AND set MULTIAGENT_LOCKS_DIR to the same temp folder, so the
+//   (#455). `dir` defaults to machine-slot slotDir() (CRAFTORIO_LOCKS_DIR when set, else the machine
+//   folder); these tests pass `slot.dir` AND set CRAFTORIO_LOCKS_DIR to the same temp folder, so the
 //   machine's real slot is never touched. Unlike runSuite, the base check always takes the slot.
 // - While it waits, `log(level, message)` gets a line matching /waiting for the suite slot/.
 const test = require('node:test');
@@ -27,9 +27,9 @@ const PROJECT = 'proj-527-slot';
 const RED = { test: 'cart totals include tax', file: 'test/cart.test.js', error: 'expected 110, got 100' };
 
 let saved;
-test.beforeEach(() => { saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
+test.beforeEach(() => { saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
@@ -40,7 +40,7 @@ function tmpWs(t) {
   fs.mkdirSync(path.join(ws, 'backlog'), { recursive: true });
   const locks = path.join(ws, 'locks');
   fs.mkdirSync(locks, { recursive: true });
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   return { ws, locks };
 }
 

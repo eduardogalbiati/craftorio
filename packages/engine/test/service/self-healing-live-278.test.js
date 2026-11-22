@@ -4,7 +4,7 @@
 // logged again after a restart, the findings-waiting notice once per budget pause and never for a
 // muted run, the report's and the morning card's Self-healing day, and acting alone by day only with
 // the permission (the owner's own requests keep the daytime rules; LOOP_CAP counted per UTC day).
-// The service runs with MULTIAGENT_SIMULATION_ONLY=1; no model is asked.
+// The service runs with CRAFTORIO_SIMULATION_ONLY=1; no model is asked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

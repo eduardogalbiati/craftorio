@@ -22,4 +22,4 @@ issue again (new body, task progress, labels), and the run records the save (`is
 text sent in `issue-save.md`), shown in Details and Artifacts. A failure (no auth, issue closed or
 deleted, network) shows the CLI's message; the document stays in `document.md`. Agents and the
 supervisor never save to an issue. A simulated run only shows the preview, and
-`MULTIAGENT_SIMULATION_ONLY=1` refuses every real save, so automated checks never call `gh`/`glab`.
+`CRAFTORIO_SIMULATION_ONLY=1` refuses every real save, so automated checks never call `gh`/`glab`.

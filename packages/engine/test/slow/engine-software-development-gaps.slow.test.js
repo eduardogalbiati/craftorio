@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root, runSoftwareDevelopment: runFeature } = require('../engine-helpers');
 
 test('#98: requirements_left_out is a human gate; neither a retry nor the supervisor can answer it', () => {

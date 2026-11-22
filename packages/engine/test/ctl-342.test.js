@@ -3,7 +3,7 @@
 // (packages/engine/control/index.js over a simulation service in a temp workspace, opened as
 // test/control-channel-336.test.js does). Without cargo its cases are skipped with one line; CI (CI set)
 // never skips them, and a failed build fails them with cargo's message.
-//   craftorio-ctl <channel> [json-argument] [--workspace <dir>]   (else MULTIAGENT_WORKSPACE)
+//   craftorio-ctl <channel> [json-argument] [--workspace <dir>]   (else CRAFTORIO_WORKSPACE)
 //   craftorio-ctl --list                                           (the allowlist with argument schemas)
 // Exit codes: 0 the JSON result printed; 1 a refused or failed call (reason on stderr); 2 no
 // <workspace>/control/endpoint.json (the switch is off); 3 the app's contract version differs.
@@ -54,7 +54,7 @@ function ctl(args, env) {
   });
 }
 
-const envFor = (ws) => ({ ...process.env, MULTIAGENT_WORKSPACE: ws });
+const envFor = (ws) => ({ ...process.env, CRAFTORIO_WORKSPACE: ws });
 
 async function openChannel(t, service) {
   const { createControlChannel } = require('../control');
@@ -142,11 +142,11 @@ test('#342 craftorio-ctl --list: exits 0 and prints every allowlisted channel wi
   assert.match(r.stdout, /projectId/, 'roadmap:get\'s argument schema');
 });
 
-test('#342 craftorio-ctl: --workspace <dir> instead of MULTIAGENT_WORKSPACE', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: --workspace <dir> instead of CRAFTORIO_WORKSPACE', { skip: SKIP }, async (t) => {
   const { service } = makeService(t);
   await openChannel(t, service);
   const env = { ...process.env };
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_WORKSPACE;
   const r = await ctl(['settings:get', '--workspace', service.workspace().root], env);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(resultOf(r.stdout).controlChannel, true);

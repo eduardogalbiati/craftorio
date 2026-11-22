@@ -12,7 +12,7 @@
 // with the run's id and the human gate it reaches (or its end), through the platform adapters
 // (backlog.js issueSaveCommand / prCommentCommand). A rule naming a repository workflow the owner has
 // not accepted at HEAD is refused with it (#485). Under
-// MULTIAGENT_SIMULATION_ONLY=1 the platform is never read nor written and a run would be a mock one.
+// CRAFTORIO_SIMULATION_ONLY=1 the platform is never read nor written and a run would be a mock one.
 // The state (seen event ids, the last event, the runs started) is <workspace>/backlog/triggers/<id>.json;
 // the project page reads it with the rules through triggers:status (channels/triggers.js).
 

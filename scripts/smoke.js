@@ -4,7 +4,7 @@
 //        npx electron scripts/smoke.js --startup-budget     the startup budget (#389), below
 //        npx electron scripts/smoke.js --phone-gates <out-dir>  gates-only page, simulated data
 //
-// Never calls a real model: MULTIAGENT_SIMULATION_ONLY=1 makes the engine refuse real runs, the app
+// Never calls a real model: CRAFTORIO_SIMULATION_ONLY=1 makes the engine refuse real runs, the app
 // opens a fresh temporary workspace (never the user's) with Developer mode on, and the script fails
 // unless every session of the run was simulated. Write UI checks as scripts like this one, never as
 // a hand-written script that launches apps/desktop/host/main directly.
@@ -19,6 +19,7 @@
 // it over STALL_MS.
 
 if (process.argv.includes('--phone-gates')) {
+require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
   require('./smoke-phone-gates').run();
   return;
 }
@@ -27,13 +28,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { app, ipcMain } = require('electron');
-process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.2';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.2';
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-ws-'));
-process.env.MULTIAGENT_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
+process.env.CRAFTORIO_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
 // a scratch user data folder too (never the dev app's: its account session and engine connection stay untouched)
-process.env.MULTIAGENT_USER_DATA = path.join(wsDir, 'user-data');
-fs.mkdirSync(process.env.MULTIAGENT_USER_DATA, { recursive: true });
+process.env.CRAFTORIO_USER_DATA = path.join(wsDir, 'user-data');
+fs.mkdirSync(process.env.CRAFTORIO_USER_DATA, { recursive: true });
 // --lang <code> (#329): the interface language (a code of packages/shared/i18n/), English by default
 // whatever the computer's language, so the checks keep their English selectors
 const langAt = process.argv.indexOf('--lang');

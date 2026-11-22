@@ -24,7 +24,7 @@
 //   the run has no suite logs) }; with two runIds, comparison: { tests: [{ test, beforeMs, afterMs }] }
 //   for the tests both ran. Declared test names come from test/*.test.js of the run's checkout
 //   (summary.worktree.dir, else inputs.project_path).
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -46,7 +46,7 @@ function scratchDir(t, prefix) {
 
 // The tools' ctx on a fresh workspace (as test/oracle/oracle-capable-184.test.js wires it).
 function makeCtx(t) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-321-ws-'));
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   t.after(() => service.shutdown());

@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.02';
 const count = (prompt, name) => String(prompt || '').split(`<skill name="${name}"`).length - 1;
 
 test('#720 a skill named by both the agent and the step is loaded once; an agent-only skill still loads', { timeout: 30000 }, async (t) => {

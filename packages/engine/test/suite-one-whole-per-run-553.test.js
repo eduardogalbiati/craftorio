@@ -34,11 +34,11 @@ const tmp = (t, prefix = 'suite-553-') => {
 function machineFolder(t) {
   const root = tmp(t, 'suite-553-machine-');
   const saved = {};
-  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'MULTIAGENT_LOCKS_DIR']) saved[k] = process.env[k];
+  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'CRAFTORIO_LOCKS_DIR']) saved[k] = process.env[k];
   process.env.TEMP = root;
   process.env.TMP = root;
   process.env.TMPDIR = root;
-  process.env.MULTIAGENT_LOCKS_DIR = path.join(root, 'craftorio', 'locks');
+  process.env.CRAFTORIO_LOCKS_DIR = path.join(root, 'craftorio', 'locks');
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
 }
 
@@ -67,7 +67,7 @@ const TEST_PATH = /test\/[\w./-]+\.test\.js/g;
 // The stubbed suite command. `failing`: the test files that fail now; a whole run (no file on the
 // command, no list) runs them all (WHOLE_TESTS tests), a focused run only those it selects (one test
 // per file). `opts.whole`: how the next whole run ends ('timeout': the suite's timeout; 'unreadable':
-// exit 1 with no failing test in its log). `opts.ignoreList`: the runner ignores MULTIAGENT_TEST_FILES
+// exit 1 with no failing test in its log). `opts.ignoreList`: the runner ignores CRAFTORIO_TEST_FILES
 // and runs the whole suite. Each call is recorded with the files it ran (null: the whole suite).
 const WHOLE_TESTS = 1000;
 function fakeSuite() {
@@ -75,7 +75,7 @@ function fakeSuite() {
   const calls = [];
   const opts = { whole: 'normal', ignoreList: false };
   const run = async ({ command, env, logFile }) => {
-    const listFile = env?.MULTIAGENT_TEST_FILES;
+    const listFile = env?.CRAFTORIO_TEST_FILES;
     const listed = listFile ? fs.readFileSync(path.resolve(listFile), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean) : [];
     const named = String(command).match(TEST_PATH) || [];
     let files = listed.length || named.length ? [...new Set([...listed, ...named])].sort() : null;
@@ -259,7 +259,7 @@ test('#553 a fix round through the list whose runner ignored it (as many tests a
   machineFolder(t);
   // 300 test files of src/z.js with long paths: a selection over the Windows command line; a runner
   // that reads the list (scripts/test.js, as this repository's)
-  const extra = { 'scripts/test.js': '// the files: the command line or process.env.MULTIAGENT_TEST_FILES\n' };
+  const extra = { 'scripts/test.js': '// the files: the command line or process.env.CRAFTORIO_TEST_FILES\n' };
   for (let i = 0; i < 300; i++) extra[`test/service/area-name-${String(i).padStart(4, '0')}.test.js`] = "require('../../src/z');\n";
   const r = repo(t, { scripts: { test: 'node scripts/test.js' }, extra });
   r.commit('src/x.js', 'module.exports = 2;\n');

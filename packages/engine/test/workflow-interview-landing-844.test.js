@@ -57,9 +57,9 @@ function repo(t) {
 }
 
 async function interview(t, dir) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
   const ws = setupWorkspace(tmp(t, 'wfi-844e-ws-'), { persist: false });
   seeds.seedSeeds(seeds.BUNDLED_SEEDS_DIR, ws.seeds);
   const project = await projects.createProject(ws.projects, { name: 'edge', folder: dir });

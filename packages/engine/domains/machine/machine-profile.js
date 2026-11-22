@@ -120,7 +120,7 @@ function suggestFromMemoryGuard(events, { now = Date.now(), concurrentRuns, time
 
 function workerEnv({ testWorkers } = {}) {
   const n = String(posInt(testWorkers) || 1);
-  return { MULTIAGENT_TEST_WORKERS: n, MULTIAGENT_E2E_WORKERS: n };
+  return { CRAFTORIO_TEST_WORKERS: n, CRAFTORIO_E2E_WORKERS: n };
 }
 
 module.exports = {

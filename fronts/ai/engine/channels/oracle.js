@@ -4,7 +4,7 @@
 // oracleDelegate (the Product Owner, the supervisor, the analyzer, the checker), oracleProposeOrRoute
 // and oracleRequestAgent (#241: a card an owner holds goes to that owner's inbox), oracleWake (#123:
 // watches, mutes, the pending batch), oracleToolList. `mock` (the drawer's developer mode) and
-// MULTIAGENT_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost. Every oracle
+// CRAFTORIO_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost. Every oracle
 // channel with input takes one object (`params: 'opts'`), the way the renderer calls them (#187).
 
 const simulation = require('@craftorio/engine/engine/simulation');

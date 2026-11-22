@@ -6,7 +6,7 @@
 // (@electron/packager dereferences the workspace link). appRoot() walks up from this file to the first
 // package.json that is the app's: it declares `workspaces` (the repository's) or a `multiagent` section
 // (the packager strips `workspaces` from the shipped package.json, resources/app's, and keeps `multiagent`).
-// MULTIAGENT_APP_ROOT names it explicitly (another layout, an engine installed from npm). Bundled
+// CRAFTORIO_APP_ROOT names it explicitly (another layout, an engine installed from npm). Bundled
 // defaults come from here, never from a package's own folder; user data never from either (AGENTS.md).
 //
 //   appRoot()            the folder (cached)
@@ -36,9 +36,9 @@ function findRoot(from) {
 
 function appRoot() {
   if (cached) return cached;
-  const env = process.env.MULTIAGENT_APP_ROOT;
+  const env = process.env.CRAFTORIO_APP_ROOT;
   cached = env ? path.resolve(env) : findRoot(__dirname);
-  if (!cached) throw new Error(`The app root was not found above ${__dirname}: no package.json with "workspaces" or a "multiagent" section (set MULTIAGENT_APP_ROOT).`);
+  if (!cached) throw new Error(`The app root was not found above ${__dirname}: no package.json with "workspaces" or a "multiagent" section (set CRAFTORIO_APP_ROOT).`);
   return cached;
 }
 

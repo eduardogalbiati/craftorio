@@ -10,7 +10,7 @@
 // as the existing runSuite tests call it) and a stubbed `run`, so no process is spawned. The engine
 // tests call WorkflowRun.prototype.suiteRound on a small run state (like
 // test/release-focused-no-commit-364.test.js) whose machine runs the real runSuite with a stubbed
-// `run`; the machine-wide folder is a temp folder (TEMP/TMP and MULTIAGENT_LOCKS_DIR point at it).
+// `run`; the machine-wide folder is a temp folder (TEMP/TMP and CRAFTORIO_LOCKS_DIR point at it).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -114,7 +114,7 @@ test('the screenshot slot keeps its own limit: a 20-minute screenshot hold is ta
 test('a process started by the suite slot\'s holder inherits it through SUITE_SLOT_ENV and does not wait (#455)', async (t) => {
   const dir = tmp(t);
   hold(dir, { token: 'suite-token-1' });
-  const name = machineSlot.SUITE_SLOT_ENV || 'MULTIAGENT_SUITE_SLOT_UNDEFINED';
+  const name = machineSlot.SUITE_SLOT_ENV || 'CRAFTORIO_SUITE_SLOT_UNDEFINED';
   const before = process.env[name];
   process.env[name] = 'suite-token-1';
   t.after(() => { if (before === undefined) delete process.env[name]; else process.env[name] = before; });
@@ -136,7 +136,7 @@ test('runSuite: a whole-suite round holds the suite slot while its command runs,
   assert.equal(calls[0].hold === null, false, 'the slot is held while the command runs');
   assert.equal(calls[0].hold.pid, process.pid);
   assert.match(String(calls[0].hold.holder), /run-b/);
-  assert.equal(calls[0].env[machineSlot.SUITE_SLOT_ENV || 'MULTIAGENT_SUITE_SLOT_UNDEFINED'], calls[0].hold.token, 'the suite inherits the slot');
+  assert.equal(calls[0].env[machineSlot.SUITE_SLOT_ENV || 'CRAFTORIO_SUITE_SLOT_UNDEFINED'], calls[0].hold.token, 'the suite inherits the slot');
   assert.equal(fs.existsSync(slotPath(dir)), false, 'freed when the round ends');
 });
 
@@ -264,17 +264,17 @@ test('runSuite: a hold older than SUITE_MAX_HOLD_MS is taken over without waitin
 
 // ---- the engine: a suite step of a run takes the machine-wide slot ----------------------------
 
-// the machine-wide folder in a temp folder: os.tmpdir() (machineSlotDir) and MULTIAGENT_LOCKS_DIR
+// the machine-wide folder in a temp folder: os.tmpdir() (machineSlotDir) and CRAFTORIO_LOCKS_DIR
 // (slotDir) both lead to <root>/multiagent-orchestrator/locks
 function machineFolder(t) {
   const root = tmp(t, 'suite-slot-machine-');
   const dir = path.join(root, 'craftorio', 'locks');
   const saved = {};
-  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'MULTIAGENT_LOCKS_DIR']) saved[k] = process.env[k];
+  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'CRAFTORIO_LOCKS_DIR']) saved[k] = process.env[k];
   process.env.TEMP = root;
   process.env.TMP = root;
   process.env.TMPDIR = root;
-  process.env.MULTIAGENT_LOCKS_DIR = dir;
+  process.env.CRAFTORIO_LOCKS_DIR = dir;
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
   return dir;
 }

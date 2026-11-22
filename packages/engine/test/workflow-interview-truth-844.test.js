@@ -6,7 +6,7 @@
 //
 // Spec (the interface these tests assume): require('../service/areas/workflow-interview')(ctx)
 //   .workflowInterview({ projectId }) -> { profile, evidence, questions } (as in #487 / #640), run here
-//   under MULTIAGENT_SIMULATION_ONLY=1 (no model: the free profile git and the files give).
+//   under CRAFTORIO_SIMULATION_ONLY=1 (no model: the free profile git and the files give).
 // - evidence.team.numbers.authors counts people (identities of one person merged), not identities;
 // - the mode is weighed by who merges: outside PRs merged by an owner who otherwise pushes straight to
 //   main is a local flow (or the mode left open, asked as a question), never 'remote';
@@ -40,9 +40,9 @@ function tmp(t, prefix) {
 }
 
 function simulation(t, value) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = value;
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = value;
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
 }
 
 // the issue's history: 3 merges of outside PRs, the owner's 6 straight commits, 5 tags, 5 identities of 3 people

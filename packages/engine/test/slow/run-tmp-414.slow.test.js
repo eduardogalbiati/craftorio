@@ -22,9 +22,9 @@ test('#414 engine: an agent of a run with a worktree gets TMP, TEMP and TMPDIR s
   const f = fixture(t);
   const runsDir = path.join(f.tmp, 'runs');
   // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   const fake = path.join(__dirname, '..', 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(f.tmp, 'wf.yaml');
   fs.writeFileSync(file, [
@@ -124,9 +124,9 @@ test('#414 engine: a run without a worktree loses its tmp when it ends too', { t
 test('#414 engine: a resumed run gets a fresh tmp of its own (its new run folder), and its agent\'s TMP points there, not at the earlier run\'s', { timeout: 60000 }, async (t) => {
   const f = fixture(t);
   const runsDir = path.join(f.tmp, 'runs');
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   const fake = path.join(__dirname, '..', 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(f.tmp, 'wf-gate.yaml');
   fs.writeFileSync(file, [

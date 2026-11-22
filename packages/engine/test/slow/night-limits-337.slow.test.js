@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const actions = require('../../domains/oracle/oracle-actions');
 const night = require('../../domains/night/night-watch');
 const providers = require('../../engine/providers');

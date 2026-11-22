@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun, loadWorkflow, evalExpr } = require('@craftorio/engine/engine/workflow');
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 

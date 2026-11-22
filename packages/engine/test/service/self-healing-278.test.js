@@ -12,7 +12,7 @@
 //     notification (notification center) whose title or body says findings are waiting (/finding/i).
 //   - Self-healing off and no Night watch: nothing is detected (as today; green today).
 // The Oracle's wake-ups are turned off (wakeScope 'off') where no budget pause is involved, so no model
-// is ever asked; the service runs with MULTIAGENT_SIMULATION_ONLY=1.
+// is ever asked; the service runs with CRAFTORIO_SIMULATION_ONLY=1.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

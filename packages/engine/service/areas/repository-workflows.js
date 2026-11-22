@@ -13,7 +13,7 @@ const { MANIFEST_FILE, parseManifest } = require('../../domains/project/project-
 const { editedWorkspaceCopy, repositoryEntry } = require('../../domains/workflow/workflows');
 const { gitOut } = require('../common');
 
-const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);
+const CRAFTORIO_DIR = path.posix.dirname(MANIFEST_FILE);
 // a commit's hash, short or full: 40 characters for SHA-1, 64 for a SHA-256 repository
 const SHA = /^[0-9a-f]{7,64}$/i;
 // the diff since the last accepted commit the screen shows, cut past this
@@ -67,7 +67,7 @@ module.exports = (ctx) => {
     const accepted = project.acceptedWorkflows || {};
     const items = [];
     for (const entry of manifest.workflows.filter((e) => e.file)) {
-      const rel = `${MULTIAGENT_DIR}/${entry.file}`;
+      const rel = `${CRAFTORIO_DIR}/${entry.file}`;
       const blob = gitOut(project.folder, ['rev-parse', `${head}:${rel}`]);
       if (!blob) continue; // declared but never committed: nothing to accept yet
       const file = path.posix.basename(entry.file);
@@ -89,7 +89,7 @@ module.exports = (ctx) => {
     if (!SHA.test(sha) || gitOut(project.folder, ['cat-file', '-e', `${sha}^{commit}`]) == null) throw new Error(`Commit ${sha} is not in the repository of ${project.name || projectId}.`);
     const text = gitOut(project.folder, ['show', `${sha}:${MANIFEST_FILE}`]);
     const entry = text == null ? null : repositoryEntry(parseManifest(text).workflows, path.basename(String(file || '')));
-    const blob = entry && gitOut(project.folder, ['rev-parse', `${sha}:${MULTIAGENT_DIR}/${entry.file}`]);
+    const blob = entry && gitOut(project.folder, ['rev-parse', `${sha}:${CRAFTORIO_DIR}/${entry.file}`]);
     if (!blob) throw new Error(`Workflow ${file} is not declared in ${MANIFEST_FILE} at commit ${sha.slice(0, 7)}.`);
     const full = gitOut(project.folder, ['rev-parse', `${sha}^{commit}`]);
     projects.updateProject(ctx.ws.projects, project.id, { acceptedWorkflows: { ...(project.acceptedWorkflows || {}), [entry.file.split('/').pop()]: { commit: full, blob } } });

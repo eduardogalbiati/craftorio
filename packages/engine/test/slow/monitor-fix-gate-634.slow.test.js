@@ -6,10 +6,10 @@
 // temp JSON-lines file), monitor:poll, monitor:state, monitor:diagnose -> { cardId } (an 'intent' card
 // of the project's Discovery Inbox, read with domains/discovery/discovery.js readCard), and
 // monitor:propose-fix -> { runId }, which starts the bundled `fix` workflow (simulated under
-// MULTIAGENT_SIMULATION_ONLY=1). The run is followed through the service's pushed run events: its
+// CRAFTORIO_SIMULATION_ONLY=1). The run is followed through the service's pushed run events: its
 // workflow.started names workflow 'fix', and it must open a human gate (approval.requested) before any
 // workflow.finished, without reaching a merge or push step. A deadline makes a missing gate fail here.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

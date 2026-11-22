@@ -12,7 +12,7 @@
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { runSoftwareDevelopment } = require('../engine-helpers');
 
 const PASSING = { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } };

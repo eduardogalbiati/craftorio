@@ -9,7 +9,7 @@ const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 const { runUntilStall } = require('../helpers/run-watch');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.05';
 const root = path.join(__dirname, '..', '..', '..', '..');
 const LOCAL_HERO = path.join(root, 'workflows', 'feature.yaml');
 // #737: a run with no event for this long fails at once, naming its step (helpers/run-watch.js);

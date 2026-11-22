@@ -7,7 +7,7 @@ const { gateBrief } = require('../../engine/gate-summary');
 const { createMobileGatesServer } = require('../../domains/workspace/mobile-gates');
 
 async function phoneGatesFixture() {
-  if (process.env.MULTIAGENT_SIMULATION_ONLY !== '1') throw new Error('Phone gates fixture requires simulation-only mode.');
+  if (process.env.CRAFTORIO_SIMULATION_ONLY !== '1') throw new Error('Phone gates fixture requires simulation-only mode.');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phone-gates-smoke-'));
   const state = { language: 'en', time: Date.now(), open: true, answers: [] };
   const gate = {

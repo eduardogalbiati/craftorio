@@ -1,5 +1,5 @@
 // Sign-in off (`enabled: false` in domains/account/auth-config.js): the engine server, started without
-// MULTIAGENT_AUTH=off, has nothing to sign in to, so the UI shows no sign-in screen (ui-kit/account.js
+// CRAFTORIO_AUTH=off, has nothing to sign in to, so the UI shows no sign-in screen (ui-kit/account.js
 // shows it only when `required`). Spawned on a scratch workspace, simulation only. When sign-in comes back,
 // this test goes with the switch.
 const test = require('node:test');
@@ -12,18 +12,18 @@ const authConfig = require('../../domains/account/auth-config');
 
 const TOKEN = 'sign-in-off-test-0123456789';
 
-test('sign-in off: a server without MULTIAGENT_AUTH=off requires no account and says so', async (t) => {
+test('sign-in off: a server without CRAFTORIO_AUTH=off requires no account and says so', async (t) => {
   assert.equal(authConfig.enabled, false);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sign-in-off-'));
   t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* EBUSY: the OS cleans it */ } });
   const home = path.join(dir, 'home');
   fs.mkdirSync(home, { recursive: true });
   const env = {
-    ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_SERVER_TOKEN: TOKEN,
-    MULTIAGENT_USER_DATA: path.join(home, 'user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
+    ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_SERVER_TOKEN: TOKEN,
+    CRAFTORIO_USER_DATA: path.join(home, 'user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
-  delete env.MULTIAGENT_AUTH;
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_AUTH;
+  delete env.CRAFTORIO_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
   const bin = path.join(__dirname, '..', '..', 'bin', 'craftorio-engine.js');
   const child = spawn(process.execPath, [bin, '--port', '0', '--workspace', path.join(dir, 'workspace')], { env });

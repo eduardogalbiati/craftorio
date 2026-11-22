@@ -209,7 +209,7 @@ async function server(t) {
   const { createService } = require('../../service');
   const { createServer } = require('../../server');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-setup-740-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const service = createService({ host: { trashItem: async () => {}, appVersion: '1.2.3', isPackaged: false } });
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   const srv = createServer({ service, token: TOKEN });

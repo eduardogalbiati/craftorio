@@ -1,6 +1,6 @@
 // #287 A Roadmap edit saved from a stale screen never overwrites changes made elsewhere. Acceptance
 // tests written before the code, through the service (the roadmap channels and the Product Owner's
-// inbox), in a scratch workspace; everything runs simulated (MULTIAGENT_SIMULATION_ONLY=1).
+// inbox), in a scratch workspace; everything runs simulated (CRAFTORIO_SIMULATION_ONLY=1).
 //
 // Interface the developer implements:
 // - roadmap:save (api.saveRoadmap) takes a 4th parameter `base`: the roadmap's `updatedAt` the screen
@@ -20,7 +20,7 @@
 //   change is dropped.
 // The "elsewhere" change of the evidence is written by an outside writer (a script calling
 // packages/engine/domains/roadmap/roadmap.js saveStages on the file, as the evidence's script did), never seen by the screen.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

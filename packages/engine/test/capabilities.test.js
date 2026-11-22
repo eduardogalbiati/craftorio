@@ -21,7 +21,7 @@ test('claude: capabilities become --tools (offered), --allowedTools (approved) a
   assert.equal(argAfter(args, '--tools'), 'Read,Glob,Grep,Edit,NotebookEdit,Write,Bash,Agent,Task');
   assert.equal(argAfter(args, '--allowedTools'), [
     'Read Glob Grep Edit NotebookEdit Write Bash(git:*) Bash(npm:*)',
-    'Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*)',
+    'Bash(CRAFTORIO_SIMULATION_ONLY=1 git:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*)',
     ...READ_BASH, ...WRITE_BASH, 'Agent Task',
   ].join(' '));
   assert.equal(argAfter(args, '--permission-mode'), 'acceptEdits');
@@ -30,7 +30,7 @@ test('claude: capabilities become --tools (offered), --allowedTools (approved) a
   const ro = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'bash:git diff'], web: true }) }).args;
   assert.equal(argAfter(ro, '--tools'), 'Read,Glob,Grep,Bash,WebSearch,WebFetch');
   assert.equal(argAfter(ro, '--allowedTools'), [
-    'Read Glob Grep Bash(git diff:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git diff:*)', ...READ_BASH, 'WebSearch WebFetch',
+    'Read Glob Grep Bash(git diff:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 git diff:*)', ...READ_BASH, 'WebSearch WebFetch',
   ].join(' '));
   assert.ok(!ro.includes('--permission-mode'), 'read-only agents never get acceptEdits');
 });
@@ -46,7 +46,7 @@ test('claude: every agent with bash:<command> also gets the read-only utilities 
   const writer = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'write', 'bash:npm'] }) }).args;
   const allowedRw = argAfter(writer, '--allowedTools');
   for (const rule of [...READ_BASH, ...WRITE_BASH]) assert.ok(allowedRw.includes(rule), rule);
-  assert.ok(allowedRw.includes('Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*)'), 'a still-prefixed command is allowed too, so the engine setting the var does not by itself refuse it');
+  assert.ok(allowedRw.includes('Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*)'), 'a still-prefixed command is allowed too, so the engine setting the var does not by itself refuse it');
 
   // a utility the agent already declared as its own command is listed once, not duplicated
   const withGrep = argAfter(caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'bash:grep'] }) }).args, '--allowedTools');
@@ -68,48 +68,48 @@ test('runDirs/commandGuide: an agent with commands gets a logs, a scratch, a tmp
 
   const guide = caps.commandGuide(withBash, 'C:/run');
   assert.match(guide, /never `cd <folder> && \.\.\.`/, 'the current folder already is the working folder');
-  assert.match(guide, /MULTIAGENT_SIMULATION_ONLY=1 is already set in your environment: never prefix/, 'the engine sets it, not the agent');
+  assert.match(guide, /CRAFTORIO_SIMULATION_ONLY=1 is already set in your environment: never prefix/, 'the engine sets it, not the agent');
   assert.ok(guide.includes(`Write command logs to \`${path.join('C:/run', 'logs')}`), 'the log folder, never /tmp, $TEMP or AppData');
   assert.match(guide, /never to \/tmp, \$TEMP or AppData/);
   assert.match(guide, /rephrase it once into an allowed form instead of retrying variants/);
-  assert.doesNotMatch(guide, /scratch workspace/, 'no MULTIAGENT_WORKSPACE (a run with no worktree): nothing to say about it');
+  assert.doesNotMatch(guide, /scratch workspace/, 'no CRAFTORIO_WORKSPACE (a run with no worktree): nothing to say about it');
 });
 
 test('agentEnv: the agent\'s environment is AGENT_ENV alone, unless the run has a scratch workspace (#120)', () => {
-  assert.deepEqual(caps.agentEnv(), { MULTIAGENT_SIMULATION_ONLY: '1' });
-  assert.deepEqual(caps.agentEnv(null), { MULTIAGENT_SIMULATION_ONLY: '1' });
+  assert.deepEqual(caps.agentEnv(), { CRAFTORIO_SIMULATION_ONLY: '1' });
+  assert.deepEqual(caps.agentEnv(null), { CRAFTORIO_SIMULATION_ONLY: '1' });
   assert.deepEqual(caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' }), {
-    MULTIAGENT_SIMULATION_ONLY: '1',
-    MULTIAGENT_USER_DATA: 'C:/run/scratch/user-data',
-    MULTIAGENT_WORKSPACE: 'C:/run/scratch/workspace',
+    CRAFTORIO_SIMULATION_ONLY: '1',
+    CRAFTORIO_USER_DATA: 'C:/run/scratch/user-data',
+    CRAFTORIO_WORKSPACE: 'C:/run/scratch/workspace',
   });
 });
 
-test('agentEnv: with the run\'s temp folder, MULTIAGENT_LOCKS_DIR keeps the machine-wide slots\' folder, not one under the run (#455)', () => {
+test('agentEnv: with the run\'s temp folder, CRAFTORIO_LOCKS_DIR keeps the machine-wide slots\' folder, not one under the run (#455)', () => {
   const { machineSlotDir } = require('../engine/machine-slot');
   const machine = machineSlotDir();
   const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data', tmp: 'C:/run/tmp' });
   assert.equal(env.TMP, 'C:/run/tmp');
-  assert.equal(env.MULTIAGENT_LOCKS_DIR, machine);
-  assert.equal(String(env.MULTIAGENT_LOCKS_DIR).startsWith('C:/run'), false);
-  assert.equal('MULTIAGENT_LOCKS_DIR' in caps.agentEnv(), false, 'no scratch: nothing changes');
+  assert.equal(env.CRAFTORIO_LOCKS_DIR, machine);
+  assert.equal(String(env.CRAFTORIO_LOCKS_DIR).startsWith('C:/run'), false);
+  assert.equal('CRAFTORIO_LOCKS_DIR' in caps.agentEnv(), false, 'no scratch: nothing changes');
 });
 
 test('commandGuide: an agent given a scratch workspace is told every one of its own variables (plural wording) and where its own checks must write', () => {
   const withBash = caps.normalize({ tools: ['read', 'bash:npm'] });
   const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' });
   const guide = caps.commandGuide(withBash, 'C:/run', env);
-  assert.match(guide, /MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_USER_DATA=C:\/run\/scratch\/user-data, MULTIAGENT_WORKSPACE=C:\/run\/scratch\/workspace are already set/, 'plural: more than one variable');
+  assert.match(guide, /CRAFTORIO_SIMULATION_ONLY=1, CRAFTORIO_USER_DATA=C:\/run\/scratch\/user-data, CRAFTORIO_WORKSPACE=C:\/run\/scratch\/workspace are already set/, 'plural: more than one variable');
   assert.match(guide, /this run's scratch workspace `C:\/run\/scratch\/workspace`: never pass a path under the owner's workspace/);
 });
 
-test('claudeBashRules: a command is allowed prefixed by any one of the agent\'s own environment variables, not only MULTIAGENT_SIMULATION_ONLY', () => {
+test('claudeBashRules: a command is allowed prefixed by any one of the agent\'s own environment variables, not only CRAFTORIO_SIMULATION_ONLY', () => {
   const c = caps.normalize({ tools: ['read', 'bash:npm'] });
   const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' });
   const allowed = argAfter(caps.providerArgs('claude-code', { caps: c, env }).args, '--allowedTools');
-  assert.match(allowed, /Bash\(MULTIAGENT_SIMULATION_ONLY=1 npm:\*\)/);
-  assert.match(allowed, /Bash\(MULTIAGENT_WORKSPACE=C:\/run\/scratch\/workspace npm:\*\)/);
-  assert.match(allowed, /Bash\(MULTIAGENT_USER_DATA=C:\/run\/scratch\/user-data npm:\*\)/);
+  assert.match(allowed, /Bash\(CRAFTORIO_SIMULATION_ONLY=1 npm:\*\)/);
+  assert.match(allowed, /Bash\(CRAFTORIO_WORKSPACE=C:\/run\/scratch\/workspace npm:\*\)/);
+  assert.match(allowed, /Bash\(CRAFTORIO_USER_DATA=C:\/run\/scratch\/user-data npm:\*\)/);
 });
 
 test('edits_tests: false → Claude refuses edits to the test paths; the other CLIs note that they cannot', () => {
@@ -244,15 +244,15 @@ test('a real turn gets the capability and isolation flags, and its context is me
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-run-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   // this run has no worktree (no orchestrator.worktree), so the engine's own agentEnv carries no
-  // MULTIAGENT_WORKSPACE/MULTIAGENT_USER_DATA; isolate the ones the *outer* run (this very CI/agent
+  // CRAFTORIO_WORKSPACE/CRAFTORIO_USER_DATA; isolate the ones the *outer* run (this very CI/agent
   // turn) already has, so the spawned fake does not inherit them through process.env
-  const outerEnv = { MULTIAGENT_WORKSPACE: process.env.MULTIAGENT_WORKSPACE, MULTIAGENT_USER_DATA: process.env.MULTIAGENT_USER_DATA };
-  delete process.env.MULTIAGENT_WORKSPACE;
-  delete process.env.MULTIAGENT_USER_DATA;
+  const outerEnv = { CRAFTORIO_WORKSPACE: process.env.CRAFTORIO_WORKSPACE, CRAFTORIO_USER_DATA: process.env.CRAFTORIO_USER_DATA };
+  delete process.env.CRAFTORIO_WORKSPACE;
+  delete process.env.CRAFTORIO_USER_DATA;
   t.after(() => {
     for (const [k, v] of Object.entries(outerEnv)) { if (v !== undefined) process.env[k] = v; }
   });
@@ -276,7 +276,7 @@ test('a real turn gets the capability and isolation flags, and its context is me
   const spawn = events.find((e) => e.type === 'session.stream' && e.item.kind === 'spawn').item;
   assert.ok(spawn.args.includes('--strict-mcp-config'));
   assert.equal(argAfter(spawn.args, '--tools'), 'Read,Glob,Grep,Bash');
-  assert.equal(argAfter(spawn.args, '--allowedTools'), ['Read Glob Grep Bash(gh:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 gh:*)', ...READ_BASH].join(' '));
+  assert.equal(argAfter(spawn.args, '--allowedTools'), ['Read Glob Grep Bash(gh:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 gh:*)', ...READ_BASH].join(' '));
   assert.ok(spawn.args.includes('--verbose'), 'cli_args still apply on top');
   // the run's logs, scratch and evidence folders exist and are offered to the CLI with --add-dir (#96, #120, #146)
   const runDirArgs = spawn.args.filter((a, i) => spawn.args[i - 1] === '--add-dir');
@@ -290,11 +290,11 @@ test('a real turn gets the capability and isolation flags, and its context is me
   // conversation's per request (a sub-agent's request does not count)
   const received = events.find((e) => e.type === 'session.message_received');
   assert.ok(!received.text.includes('```handoff'));
-  // the engine sets MULTIAGENT_SIMULATION_ONLY in the child's own environment: the agent needs no
+  // the engine sets CRAFTORIO_SIMULATION_ONLY in the child's own environment: the agent needs no
   // `VAR=value` prefix, even though this test deleted it from the *parent* process to lift the guard
-  assert.match(received.text, /MULTIAGENT_SIMULATION_ONLY: 1/);
+  assert.match(received.text, /CRAFTORIO_SIMULATION_ONLY: 1/);
   // no worktree in this run (no orchestrator.worktree, no worktreesDir): no scratch workspace either
-  assert.match(received.text, /MULTIAGENT_WORKSPACE: undefined/);
+  assert.match(received.text, /CRAFTORIO_WORKSPACE: undefined/);
   assert.deepEqual(received.context, { start: 31000, peak: 41500 });
   assert.equal(received.handoff, '- Goal: fake');
   assert.ok(fs.existsSync(path.join(run.runDir, 'handoffs', 'work-v1-dev.md')));
@@ -306,9 +306,9 @@ test('a real turn gets the capability and isolation flags, and its context is me
 test('Agent/Task tool calls are counted as sub-agent calls, per agent and per step; other tools and a step with none do not count (#160)', { timeout: 30000 }, async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-subagent-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const guard = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.CRAFTORIO_SIMULATION_ONLY = guard; });
   const withSubagent = path.join(__dirname, 'fixtures', 'fake-claude-subagent.js').replace(/\\/g, '/');
   const plain = path.join(__dirname, 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(dir, 'wf.yaml');

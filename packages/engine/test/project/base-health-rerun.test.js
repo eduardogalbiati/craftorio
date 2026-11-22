@@ -39,8 +39,8 @@ const SLOW = { test: 'renders the big board', file: 'test/board.test.js', error:
 const NOFILE = { test: 'a test the parser found no file for', error: 'boom' };
 
 let savedLocks;
-test.beforeEach(() => { savedLocks = process.env.MULTIAGENT_LOCKS_DIR; });
-test.afterEach(() => { if (savedLocks === undefined) delete process.env.MULTIAGENT_LOCKS_DIR; else process.env.MULTIAGENT_LOCKS_DIR = savedLocks; });
+test.beforeEach(() => { savedLocks = process.env.CRAFTORIO_LOCKS_DIR; });
+test.afterEach(() => { if (savedLocks === undefined) delete process.env.CRAFTORIO_LOCKS_DIR; else process.env.CRAFTORIO_LOCKS_DIR = savedLocks; });
 
 function tmpWs(t) {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'bh613-'));
@@ -48,7 +48,7 @@ function tmpWs(t) {
   fs.mkdirSync(path.join(ws, 'backlog'), { recursive: true });
   const locks = path.join(ws, 'locks');
   fs.mkdirSync(locks, { recursive: true });
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   return { ws, locks };
 }
 

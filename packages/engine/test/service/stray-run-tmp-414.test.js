@@ -11,7 +11,7 @@
 // - A resumed run (#250) gets its own id, so its tests write under runs/<resumed id>/tmp although it
 //   works in the earlier run's worktree; such a process is named with the resumed run.
 // - watchStrayProcesses() returns early in simulation-only mode: the test clears
-//   MULTIAGENT_SIMULATION_ONLY around the call (restored after) and never starts a run.
+//   CRAFTORIO_SIMULATION_ONLY around the call (restored after) and never starts a run.
 // Modules are required inside each test, so this file loads before the code exists.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -70,10 +70,10 @@ function setup(t) {
   const original = shared.watchStrays;
   let handed = null;
   shared.watchStrays = (next) => { handed = next; };
-  const sim = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  const sim = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
   try { area.watchStrayProcesses(); } finally {
-    process.env.MULTIAGENT_SIMULATION_ONLY = sim;
+    process.env.CRAFTORIO_SIMULATION_ONLY = sim;
     shared.watchStrays = original;
   }
   assert.equal(typeof handed?.runs, 'function', 'watchStrayProcesses hands the guard its runs');

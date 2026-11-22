@@ -2,8 +2,8 @@
 // clients: what it can reach is limited by row level security (see supabase/migrations). Provider
 // client secrets live only in the Supabase dashboard, never here.
 //
-// In development (not packaged) MULTIAGENT_SUPABASE_URL / MULTIAGENT_SUPABASE_KEY override these,
-// and MULTIAGENT_AUTH=off disables sign-in (tests, UI smoke). The packaged app ignores them.
+// In development (not packaged) CRAFTORIO_SUPABASE_URL / CRAFTORIO_SUPABASE_KEY override these,
+// and CRAFTORIO_AUTH=off disables sign-in (tests, UI smoke). The packaged app ignores them.
 //
 // `enabled: false` turns sign-in off everywhere, the packaged app and the server included: no sign-in
 // screen, no Supabase client, nothing recorded. Set it back to true to ask for the account again.

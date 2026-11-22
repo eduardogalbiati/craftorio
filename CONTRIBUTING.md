@@ -18,11 +18,11 @@ marks the ones the maintainer would welcome a hand with. How the code fits toget
    `npm run package`, need it.
 
 **Sign-in during development**: the packaged app asks for an account (it only counts the people
-using the app). From source, set `MULTIAGENT_AUTH=off` to skip it:
+using the app). From source, set `CRAFTORIO_AUTH=off` to skip it:
 
 ```
-MULTIAGENT_AUTH=off npm start          # bash
-$env:MULTIAGENT_AUTH = 'off'; npm start  # PowerShell
+CRAFTORIO_AUTH=off npm start          # bash
+$env:CRAFTORIO_AUTH = 'off'; npm start  # PowerShell
 ```
 
 **Developer mode** (Settings › Execution › Developer mode) shows the "Simulation" checkboxes: a
@@ -35,14 +35,14 @@ Read when running from source; the packaged app ignores the ones marked "source 
 
 | Variable | What it does |
 |---|---|
-| `MULTIAGENT_AUTH` | `off` skips the sign-in (development, tests, screenshots, `npm run serve`). Source only. |
-| `MULTIAGENT_SUPABASE_URL` | The accounts backend's URL instead of the one in `packages/engine/domains/account/auth-config.js`. Source only. |
-| `MULTIAGENT_SUPABASE_KEY` | Its publishable key, with `MULTIAGENT_SUPABASE_URL`. Source only. |
-| `MULTIAGENT_WORKSPACE` | The workspace folder (runs, repos, worktrees). Unset from source: a scratch workspace when another app already holds the owner's one, or in simulation-only mode. |
-| `MULTIAGENT_USER_DATA` | Electron's `userData` folder (settings, account session). Source only. |
-| `MULTIAGENT_SIMULATION_ONLY` | `1` refuses every real run: only the mock provider (`npm test` sets it). |
-| `MULTIAGENT_SERVER_TOKEN` | The `npm run serve` token; unset, a random one at every start. Full control of the machine: keep it secret. |
-| `MULTIAGENT_E2E_WORKERS` | Parallel workers of `npm run test:e2e`; unset, sized from the machine. |
+| `CRAFTORIO_AUTH` | `off` skips the sign-in (development, tests, screenshots, `npm run serve`). Source only. |
+| `CRAFTORIO_SUPABASE_URL` | The accounts backend's URL instead of the one in `packages/engine/domains/account/auth-config.js`. Source only. |
+| `CRAFTORIO_SUPABASE_KEY` | Its publishable key, with `CRAFTORIO_SUPABASE_URL`. Source only. |
+| `CRAFTORIO_WORKSPACE` | The workspace folder (runs, repos, worktrees). Unset from source: a scratch workspace when another app already holds the owner's one, or in simulation-only mode. |
+| `CRAFTORIO_USER_DATA` | Electron's `userData` folder (settings, account session). Source only. |
+| `CRAFTORIO_SIMULATION_ONLY` | `1` refuses every real run: only the mock provider (`npm test` sets it). |
+| `CRAFTORIO_SERVER_TOKEN` | The `npm run serve` token; unset, a random one at every start. Full control of the machine: keep it secret. |
+| `CRAFTORIO_E2E_WORKERS` | Parallel workers of `npm run test:e2e`; unset, sized from the machine. |
 
 ## Running the app on this repository
 
@@ -76,7 +76,7 @@ only on your machine.
 ## Checks
 
 - `npm test` runs the unit tests and a full simulated run of the feature workflow.
-  It is simulation-only (`MULTIAGENT_SIMULATION_ONLY=1`): it never calls a model and never starts
+  It is simulation-only (`CRAFTORIO_SIMULATION_ONLY=1`): it never calls a model and never starts
   a real run, so it costs nothing.
 - `node scripts/docs.js --check` checks that the generated README tables are up to date
   (`npm run docs` regenerates them).
@@ -86,7 +86,7 @@ only on your machine.
 - UI changes: `npx electron scripts/smoke.js <out.png>` (a simulated run and a screenshot) or
   `npm run screenshot -- --view <screen> --out <dir>`.
 - `npm run test:e2e` sizes its parallel workers from your machine (`auto`); on a slow machine set
-  `MULTIAGENT_E2E_WORKERS=1` (or any number) to choose them yourself.
+  `CRAFTORIO_E2E_WORKERS=1` (or any number) to choose them yourself.
 - A dependency change: `npm run licenses` regenerates `resources/THIRD_PARTY_LICENSES.txt`.
 
 ## Rules

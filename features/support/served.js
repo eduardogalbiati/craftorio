@@ -1,6 +1,6 @@
 // The browser UI of a served engine for the Playwright E2E suite (#339): launchServedUi() starts the
 // engine server (`node scripts/serve.js --port 0 --workspace <scratch>`, as `npm run serve` does) on a
-// fresh scratch workspace, in simulation (MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AUTH=off, HOME
+// fresh scratch workspace, in simulation (CRAFTORIO_SIMULATION_ONLY=1, CRAFTORIO_AUTH=off, HOME
 // inside the scratch folder), and a "browser" for its UI: an Electron window with no preload
 // (features/support/browser-main.js), so window.api is apps/web/renderer/api-http.js over HTTP, as in a
 // real browser. Electron is the browser on purpose: it is always installed with the app, Playwright's
@@ -28,11 +28,11 @@ function servedEnv(scratch, { size }) {
   for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'workspace'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   const env = {
     ...process.env,
-    MULTIAGENT_USER_DATA: path.join(scratch, 'user-data'),
-    MULTIAGENT_SIMULATION_ONLY: '1',
-    MULTIAGENT_AUTH: 'off',
-    MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
-    MULTIAGENT_E2E_SIZE: size,
+    CRAFTORIO_USER_DATA: path.join(scratch, 'user-data'),
+    CRAFTORIO_SIMULATION_ONLY: '1',
+    CRAFTORIO_AUTH: 'off',
+    CRAFTORIO_MOCK_DELAY_SCALE: '0.02',
+    CRAFTORIO_E2E_SIZE: size,
     LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),

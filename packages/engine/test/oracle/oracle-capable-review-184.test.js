@@ -4,7 +4,7 @@
 // backlog (settings' platform and the project's repo), and the benchmark questions of 2026-10-01/02
 // kept as fixtures (test/fixtures/oracle-benchmark) the skill and the tools must still answer.
 // gh/glab are never started (ctx.execCli is the boundary); no model is called (mock / simulation).
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -20,7 +20,7 @@ const ROOT = path.join(__dirname, '..', '..', '..', '..');
 
 // A service on a scratch workspace; the folder is removed after the service stops (hooks run in order).
 function makeService(t) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-184r-ws-'));
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   t.after(() => service.shutdown());

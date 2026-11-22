@@ -19,7 +19,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../engine/workflow');
 const { eventLanes } = require('../../../../test/run-event-lanes');
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const root = path.join(__dirname, '..', '..', '..', '..');
 const BASELINE = path.join(root, 'packages', 'engine', 'test', 'fixtures', 'events-ai-development-local-hero-250.json');

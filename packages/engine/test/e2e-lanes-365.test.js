@@ -69,8 +69,8 @@ test('every scenario of the suite runs in exactly one lane (#365)', () => {
   assert.ok(all.length > 100, `scenarios found: ${all.length}`);
   const wrong = all
     .map((s) => ({ s, n: lanesOf(config, s.text).length }))
-    // @quarantine scenarios run in no lane unless MULTIAGENT_E2E_QUARANTINE=1 (playwright.config.js)
-    .filter(({ s, n }) => n !== (s.tags.includes("@quarantine") && process.env.MULTIAGENT_E2E_QUARANTINE !== "1" ? 0 : 1))
+    // @quarantine scenarios run in no lane unless CRAFTORIO_E2E_QUARANTINE=1 (playwright.config.js)
+    .filter(({ s, n }) => n !== (s.tags.includes("@quarantine") && process.env.CRAFTORIO_E2E_QUARANTINE !== "1" ? 0 : 1))
     .map(({ s, n }) => `${s.file}: ${s.name} (${n} lanes)`);
   assert.deepEqual(wrong.slice(0, 10), []);
 });
@@ -107,19 +107,19 @@ test('the suite still never retries a scenario (#365, #362)', () => {
   for (const p of config.projects || []) assert.ok(p.retries == null || p.retries === 0, `${p.name}: retries ${p.retries}`);
 });
 
-// The config loaded again with MULTIAGENT_E2E_WORKERS set to value (undefined: unset)
+// The config loaded again with CRAFTORIO_E2E_WORKERS set to value (undefined: unset)
 function freshConfig(value) {
   const file = require.resolve('../../../playwright.config.js');
-  const before = process.env.MULTIAGENT_E2E_WORKERS;
+  const before = process.env.CRAFTORIO_E2E_WORKERS;
   delete require.cache[file];
-  if (value === undefined) delete process.env.MULTIAGENT_E2E_WORKERS;
-  else process.env.MULTIAGENT_E2E_WORKERS = value;
+  if (value === undefined) delete process.env.CRAFTORIO_E2E_WORKERS;
+  else process.env.CRAFTORIO_E2E_WORKERS = value;
   try {
     return require(file);
   } finally {
     delete require.cache[file];
-    if (before === undefined) delete process.env.MULTIAGENT_E2E_WORKERS;
-    else process.env.MULTIAGENT_E2E_WORKERS = before;
+    if (before === undefined) delete process.env.CRAFTORIO_E2E_WORKERS;
+    else process.env.CRAFTORIO_E2E_WORKERS = before;
   }
 }
 
@@ -130,7 +130,7 @@ function configWith(value) {
 }
 
 // the default (auto) and an invalid value are #366's: test/e2e-workers-366.test.js
-test('MULTIAGENT_E2E_WORKERS sets the behaviour lane and the pool; the visual lane stays at one worker (#365)', () => {
+test('CRAFTORIO_E2E_WORKERS sets the behaviour lane and the pool; the visual lane stays at one worker (#365)', () => {
   assert.deepEqual(configWith('3'), { pool: 3, behaviour: 3, visual: 1 });
   // 1 gives back the old one-Electron-at-a-time suite
   assert.deepEqual(configWith('1'), { pool: 1, behaviour: 1, visual: 1 });
@@ -145,15 +145,15 @@ test('only the visual lane asks for the screenshot slot (#365)', () => {
 test('a launch without the slot never takes it; a launch with it holds it until released (#365)', async (t) => {
   // the machine's slot folder lives under the OS temp folder: point it at a scratch one
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'e2e-lanes-365-'));
-  const saved = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR, slot: process.env.MULTIAGENT_SCREENSHOT_SLOT };
+  const saved = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR, slot: process.env.CRAFTORIO_SCREENSHOT_SLOT };
   t.after(() => {
-    for (const [k, v] of Object.entries({ TEMP: saved.TEMP, TMP: saved.TMP, TMPDIR: saved.TMPDIR, MULTIAGENT_SCREENSHOT_SLOT: saved.slot })) {
+    for (const [k, v] of Object.entries({ TEMP: saved.TEMP, TMP: saved.TMP, TMPDIR: saved.TMPDIR, CRAFTORIO_SCREENSHOT_SLOT: saved.slot })) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
     fs.rmSync(tmp, { recursive: true, force: true });
   });
   process.env.TEMP = tmp; process.env.TMP = tmp; process.env.TMPDIR = tmp;
-  delete process.env.MULTIAGENT_SCREENSHOT_SLOT;
+  delete process.env.CRAFTORIO_SCREENSHOT_SLOT;
   const machineSlot = require('../engine/machine-slot');
   const { screenshotSlot } = require('../../../features/support/app');
   assert.equal(machineSlot.machineSlotDir().startsWith(tmp), true, 'the slot folder follows the scratch temp folder');

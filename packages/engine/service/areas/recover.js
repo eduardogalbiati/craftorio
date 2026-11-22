@@ -5,7 +5,7 @@
 // turn the crash cut is recorded as a stopped attempt. Never a second copy: a run another live process
 // owns is left alone (#112), and this process takes its owner.json over in the same tick as that
 // check, so a process started next on the workspace sees it alive. Simulation-only
-// (MULTIAGENT_SIMULATION_ONLY=1) never recovers a real run; a child run (`type: workflow`) is left
+// (CRAFTORIO_SIMULATION_ONLY=1) never recovers a real run; a child run (`type: workflow`) is left
 // to its parent. What is not recovered stays interrupted: notifyInterruptedRun reports it (areas/runs.js),
 // Resume from step continues it (areas/resume.js). docs/agents/engine/resume.md.
 

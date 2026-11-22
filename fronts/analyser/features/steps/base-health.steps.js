@@ -15,7 +15,7 @@
 //   holds the machine's `suite` slot (packages/engine/engine/machine-slot.js).
 //
 // #527 (fronts/analyser/features/base-health.feature): the app is launched with its temp folder (TMP/TEMP/TMPDIR, so
-// machineSlotDir()) and MULTIAGENT_LOCKS_DIR in a folder of the scenario, never the machine's; the
+// machineSlotDir()) and CRAFTORIO_LOCKS_DIR in a folder of the scenario, never the machine's; the
 // "other run" is a suite.slot file there held by this test process (alive, this host), as
 // machine-slot.js writes it. The base check is started inside the app's main process through the
 // service's own base-health area (afterBaseMerge, kept by features/support/electron-main.js), as a
@@ -122,7 +122,7 @@ Then('stage {int} shows the item {string}', async ({ e2e }, n, title) => {
 const baseCheckCard = (page) => page.getByTestId('base-check-card').filter({ visible: true }).first();
 const OTHER_RUN = '20261023-120000-cccc3333';
 
-// The app's temp folder (machineSlotDir) and MULTIAGENT_LOCKS_DIR in a folder of this scenario, its
+// The app's temp folder (machineSlotDir) and CRAFTORIO_LOCKS_DIR in a folder of this scenario, its
 // suite slot held by "another run": this test process, alive on this host (machine-slot.js's holder)
 Given("the app is open while another run holds the machine's suite slot", async ({ e2e }) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
@@ -131,7 +131,7 @@ Given("the app is open while another run holds the machine's suite slot", async 
   const slot = path.join(locks, 'suite.slot');
   fs.writeFileSync(slot, JSON.stringify({ pid: process.pid, host: os.hostname(), token: 'e2e-other-run', started: Date.now(), holder: OTHER_RUN }), { flag: 'wx' });
   e2e.suiteSlot = slot;
-  await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, MULTIAGENT_LOCKS_DIR: locks } });
+  await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, CRAFTORIO_LOCKS_DIR: locks } });
   const close = e2e.close;
   e2e.close = async () => {
     await close();
@@ -179,12 +179,12 @@ Then("the roadmap's base check reads {string}", async ({ e2e }, text) => {
 
 // ---- #750: the Roadmap header's activity band while the base check runs ------------------------------
 // (fronts/build/features/roadmap.feature). The app gets a suite slot of the scenario's own (its temp
-// folder and MULTIAGENT_LOCKS_DIR, as #527), free, so no other suite on the machine makes the check wait.
+// folder and CRAFTORIO_LOCKS_DIR, as #527), free, so no other suite on the machine makes the check wait.
 Given("the app is open with the machine's suite slot free", async ({ e2e }) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
   const locks = path.join(tmp, 'craftorio', 'locks');
   fs.mkdirSync(locks, { recursive: true });
-  await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, MULTIAGENT_LOCKS_DIR: locks } });
+  await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, CRAFTORIO_LOCKS_DIR: locks } });
   const close = e2e.close;
   e2e.close = async () => {
     await close();

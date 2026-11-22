@@ -29,7 +29,7 @@ called only when a step fails, or on demand" (`AGENTS.md`).
   `max_total_context`, checked by the engine before each turn, never cutting a turn in progress.
 - **Recovery is validated.** A supervisor's `goto` must be one of the steps the transition
   declared in `recover:`; an invalid one is an escalation (`recoverFromActionError`).
-- **It all runs without a model.** `MULTIAGENT_SIMULATION_ONLY=1` and the mock provider walk the
+- **It all runs without a model.** `CRAFTORIO_SIMULATION_ONLY=1` and the mock provider walk the
   whole graph in `npm test`, with `mockSequences` to force failures, refused calls, probe states and
   action errors (`docs/agents/testing.md`).
 

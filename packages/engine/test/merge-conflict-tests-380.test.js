@@ -21,8 +21,8 @@ const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 const supervisor = require('../domains/supervisor/supervisor');
 const productOwner = require('../domains/po/product-owner');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
-process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
 
 const root = path.join(__dirname, '..', '..', '..');
 const FEATURE = 'features/a.feature';

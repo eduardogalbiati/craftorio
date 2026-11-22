@@ -3,7 +3,7 @@
 // prints its result as JSON. Plain Node, no dependencies.
 //   node scripts/ctl.js <channel> [json-argument]
 //   node scripts/ctl.js roadmap:start '{"projectId":"my-app"}'
-// The workspace is MULTIAGENT_WORKSPACE, or --workspace <dir>; the endpoint and its token come from
+// The workspace is CRAFTORIO_WORKSPACE, or --workspace <dir>; the endpoint and its token come from
 // <workspace>/control/endpoint.json (written while Settings › Execution › "Allow outside sessions to
 // control this app" is on). A refused or failed call exits with 1 and prints the error on stderr.
 
@@ -18,7 +18,7 @@ function fail(message) {
 
 function parseArgs(argv) {
   const rest = [];
-  let ws = process.env.MULTIAGENT_WORKSPACE || '';
+  let ws = process.env.CRAFTORIO_WORKSPACE || '';
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--workspace') ws = argv[++i] || '';
     else rest.push(argv[i]);
@@ -29,7 +29,7 @@ function parseArgs(argv) {
 function main() {
   const { ws, channel, json } = parseArgs(process.argv.slice(2));
   if (!channel) fail('Usage: node scripts/ctl.js <channel> [json-argument] [--workspace <dir>]');
-  if (!ws) fail('No workspace: set MULTIAGENT_WORKSPACE or pass --workspace <dir>.');
+  if (!ws) fail('No workspace: set CRAFTORIO_WORKSPACE or pass --workspace <dir>.');
   const file = path.join(ws, 'control', 'endpoint.json');
   let endpoint;
   try { endpoint = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {

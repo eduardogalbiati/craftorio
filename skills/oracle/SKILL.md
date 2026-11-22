@@ -104,7 +104,7 @@ Use `delegate` instead of reading everything yourself; only the answer and its c
 - `supervisor`: a run's diagnosis or a recommendation for a gate (it never answers the gate);
 - `analyzer`: a run's tool calls and costs per step and tool (no model, free);
 - `checker`: runs a test file or a command on a scratch checkout of a project's branch, with
-  `MULTIAGENT_SIMULATION_ONLY=1`, and returns the result with its evidence (no model; the checkout
+  `CRAFTORIO_SIMULATION_ONLY=1`, and returns the result with its evidence (no model; the checkout
   is removed after). A check that costs money or takes more than ~2 min is a `check.run` card.
 A delegation by a model costs money: say so, with the cost the chat shows.
 

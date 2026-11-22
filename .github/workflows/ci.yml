@@ -59,7 +59,7 @@ jobs:
         shell: bash   # Git Bash on Windows: the same scripts on every OS
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # the tests do not open the UI
-      MULTIAGENT_SIMULATION_ONLY: "1"      # automated checks never call real models
+      CRAFTORIO_SIMULATION_ONLY: "1"      # automated checks never call real models
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -106,12 +106,12 @@ jobs:
       - name: UI screenshots (every view, simulation)
         if: runner.os != 'macOS'
         env:
-          MULTIAGENT_UI_TESTS: "1"
+          CRAFTORIO_UI_TESTS: "1"
         run: node node_modules/electron/install.js && ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}node --test packages/engine/test/screenshot.test.js
       # The Playwright + playwright-bdd E2E suite's critical journeys (#222): the real app with
       # _electron on a simulated demo workspace, real assertions; a failure keeps its trace and screenshot.
       # Same two lanes as locally (#365, playwright.config.js), @visual one at a time. The behaviour
-      # lane's workers are left to auto (#366, MULTIAGENT_E2E_WORKERS unset): sized from the runner's
+      # lane's workers are left to auto (#366, CRAFTORIO_E2E_WORKERS unset): sized from the runner's
       # threads and free memory, 1 on the hosted 4-vCPU runners; the log's "E2E: ..." line says it.
       - name: E2E smoke (Playwright, @smoke)
         if: runner.os != 'macOS'

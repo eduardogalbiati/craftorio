@@ -1,4 +1,4 @@
-// The E2E behaviour lane's workers (#366): `MULTIAGENT_E2E_WORKERS=N` (N >= 1) forces N; unset or
+// The E2E behaviour lane's workers (#366): `CRAFTORIO_E2E_WORKERS=N` (N >= 1) forces N; unset or
 // `auto` sizes them from the machine, clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5))).
 // An invalid value falls back to auto with a warning. `e2eWorkers` is pure (the value and the machine
 // passed in) and returns the start line playwright.config.js prints, e.g.
@@ -18,7 +18,7 @@ const AUTO = {
   max: 4,
 };
 const GB = 1024 ** 3;
-const VARIABLE = 'MULTIAGENT_E2E_WORKERS';
+const VARIABLE = 'CRAFTORIO_E2E_WORKERS';
 
 const plural = (n) => `${n} worker${n === 1 ? '' : 's'}`;
 

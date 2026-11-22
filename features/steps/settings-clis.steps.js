@@ -17,7 +17,7 @@
 //                               data-state="running" | "ended"
 //   wizard-cli-warning          the wizard's CLI warning (data-error="cli-missing" | "cli-signed-out"),
 //                               its "Open Setup" button opens Agents & CLIs (no longer the first-run Setup)
-// A simulated machine without a CLI: MULTIAGENT_E2E_CLI_MISSING=<id> (simulation only), its probes find
+// A simulated machine without a CLI: CRAFTORIO_E2E_CLI_MISSING=<id> (simulation only), its probes find
 // no such CLI until a simulated Install of it, which writes its output and installs nothing.
 
 const { expect } = require('@playwright/test');
@@ -49,7 +49,7 @@ const wizard = (page) => page.getByTestId('project-wizard');
 const cliWarning = (page) => wizard(page).getByTestId('wizard-cli-warning');
 
 Given('the app is open on a machine without the {string}', async ({ e2e }, name) => {
-  await e2e.open({ env: { MULTIAGENT_E2E_CLI_MISSING: cliId(name) } });
+  await e2e.open({ env: { CRAFTORIO_E2E_CLI_MISSING: cliId(name) } });
 });
 
 Then('Agents & CLIs lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI and Git, each with a status', async ({ e2e }) => {

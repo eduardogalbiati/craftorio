@@ -27,7 +27,7 @@ test('npmScriptOf reads the script, its coverage variant and the args', () => {
 });
 
 test('takesFileList refuses a command with files already on it', () => {
-  const dir = project({ test: 'node run.js' }, { 'run.js': '// reads MULTIAGENT_TEST_FILES\n' });
+  const dir = project({ test: 'node run.js' }, { 'run.js': '// reads CRAFTORIO_TEST_FILES\n' });
   assert.strictEqual(takesFileList('npm test', dir), true);
   assert.strictEqual(takesFileList('npm test -- a.test.js', dir), false);
 });
@@ -45,7 +45,7 @@ test('listIgnored reports a list round that ran the whole suite as a whole run',
   const logs = [];
   const out = { scope: 'files', passed: 100, failed: 0, selection: { files, why: 'since round 1' } };
   const why = listIgnored(out, { list: true, files, wholeTests: 100, log: (level, m) => logs.push(level), tooLong: null });
-  assert.match(why, /ignored the list of MULTIAGENT_TEST_FILES/);
+  assert.match(why, /ignored the list of CRAFTORIO_TEST_FILES/);
   assert.strictEqual(out.scope, 'full');
   assert.strictEqual(out.list_ignored, true);
   assert.match(out.selection.why, /^since round 1; .*so the whole suite ran$/);

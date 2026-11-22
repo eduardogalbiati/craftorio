@@ -6,7 +6,7 @@
 // is stored: the conversation files keep what they kept. A turn can be stopped (chat:cancel): its
 // AbortSignal kills the CLI and the chat records the answer written so far, marked as stopped.
 // mockSteps: the simulated chats stream a few fake steps and their text, so the UI can be checked
-// without a model call (delays scaled by MULTIAGENT_MOCK_DELAY_SCALE, like the mock provider).
+// without a model call (delays scaled by CRAFTORIO_MOCK_DELAY_SCALE, like the mock provider).
 
 const crypto = require('crypto');
 
@@ -119,7 +119,7 @@ function createChatTurns({ emit, throttleMs = THROTTLE_MS, now = Date.now }) {
  * `signal` aborts.
  */
 async function mockSteps(onItem, { steps = [], text = '', json = null, signal, delayMs = 250 } = {}) {
-  const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
+  const scale = +(process.env.CRAFTORIO_MOCK_DELAY_SCALE ?? 1);
   const wait = (ms) => new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new Error('Cancelled')); return; }
     const t = setTimeout(resolve, Math.max(0, ms * scale));

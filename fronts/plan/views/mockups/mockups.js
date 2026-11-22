@@ -6,7 +6,7 @@
 // empty state says what to do next: Build the visual kit (the deterministic machine step, then the
 // ui-kit-map workflow when real) with its D15 estimate shown first (mockups:estimate, build-kit:
 // $1.50–$4.00). New mockup is a dialog (Title, Prompt, Create) with the generate-screen estimate; the
-// simulated designer (MULTIAGENT_SIMULATION_ONLY) writes the screen at once, a real one starts a
+// simulated designer (CRAFTORIO_SIMULATION_ONLY) writes the screen at once, a real one starts a
 // mockup-generate run. A Discovery card's "Mock this card" calls MockupsActions.fromCard.
 // #835: once the kit exists, a tablist Gallery | Kit; the Kit tab lists the components (name, file:line
 // source, a live preview: a sandboxed iframe on mockup://<id>/kit/components.html#c-<slug>), the tokens

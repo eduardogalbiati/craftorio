@@ -3,11 +3,11 @@
 // roadmap with Tonight's runs, a local merge, the dependency cache) and the three agents' usage
 // (packages/engine/domains/analytics/analytics-demo.js, #280), and launches the real Electron
 // app on it with Playwright's _electron (features/support/electron-main.js), in simulation:
-// MULTIAGENT_SIMULATION_ONLY=1 (the engine refuses real runs, real providers and CLI terminals),
+// CRAFTORIO_SIMULATION_ONLY=1 (the engine refuses real runs, real providers and CLI terminals),
 // sign-in off, HOME/USERPROFILE/APPDATA inside the scratch folder (no CLI session or account of this
 // machine shows). Electron is never started as plain Node: ELECTRON_RUN_AS_NODE is removed.
 // A launch with slot: true (the visual lane, #365) takes the machine-wide screenshot slot (#199,
-// packages/engine/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
+// packages/engine/engine/machine-slot.js, in machineSlotDir: not the suite step's own CRAFTORIO_LOCKS_DIR,
 // so a release run waits for other runs' captures) and frees it on close; the behaviour lane's
 // launches (slot: false) never wait for it. close() removes the scratch folder.
 // The app runs in English whatever the computer's language (#444): the demo workspace chooses
@@ -54,28 +54,28 @@ async function seedWorkspace(wsDir) {
 // The launched app's environment: simulation only, the scratch workspace, no Node mode.
 // mockDelayScale: the simulated turns' speed (default 0.02: a turn in well under a second; #368's
 // pause scenarios use a larger one so an agent's turn lasts long enough to be paused during it)
-// extra: more variables for the app, e.g. { MULTIAGENT_NO_SANDBOX: '1' } (#476: what the Linux
+// extra: more variables for the app, e.g. { CRAFTORIO_NO_SANDBOX: '1' } (#476: what the Linux
 // AppImage's launcher sets when it starts the app without Chromium's sandbox)
 function appEnv(scratch, { theme, size, now, mockDelayScale = 0.02, extra = {} }) {
   const home = path.join(scratch, 'home');
   for (const d of [home, path.join(home, 'AppData'), path.join(scratch, 'user-data')]) fs.mkdirSync(d, { recursive: true });
   const env = {
     ...process.env,
-    MULTIAGENT_SIMULATION_ONLY: '1',
-    MULTIAGENT_AUTH: 'off',
-    MULTIAGENT_WORKSPACE: path.join(scratch, 'workspace'),
-    MULTIAGENT_USER_DATA: path.join(scratch, 'user-data'),
-    MULTIAGENT_MOCK_DELAY_SCALE: String(mockDelayScale),
-    MULTIAGENT_E2E_THEME: theme,
-    MULTIAGENT_E2E_SIZE: size,
+    CRAFTORIO_SIMULATION_ONLY: '1',
+    CRAFTORIO_AUTH: 'off',
+    CRAFTORIO_WORKSPACE: path.join(scratch, 'workspace'),
+    CRAFTORIO_USER_DATA: path.join(scratch, 'user-data'),
+    CRAFTORIO_MOCK_DELAY_SCALE: String(mockDelayScale),
+    CRAFTORIO_E2E_THEME: theme,
+    CRAFTORIO_E2E_SIZE: size,
     LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8',
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
     ...extra,
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  if (now != null) env.MULTIAGENT_E2E_NOW = String(now);
-  else delete env.MULTIAGENT_E2E_NOW;
+  if (now != null) env.CRAFTORIO_E2E_NOW = String(now);
+  else delete env.CRAFTORIO_E2E_NOW;
   return env;
 }
 
@@ -96,7 +96,7 @@ function removeScratch(dir) {
  * theme: light | dark; size: WxH; empty: true leaves the workspace folder unseeded (a first start:
  * no settings.json, no project; project is null, #319); now: a fixed clock (ms, #362,
  * features/support/fixed-clock.js) for the seed and the app's main process, the real one without it.
- * mockDelayScale: MULTIAGENT_MOCK_DELAY_SCALE for the app (default 0.02).
+ * mockDelayScale: CRAFTORIO_MOCK_DELAY_SCALE for the app (default 0.02).
  * slot: hold the machine's screenshot slot while the app is open (#365: the visual lane).
  * env: more environment variables for the app (appEnv's extra, #476).
  * No recordVideo: with Electron 44 it stalls the window before its page loads (the trace's

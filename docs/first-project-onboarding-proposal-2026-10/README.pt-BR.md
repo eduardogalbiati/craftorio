@@ -339,7 +339,7 @@ A última peça do loop do SDLC (o Maintain) e a última fase do plano. O app pa
 
 ## Custo das chamadas reais
 
-São ordens de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (`MULTIAGENT_SIMULATION_ONLY=1`). O assistente mostra o total antes do clique, e ele conta no orçamento diário (#206).
+São ordens de grandeza, sem medição. Todo o desenvolvimento roda no provedor simulado (`CRAFTORIO_SIMULATION_ONLY=1`). O assistente mostra o total antes do clique, e ele conta no orçamento diário (#206).
 
 | Item | Quando | Modelo | Estimativa |
 |---|---|---|---|

@@ -29,7 +29,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { runSoftwareDevelopment } = require('../engine-helpers');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 const MAX_GIT_PROCESSES = 26;
 

@@ -339,7 +339,7 @@ The last piece of the SDLC loop (Maintain), and the last phase of the plan. The 
 
 ## Cost of real-model calls
 
-These are orders of magnitude, not measured. All development runs on the mock provider (`MULTIAGENT_SIMULATION_ONLY=1`). The wizard shows the total before the click, and it counts toward the daily budget (#206).
+These are orders of magnitude, not measured. All development runs on the mock provider (`CRAFTORIO_SIMULATION_ONLY=1`). The wizard shows the total before the click, and it counts toward the daily budget (#206).
 
 | Item | When | Model | Estimate |
 |---|---|---|---|

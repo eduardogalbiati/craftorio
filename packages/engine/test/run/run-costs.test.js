@@ -31,7 +31,7 @@ const runs = require('../../domains/run/runs');
 const { runFigures } = require('../../domains/run/run-analysis');
 const { actualCost } = require('../../domains/usage/cost-estimate');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 
 const near = (actual, expected, tol, msg) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) < tol, `${msg}: expected ${expected}, got ${actual}`);
 

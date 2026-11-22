@@ -3,7 +3,7 @@ Feature: The account
   The app asks for a free account only to count the people using it: no trial, no plan, and nothing
   about the account stops a run.
 
-  # The E2E app runs with sign-in off (MULTIAGENT_AUTH=off): the steps push the account state the
+  # The E2E app runs with sign-in off (CRAFTORIO_AUTH=off): the steps push the account state the
   # main process would send (auth:changed) to show the sign-in screen or a signed-in user.
   Scenario: The sign-in screen says the account only counts the people using the app
     Given the app is open

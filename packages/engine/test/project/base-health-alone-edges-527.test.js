@@ -25,9 +25,9 @@ const TIMING = { test: 'opens the board quickly', file: 'test/speed.test.js', er
 const PLAIN = { test: 'cart totals include tax', file: 'test/cart.test.js', error: 'expected 110, got 100' };
 
 let saved;
-test.beforeEach(() => { saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
+test.beforeEach(() => { saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env[SUITE_SLOT_ENV] }; delete process.env[SUITE_SLOT_ENV]; });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], [SUITE_SLOT_ENV, saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
 });
@@ -43,7 +43,7 @@ function tmpWs(t) {
   fs.mkdirSync(path.join(ws, 'backlog'), { recursive: true });
   const locks = path.join(ws, 'locks');
   fs.mkdirSync(locks, { recursive: true });
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   return { ws, locks };
 }
 

@@ -9,6 +9,7 @@
 // Normalized items emitted via onItem():
 //   { kind: 'spawn' | 'session' | 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'usage' | 'stderr' | 'raw', ... }
 
+require('../domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 const {
   execFile,
   execSync,
@@ -88,7 +89,7 @@ function mergeLoginShellPath() {
   if (process.platform === 'win32' || loginPathMerged) return;
   loginPathMerged = true;
   const shell = process.env.SHELL && fs.existsSync(process.env.SHELL) ? process.env.SHELL : '/bin/sh';
-  const mark = '__MULTIAGENT_PATH__';
+  const mark = '__CRAFTORIO_PATH__';
   let dir;
   let out = '';
   try {
@@ -709,7 +710,7 @@ function mockUsageLimited(hint, model) {
 
 async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs, attachments = [] }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
-  const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
+  const scale = +(process.env.CRAFTORIO_MOCK_DELAY_SCALE ?? 1);
   const d = (ms) => sleep(ms * scale * (0.6 + Math.random() * 0.8), signal);
   const n = (mockTurns.get(sid) || 0) + 1;
   mockTurns.set(sid, n);

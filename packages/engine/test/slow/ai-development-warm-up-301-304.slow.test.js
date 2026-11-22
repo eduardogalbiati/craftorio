@@ -13,7 +13,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../../engine/workflow');
 const { repoFromTemplate } = require('../helpers/git-fixture');
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');

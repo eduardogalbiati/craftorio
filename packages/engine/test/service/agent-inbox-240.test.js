@@ -24,8 +24,8 @@
 //   'supervisor', ref: <the Oracle message id given>, ownerTs: <ts of the owner's result message> }.
 // - Params assumed here: roadmap.add { issues: [numbers], workflow? }, roadmap.skip { itemId },
 //   plan { question }, run.stop { runId }, dispatch.restart {}.
-// Everything runs simulated (MULTIAGENT_SIMULATION_ONLY=1): no model, no gh, no real run.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+// Everything runs simulated (CRAFTORIO_SIMULATION_ONLY=1): no model, no gh, no real run.
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

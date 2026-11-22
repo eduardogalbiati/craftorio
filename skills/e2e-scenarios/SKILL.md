@@ -55,7 +55,7 @@ a browser, the machine stops responding. The rules of this section come first:
   script), the CLI, the HTTP API. Never call internal functions from an E2E step: that is a unit
   test.
 - Steps never call paid services or real AI models: use the project's mock or simulation switch
-  (this orchestrator: `MULTIAGENT_SIMULATION_ONLY=1`, already in your environment, and a scratch
+  (this orchestrator: `CRAFTORIO_SIMULATION_ONLY=1`, already in your environment, and a scratch
   workspace).
 - Feature files and step definitions are tests: only the test writer writes them (they are under
   the workflow's `tests_paths`); commit them with the other tests.

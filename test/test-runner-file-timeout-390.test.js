@@ -1,5 +1,5 @@
 // scripts/test.js (#390): every test gets a timeout, so a hung test fails with its name instead of
-// running (and holding the run's worktree) forever. The timeout is set by MULTIAGENT_TEST_TIMEOUT_MS
+// running (and holding the run's worktree) forever. The timeout is set by CRAFTORIO_TEST_TIMEOUT_MS
 // here so the check takes seconds; the hung fixture ends by itself after 40 s whatever happens.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -26,7 +26,7 @@ function fixtures(t) {
 
 test('a hung test fails on its timeout with its name and file, and the run ends', { timeout: 60000 }, (t) => {
   const { dir, files } = fixtures(t);
-  const env = { ...process.env, MULTIAGENT_TEST_CONCURRENCY: '2', MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: path.join(dir, 'human.log'), MULTIAGENT_TEST_TIMEOUT_MS: '2000' };
+  const env = { ...process.env, CRAFTORIO_TEST_CONCURRENCY: '2', CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: path.join(dir, 'human.log'), CRAFTORIO_TEST_TIMEOUT_MS: '2000' };
   delete env.NODE_TEST_CONTEXT;
   const r = spawnSync(process.execPath, ['scripts/test.js', ...files], { cwd: root, encoding: 'utf8', env, timeout: 30000 });
   assert.equal(r.error?.code, undefined, 'the run ends on its own, long before the hung test would');

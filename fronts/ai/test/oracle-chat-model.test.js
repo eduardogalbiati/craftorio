@@ -3,7 +3,7 @@
 // image-viewer-model.test.js checks image-viewer-model.js. oracle.js (the renderer) and its DOM
 // wiring (follow(), the drawer open/close, the screenshot states) are exercised through
 // npm run screenshot -- --view oracle (scripts/screenshot.js's demoOracle) and the generic
-// "opens every view" test in screenshot.test.js, gated behind MULTIAGENT_UI_TESTS=1.
+// "opens every view" test in screenshot.test.js, gated behind CRAFTORIO_UI_TESTS=1.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const M = require('../views/oracle/oracle-chat-model');

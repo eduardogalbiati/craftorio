@@ -19,7 +19,7 @@
 // The suite runs as from a shell (#210) with the allowlisted environment (#470, child-env.js plus the
 // workflow's env.passthrough): `suiteEnv` drops the app's variables (Electron's, npm's, an
 // inspector in NODE_OPTIONS that forces node --test to one file at a time, the scratch workspace that
-// every test process would share) and gives the suite its own lock folder (MULTIAGENT_LOCKS_DIR,
+// every test process would share) and gives the suite its own lock folder (CRAFTORIO_LOCKS_DIR,
 // <run>/locks), so a test never waits for the machine-wide screenshot slot held by other runs; a
 // whole-suite round itself waits for the machine-wide `suite` slot (#455, `slot`). The
 // log starts with what the child gets (parallelism, the variables removed). Without a step
@@ -60,7 +60,7 @@
 // its files through a list file the runner reads (#553), else runs the whole suite instead
 // (`selection.why` and the message say so), and the base check of too many files is skipped with
 // that reason. A timed-out file reruns alone, always short enough.
-// Agent mode (#219): the suite gets MULTIAGENT_AGENT_MODE=1 and MULTIAGENT_TEST_HUMAN_LOG (<log>.human.log);
+// Agent mode (#219): the suite gets CRAFTORIO_AGENT_MODE=1 and CRAFTORIO_TEST_HUMAN_LOG (<log>.human.log);
 // a runner that knows them (this project's scripts/test.js) prints one failures-only JSON line,
 // which `parseFailures` / `parseCounts` read before any text format (`human_log`, `file_counts`).
 // Red check (#220): `redCheck` sorts the test files of a tests-first run into red / green / broken.
@@ -280,16 +280,16 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 
 // The suite's environment from the engine's (#210): what a shell would give it. Removed: Electron's
 // and Chromium's variables, npm's (the app started with `npm start`), the agents' CLI marker, a test
-// runner context, the app's own MULTIAGENT_* (the scratch workspace and user data every test process
+// runner context, the app's own CRAFTORIO_* and their old names MULTIAGENT_* (the scratch workspace and user data every test process
 // would share, an inherited screenshot slot); inspector flags are cut from NODE_OPTIONS (node --test
-// runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
+// runs one file at a time under an inspector). Set: CRAFTORIO_SIMULATION_ONLY=1, CRAFTORIO_AGENT_MODE=1
 // (#219: a runner that knows it prints the failures-only JSON, packages/engine/engine/agent-test-report.js) and,
-// with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
+// with locksDir, CRAFTORIO_LOCKS_DIR (the suite's own screenshot slot); with testWorkers, the run's
 // test workers (#367, packages/engine/domains/machine/machine-profile.js workerEnv), never an inherited value; with tmpDir, TMP,
 // TEMP and TMPDIR (#414: the run's temp folder over the user's). #470 (SEC-5): only the allowlisted
 // variables reach the repository's scripts (packages/engine/engine/child-env.js, no platform tokens), plus the
 // workflow's env.passthrough names; `removed` still names only the ones above. → { env, removed: [names] }
-const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
+const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|CRAFTORIO_|MULTIAGENT_)/i;
 function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir, passthrough = [] } = {}) {
   const out = {};
   const removed = [];
@@ -305,12 +305,12 @@ function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir, passthrough = [] } 
     }
     out[k] = v;
   }
-  out.MULTIAGENT_SIMULATION_ONLY = '1';
-  out.MULTIAGENT_AGENT_MODE = '1';
-  if (locksDir) out.MULTIAGENT_LOCKS_DIR = locksDir;
+  out.CRAFTORIO_SIMULATION_ONLY = '1';
+  out.CRAFTORIO_AGENT_MODE = '1';
+  if (locksDir) out.CRAFTORIO_LOCKS_DIR = locksDir;
   if (testWorkers) Object.assign(out, workerEnv({ testWorkers }));
   if (tmpDir) Object.assign(out, { TMP: tmpDir, TEMP: tmpDir, TMPDIR: tmpDir });
-  const replaced = (k) => /^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k) || (!!testWorkers && /^MULTIAGENT_(TEST|E2E)_WORKERS$/i.test(k));
+  const replaced = (k) => /^CRAFTORIO_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k) || (!!testWorkers && /^CRAFTORIO_(TEST|E2E)_WORKERS$/i.test(k));
   return { env: out, removed: removed.filter((k) => !replaced(k)).sort() };
 }
 
@@ -622,7 +622,7 @@ async function runFileAlone({ command, file, cwd, where, env, timeoutMs, signal,
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   fs.writeFileSync(logFile, `$ ${cmd}\n# ${file} alone ${where} (${cwd}), timeout ${Math.round(timeoutMs / 60e3)} min: ${why}\n`);
   const t0 = Date.now();
-  const r = await run({ command: cmd, cwd, env: env ? { ...env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) } : env, timeoutMs, signal, logFile, ...cmdArgs });
+  const r = await run({ command: cmd, cwd, env: env ? { ...env, CRAFTORIO_TEST_HUMAN_LOG: humanLog(logFile) } : env, timeoutMs, signal, logFile, ...cmdArgs });
   const ms = Date.now() - t0;
   let text = '';
   try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
@@ -726,7 +726,7 @@ async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args
 function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, logPrefix = '' }) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
-    + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
+    + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set CRAFTORIO_SIMULATION_ONLY=1, CRAFTORIO_AGENT_MODE=1, CRAFTORIO_LOCKS_DIR=${childEnv.env.CRAFTORIO_LOCKS_DIR}, CRAFTORIO_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
   const onBase = baseCommit ? `# base: tested on top of ${baseCommit}\n` : '';
   fs.writeFileSync(logFile, `${logPrefix}$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}${onBase}`);
 }
@@ -826,7 +826,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await runRound({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile), ...listEnv }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
+    const r = await runRound({ command: out.command, cwd, env: { ...childEnv.env, CRAFTORIO_TEST_HUMAN_LOG: humanLog(logFile), ...listEnv }, timeoutMs: out.timeout_ms, signal, logFile, ...optionalRunArgs({ onSpawn, sweep }) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];
@@ -868,7 +868,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // the failures the run does not know yet: do they fail on the base too? (#211)
   if (out.failures.length && (base || mock) && !signal?.aborted) {
     const where = (name) => ({ command: out.command, mock, signal, run, timeoutMs: out.timeout_ms, runDir, cacheDir: baseCacheDir, log, platform, onLog, logFile: logFile ? path.join(runDir, 'logs', `${name}.log`) : null,
-      env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `${name}.log`)) } : undefined });
+      env: childEnv ? { ...childEnv.env, CRAFTORIO_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `${name}.log`)) } : undefined });
     const { onBase: redOnBase, info } = await checkOnBase({ ...where(`suite-${round}-base`), failures: out.failures, base });
     out.base_check = info;
     // #527: confirmed alone by a base check; #736: and red on the base's last green commit too (suite-last-green.js)

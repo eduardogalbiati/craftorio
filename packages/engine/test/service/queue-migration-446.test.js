@@ -40,8 +40,8 @@ const ref = (n) => ({ number: n, url: `https://github.com/o/r/issues/${n}`, titl
 const issueNumbers = (item) => (item.issues || [item]).map((i) => i.number);
 
 test('#446 a leftover queue file becomes one planned roadmap stage at the end, once; its pause is dropped', async (t) => {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
   const { tmp, openService } = harness(t);
   const dir = tmp('queue-move-ws-');
   const folder = tmp('queue-move-project-');

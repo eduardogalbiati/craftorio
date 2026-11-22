@@ -37,7 +37,7 @@ for Coding Agents") adds: build the rules gradually and expect some to become un
    `docs/agents/` and `skills/`, and `AGENTS.md`), the files edited, the topic docs of edited folders
    not read in the same session (the folder table `TOPICS` in the script), a shared list file
    edited, a `git push` to `main` and a real run attempted (a run command without `--mock`; the
-   engine refuses it under `MULTIAGENT_SIMULATION_ONLY`); the rules the data cannot show are listed
+   engine refuses it under `CRAFTORIO_SIMULATION_ONLY`); the rules the data cannot show are listed
    as not measured.
 
 ### Baseline (2026-09-26 to 2026-10-26)

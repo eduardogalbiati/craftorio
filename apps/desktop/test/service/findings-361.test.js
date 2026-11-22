@@ -17,8 +17,8 @@
 //   request.from === 'findings'. Afterwards findings:list gives the finding a status other than
 //   'saved' ('sent' while the request waits in the inbox, 'filed' once the issue exists).
 //   An unknown id is refused: ok false with an error, nothing sent.
-// Everything runs simulated (MULTIAGENT_SIMULATION_ONLY=1): no model, no gh, no real run.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+// Everything runs simulated (CRAFTORIO_SIMULATION_ONLY=1): no model, no gh, no real run.
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

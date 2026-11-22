@@ -1,6 +1,6 @@
 // scripts/run.js (node scripts/run.js --mock ...): the terminal entry point agents themselves use
 // for their own checks. #120: given the run scratch workspace an agent's environment carries
-// (MULTIAGENT_WORKSPACE), it must write there, never fall back to the owner's registered workspace.
+// (CRAFTORIO_WORKSPACE), it must write there, never fall back to the owner's registered workspace.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -14,7 +14,7 @@ function tmp(t, prefix) {
   return dir;
 }
 
-test('a mock run honors MULTIAGENT_WORKSPACE (an agent\'s own run scratch workspace, set by the engine) and writes its run there, never under the registered workspace', (t) => {
+test('a mock run honors CRAFTORIO_WORKSPACE (an agent\'s own run scratch workspace, set by the engine) and writes its run there, never under the registered workspace', (t) => {
   const scratch = tmp(t, 'run-script-scratch-');
   const repo = tmp(t, 'run-script-repo-');
   const out = execFileSync(process.execPath, [
@@ -23,7 +23,7 @@ test('a mock run honors MULTIAGENT_WORKSPACE (an agent\'s own run scratch worksp
     '--file', path.join(__dirname, '..', 'packages', 'engine', 'test', 'fixtures', 'run-script.yaml'),
     '--repo', repo,
   ], {
-    env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: scratch },
+    env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_WORKSPACE: scratch },
     encoding: 'utf8',
   });
   assert.match(out, /■ success/);

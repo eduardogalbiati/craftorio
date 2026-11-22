@@ -68,5 +68,5 @@ test('release only removes the file when it still holds this token (never someon
 });
 
 test('SCREENSHOT_SLOT_ENV names the variable a holder passes its token to its child in', () => {
-  assert.equal(SCREENSHOT_SLOT_ENV, 'MULTIAGENT_SCREENSHOT_SLOT');
+  assert.equal(SCREENSHOT_SLOT_ENV, 'CRAFTORIO_SCREENSHOT_SLOT');
 });

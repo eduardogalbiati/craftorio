@@ -1,6 +1,6 @@
 // The Backlog's Product Owner (#105, packages/engine/domains/po/product-owner.js): questions about a project's backlog and
 // the conversation kept per project. Read-only: it proposes, the owner applies (Assign, roadmap).
-// `mock` (the screen's developer mode) and MULTIAGENT_SIMULATION_ONLY answer from the simulated
+// `mock` (the screen's developer mode) and CRAFTORIO_SIMULATION_ONLY answer from the simulated
 // Product Owner: no model call, no cost. po:ask's `issues` (#169): the issues the owner selected on
 // the Backlog and sent to the Product Owner, read in full and planned with suggested extra issues.
 // #785: `mode: 'auto'` (the drawer) lets the Product Owner decide whether it plans or registers, and
@@ -8,7 +8,7 @@
 // Registering an issue (#117): `mode: 'issue'` drafts an issue in the same conversation; po:attach
 // stores a pasted or dropped file; po:file files the draft on the owner's click (create, append to
 // an existing issue's body, or comment), then syncs the backlog; po:discard drops it. `preview`
-// and MULTIAGENT_SIMULATION_ONLY only preview: never gh/glab.
+// and CRAFTORIO_SIMULATION_ONLY only preview: never gh/glab.
 // po:file's `epic`: a new issue joins its draft's epic (#138). po:split files a proposed split of an
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.

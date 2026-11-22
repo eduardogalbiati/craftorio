@@ -67,7 +67,7 @@ test('#414 agentEnv: an agent of a run gets TMP, TEMP and TMPDIR set to the run\
   const scratch = { workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data', tmp: path.join('C:/run', 'tmp') };
   const env = loadCaps().agentEnv(scratch);
   assert.deepEqual(tmpVars(env), [path.join('C:/run', 'tmp'), path.join('C:/run', 'tmp'), path.join('C:/run', 'tmp')]);
-  assert.equal(env.MULTIAGENT_WORKSPACE, 'C:/run/scratch/workspace', 'the scratch workspace is still given');
+  assert.equal(env.CRAFTORIO_WORKSPACE, 'C:/run/scratch/workspace', 'the scratch workspace is still given');
 });
 
 test('#414 agentEnv: the run\'s test workers do not drop the temp folder', () => {

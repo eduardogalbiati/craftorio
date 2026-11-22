@@ -3,7 +3,7 @@
 // a schema retry, the supervisor-on-call stall gate after a finished step, a child run that ended
 // paused after Cancel pause, and the step command a pause waits for (the screenshots, a transition
 // action). Whole simulated runs (mock provider, tiny inline workflows).
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

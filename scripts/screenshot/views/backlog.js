@@ -246,12 +246,12 @@ function seed({ args, ws, project, projects }) {
 }
 
 // --issues disabled (#845): the repository has Issues turned off: the last sync read no issue and says so
-// (issuesDisabled), and a new sync answers the same (the simulation-only hook MULTIAGENT_E2E_ISSUES_FAIL)
+// (issuesDisabled), and a new sync answers the same (the simulation-only hook CRAFTORIO_E2E_ISSUES_FAIL)
 function demoIssuesDisabled(ws, projectId) {
   const file = path.join(ws.backlog, `${projectId}.json`);
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   fs.writeFileSync(file, JSON.stringify({ ...data, issues: [], epics: [], issuesDisabled: true }, null, 2));
-  process.env.MULTIAGENT_E2E_ISSUES_FAIL = 'disabled';
+  process.env.CRAFTORIO_E2E_ISSUES_FAIL = 'disabled';
 }
 
 // #254: the Roadmap screen has its own menu entry

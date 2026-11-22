@@ -9,7 +9,7 @@
 // warnings are computed here from the issues' `complexity:n` labels and past runs, not left to the
 // model. It never edits issues, never starts runs and never answers a gate: the Backlog's Assign and
 // Add to roadmap buttons apply a proposal only on the owner's click.
-// Simulated (developer mode, MULTIAGENT_SIMULATION_ONLY): mockAnswer builds the answer from the
+// Simulated (developer mode, CRAFTORIO_SIMULATION_ONLY): mockAnswer builds the answer from the
 // backlog itself, with no model call and no cost.
 // Calibration (#189, apps/desktop/renderer/po-calibration.js): a plan question is planned with the agent's saved
 // Speed ↔ Quality step, or a step for that question only; the prompt states its parameters, the simulated

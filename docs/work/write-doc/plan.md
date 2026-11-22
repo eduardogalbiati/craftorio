@@ -71,7 +71,7 @@ Phase 1 ships the flow from the intent to a signed-off spec; these parts of R8â€
 - **The reader's contract moves:** the editor talks to it only through `postMessage` messages, with a contract test on both sides.
 - **A gate that never ends:** `human_edit` keeps its state in the run; closing the app returns to the same gate, with the chat history.
 - **Translation drift:** each request updates the source and the translation in the same commit; the lint compares the headings and anchors of the pair.
-- **Unexpected cost:** in simulation nothing calls a model (`MULTIAGENT_SIMULATION_ONLY=1`); for real, every action shows its estimate first.
+- **Unexpected cost:** in simulation nothing calls a model (`CRAFTORIO_SIMULATION_ONLY=1`); for real, every action shows its estimate first.
 - **Writes outside the run:** a machine step refuses changes outside `docs/work/<item>/`.
 
 ## Proof

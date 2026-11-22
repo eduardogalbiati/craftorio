@@ -1,6 +1,6 @@
 // scripts/test.js and the list of test files (#553, acceptance tests written before the code): a
 // selection too long for the command line reaches the runner as a list file named by
-// MULTIAGENT_TEST_FILES (one path per line). The runner runs only the listed files, as a focused run:
+// CRAFTORIO_TEST_FILES (one path per line). The runner runs only the listed files, as a focused run:
 // it never waits for the machine-wide suite slot (#455), which another run holds here, so a runner
 // that ignored the list would start the whole suite and wait (the spawn's timeout ends it).
 const test = require('node:test');
@@ -30,16 +30,16 @@ function hold(dir) {
 }
 
 function agentEnv(dir, locks, extra = {}) {
-  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_CONCURRENCY: '1', MULTIAGENT_TEST_HUMAN_LOG: path.join(dir, 'human.log'), MULTIAGENT_LOCKS_DIR: locks };
+  const env = { ...process.env, CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_CONCURRENCY: '1', CRAFTORIO_TEST_HUMAN_LOG: path.join(dir, 'human.log'), CRAFTORIO_LOCKS_DIR: locks };
   delete env.NODE_TEST_CONTEXT;
   delete env[SUITE_SLOT_ENV];
-  delete env.MULTIAGENT_TEST_FILES;
+  delete env.CRAFTORIO_TEST_FILES;
   return { ...env, ...extra };
 }
 
 const humanLog = (dir) => { try { return fs.readFileSync(path.join(dir, 'human.log'), 'utf8'); } catch { return ''; } };
 
-test('scripts/test.js runs only the files listed in MULTIAGENT_TEST_FILES, as a focused run (#553)', { timeout: 60000 }, (t) => {
+test('scripts/test.js runs only the files listed in CRAFTORIO_TEST_FILES, as a focused run (#553)', { timeout: 60000 }, (t) => {
   const dir = tmpDir(t);
   const { locks, slot } = hold(dir);
   const ok = path.join(dir, 'listfx-ok.test.js');
@@ -48,7 +48,7 @@ test('scripts/test.js runs only the files listed in MULTIAGENT_TEST_FILES, as a 
   fs.writeFileSync(bad, "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('listed two', () => {\n  assert.equal(1, 2);\n});\n");
   const list = path.join(dir, 'files.txt');
   fs.writeFileSync(list, `${ok}\n${bad}\n`);
-  const r = spawnSync(process.execPath, ['scripts/test.js'], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { MULTIAGENT_TEST_FILES: list }), timeout: 30000 });
+  const r = spawnSync(process.execPath, ['scripts/test.js'], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { CRAFTORIO_TEST_FILES: list }), timeout: 30000 });
   assert.equal(r.error?.code, undefined, `the run ends on its own (a whole suite would wait for the slot): ${humanLog(dir).slice(0, 300)}`);
   assert.doesNotMatch(humanLog(dir), /waiting for the suite slot/, 'a listed run never waits for the suite slot');
   const lines = r.stdout.trim().split(/\r?\n/);
@@ -93,7 +93,7 @@ test('#597 the whole suite of a workspace starts with more test files than a Win
   const fast = longFileList(path.join(ws, 'test'), '.test.js', WINDOWS_COMMAND_LINE + 2000, shown);
   const slow = longFileList(path.join(ws, 'test', 'more'), '.slow.test.js', WINDOWS_COMMAND_LINE + 2000, shown);
   assert.ok(fast.total > WINDOWS_COMMAND_LINE && slow.total > WINDOWS_COMMAND_LINE, 'each group is longer than a Windows command line');
-  const r = spawnSync(process.execPath, ['scripts/test.js', '--workspace', ws], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { MULTIAGENT_TEST_CONCURRENCY: '2' }), timeout: 280000 });
+  const r = spawnSync(process.execPath, ['scripts/test.js', '--workspace', ws], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { CRAFTORIO_TEST_CONCURRENCY: '2' }), timeout: 280000 });
   assert.equal(r.error?.code, undefined, `the run ends on its own: ${humanLog(dir).slice(0, 300)}`);
   assert.doesNotMatch(`${r.stderr}\n${humanLog(dir)}`, /ENAMETOOLONG/, 'no file list on the command line');
   const lines = r.stdout.trim().split(/\r?\n/);
@@ -104,16 +104,16 @@ test('#597 the whole suite of a workspace starts with more test files than a Win
   assert.equal(r.status, 0);
 });
 
-test('#597 a MULTIAGENT_TEST_FILES list longer than a Windows command line starts, and the tests never inherit the list', { timeout: 300000 }, (t) => {
+test('#597 a CRAFTORIO_TEST_FILES list longer than a Windows command line starts, and the tests never inherit the list', { timeout: 300000 }, (t) => {
   const dir = tmpDir(t);
   const { locks } = hold(dir);
   const { files, total } = longFileList(path.join(dir, 'sel'), '.test.js', WINDOWS_COMMAND_LINE + 2000);
   assert.ok(total > WINDOWS_COMMAND_LINE, 'the list is longer than a Windows command line');
   const inherits = path.join(dir, 'sel', 'inherits.test.js');
-  fs.writeFileSync(inherits, "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('the list is not inherited', () => {\n  assert.equal(process.env.MULTIAGENT_TEST_FILES, undefined);\n});\n");
+  fs.writeFileSync(inherits, "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('the list is not inherited', () => {\n  assert.equal(process.env.CRAFTORIO_TEST_FILES, undefined);\n});\n");
   const list = path.join(dir, 'files.txt');
   fs.writeFileSync(list, [...files, inherits].join('\n'));
-  const r = spawnSync(process.execPath, ['scripts/test.js'], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { MULTIAGENT_TEST_FILES: list, MULTIAGENT_TEST_CONCURRENCY: '2' }), timeout: 280000 });
+  const r = spawnSync(process.execPath, ['scripts/test.js'], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { CRAFTORIO_TEST_FILES: list, CRAFTORIO_TEST_CONCURRENCY: '2' }), timeout: 280000 });
   assert.equal(r.error?.code, undefined, `the run ends on its own (a whole suite would wait for the slot): ${humanLog(dir).slice(0, 300)}`);
   assert.doesNotMatch(`${r.stderr}\n${humanLog(dir)}`, /ENAMETOOLONG/, 'no file list on the command line');
   const lines = r.stdout.trim().split(/\r?\n/);
@@ -161,7 +161,7 @@ test('#597 outside agent mode the spec report reaches stdout and a failure fails
   const bad = path.join(dir, 'spec-bad.test.js');
   fs.writeFileSync(ok, "const test = require('node:test');\ntest('spec one passes', () => {});\n");
   fs.writeFileSync(bad, "const test = require('node:test');\nconst assert = require('node:assert/strict');\ntest('spec two fails', () => {\n  assert.equal(1, 2);\n});\n");
-  const r = spawnSync(process.execPath, ['scripts/test.js', ok, bad], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { MULTIAGENT_AGENT_MODE: '0' }), timeout: 30000 });
+  const r = spawnSync(process.execPath, ['scripts/test.js', ok, bad], { cwd: root, encoding: 'utf8', env: agentEnv(dir, locks, { CRAFTORIO_AGENT_MODE: '0' }), timeout: 30000 });
   assert.equal(r.error?.code, undefined, 'the run ends on its own');
   assert.match(r.stdout, /spec one passes/);
   assert.match(r.stdout, /spec two fails/);

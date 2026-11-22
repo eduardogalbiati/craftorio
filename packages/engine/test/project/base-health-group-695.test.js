@@ -25,16 +25,16 @@ const { fixture, commit } = require('../worktree-helpers');
 const load = () => require('../../domains/project/base-health');
 const loadRoadmap = () => require('../../domains/roadmap/roadmap');
 
-// #528: runBaseCheck takes the `suite` slot in MULTIAGENT_LOCKS_DIR; each test gets its own folder
+// #528: runBaseCheck takes the `suite` slot in CRAFTORIO_LOCKS_DIR; each test gets its own folder
 let saved;
 test.beforeEach(() => {
-  saved = { locks: process.env.MULTIAGENT_LOCKS_DIR, inherit: process.env.MULTIAGENT_SUITE_SLOT };
-  delete process.env.MULTIAGENT_SUITE_SLOT;
+  saved = { locks: process.env.CRAFTORIO_LOCKS_DIR, inherit: process.env.CRAFTORIO_SUITE_SLOT };
+  delete process.env.CRAFTORIO_SUITE_SLOT;
   saved.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bh695-locks-'));
-  process.env.MULTIAGENT_LOCKS_DIR = saved.dir;
+  process.env.CRAFTORIO_LOCKS_DIR = saved.dir;
 });
 test.afterEach(() => {
-  for (const [k, v] of [['MULTIAGENT_LOCKS_DIR', saved.locks], ['MULTIAGENT_SUITE_SLOT', saved.inherit]]) {
+  for (const [k, v] of [['CRAFTORIO_LOCKS_DIR', saved.locks], ['CRAFTORIO_SUITE_SLOT', saved.inherit]]) {
     if (v === undefined) delete process.env[k]; else process.env[k] = v;
   }
   fs.rmSync(saved.dir, { recursive: true, force: true, maxRetries: 3 });

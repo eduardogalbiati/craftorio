@@ -79,7 +79,7 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   memory, the budget) gives `owner.json` back, stays `interrupted` and is reported at once. Never a second copy: a run another live
   process owns is left (#112); the process claims `owner.json` in the same tick as the check, so a
   second service started next sees it alive. Not recovered: real runs under
-  `MULTIAGENT_SIMULATION_ONLY=1`, child runs (their parent's step runs them again), finished runs;
+  `CRAFTORIO_SIMULATION_ONLY=1`, child runs (their parent's step runs them again), finished runs;
   they stay `interrupted` and are reported. Known gaps: `max_visits` counters and the step timing
   start from zero, and a mock run's simulated answers count from the first again.
   *Resume from step* stays the owner's path: a new run with a new id, refused while the run is live

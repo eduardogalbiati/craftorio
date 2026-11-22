@@ -216,7 +216,7 @@ test('scripts/ctl.js: reads endpoint.json, calls a channel and prints its result
   await openChannel(t, service);
   const ctl = path.join(ROOT, 'scripts', 'ctl.js');
   assert.equal(fs.existsSync(ctl), true, 'scripts/ctl.js exists');
-  const env = { ...process.env, MULTIAGENT_WORKSPACE: service.workspace().root };
+  const env = { ...process.env, CRAFTORIO_WORKSPACE: service.workspace().root };
   // Async: the endpoint is served by this very process.
   const { stdout } = await promisify(execFile)(process.execPath, [ctl, 'settings:get'], { env, timeout: 30000 });
   const printed = JSON.parse(stdout);
@@ -368,18 +368,18 @@ test('roadmap:save through the endpoint with a stale base goes through the #287 
   assert.deepEqual(names, ['Outside', 'Screen']);
 });
 
-test('scripts/ctl.js: --workspace <dir> instead of MULTIAGENT_WORKSPACE', async (t) => {
+test('scripts/ctl.js: --workspace <dir> instead of CRAFTORIO_WORKSPACE', async (t) => {
   const { service } = makeService(t);
   await openChannel(t, service);
   const env = { ...process.env };
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_WORKSPACE;
   const { stdout } = await promisify(execFile)(process.execPath, [path.join(ROOT, 'scripts', 'ctl.js'), 'settings:get', '--workspace', service.workspace().root], { env, timeout: 30000 });
   assert.equal(JSON.parse(stdout).controlChannel, true);
 });
 
 test('scripts/ctl.js: an argument that is not JSON, or no endpoint file, exits 1 with the reason on stderr', async (t) => {
   const { service } = makeService(t);
-  const env = { ...process.env, MULTIAGENT_WORKSPACE: service.workspace().root };
+  const env = { ...process.env, CRAFTORIO_WORKSPACE: service.workspace().root };
   const ctl = path.join(ROOT, 'scripts', 'ctl.js');
   const run = (args) => promisify(execFile)(process.execPath, [ctl, ...args], { env, timeout: 30000 }).then(() => null, (e) => e);
 

@@ -19,7 +19,7 @@ const isRefusal = (item) => item?.kind === 'tool_result' && !!item.is_error
 
 function runFolder(arg, workspace) {
   if (fs.existsSync(path.join(arg, 'events.jsonl'))) return arg;
-  const ws = workspace || process.env.MULTIAGENT_WORKSPACE || path.join(require('os').homedir(), 'multiagent-workspace');
+  const ws = workspace || process.env.CRAFTORIO_WORKSPACE || path.join(require('os').homedir(), 'multiagent-workspace');
   return path.join(ws, 'runs', arg);
 }
 

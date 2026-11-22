@@ -1,6 +1,6 @@
 // scripts/test.js and the machine-wide suite slot (#455): in agent mode, the whole suite (no file
 // list) waits for the `suite` slot another run holds and says so in its human log; a focused run
-// (a file list) never touches the slot. The slot folder is a temp MULTIAGENT_LOCKS_DIR holding a hold
+// (a file list) never touches the slot. The slot folder is a temp CRAFTORIO_LOCKS_DIR holding a hold
 // of this test's own (live) process; the waiting runner is stopped as soon as it says it waits, so
 // the whole suite never starts.
 const test = require('node:test');
@@ -30,7 +30,7 @@ function hold(dir) {
 
 // agent mode, the slot folder in `locks`, no inherited suite slot (this test may run inside a suite step)
 function agentEnv(dir, locks) {
-  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_CONCURRENCY: '1', MULTIAGENT_TEST_HUMAN_LOG: path.join(dir, 'human.log'), MULTIAGENT_LOCKS_DIR: locks };
+  const env = { ...process.env, CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_CONCURRENCY: '1', CRAFTORIO_TEST_HUMAN_LOG: path.join(dir, 'human.log'), CRAFTORIO_LOCKS_DIR: locks };
   delete env.NODE_TEST_CONTEXT;
   delete env[SUITE_SLOT_ENV];
   return env;

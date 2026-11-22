@@ -1,5 +1,5 @@
 // A simulated machine without a CLI (#740, the E2E scenarios of features/740-settings-clis.feature): with
-// MULTIAGENT_SIMULATION_ONLY=1 and MULTIAGENT_E2E_CLI_MISSING=<id>[,<id>] the engine's probes
+// CRAFTORIO_SIMULATION_ONLY=1 and CRAFTORIO_E2E_CLI_MISSING=<id>[,<id>] the engine's probes
 // (packages/engine/service/areas/settings.js envDetails / toolSignIn) find no such CLI until a simulated
 // Install of it (packages/engine/service/areas/cli-setup.js), which installs nothing and leaves the CLI
 // "installed, not signed in" for the re-check that follows. Outside simulation the hook does nothing.
@@ -11,7 +11,7 @@ const installed = new Set();
 // the ids the hook makes missing (none outside simulation)
 function missingIds(env = process.env) {
   if (!simulation.simulationOnly(env)) return [];
-  return String(env.MULTIAGENT_E2E_CLI_MISSING || '').split(',').map((s) => s.trim()).filter(Boolean);
+  return String(env.CRAFTORIO_E2E_CLI_MISSING || '').split(',').map((s) => s.trim()).filter(Boolean);
 }
 
 // 'missing' | 'installed' for a CLI the hook covers, else null (the real probes answer)

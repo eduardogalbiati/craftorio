@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../../engine/workflow');
 const evidence = require('../../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root, runLoopBlocked, runConditionalAction, tempWorkflow, until } = require('../engine-helpers');
 
 test('computeOutputs: each declared output is the template rendered over the finished run, parsed for its type; empty or unparsable stays null (with a warning)', async () => {
@@ -384,9 +384,9 @@ steps:
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   // agent turns must take longer than the gate's wait for "duration_ms >= gate_wait_ms" to mean anything: this test keeps the scale above the file's 0.02
-  const scale = process.env.MULTIAGENT_MOCK_DELAY_SCALE;
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
-  t.after(() => { process.env.MULTIAGENT_MOCK_DELAY_SCALE = scale; });
+  const scale = process.env.CRAFTORIO_MOCK_DELAY_SCALE;
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
+  t.after(() => { process.env.CRAFTORIO_MOCK_DELAY_SCALE = scale; });
   const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {

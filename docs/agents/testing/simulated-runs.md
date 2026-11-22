@@ -8,7 +8,7 @@ The whole mock runs of the bundled workflows (#305, #306), their inventory and t
 longest file, and every file pays for what its helpers do at load. A whole simulated run of a
 bundled workflow takes about 8 s alone (more under the suite's load); two thirds of the files
 finish in under 1.5 s. Measured (#525, 2026-10-26, Windows, one run of software-development with
-the default mock answers, `MULTIAGENT_MOCK_DELAY_SCALE=0.05`, alone on the machine): 8.0 s and 32
+the default mock answers, `CRAFTORIO_MOCK_DELAY_SCALE=0.05`, alone on the machine): 8.0 s and 32
 `git` processes, down from 11.8 s and 100 before the test-file guard's git calls were cut (one
 `git status` per snapshot and check, the root and the existing base refs found once per run).
 
@@ -35,7 +35,7 @@ the default mock answers, `MULTIAGENT_MOCK_DELAY_SCALE=0.05`, alone on the machi
 - **Fail fast (#737)**: `packages/engine/test/helpers/run-watch.js` `runUntilStall(run, { stallMs })`
   replaces `await run.start()`: a run with no event for `stallMs` (default 5 s) is stopped and the
   test fails at once, naming the step it stopped at, instead of reaching the test's timeout.
-- **Timings kept over time (#737)**: `MULTIAGENT_TEST_TIMINGS_FILE=<file> npm test` appends one JSON
+- **Timings kept over time (#737)**: `CRAFTORIO_TEST_TIMINGS_FILE=<file> npm test` appends one JSON
   line per run (`at`, `wall_ms`, `files: [{ file, tier, ms }]`): the baseline a later run compares with.
 - **Where whole runs live**: `packages/engine/test/slow/`, one workflow and theme per file, each under about 30 s
   on the suite (`engine-software-development-<theme>.slow.test.js`; a mixed file keeps its

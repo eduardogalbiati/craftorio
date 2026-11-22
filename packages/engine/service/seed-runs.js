@@ -3,7 +3,7 @@
 // through here, so both see the same run in progress (one per project and seed at a time; a second
 // one is refused as busy) and the last run's error. A run: the project's recorded tool (seedTools)
 // through the shell, else one Oracle turn read-only in its daily budget (packages/engine/domains/oracle/oracle-seeds.js),
-// simulated under mock or MULTIAGENT_SIMULATION_ONLY; saved under <workspace>/architecture/. The
+// simulated under mock or CRAFTORIO_SIMULATION_ONLY; saved under <workspace>/architecture/. The
 // state lives per service context (a WeakMap on ctx), read at call time.
 // runDefaultsOf (#735): a project's run defaults over its last ways-of-working profile, for the run
 // dialog's hints, the Backlog's queue and the Roadmap; withProjectDefaults, a run's inputs over them.

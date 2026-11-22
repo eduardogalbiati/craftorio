@@ -3,10 +3,10 @@
 // (#171) call it. Service-level tests drive it through a real service on a scratch workspace, the
 // way test/supervisor-chat.test.js does for the app-wide Supervisor chat; a couple of unit-level
 // tests call createOracle directly for what the channel's own simulation guard would hide
-// (refuseReal outside MULTIAGENT_SIMULATION_ONLY).
+// (refuseReal outside CRAFTORIO_SIMULATION_ONLY).
 // Live progress (#180): oracle:ask's turn is pushed on chat:progress and chat:cancel stops it;
 // mockSteps' delays are scaled down (like the mock provider) so these tests stay fast.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -18,7 +18,7 @@ const oracle = require('@craftorio/engine/domains/oracle/oracle');
 
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-ws-'));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   t.after(() => service.shutdown());
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -97,7 +97,7 @@ test('oracle:ask with mock answers from the simulated Oracle through the real re
   assert.match(out.message.text, /Dashboard/);
 });
 
-test('oracle:ask without mock, under MULTIAGENT_SIMULATION_ONLY (set in the test env): answers from the mock too', async (t) => {
+test('oracle:ask without mock, under CRAFTORIO_SIMULATION_ONLY (set in the test env): answers from the mock too', async (t) => {
   const { api } = makeService(t);
   const out = await api['oracle:ask']({ question: 'How much did I spend?' });
   assert.equal(out.message.role, 'oracle');
@@ -154,7 +154,7 @@ test('chat:cancel(\'oracle\') stops an oracle:ask turn in flight: the answer is 
 test('the conversation persists across a restart: the history and the provider session are kept', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-restart-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 
   const service1 = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   service1.setWorkspace(setupWorkspace(dir, { persist: false }));
@@ -338,7 +338,7 @@ test('oracle:ask: a pasted file of a type the model cannot read is refused, nami
 test('oracle:markRead: readAt persists across a restart', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-read-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 
   const service1 = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
   service1.setWorkspace(setupWorkspace(dir, { persist: false }));
@@ -375,7 +375,7 @@ test('createOracle: without mock, outside a mocked run, refuseReal is consulted 
     mcpCommand: () => { throw new Error('mcpCommand() should not be called'); },
     skillsDirs: () => [],
     resolveCommand: () => { throw new Error('resolveCommand() should not be called'); },
-    refuseReal: () => { throw new Error('Simulation only (MULTIAGENT_SIMULATION_ONLY=1): refusing to start the Oracle\'s CLI (claude).'); },
+    refuseReal: () => { throw new Error('Simulation only (CRAFTORIO_SIMULATION_ONLY=1): refusing to start the Oracle\'s CLI (claude).'); },
     agent: () => ({ model: 'claude-opus-5-5', effort: 'high' }),
     settings: () => ({}),
   });

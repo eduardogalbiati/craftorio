@@ -184,7 +184,7 @@ test('#862 the app\'s run service and the CLI both take their Settings options f
 
 // Starts scripts/run.js as a real (not --mock) run in a scratch workspace whose settings.json holds
 // `saved`, with the probe preloaded: it reports what the CLI handed to WorkflowRun and exits before
-// any step runs (MULTIAGENT_SIMULATION_ONLY=1: no real model can be called anyway).
+// any step runs (CRAFTORIO_SIMULATION_ONLY=1: no real model can be called anyway).
 function cliRun(t, saved) {
   const scratch = tmp(t, 'run-settings-cli-');
   fs.writeFileSync(path.join(scratch, 'settings.json'), JSON.stringify(saved));
@@ -198,7 +198,7 @@ function cliRun(t, saved) {
     '--task', 'probe the settings',
   ], {
     cwd: repoRoot,
-    env: { ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: scratch },
+    env: { ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_WORKSPACE: scratch },
     encoding: 'utf8',
     timeout: 120000,
   });

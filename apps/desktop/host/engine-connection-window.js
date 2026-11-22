@@ -37,7 +37,7 @@ const PAGE_SIZE = { width: 640, height: 700 };
  * @param mainWindow  () → the local main window (the page opens over it), in local mode
  * @param prepareRestart  () → throws when the app cannot restart now (runs in progress here)
  * @param relaunch    () → restarts the app
- * @param env         the process environment decideMode reads (MULTIAGENT_ENGINE, MULTIAGENT_SIMULATION_ONLY)
+ * @param env         the process environment decideMode reads (CRAFTORIO_ENGINE, CRAFTORIO_SIMULATION_ONLY)
  * @param screen      Electron's screen (optional): the page fits the display it opens on
  * @param quit        () → quits the app (the page closed while it was the app's only window)
  */
@@ -190,7 +190,7 @@ function createEngineConnection({
     });
     w.webContents.on('did-navigate', (_e, _url, status) => {
       if (status >= 400 && remoteWin === w) {
-        fail({ reason: status === 401 ? 'token' : 'http', url: d.url, status, message: status === 401 ? `${d.host} refused the token: copy MULTIAGENT_SERVER_TOKEN from the engine's computer again.` : `${d.host} answered HTTP ${status}.` });
+        fail({ reason: status === 401 ? 'token' : 'http', url: d.url, status, message: status === 401 ? `${d.host} refused the token: copy CRAFTORIO_SERVER_TOKEN from the engine's computer again.` : `${d.host} answered HTTP ${status}.` });
       }
     });
     w.on('closed', () => { if (remoteWin === w) remoteWin = null; });

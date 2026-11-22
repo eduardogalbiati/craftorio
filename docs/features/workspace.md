@@ -57,5 +57,5 @@ order: 100
 - Settings shows the current workspace, with **Open** and **Change…**.
 - The `repo_path` input accepts a git URL (`https://…` or `git@…`): the app clones it into
   `repos/<owner>-<repo>` (or runs `git fetch` if already cloned) and runs the workflow on that copy.
-- `MULTIAGENT_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
+- `CRAFTORIO_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.

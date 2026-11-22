@@ -16,8 +16,8 @@
 // - monitor:automation { projectId, diagnose, fix, dailyCap }: modes 'ask' | 'on' | 'off', cap >= 0.
 //   diagnose 'on' diagnoses new groups at poll time, at most dailyCap a day.
 // - monitor:propose-fix { projectId, fingerprint } -> { ok, runId }: starts the `fix` workflow (simulated
-//   under MULTIAGENT_SIMULATION_ONLY); the run itself is pinned by test/slow/monitor-fix-gate-634.slow.test.js.
-// No model is called (MULTIAGENT_SIMULATION_ONLY=1, set by makeService).
+//   under CRAFTORIO_SIMULATION_ONLY); the run itself is pinned by test/slow/monitor-fix-gate-634.slow.test.js.
+// No model is called (CRAFTORIO_SIMULATION_ONLY=1, set by makeService).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -110,7 +110,7 @@ test('applyEdit refuses an unknown edit and an item joined with itself', () => {
 });
 
 test('the discovery:import-* channels split, edit and import a document into cards with the file attached', async (t) => {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, userDataDir: tmp(t) } });
   t.after(() => service.shutdown());
   service.setWorkspace(setupWorkspace(tmp(t), { persist: false }));

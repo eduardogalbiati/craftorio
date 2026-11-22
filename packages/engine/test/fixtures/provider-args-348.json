@@ -463,7 +463,7 @@
    "--tools",
    "Read,Glob,Grep,Bash",
    "--allowedTools",
-   "Read Glob Grep Bash(git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)"
+   "Read Glob Grep Bash(git:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)"
   ],
   "notes": [],
   "prompt": "Do the task."
@@ -489,7 +489,7 @@
    "--tools",
    "Read,Glob,Grep,Bash",
    "--allowedTools",
-   "Read Glob Grep Bash(git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)"
+   "Read Glob Grep Bash(git:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)"
   ],
   "notes": [],
   "prompt": "Do the task."
@@ -513,7 +513,7 @@
    "--tools",
    "Read,Glob,Grep,Bash",
    "--allowedTools",
-   "Read Glob Grep Bash(git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)",
+   "Read Glob Grep Bash(git:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)",
    "--resume",
    "sess-123"
   ],
@@ -541,7 +541,7 @@
    "--tools",
    "Read,Glob,Grep,Bash",
    "--allowedTools",
-   "Read Glob Grep Bash(git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)",
+   "Read Glob Grep Bash(git:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)",
    "--resume",
    "sess-123"
   ],
@@ -567,7 +567,7 @@
    "--tools",
    "Read,Glob,Grep,Bash",
    "--allowedTools",
-   "Read Glob Grep Bash(git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)",
+   "Read Glob Grep Bash(git:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 git:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*)",
    "--add-dir",
    "<IMG_DIR>"
   ],
@@ -863,7 +863,7 @@
    "--tools",
    "Read,Glob,Grep,Edit,NotebookEdit,Bash",
    "--allowedTools",
-   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
+   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
    "--disallowedTools",
    "Edit(test/**) Bash(npm ci:*)",
    "--permission-mode",
@@ -893,7 +893,7 @@
    "--tools",
    "Read,Glob,Grep,Edit,NotebookEdit,Bash",
    "--allowedTools",
-   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
+   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
    "--disallowedTools",
    "Edit(test/**) Bash(npm ci:*)",
    "--permission-mode",
@@ -921,7 +921,7 @@
    "--tools",
    "Read,Glob,Grep,Edit,NotebookEdit,Bash",
    "--allowedTools",
-   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
+   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
    "--disallowedTools",
    "Edit(test/**) Bash(npm ci:*)",
    "--permission-mode",
@@ -953,7 +953,7 @@
    "--tools",
    "Read,Glob,Grep,Edit,NotebookEdit,Bash",
    "--allowedTools",
-   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
+   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
    "--disallowedTools",
    "Edit(test/**) Bash(npm ci:*)",
    "--permission-mode",
@@ -983,7 +983,7 @@
    "--tools",
    "Read,Glob,Grep,Edit,NotebookEdit,Bash",
    "--allowedTools",
-   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
+   "Read Glob Grep Edit NotebookEdit Bash(npm:*) Bash(CRAFTORIO_SIMULATION_ONLY=1 npm:*) Bash([:*) Bash(awk:*) Bash(basename:*) Bash(cat:*) Bash(cut:*) Bash(dirname:*) Bash(echo:*) Bash(grep:*) Bash(head:*) Bash(ls:*) Bash(printenv:*) Bash(pwd:*) Bash(tail:*) Bash(test:*) Bash(tr:*) Bash(wc:*) Bash(mkdir:*) Bash(mktemp:*) Bash(sort:*) Bash(uniq:*)",
    "--disallowedTools",
    "Edit(test/**) Bash(npm ci:*)",
    "--permission-mode",

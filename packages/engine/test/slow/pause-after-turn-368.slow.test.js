@@ -20,7 +20,7 @@
 //   roadmap (state 'paused', pausedStage, pausedBy null, items 'paused'); `roadmap:start` (Resume)
 //   resumes the stage's paused runs where they paused.
 // Each wait has a deadline, so a missing behaviour fails its test instead of hanging the file.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -217,7 +217,7 @@ function serviceOn(dir) {
 }
 
 test('resume after a restart: the paused run ends with the same step outputs as an uninterrupted run, and no turn runs twice', async (t) => {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pause-368-ws-'));
   const open = new Set(); // the services not shut down yet
   t.after(async () => {

@@ -1,6 +1,6 @@
 // scripts/screenshot.js: one screen of the app in simulation, saved as a PNG, and the app quits by
 // itself. The Electron part opens ~25 windows in about a minute, so it only runs with
-// MULTIAGENT_UI_TESTS=1 (CI does it on Windows): it needs the Electron binary
+// CRAFTORIO_UI_TESTS=1 (CI does it on Windows): it needs the Electron binary
 // (`node node_modules/electron/install.js`) and a display (on Linux: xvfb-run).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -165,7 +165,7 @@ const electron = (() => {
   const dir = path.join(root, 'node_modules', 'electron');
   try { const p = path.join(dir, 'dist', fs.readFileSync(path.join(dir, 'path.txt'), 'utf8').trim()); return fs.existsSync(p) ? p : null; } catch { return null; }
 })();
-const skip = process.env.MULTIAGENT_UI_TESTS !== '1' ? 'set MULTIAGENT_UI_TESTS=1 to open the app' : false;
+const skip = process.env.CRAFTORIO_UI_TESTS !== '1' ? 'set CRAFTORIO_UI_TESTS=1 to open the app' : false;
 
 test('the Electron binary is installed for the UI tests', { skip }, () => {
   assert.ok(electron, 'run `node node_modules/electron/install.js` first');

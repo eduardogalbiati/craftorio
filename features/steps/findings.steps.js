@@ -99,7 +99,7 @@ Then('the findings list has no finding', async ({ e2e }) => {
 // The served engine and its browser UI come from features/support/served.js ("Given the engine is
 // served on this machine" and "When I open the served UI in the browser", engine-version.steps.js).
 // The desktop app in remote mode: the same engine server (servedEnv/startServer) and launchApp with a
-// user data folder (MULTIAGENT_USER_DATA) whose engine-connection.json points at it.
+// user data folder (CRAFTORIO_USER_DATA) whose engine-connection.json points at it.
 // New data-testids (#751):
 //   findings-frozen-image    the frozen picture (<img class="fd-img">), only when a capture was taken
 //   findings-capture-error   the overlay's message that the capture failed (interface language)
@@ -186,7 +186,7 @@ Given('the desktop app is open in remote mode on an engine served on this machin
     const userData = path.join(scratch, 'desktop-user-data');
     fs.mkdirSync(userData, { recursive: true });
     fs.writeFileSync(path.join(userData, 'engine-connection.json'), `${JSON.stringify({ mode: 'remote', address: url.origin, token: { plain: url.searchParams.get('token') } }, null, 2)}\n`);
-    await e2e.open({ env: { MULTIAGENT_USER_DATA: userData } });
+    await e2e.open({ env: { CRAFTORIO_USER_DATA: userData } });
   } catch (e) {
     stop();
     throw e;

@@ -36,15 +36,15 @@ async function startEngine() {
   const token = crypto.randomBytes(24).toString('base64url');
   const env = {
     ...process.env,
-    MULTIAGENT_SIMULATION_ONLY: '1',
-    MULTIAGENT_AUTH: 'off',
-    MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
-    MULTIAGENT_SERVER_TOKEN: token,
-    MULTIAGENT_USER_DATA: path.join(scratch, 'user-data'),
+    CRAFTORIO_SIMULATION_ONLY: '1',
+    CRAFTORIO_AUTH: 'off',
+    CRAFTORIO_MOCK_DELAY_SCALE: '0.02',
+    CRAFTORIO_SERVER_TOKEN: token,
+    CRAFTORIO_USER_DATA: path.join(scratch, 'user-data'),
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   };
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
   const child = spawn(process.execPath, [BIN, '--port', '0', '--workspace', path.join(scratch, 'workspace')], {
     cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,

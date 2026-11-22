@@ -2,7 +2,7 @@
 // (a live roadmap's last stage ended), refillRoadmap checks the daily budget (and the spending budget, #206), syncs the backlog first
 // (setting refreshFirst; never in a simulation), asks the Product Owner the fixed refill question
 // about the issues it may pick (the simulated Product Owner in a simulated roadmap or
-// MULTIAGENT_SIMULATION_ONLY: no model call), adds its first stages as planned stages and dispatches
+// CRAFTORIO_SIMULATION_ONLY: no model call), adds its first stages as planned stages and dispatches
 // the roadmap again. One refill per project at a time; the outcome is the roadmap's liveRefill and a
 // notification. It never answers a gate and never starts anything but the roadmap's own items.
 

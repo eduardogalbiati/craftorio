@@ -14,7 +14,7 @@ const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 const { runUntilStall } = require('../helpers/run-watch');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.05';
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'merge-race.yaml');
 // #737: a run with no event for this long fails at once, naming its step (helpers/run-watch.js)
 const STALL_MS = 10000;

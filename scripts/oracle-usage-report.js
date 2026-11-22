@@ -7,7 +7,7 @@
 //
 //   node scripts/oracle-usage-report.js [--dir <oracle folder>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 //
-// --dir defaults to $MULTIAGENT_WORKSPACE/oracle.
+// --dir defaults to $CRAFTORIO_WORKSPACE/oracle.
 
 const fs = require('fs');
 const path = require('path');
@@ -87,7 +87,7 @@ function table(rows) {
 }
 
 if (require.main === module) {
-  const dir = arg('dir', process.env.MULTIAGENT_WORKSPACE ? path.join(process.env.MULTIAGENT_WORKSPACE, 'oracle') : null);
+  const dir = arg('dir', process.env.CRAFTORIO_WORKSPACE ? path.join(process.env.CRAFTORIO_WORKSPACE, 'oracle') : null);
   if (!dir || !fs.existsSync(dir)) {
     console.error('Usage: node scripts/oracle-usage-report.js --dir <workspace>/oracle [--from YYYY-MM-DD] [--to YYYY-MM-DD]');
     process.exit(1);

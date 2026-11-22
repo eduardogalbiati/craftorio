@@ -11,7 +11,7 @@
 // (packages/engine/domains/supervisor/supervisor-tools.js, served by packages/engine/domains/supervisor/supervisor-mcp.js over packages/engine/domains/supervisor/supervisor-bridge.js) and has no
 // built-in tool: no file reads, no commands, so no access to the repositories' code. It never crosses a
 // human gate and never prescribes code fixes (it routes them to the workflow's agents).
-// `mock` (and MULTIAGENT_SIMULATION_ONLY) answers from the simulated supervisor: no model call, no
+// `mock` (and CRAFTORIO_SIMULATION_ONLY) answers from the simulated supervisor: no model call, no
 // cost, but the same tools, called in-process.
 // Live progress (#180, packages/engine/domains/chat/chat-progress.js): ask's `onItem` and `signal` stream and stop a question.
 // Its inbox (#240, packages/engine/domains/agents/agent-inbox.js): handleRequest takes another agent's request (the Oracle's) of

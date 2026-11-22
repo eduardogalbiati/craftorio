@@ -117,7 +117,7 @@ and starts paid runs, as you would in the desktop app. Share it only with yourse
 Runs the engine without Electron and serves the same UI to a browser: open the printed
 `http://…/?token=…` URL (shown once: clear it from the shell history and the scrollback if others
 can read them), or open the server's address and type the token in its sign-in form (`POST /session`,
-the token stays out of the address bar). The token (from `MULTIAGENT_SERVER_TOKEN`, else random) is
+the token stays out of the address bar). The token (from `CRAFTORIO_SERVER_TOKEN`, else random) is
 then kept in an HttpOnly, SameSite=Strict cookie for a week (`Secure` when the request came over
 HTTPS, e.g. `X-Forwarded-Proto: https` from a TLS proxy); API clients send
 `Authorization: Bearer <token>`. On `127.0.0.1` the server answers only requests whose `Host` is
@@ -134,7 +134,7 @@ Tailscale is not running). A proxy in front must send one of these names as `Hos
 - Requests from another origin are refused. Beyond `127.0.0.1` the traffic is plain HTTP: put the
   server behind a reverse proxy with TLS.
 - The server asks for the same account as the app (sign in from the browser UI; the sign-in page
-  opens on the server machine). `MULTIAGENT_AUTH=off` disables it in development.
+  opens on the server machine). `CRAFTORIO_AUTH=off` disables it in development.
 
 ### The app on one computer, the engine on another
 
@@ -145,14 +145,14 @@ computers on the same [Tailscale](https://tailscale.com) tailnet.
 On the computer that runs the engine (a source checkout), in PowerShell:
 
 ```powershell
-$env:MULTIAGENT_SERVER_TOKEN = "<a long random secret, at least 16 characters>"
-$env:MULTIAGENT_AUTH = "off"
+$env:CRAFTORIO_SERVER_TOKEN = "<a long random secret, at least 16 characters>"
+$env:CRAFTORIO_AUTH = "off"
 npm run serve -- --host tailscale --port 7300
 ```
 
 Close the desktop app on that computer first: like the app, the server locks its workspace (one
 engine per workspace) and refuses to start on a workspace the app has open (or pass
-`--workspace <another folder>`). Keep `MULTIAGENT_SERVER_TOKEN` the same: the app saves the token,
+`--workspace <another folder>`). Keep `CRAFTORIO_SERVER_TOKEN` the same: the app saves the token,
 and without the variable the server makes a new one at every start. `--host tailscale` keeps the engine off the local network;
 `--host 0.0.0.0 --insecure-http` listens everywhere over plain HTTP (only behind a VPN or a TLS proxy).
 
@@ -171,7 +171,7 @@ with the token encrypted by the OS, never in the workspace. A computer that offe
   refuses the token, the app shows the connection page with the reason: **Retry**, **Change the
   address** or **Use this computer**.
 - Back to this computer: Settings › Execution › Engine › Change… › **This computer** (the address
-  and token stay saved for later). `MULTIAGENT_ENGINE=local` forces this computer for one start.
+  and token stay saved for later). `CRAFTORIO_ENGINE=local` forces this computer for one start.
 - On the engine's computer, not in the window: the CLIs and their sign-ins, the terminals (shown
   in the window, running there), files and folders (type that computer's paths: the folder picker is
   not available), desktop notifications, Keep awake, the control channel, the ↗ external terminal
@@ -180,7 +180,7 @@ with the token encrypted by the OS, never in the workspace. A computer that offe
   computer's language, but the AI agents ("Same as the interface") follow the engine's computer's
   language, where they run. To make them agree, choose Interface or AI agents there.
 - **Sign-in**: a remote app cannot sign the server in yet (the provider's page would open on the
-  engine's computer), so the server runs with `MULTIAGENT_AUTH=off`; the account only counts users.
+  engine's computer), so the server runs with `CRAFTORIO_AUTH=off`; the account only counts users.
 - Plain HTTP over Tailscale is encrypted by WireGuard. For HTTPS, leave `npm run serve` on
   `127.0.0.1` and put `tailscale serve` in front of it on that computer:
 

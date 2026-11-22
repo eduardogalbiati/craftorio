@@ -16,7 +16,7 @@ function tmp(t) {
 }
 
 function makeService(t) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, userDataDir: tmp(t) } });
   t.after(() => service.shutdown());
   const ws = setupWorkspace(tmp(t), { persist: false });

@@ -402,7 +402,7 @@ Then('the roadmap item {string} offers no {string} switch', async ({ e2e }, titl
 //   its first entry, Esc closes it and gives the focus back to the ⋮ button.
 // - data-testid="filter-row": the row above the bar (and above the Board) with the filters.
 // The roadmap set running for #269 is simulated, its refused item skipped, so nothing real starts and
-// no refused start pauses it again (MULTIAGENT_SIMULATION_ONLY=1 anyway).
+// no refused start pauses it again (CRAFTORIO_SIMULATION_ONLY=1 anyway).
 
 const rmBar = (page) => page.getByTestId('roadmap-bar');
 const stateDot = (page) => rmBar(page).getByTestId('roadmap-state-dot');

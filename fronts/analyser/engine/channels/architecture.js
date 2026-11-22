@@ -1,7 +1,7 @@
 // A project's Architecture tab (#356): the git facts of its repository (packages/engine/domains/project/architecture-facts.js,
 // numbers from the pure core packages/shared/architecture-model.js), the Oracle's analysis on demand
 // (packages/engine/domains/oracle/oracle-architecture.js: one turn in the Oracle's daily budget, simulated under mock or
-// MULTIAGENT_SIMULATION_ONLY; one analysis at a time, a second call is refused), the saved reports
+// CRAFTORIO_SIMULATION_ONLY; one analysis at a time, a second call is refused), the saved reports
 // (<workspace>/architecture/<project id>/, the latest with its findings marked new or gone, the
 // project's real finished runs since), the cost estimate from the last real analyses, the
 // project's exclude list, and "Create issue" (#730, architecture:createIssue): a finding becomes a

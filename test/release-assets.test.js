@@ -137,7 +137,7 @@ test('release assets: every preview os choice but "all" picks at least one targe
 //   APP_RUN, the text of the AppImage's AppRun (a POSIX sh script). Its `--no-sandbox` branch (the
 //   `if … then … fi` checking apparmor_restrict_unprivileged_userns / unprivileged_userns_clone)
 //   writes a warning naming the sandbox to stderr (`>&2`) and starts the app with the environment
-//   variable MULTIAGENT_NO_SANDBOX=1 (the app's signal to show the warning once, Settings › About or a
+//   variable CRAFTORIO_NO_SANDBOX=1 (the app's signal to show the warning once, Settings › About or a
 //   toast); the normal start (after `fi`) sets neither.
 const appRun = () => {
   const { APP_RUN } = require('../scripts/release-assets');
@@ -160,10 +160,10 @@ test('#476 AppRun: without the sandbox it writes a warning naming the sandbox to
   assert.match(warning, /sandbox/i);
 });
 
-test('#476 AppRun: without the sandbox it starts the app with MULTIAGENT_NO_SANDBOX=1, the normal start without it', () => {
+test('#476 AppRun: without the sandbox it starts the app with CRAFTORIO_NO_SANDBOX=1, the normal start without it', () => {
   const { fallback, normal } = appRunParts();
-  assert.match(fallback, /MULTIAGENT_NO_SANDBOX=1/);
-  assert.doesNotMatch(normal, /MULTIAGENT_NO_SANDBOX/);
+  assert.match(fallback, /CRAFTORIO_NO_SANDBOX=1/);
+  assert.doesNotMatch(normal, /CRAFTORIO_NO_SANDBOX/);
 });
 
 test('#476 README Install (Linux) documents the sysctl that keeps the sandbox on', () => {

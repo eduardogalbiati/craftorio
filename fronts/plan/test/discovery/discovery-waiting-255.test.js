@@ -62,7 +62,7 @@ test('the longest waiting question comes first (#255)', (t) => {
 });
 
 test('discovery:waiting lists the waiting cards through the service; the owner\'s note takes the card off (#255)', async (t) => {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, userDataDir: tmp(t) } });
   t.after(() => service.shutdown());
   service.setWorkspace(setupWorkspace(tmp(t), { persist: false }));

@@ -15,7 +15,7 @@
 # and runs the kit lint on it. The designer only reads: the current folder is the mockup folder and
 # the project's repository is read-only (it never writes to the user's repository).
 # No human_approval: the chat is driven by the owner, the run only prepares a version. Defaults:
-# Opus to generate, Sonnet to edit (Q-3), switchable per run. Simulated (MULTIAGENT_SIMULATION_ONLY)
+# Opus to generate, Sonnet to edit (Q-3), switchable per run. Simulated (CRAFTORIO_SIMULATION_ONLY)
 # the service does not start this workflow: its simulated designer answers at once, no model call.
 # `mode` recreate (#836, the running-app source): mockups:recreate starts it with `app_url`, the page of
 # the running app (Run App / Local preview); the designer redraws that page with the project's kit.

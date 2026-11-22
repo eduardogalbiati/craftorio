@@ -49,7 +49,7 @@ for (const { id, info } of list) {
 }
 
 if (args.delete.length) {
-  if (simulationOnly()) { console.error('Refused: --delete is the owner\'s action (MULTIAGENT_SIMULATION_ONLY is set).'); process.exit(1); }
+  if (simulationOnly()) { console.error('Refused: --delete is the owner\'s action (CRAFTORIO_SIMULATION_ONLY is set).'); process.exit(1); }
   const known = new Set(list.map((s) => s.id));
   for (const id of args.delete) {
     if (!known.has(id)) { console.error(`  skipped ${id}: not a simulated run without a project`); continue; }

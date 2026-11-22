@@ -242,7 +242,7 @@ test('recordResult from AI Arena is recorded the same way with its own source', 
 // ---- channels -------------------------------------------------------------------------------------
 
 function makeService(t) {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
   const { createService } = require('@craftorio/engine/service');
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, userDataDir: tmp(t, 'discovery-board-ud-').root } });
   t.after(() => service.shutdown());

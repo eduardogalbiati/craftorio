@@ -22,7 +22,7 @@
 // #613 widened the rule: every failure goes through one second round (rerunFiles({ cwd, env, files, commit })
 // → { failures, log?, error? }, base-health-rerun.test.js) in place of runAlone; these tests use it.
 // - runBaseCheck also takes the suite slot (base-health-slot-527.test.js): the slot folder is a temp
-//   MULTIAGENT_LOCKS_DIR here.
+//   CRAFTORIO_LOCKS_DIR here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -39,8 +39,8 @@ const SLOW2 = { test: 'imports the archive', file: 'test/archive.test.js', error
 const PLAIN = { test: 'cart totals include tax', file: 'test/cart.test.js', error: 'expected 110, got 100' };
 
 let savedLocks;
-test.beforeEach(() => { savedLocks = process.env.MULTIAGENT_LOCKS_DIR; });
-test.afterEach(() => { if (savedLocks === undefined) delete process.env.MULTIAGENT_LOCKS_DIR; else process.env.MULTIAGENT_LOCKS_DIR = savedLocks; });
+test.beforeEach(() => { savedLocks = process.env.CRAFTORIO_LOCKS_DIR; });
+test.afterEach(() => { if (savedLocks === undefined) delete process.env.CRAFTORIO_LOCKS_DIR; else process.env.CRAFTORIO_LOCKS_DIR = savedLocks; });
 
 function tmpWs(t) {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'bh527a-'));
@@ -48,7 +48,7 @@ function tmpWs(t) {
   fs.mkdirSync(path.join(ws, 'backlog'), { recursive: true });
   const locks = path.join(ws, 'locks');
   fs.mkdirSync(locks, { recursive: true });
-  process.env.MULTIAGENT_LOCKS_DIR = locks;
+  process.env.CRAFTORIO_LOCKS_DIR = locks;
   return { ws, locks };
 }
 

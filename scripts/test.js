@@ -4,25 +4,25 @@
 // works on any Node version; fixtures/ folders hold no tests.
 //   npm test -w packages/shared        one workspace's tests (`node scripts/test.js --workspace <dir>`:
 //                                      its test/ folder only, no full flow)
-// The files run in parallel, one process each: the concurrency is explicit (MULTIAGENT_TEST_CONCURRENCY,
+// The files run in parallel, one process each: the concurrency is explicit (CRAFTORIO_TEST_CONCURRENCY,
 // else the CPUs minus one) and printed with what could lower it (an inspector in NODE_OPTIONS forces
 // node --test to one file at a time), so a slow suite inside the app can be compared with a shell (#210).
 // The unit report ends with the five slowest files and their wall time (#305): the suite's wall
 // time is bounded below by its longest file.
 // Two tiers by name (#737, test-timeouts.js testTier): the integration tests are the slow files
 // (*.slow.test.js or a slow/ folder: a whole simulated run on a real git repository, about 30 s per
-// file at most), every other file is a unit test. MULTIAGENT_TEST_TIMINGS_FILE=<file> appends one JSON
+// file at most), every other file is a unit test. CRAFTORIO_TEST_TIMINGS_FILE=<file> appends one JSON
 // line per run ({ at, wall_ms, files: [{ file, tier, ms }] }), kept over time to compare runs with.
 // With test files as arguments (the suite step's check of failures on the base, #211), only those
-// run, without the full flow. #553: the same with MULTIAGENT_TEST_FILES=<file> (one test path per
+// run, without the full flow. #553: the same with CRAFTORIO_TEST_FILES=<file> (one test path per
 // line, relative to the project), the suite step's selection too long for the command line.
 // Agent mode (#219, packages/engine/engine/agent-test-report.js isAgentMode: inside an agent or the orchestrator,
-// never in a terminal or CI; MULTIAGENT_AGENT_MODE=1/0 forces it): stdout is one JSON line, failures
+// never in a terminal or CI; CRAFTORIO_AGENT_MODE=1/0 forces it): stdout is one JSON line, failures
 // only (scripts/test-reporter-agent.js), with the full flow's result; the human-readable report goes
-// to MULTIAGENT_TEST_HUMAN_LOG (default .test-output/human.log), named in the JSON's `human_log`.
+// to CRAFTORIO_TEST_HUMAN_LOG (default .test-output/human.log), named in the JSON's `human_log`.
 //   npm test
 //   npm test -- test/a.test.js test/b.test.js
-// Every test has a timeout (#390; MULTIAGENT_TEST_TIMEOUT_MS, 0 = none) and a file's process exits
+// Every test has a timeout (#390; CRAFTORIO_TEST_TIMEOUT_MS, 0 = none) and a file's process exits
 // once its tests end (scripts/test-exit.js, a short grace instead of --test-force-exit, which aborts
 // processes on Windows): a hung test fails with its name and file instead of running,
 // and holding the run's worktree, forever. The default budget is per file (#402,
@@ -41,6 +41,7 @@
 // node:test's run() and the same reporters, so any number of files runs (a Windows command line
 // holds 32,767 characters: the whole suite's 838 paths took 43,510 and the spawn died ENAMETOOLONG).
 
+require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -73,13 +74,13 @@ const machineSlot = require('@craftorio/engine/engine/machine-slot');
 const { TEST_FILES_ENV } = require('@craftorio/engine/engine/suite-command-line');
 const { testTier, testTimeoutMs } = require('@craftorio/engine/engine/test-timeouts');
 
-// decided before the variable below is set: the orchestrator's own MULTIAGENT_SIMULATION_ONLY counts
+// decided before the variable below is set: the orchestrator's own CRAFTORIO_SIMULATION_ONLY counts
 const agent = isAgentMode(process.env, { isTTY: !!process.stdout.isTTY });
 // Automated checks never call real models: the engine refuses real runs and real providers.
-process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 
 const root = path.join(__dirname, '..');
-const humanLog = agent ? path.resolve(root, process.env.MULTIAGENT_TEST_HUMAN_LOG || path.join('.test-output', 'human.log')) : null;
+const humanLog = agent ? path.resolve(root, process.env.CRAFTORIO_TEST_HUMAN_LOG || path.join('.test-output', 'human.log')) : null;
 const reportFile = agent ? humanLog.replace(/(\.log)?$/, '.report.json') : null;
 if (agent) {
   fs.mkdirSync(path.dirname(humanLog), { recursive: true });
@@ -137,7 +138,7 @@ if (agent && !only.length && !process.env[machineSlot.SUITE_SLOT_ENV]) {
 }
 
 const cpus = Math.max(os.availableParallelism(), os.cpus().length);
-const concurrency = Math.max(1, Number(process.env.MULTIAGENT_TEST_CONCURRENCY) || cpus - 1);
+const concurrency = Math.max(1, Number(process.env.CRAFTORIO_TEST_CONCURRENCY) || cpus - 1);
 const inspector = /--(inspect|debug)/.test(process.env.NODE_OPTIONS || '') || process.execArgv.some((a) => /^--(inspect|debug)/.test(a));
 say(`\n== Unit tests (${files.length} file(s), concurrency ${concurrency}, availableParallelism ${os.availableParallelism()}, cpus ${os.cpus().length}) ==`);
 if (inspector) say('warning: an inspector is enabled (NODE_OPTIONS or execArgv): node --test runs one file at a time');
@@ -207,10 +208,10 @@ const shown = (file) => {
   return (rel.startsWith('..') || path.isAbsolute(rel) ? file : rel).split(path.sep).join('/');
 };
 
-// #737: one JSON line per run appended to MULTIAGENT_TEST_TIMINGS_FILE, kept over time so a later run
+// #737: one JSON line per run appended to CRAFTORIO_TEST_TIMINGS_FILE, kept over time so a later run
 // can compare with it; never on stdout (agent mode keeps it one JSON line)
 function keepTimings(times, wallMs) {
-  const file = process.env.MULTIAGENT_TEST_TIMINGS_FILE;
+  const file = process.env.CRAFTORIO_TEST_TIMINGS_FILE;
   if (!file) return;
   const record = {
     at: new Date().toISOString(),
@@ -302,8 +303,8 @@ async function main() {
   const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-test-ws-'));
   // the developer asks the owner once (#567): --auto-approve answers with its default
   const status = run(['scripts/run.js', '--mock', '--auto-approve', '--mock-ask', 'develop', '--task', 'Engine test'], {
-    MULTIAGENT_MOCK_DELAY_SCALE: '0.2',
-    MULTIAGENT_WORKSPACE: wsDir,
+    CRAFTORIO_MOCK_DELAY_SCALE: '0.2',
+    CRAFTORIO_WORKSPACE: wsDir,
   });
   if (status === 0) { try { fs.rmSync(wsDir, { recursive: true, force: true }); } catch { /* temp folder */ } }
   else say(`test workspace kept in ${wsDir}`);

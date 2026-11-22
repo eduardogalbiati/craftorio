@@ -61,7 +61,7 @@ Escopo: a fase 0 (o editor sobre o protótipo do leitor) e a fase 1 (MVP, R1–R
 - **O contrato do leitor muda:** o editor só conversa com ele por mensagens de `postMessage`, com um teste de contrato dos dois lados.
 - **Um gate que nunca termina:** o `human_edit` guarda o estado no run; fechar o app volta ao mesmo gate, com o histórico do chat.
 - **A tradução se descolar da fonte:** cada pedido atualiza a fonte e a tradução no mesmo commit; o lint compara os títulos e as âncoras do par.
-- **Custo inesperado:** no simulado nada chama modelo (`MULTIAGENT_SIMULATION_ONLY=1`); no real, cada ação mostra a estimativa antes.
+- **Custo inesperado:** no simulado nada chama modelo (`CRAFTORIO_SIMULATION_ONLY=1`); no real, cada ação mostra a estimativa antes.
 - **Escritas fora do run:** um passo de máquina recusa mudanças fora de `docs/work/<item>/`.
 
 ## Prova

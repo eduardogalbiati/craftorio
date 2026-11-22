@@ -2,7 +2,7 @@
 // scripts/ctl.js, shipped next to the app so an outside session needs neither Node nor a checkout.
 //   craftorio-ctl <channel> [json-argument] [--workspace <dir>]   calls the channel, prints its result
 //   craftorio-ctl --list [--workspace <dir>]                       the allowed channels, argument schemas
-// The workspace is --workspace, else MULTIAGENT_WORKSPACE; the endpoint and its token come from
+// The workspace is --workspace, else CRAFTORIO_WORKSPACE; the endpoint and its token come from
 // <workspace>/control/endpoint.json (written while Settings › Execution › "Allow outside sessions to
 // control this app" is on). It first checks the app's contract version (GET /api/version).
 // Exit codes: 0 the result printed (pretty JSON); 1 a refused or failed call, or a usage error (the
@@ -40,7 +40,7 @@ struct Args {
 }
 
 fn parse_args(argv: Vec<String>) -> Result<Args, Failure> {
-    let mut workspace = std::env::var("MULTIAGENT_WORKSPACE").unwrap_or_default();
+    let mut workspace = std::env::var("CRAFTORIO_WORKSPACE").unwrap_or_default();
     let mut list = false;
     let mut rest = Vec::new();
     let mut it = argv.into_iter();
@@ -60,7 +60,7 @@ fn parse_args(argv: Vec<String>) -> Result<Args, Failure> {
     if workspace.is_empty() {
         return fail(
             1,
-            "No workspace: set MULTIAGENT_WORKSPACE or pass --workspace <dir>.",
+            "No workspace: set CRAFTORIO_WORKSPACE or pass --workspace <dir>.",
         );
     }
     Ok(Args {

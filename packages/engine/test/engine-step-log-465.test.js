@@ -38,11 +38,11 @@ function machineFolder(t) {
   const root = tmp(t, 'step-log-465-machine-');
   const dir = path.join(root, 'craftorio', 'locks');
   const saved = {};
-  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'MULTIAGENT_LOCKS_DIR']) saved[k] = process.env[k];
+  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'CRAFTORIO_LOCKS_DIR']) saved[k] = process.env[k];
   process.env.TEMP = root;
   process.env.TMP = root;
   process.env.TMPDIR = root;
-  process.env.MULTIAGENT_LOCKS_DIR = dir;
+  process.env.CRAFTORIO_LOCKS_DIR = dir;
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
   return dir;
 }

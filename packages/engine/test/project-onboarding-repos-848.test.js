@@ -1,5 +1,5 @@
 // #848: the repositories the wizard's Repository step filters (packages/engine/service/areas/project-onboarding.js
-// machineRepos / cliAccounts): up to 100 asked of the CLI, and the E2E hook MULTIAGENT_E2E_GITHUB_REPOS that stands
+// machineRepos / cliAccounts): up to 100 asked of the CLI, and the E2E hook CRAFTORIO_E2E_GITHUB_REPOS that stands
 // for gh in a simulated run. The CLI is the system boundary: a fake gh first on the PATH (as run-pr-cli-797.test.js)
 // records its arguments and prints the JSON of `gh repo list --json`.
 //
@@ -13,8 +13,8 @@ const { resolveCommand } = require('../engine/providers');
 
 const onboarding = () => require('../service/areas/project-onboarding');
 const POSIX = { skip: process.platform === 'win32' ? 'needs a shell script as the CLI' : false };
-const HOOK = 'MULTIAGENT_E2E_GITHUB_REPOS';
-const SIM = 'MULTIAGENT_SIMULATION_ONLY';
+const HOOK = 'CRAFTORIO_E2E_GITHUB_REPOS';
+const SIM = 'CRAFTORIO_SIMULATION_ONLY';
 const HOOK_REPOS = [
   { name: 'e2e-owner/shop-api', private: false, updatedAt: '2026-11-19T10:00:00Z' },
   { name: 'e2e-owner/legacy-shop', private: true, updatedAt: '2026-11-13T10:00:00Z' },

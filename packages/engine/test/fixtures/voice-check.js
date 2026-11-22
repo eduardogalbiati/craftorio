@@ -17,17 +17,17 @@
 // whose behaviour (delay, text, failure) is chosen per scenario via env vars the main process
 // (this file) sets before each one, read by packages/engine/domains/chat/speech.js's execFile call.
 // See scripts/smoke.js (the pattern this follows) and packages/ui-kit/test/voice-ui.test.js (the runner, gated by
-// MULTIAGENT_UI_TESTS=1 like test/screenshot.test.js).
+// CRAFTORIO_UI_TESTS=1 like test/screenshot.test.js).
 // Usage: npx electron test/fixtures/voice-check.js
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { app } = require('electron');
-process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 process.env.FAKE_WHISPER_TEXT = 'dictated text';
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-voice-check-ws-'));
-process.env.MULTIAGENT_WORKSPACE = wsDir;
+process.env.CRAFTORIO_WORKSPACE = wsDir;
 
 // A scratch user data folder with the "model" already "downloaded", so Settings needs no network.
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-voice-check-data-'));

@@ -29,9 +29,9 @@ function fixtures(t) {
 test('a group runner that dies without its report fails with its files and exit status, not the slowest files', (t) => {
   const { dir, killer, survivor } = fixtures(t);
   const log = path.join(dir, 'human.log');
-  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: log, MULTIAGENT_TEST_CONCURRENCY: '2' };
+  const env = { ...process.env, CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: log, CRAFTORIO_TEST_CONCURRENCY: '2' };
   delete env.NODE_TEST_CONTEXT;
-  delete env.MULTIAGENT_TEST_TIMEOUT_MS;
+  delete env.CRAFTORIO_TEST_TIMEOUT_MS;
   const r = spawnSync(process.execPath, ['scripts/test.js', killer, survivor], { cwd: root, encoding: 'utf8', env, timeout: 60000 });
   const human = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
   assert.equal(r.status, 1, `the run fails\nstderr: ${r.stderr}\nhuman log:\n${human.slice(-1500)}`);
@@ -70,9 +70,9 @@ test('a group runner that could not be started fails with its files, never "exit
   const preload = path.join(dir, 'fail-spawn.js');
   fs.writeFileSync(preload, FAIL_SPAWN);
   const log = path.join(dir, 'human.log');
-  const env = { ...process.env, MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: log, MULTIAGENT_TEST_CONCURRENCY: '1' };
+  const env = { ...process.env, CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: log, CRAFTORIO_TEST_CONCURRENCY: '1' };
   delete env.NODE_TEST_CONTEXT;
-  delete env.MULTIAGENT_TEST_TIMEOUT_MS;
+  delete env.CRAFTORIO_TEST_TIMEOUT_MS;
   const r = spawnSync(process.execPath, ['-r', preload, 'scripts/test.js', survivor], { cwd: root, encoding: 'utf8', env, timeout: 60000 });
   assert.equal(r.status, 1, `the run fails\nstderr: ${r.stderr}\nstdout: ${r.stdout}`);
   const lines = r.stdout.trim().split(/\r?\n/);

@@ -203,7 +203,7 @@ class WorkflowRun extends EventEmitter {
   // nightLimits (#337): () => tonight's limits ({ multiplier } | { values }) or null, called at each check
   //   (packages/engine/domains/night/night-limits.js tonightLimits; see effectiveLimits in packages/engine/engine/run/costs.js).
   // testWorkers (#367): the machine profile's test workers per run (packages/engine/domains/machine/machine-profile.js), given to
-  //   the agents and the suite as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS; null = not set.
+  //   the agents and the suite as CRAFTORIO_TEST_WORKERS / CRAFTORIO_E2E_WORKERS; null = not set.
   // architectureOracle (#381): () => { oracle, agent }, the service's Oracle ({ oneTurn, budgetRefusal }
   //   of packages/engine/domains/oracle/oracle.js) and its agent, for a `type: project_map` step's analyze action
   //   (packages/engine/engine/run/project-map-steps.js); null = no Oracle (a simulation needs none).

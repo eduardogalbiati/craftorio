@@ -8,8 +8,8 @@
 // `kind: file` is a test file that could not run (a syntax error, a crash before its tests): the
 // file is the failure. `error` is the error's first ERROR_LINES lines; `line` is the failing
 // assertion's line in the test file when its stack names it, else the test's own line.
-// `isAgentMode(env, { isTTY })` decides like Vitest's `agent` reporter: MULTIAGENT_AGENT_MODE=1/0
-// wins; then CI and a terminal stay human; then the orchestrator's variable (MULTIAGENT_SIMULATION_ONLY,
+// `isAgentMode(env, { isTTY })` decides like Vitest's `agent` reporter: CRAFTORIO_AGENT_MODE=1/0
+// wins; then CI and a terminal stay human; then the orchestrator's variable (CRAFTORIO_SIMULATION_ONLY,
 // set for every agent and suite it starts) or an agent CLI's marker (CLAUDECODE, CODEX_SANDBOX, ...)
 // means an agent. `reporter` is the node:test custom reporter (scripts/test-reporter-agent.js loads
 // it); `parseAgentReport(text)` finds the JSON line in a suite's output (suite-step.js parseFailures).
@@ -23,7 +23,7 @@ const REPORTER = 'multiagent-agent';
 const ERROR_LINES = 3;
 const VALUE_CHARS = 200;
 const FILE_COUNTS = 20;
-const AGENT_MARKERS = ['AI_AGENT', 'CLAUDECODE', 'CODEX_SANDBOX', 'CURSOR_AGENT', 'GEMINI_CLI', 'MULTIAGENT_SIMULATION_ONLY'];
+const AGENT_MARKERS = ['AI_AGENT', 'CLAUDECODE', 'CODEX_SANDBOX', 'CURSOR_AGENT', 'GEMINI_CLI', 'CRAFTORIO_SIMULATION_ONLY'];
 
 const flag = (v) => {
   const s = String(v ?? '').trim().toLowerCase();
@@ -34,7 +34,7 @@ const flag = (v) => {
 
 // Inside an agent or the orchestrator? env: the process environment; isTTY: stdout is a terminal.
 function isAgentMode(env = process.env, { isTTY = false } = {}) {
-  const explicit = flag(env.MULTIAGENT_AGENT_MODE);
+  const explicit = flag(env.CRAFTORIO_AGENT_MODE);
   if (explicit !== null) return explicit;
   if (flag(env.CI) || isTTY) return false;
   return AGENT_MARKERS.some((k) => env[k] != null && env[k] !== '');

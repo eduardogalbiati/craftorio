@@ -15,9 +15,9 @@
 //   data-testid="runchat-orchestrator-log-tail": the last lines of the step's log;
 //   data-testid="runchat-orchestrator-log-link": the link to the whole log (its text, title or href
 //   names the log file, logs/<step>-<visit>[-full].log).
-// The E2E hook of the simulation (NEW in #795, read only when MULTIAGENT_SIMULATION_ONLY=1, like the
-// onboarding's MULTIAGENT_E2E_ONBOARDING_* hooks): MULTIAGENT_E2E_SUITE_DELAY_MS=<ms> with
-// MULTIAGENT_E2E_SUITE_DELAY_STEP=<step id> keeps each simulated round of that suite step running
+// The E2E hook of the simulation (NEW in #795, read only when CRAFTORIO_SIMULATION_ONLY=1, like the
+// onboarding's CRAFTORIO_E2E_ONBOARDING_* hooks): CRAFTORIO_E2E_SUITE_DELAY_MS=<ms> with
+// CRAFTORIO_E2E_SUITE_DELAY_STEP=<step id> keeps each simulated round of that suite step running
 // that long (its log header "$ npm test   (simulated: nothing was run)" already written) before its
 // simulated result (packages/engine/engine/suite-step.js mockSuite: pass "ℹ pass 42", fail "1").
 
@@ -54,7 +54,7 @@ const TIME = /\b\d+:\d{2}(?::\d{2})?\b|\b\d+\s?(?:s|sec|min|m)\b/g;
 
 Given('the app is open where the simulated {string} step takes {int} seconds', async ({ e2e, $testInfo }, name, seconds) => {
   $testInfo.setTimeout($testInfo.timeout + EXTRA_BUDGET);
-  await e2e.open({ env: { MULTIAGENT_E2E_SUITE_DELAY_MS: String(seconds * 1000), MULTIAGENT_E2E_SUITE_DELAY_STEP: stepId(name) } });
+  await e2e.open({ env: { CRAFTORIO_E2E_SUITE_DELAY_MS: String(seconds * 1000), CRAFTORIO_E2E_SUITE_DELAY_STEP: stepId(name) } });
 });
 
 // Started the way the Start panel starts one (window.api.startRun, channel run:start) with the

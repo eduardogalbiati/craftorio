@@ -9,7 +9,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const evidence = require('../../domains/evidence/evidence');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root, runSoftwareDevelopment } = require('../engine-helpers');
 
 // ---- #104: validated mode (validation input, developer_check gate) ------------------------

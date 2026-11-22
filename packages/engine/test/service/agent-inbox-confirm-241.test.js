@@ -5,8 +5,8 @@
 // at once; a direct po:request / supervisor:request runs at once. Under the Night watch, a fourth
 // automatic action on one target waits (night log oracle.blocked, reason 'loop'). The owner's Do it /
 // Dismiss / Undo go through po:requestAct and supervisor:requestAct.
-// Everything runs simulated (MULTIAGENT_SIMULATION_ONLY=1): no model, no gh, no real run.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+// Everything runs simulated (CRAFTORIO_SIMULATION_ONLY=1): no model, no gh, no real run.
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

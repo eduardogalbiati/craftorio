@@ -2,7 +2,7 @@ Feature: A just-onboarded project's Backlog does not ask for a Backlog Refresh
   A project with no Backlog Refresh run counts from when it was added (#784): right after the onboarding
   its issues cannot cite files moved or tasks done since, so the Backlog shows no refresh banner. Once the
   interval passed since the project was added and merges landed on its base, the banner comes back and says
-  so, instead of "never refreshed". The import is simulated (MULTIAGENT_SIMULATION_ONLY=1, a local git
+  so, instead of "never refreshed". The import is simulated (CRAFTORIO_SIMULATION_ONLY=1, a local git
   repository in the scenario's scratch folder); the Backlog Refresh interval is the default, 24 hours.
 
   @issue-784

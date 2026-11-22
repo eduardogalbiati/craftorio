@@ -9,7 +9,7 @@ Feature: A PRs screen lists every open pull request of the project by what it ne
   # What these scenarios stand on (#812), on top of #809's, #810's and #811's:
   # - The demo project is on GitHub (https://github.com/example/demo-app), so the entry reads "PRs".
   # - The platform's open pull requests are a JSON file in the launch's scratch folder, given to the app
-  #   with MULTIAGENT_E2E_PR_FILE (the E2E PR file of features/support/electron-main.js), in the shape
+  #   with CRAFTORIO_E2E_PR_FILE (the E2E PR file of features/support/electron-main.js), in the shape
   #   { pulls: [ ...one gh `pr view --json` answer per pull request, with number, title, url, author,
   #   headRefName, baseRefName ] }.
   # - For the developer: the E2E launch's fake platform (features/support/electron-main.js) is extended

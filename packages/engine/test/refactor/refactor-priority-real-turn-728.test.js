@@ -3,7 +3,7 @@
 // It crashed on every real turn with "onItem is not a function" because no `onItem` reached runTurn.
 // The CLI is stubbed: PROVIDERS.claude (the provider the ranking uses) gets the absolute path of this
 // node and test/fixtures/fake-claude-ranking.js as its command for the test, restored after; never a
-// `claude` found on PATH (that would be the owner's real, paid CLI). MULTIAGENT_SIMULATION_ONLY is
+// `claude` found on PATH (that would be the owner's real, paid CLI). CRAFTORIO_SIMULATION_ONLY is
 // lifted for the test (providers.runTurn refuses a real provider under it) and restored after.
 // Covers the three callers: the onboarding's analysis and the Refactor tab's Prioritize both call
 // rankProject with the service's real options; the refactor-proposals workflow's prioritize step
@@ -40,12 +40,12 @@ function setup(t) {
   const saved = { command: claude.command, args: claude.args };
   claude.command = process.execPath;
   claude.args = [STUB, marker];
-  const sim = process.env.MULTIAGENT_SIMULATION_ONLY;
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  const sim = process.env.CRAFTORIO_SIMULATION_ONLY;
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
   t.after(() => {
     claude.command = saved.command;
     claude.args = saved.args;
-    if (sim === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = sim;
+    if (sim === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = sim;
     fs.rmSync(ws, { recursive: true, force: true, maxRetries: 5 });
   });
 
@@ -129,9 +129,9 @@ test('#728 providers.runTurn: a CLI turn without onItem runs to its answer (a mi
 
 test('#728 providers.runTurn: a mock turn without onItem runs to its answer too', async (t) => {
   const { runTurn } = loadProviders();
-  const scale = process.env.MULTIAGENT_MOCK_DELAY_SCALE;
-  process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0';
-  t.after(() => { if (scale === undefined) delete process.env.MULTIAGENT_MOCK_DELAY_SCALE; else process.env.MULTIAGENT_MOCK_DELAY_SCALE = scale; });
+  const scale = process.env.CRAFTORIO_MOCK_DELAY_SCALE;
+  process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0';
+  t.after(() => { if (scale === undefined) delete process.env.CRAFTORIO_MOCK_DELAY_SCALE; else process.env.CRAFTORIO_MOCK_DELAY_SCALE = scale; });
   const res = await runTurn({ provider: { type: 'mock' }, model: 'simulated', prompt: 'hi', hint: {} });
   assert.equal(typeof res.text, 'string');
   assert.equal(res.text.length > 0, true);

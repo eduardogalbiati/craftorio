@@ -52,13 +52,13 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   the whole suite again (#553); only a round whose changes touch a shared root runs a second whole
   suite, and its `selection.why` says so. A whole suite that timed out or failed outside a known
   file does not count: the next round runs it again. A selection too long for the command line
-  (#400) reaches `scripts/test.js` as a list file named by `MULTIAGENT_TEST_FILES` (one path per
+  (#400) reaches `scripts/test.js` as a list file named by `CRAFTORIO_TEST_FILES` (one path per
   line) and still runs filtered (`scope: files`, no suite slot); a runner that cannot read the list
   (its npm script is not `node <file>` naming the variable) runs the whole suite, and the message
   says why; a runner whose own counts show it ignored the list (files outside it, or as many tests
   as the run's whole suite) is reported as a whole run (`list_ignored`). Without `scope` (test-batch, E2E release) a suite step runs the whole suite.
   Inside `scripts/test.js` no test file is on a child's command line (#597): the whole suite, a
-  selection in its arguments, a `MULTIAGENT_TEST_FILES` list and `--workspace` alike, each time-budget
+  selection in its arguments, a `CRAFTORIO_TEST_FILES` list and `--workspace` alike, each time-budget
   group's files, concurrency, timeout and reporters go to a JSON file in its temp folder, and the
   group's child (`node scripts/test.js --child <file>`) starts them with node:test's `run()`, so the
   32,767-character limit of a Windows command line no longer bounds the number of test files.
@@ -72,18 +72,18 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   simulated suite) takes the machine-wide `suite` slot (`packages/engine/engine/machine-slot.js`,
   `<os tmp>/multiagent-orchestrator/locks/suite.slot`) before its command, and frees it when the
   command ends, however it ends. An agent's own whole `npm test` (agent mode, no file list) takes
-  the same slot (agents get `MULTIAGENT_LOCKS_DIR` set to that folder); the suite step's child
-  inherits it through `MULTIAGENT_SUITE_SLOT`. While another run holds it, the round waits and
+  the same slot (agents get `CRAFTORIO_LOCKS_DIR` set to that folder); the suite step's child
+  inherits it through `CRAFTORIO_SUITE_SLOT`. While another run holds it, the round waits and
   the run logs `kind: suite_slot` "suite: waiting for the suite slot (run …, pid …)"; the wait is
   not counted in the round's timeout or duration. A holder whose process is gone, or a hold older
   than `SUITE_MAX_HOLD_MS` (the largest suite timeout plus a margin), is taken over. The base
   check (#405) takes the same slot for its whole suite (#527) and waits for it the same way.
 - **Agent mode** (#219): `npm test` detects an agent (`isAgentMode` in
-  `packages/engine/engine/agent-test-report.js`: `MULTIAGENT_AGENT_MODE=1/0` wins, then CI or a terminal stays
-  human, then `MULTIAGENT_SIMULATION_ONLY` or an agent CLI's variable) and prints one failures-only
+  `packages/engine/engine/agent-test-report.js`: `CRAFTORIO_AGENT_MODE=1/0` wins, then CI or a terminal stays
+  human, then `CRAFTORIO_SIMULATION_ONLY` or an agent CLI's variable) and prints one failures-only
   JSON line (`scripts/test-reporter-agent.js`: counts, per failure the test, file, line, 3 lines of
   error, expected/actual; `kind: file` for a file that could not run; per-file counts on focused
-  runs) plus the full flow's result; the spec report goes to `MULTIAGENT_TEST_HUMAN_LOG` (default
+  runs) plus the full flow's result; the spec report goes to `CRAFTORIO_TEST_HUMAN_LOG` (default
   `.test-output/human.log`). The suite step and test requests set both variables and read the JSON
   first (`parseFailures`, `parseCounts`), the human report next to the log (`<log>.human.log`).
 - **Code → tests map** (#219): `docs/agents/test-map.md` (derived, gitignored, `npm run docs`)
@@ -95,7 +95,7 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   `protect_files` on them. There the rule of #47 reads: **the developer never edits the acceptance
   tests written before it, and may add internal tests**. Every other workflow keeps "the developer
   never writes tests" (`edits_tests: false`).
-- **Mock runs in tests**: a test that runs the mock provider sets `MULTIAGENT_MOCK_DELAY_SCALE`
+- **Mock runs in tests**: a test that runs the mock provider sets `CRAFTORIO_MOCK_DELAY_SCALE`
   (0.05 or less) and waits on events (`workflow.finished`, `approval.requested`), not on timers.
 
 ## Reading a session stream (#574)

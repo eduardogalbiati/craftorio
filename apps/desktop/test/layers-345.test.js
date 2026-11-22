@@ -179,7 +179,7 @@ test('#345 every <script src> of src/renderer/index.html names an existing file,
 });
 
 test('#345 the browser server serves the packages/shared/ modules', async (t) => {
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
   const { createService } = require('@craftorio/engine/service');
   const { createServer } = require('@craftorio/engine/server');

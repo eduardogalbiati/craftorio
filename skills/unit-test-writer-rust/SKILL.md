@@ -8,9 +8,9 @@ used_by: "test writer"
 
 # Unit tests: Rust
 
-**Test workers (#367)**: a run gets `MULTIAGENT_TEST_WORKERS` (and `MULTIAGENT_E2E_WORKERS`) in its
+**Test workers (#367)**: a run gets `CRAFTORIO_TEST_WORKERS` (and `CRAFTORIO_E2E_WORKERS`) in its
 environment, the workers this machine gives each run so parallel runs do not overload it. Read it
-from the variables line of the command guide (`MULTIAGENT_TEST_WORKERS=<n>`) and pass the number to the runner you call: `cargo test -- --test-threads=<n>`.
+from the variables line of the command guide (`CRAFTORIO_TEST_WORKERS=<n>`) and pass the number to the runner you call: `cargo test -- --test-threads=<n>`.
 Unset: leave the runner's default.
 
 ## Commands

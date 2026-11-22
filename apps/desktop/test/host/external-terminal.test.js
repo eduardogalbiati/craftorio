@@ -133,11 +133,11 @@ test('terminalLaunch: macOS escapes double quotes and backslashes inside the App
 
 test('terminalLaunch: macOS exports only the variables that differ and unsets the removed ones', () => {
   const env = { PATH: '/usr/bin', HOME: '/Users/u', ELECTRON_RUN_AS_NODE: '1' };
-  const childEnv = { PATH: '/opt/bin:/usr/bin', HOME: '/Users/u', MULTIAGENT_X: 'a b' };
+  const childEnv = { PATH: '/opt/bin:/usr/bin', HOME: '/Users/u', CRAFTORIO_X: 'a b' };
   const script = doScript(load().terminalLaunch({ platform: 'darwin', env, exists: none, ...SPEC, childEnv }));
   assert.ok(script.includes('unset ELECTRON_RUN_AS_NODE;'), script);
   assert.ok(script.includes("export PATH='/opt/bin:/usr/bin';"), script);
-  assert.ok(script.includes("export MULTIAGENT_X='a b';"), script);
+  assert.ok(script.includes("export CRAFTORIO_X='a b';"), script);
   assert.equal(script.includes('export HOME'), false, script);
   // the environment is set before the command runs
   assert.ok(script.indexOf('unset ELECTRON_RUN_AS_NODE') < script.indexOf('cd '), script);
@@ -150,10 +150,10 @@ test('terminalLaunch: macOS without a command environment exports nothing', () =
 });
 
 test('terminalLaunch: Linux hands the command environment and the cwd to the terminal spawn', () => {
-  const childEnv = { PATH: '/opt/bin', MULTIAGENT_X: '1' };
+  const childEnv = { PATH: '/opt/bin', CRAFTORIO_X: '1' };
   const launch = load().terminalLaunch({ platform: 'linux', env: { PATH: '/usr/bin' }, exists: only('xterm'), ...SPEC, childEnv });
   assert.equal(launch.options.cwd, SPEC.cwd);
-  assert.equal(launch.options.env.MULTIAGENT_X, '1');
+  assert.equal(launch.options.env.CRAFTORIO_X, '1');
   assert.equal(/\b(export|unset) /.test(shLine(launch)), false, shLine(launch));
 });
 

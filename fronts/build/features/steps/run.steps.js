@@ -201,7 +201,7 @@ When('I ask the Oracle the suggested question {string}', async ({ e2e }, questio
   await oracleDrawer(e2e.window).getByRole('button', { name: question, exact: true }).click();
 });
 
-// the simulated Oracle (MULTIAGENT_SIMULATION_ONLY) answers without a model: "Simulated Oracle: ..."
+// the simulated Oracle (CRAFTORIO_SIMULATION_ONLY) answers without a model: "Simulated Oracle: ..."
 Then('the Oracle shows a simulated answer', async ({ e2e }) => {
   await expect(oracleDrawer(e2e.window)).toContainText('Simulated Oracle', { timeout: 30000 });
 });

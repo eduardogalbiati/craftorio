@@ -32,5 +32,5 @@ The run comments once on the issue or pull request with its id, counts in the da
 budgets, waits for a free slot and the merge queue like a roadmap run, and its gates ask you: a
 trigger starts work, it never merges. A rule that names a workflow outside the manifest or misses a
 field is shown as "ignored" on the project's **Triggers** card, with the last event seen and the
-runs started. Under `MULTIAGENT_SIMULATION_ONLY=1` the platform is neither read nor written.
+runs started. Under `CRAFTORIO_SIMULATION_ONLY=1` the platform is neither read nor written.
 Details: [`docs/agents/engine/repository-workflows.md`](docs/agents/engine/repository-workflows.md).

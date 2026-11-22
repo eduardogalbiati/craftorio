@@ -2014,7 +2014,7 @@ steps:
   # the base, plus the files that failed before); when they pass, the whole suite runs once in the run.
   # #553: at most once, pass or fail: later rounds run the files affected since it plus the files that
   # failed (a shared root changed: the whole suite again); a selection over the command line goes to
-  # scripts/test.js as a list (MULTIAGENT_TEST_FILES) and still runs filtered.
+  # scripts/test.js as a list (CRAFTORIO_TEST_FILES) and still runs filtered.
   - id: suite
     display: Run suite (Unit)
     type: suite

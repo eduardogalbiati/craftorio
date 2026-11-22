@@ -208,7 +208,7 @@ test('#317 deploy.yml: each release job smoke-tests the packaged app in simulati
   const smoke = steps.filter((s) => /smoke/i.test(`${s.name || ''} ${s.run || ''}`));
   assert.ok(smoke.length > 0, 'a smoke step');
   const env = (s) => JSON.stringify({ ...(s.env || {}) }) + JSON.stringify(Object.values(wf.jobs).map((j) => j.env || {})) + JSON.stringify(wf.env || {});
-  assert.ok(smoke.every((s) => /MULTIAGENT_SIMULATION_ONLY/.test(env(s) + (s.run || ''))), 'the smoke runs with MULTIAGENT_SIMULATION_ONLY');
+  assert.ok(smoke.every((s) => /CRAFTORIO_SIMULATION_ONLY/.test(env(s) + (s.run || ''))), 'the smoke runs with CRAFTORIO_SIMULATION_ONLY');
   assert.ok(smoke.every((s) => !s['continue-on-error']), 'a smoke failure stops the release');
 });
 

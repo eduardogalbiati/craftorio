@@ -1,4 +1,4 @@
-// #258 Commit a discovery card through the service, simulated (MULTIAGENT_SIMULATION_ONLY, as the
+// #258 Commit a discovery card through the service, simulated (CRAFTORIO_SIMULATION_ONLY, as the
 // E2E scenarios run it): discovery:commit-proposal answers with the split by the rules (no model),
 // discovery:commit files it into the workspace's synced backlog (no gh), the board lists the card as
 // committed and backlog:get shows the new issues with the card; discovery:create links new learning.

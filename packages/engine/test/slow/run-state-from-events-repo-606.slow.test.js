@@ -3,7 +3,7 @@
 // Same check as run-state-from-events-606.slow.test.js: runStateFromEvents over the recorded
 // events.jsonl (and summary.json) gives the state the WorkflowRun held in memory. The seam is
 // described in test/run-state-606.js.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -61,7 +61,7 @@ const WRITE_UTILITIES = [
 ];
 // The engine sets these in every agent's environment (providers.runCli), so no command needs a
 // `VAR=value` prefix; a prefix that still appears is allowed in front of an allowed command.
-const AGENT_ENV = { MULTIAGENT_SIMULATION_ONLY: '1' };
+const AGENT_ENV = { CRAFTORIO_SIMULATION_ONLY: '1' };
 // Folders of the run every agent with commands may write to (created by the engine, given to
 // Claude Code with --add-dir): evidence screenshots (evidence/<step>/round-<n>, #146, packages/engine/domains/evidence/evidence.js),
 // logs of long commands, the run's scratch workspace (#120), the run's temp folder (#414).
@@ -90,15 +90,15 @@ const DEPS_DENIED_COMMANDS = [
 // screenshot` and the app started from the worktree never open the owner's workspace or user data.
 // scratch.tmp (#414): the run's temp folder (<run>/tmp), as TMP, TEMP and TMPDIR, so the tests a
 // turn runs write their temp files inside the run (removed when it ends), not in the user's %TEMP%.
-// With it, MULTIAGENT_LOCKS_DIR keeps the machine-wide slots' folder (#455, machineSlotDir, computed
+// With it, CRAFTORIO_LOCKS_DIR keeps the machine-wide slots' folder (#455, machineSlotDir, computed
 // here before TMP moves): an agent's whole `npm test` and its captures wait for other runs'.
 // workers: { testWorkers } of the machine profile (#367): the test workers per run, passed to the
-// test runners as MULTIAGENT_TEST_WORKERS / MULTIAGENT_E2E_WORKERS (packages/engine/domains/machine/machine-profile.js workerEnv).
+// test runners as CRAFTORIO_TEST_WORKERS / CRAFTORIO_E2E_WORKERS (packages/engine/domains/machine/machine-profile.js workerEnv).
 function agentEnv(scratch = null, workers = null) {
   const env = { ...AGENT_ENV, ...(workers?.testWorkers ? workerEnv(workers) : {}) };
   if (!scratch) return env;
-  const tmp = scratch.tmp ? { TMP: scratch.tmp, TEMP: scratch.tmp, TMPDIR: scratch.tmp, MULTIAGENT_LOCKS_DIR: machineSlotDir() } : {};
-  return { ...env, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace, ...tmp };
+  const tmp = scratch.tmp ? { TMP: scratch.tmp, TEMP: scratch.tmp, TMPDIR: scratch.tmp, CRAFTORIO_LOCKS_DIR: machineSlotDir() } : {};
+  return { ...env, CRAFTORIO_USER_DATA: scratch.userData, CRAFTORIO_WORKSPACE: scratch.workspace, ...tmp };
 }
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).
@@ -182,7 +182,7 @@ function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
     'How to run commands in this unattended run (nobody can approve a command the CLI would ask about: it is refused):',
     '- Your current folder already is your working folder: run commands directly, never `cd <folder> && ...`. For another folder use the tool\'s own path option (`git -C <dir>`, `npm --prefix <dir>`).',
     `- ${env} ${Object.keys(agentVars).length > 1 ? 'are' : 'is'} already set in your environment: never prefix a command with \`VAR=value\`.`,
-    ...(agentVars.MULTIAGENT_WORKSPACE ? [`- Simulated runs, screenshots and app checks you start go to this run's scratch workspace \`${agentVars.MULTIAGENT_WORKSPACE}\`: never pass a path under the owner's workspace (its runs/ folder).`] : []),
+    ...(agentVars.CRAFTORIO_WORKSPACE ? [`- Simulated runs, screenshots and app checks you start go to this run's scratch workspace \`${agentVars.CRAFTORIO_WORKSPACE}\`: never pass a path under the owner's workspace (its runs/ folder).`] : []),
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
     // screenshots: false (an agent that should not take any): only the logs' folder
     ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\`${caps.screenshots === false ? '' : ` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`)`}, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),

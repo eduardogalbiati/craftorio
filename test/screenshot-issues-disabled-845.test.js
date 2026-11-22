@@ -20,13 +20,13 @@ test('--issues disabled is a Backlog option; --review issues-off an option of th
 test('demoIssuesDisabled leaves the last sync with no issue and issuesDisabled, and turns on the simulation hook', (t) => {
   const backlog = fs.mkdtempSync(path.join(os.tmpdir(), 'seed-issues-off-'));
   fs.writeFileSync(path.join(backlog, 'p1.json'), JSON.stringify({ projectId: 'p1', repo: 'https://github.com/o/r', issues: [{ number: 1 }], epics: [{ number: 2 }] }));
-  const before = process.env.MULTIAGENT_E2E_ISSUES_FAIL;
+  const before = process.env.CRAFTORIO_E2E_ISSUES_FAIL;
   t.after(() => {
-    if (before === undefined) delete process.env.MULTIAGENT_E2E_ISSUES_FAIL;
-    else process.env.MULTIAGENT_E2E_ISSUES_FAIL = before;
+    if (before === undefined) delete process.env.CRAFTORIO_E2E_ISSUES_FAIL;
+    else process.env.CRAFTORIO_E2E_ISSUES_FAIL = before;
   });
   demoIssuesDisabled({ backlog }, 'p1');
   const data = JSON.parse(fs.readFileSync(path.join(backlog, 'p1.json'), 'utf8'));
   assert.deepEqual(data, { projectId: 'p1', repo: 'https://github.com/o/r', issues: [], epics: [], issuesDisabled: true });
-  assert.equal(process.env.MULTIAGENT_E2E_ISSUES_FAIL, 'disabled');
+  assert.equal(process.env.CRAFTORIO_E2E_ISSUES_FAIL, 'disabled');
 });

@@ -15,7 +15,7 @@ const GIT = 'reads or writes a git repository or calls gh/glab: needs a project 
 const NETWORK = 'reaches outside the engine (downloads, the app update, phone pairing)';
 const PIPELINE = 'needs a saved pipeline (a pipeline run saved first), no fixture makes one yet';
 const RELEASE = 'needs a release or a roadmap with items in the project, no fixture prepares one yet';
-const TERMINAL = 'opens or kills a terminal process: refused in simulation (MULTIAGENT_SIMULATION_ONLY=1)';
+const TERMINAL = 'opens or kills a terminal process: refused in simulation (CRAFTORIO_SIMULATION_ONLY=1)';
 const VERSION = 'needs an earlier version of the card or roadmap, made by an edit that saves one';
 const WIDE = 'acts on several runs or schedules (the night watch, resuming runs): needs its own scenario';
 

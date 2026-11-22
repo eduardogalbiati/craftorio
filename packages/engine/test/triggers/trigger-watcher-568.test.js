@@ -12,7 +12,7 @@
 //     startRun:   async ({ project, workflow, inputs, trigger, mock }) -> { runId }   (the same channel the
 //                 roadmap starts runs through; injected). inputs: renderTriggerInputs(rule.inputs, event)
 //                 (more keys allowed); trigger: { kind, id, url } of the event (the run's meta.json `trigger`);
-//                 mock: true when process.env.MULTIAGENT_SIMULATION_ONLY === '1' (never a real run).
+//                 mock: true when process.env.CRAFTORIO_SIMULATION_ONLY === '1' (never a real run).
 //     comment:    optional async ({ event, runId }) -> void: the one report on the issue/PR, called once per
 //                 started run, never again for the same event.
 //     stateDir:   the folder of the dedup file `<stateDir>/<project>.json` (the service passes
@@ -54,10 +54,10 @@ function stateDir(t) {
 }
 
 function simulationOnly(t, value) {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  if (value == null) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = value;
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  if (value == null) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = value;
   t.after(() => {
-    if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before;
+    if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before;
   });
 }
 

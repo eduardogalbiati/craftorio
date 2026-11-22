@@ -2,7 +2,7 @@
 // previous session of the app is settled when the board is read (its pipeline's result recovered from
 // the run folders, a run that is gone or a chain that stopped ends it as failed), a second start while
 // one runs is refused, and Ready's clarity check (no run) answers a move-anyway too. Simulated only
-// (MULTIAGENT_SIMULATION_ONLY); the run folders of the restart cases are written by hand.
+// (CRAFTORIO_SIMULATION_ONLY); the run folders of the restart cases are written by hand.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

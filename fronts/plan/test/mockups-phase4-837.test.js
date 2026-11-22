@@ -1,7 +1,7 @@
 // #837 Mockups phase 4: live components (Storybook), export to the repository by PR, Figma import, the
 // live link (its server route is pinned in packages/engine/test/mockups-live-link-837.test.js) and the docs.
 // Written before the code: every new export, channel and file is loaded inside its test. All simulated
-// (MULTIAGENT_SIMULATION_ONLY=1): no model, no workflow run, no network. The contract:
+// (CRAFTORIO_SIMULATION_ONLY=1): no model, no workflow run, no network. The contract:
 // - fronts/plan/engine/domains/mockups.js, new exports:
 //   - detectStorybook(folder) → { available: boolean, configDir: string | null }: available when the project
 //     folder has a `.storybook/` folder (configDir '.storybook') or a `storybook` / `@storybook/*` entry in
@@ -19,7 +19,7 @@
 //     'figma' } in kit.json `tokens` (and tokens.css), each top-level FRAME a reference { source: 'figma',
 //     id, name } in kit.json `references`, and kit.json `inferences` records the import (an entry naming
 //     Figma); ONE commit. A file without a document throws and leaves kit.json as it was. With `fileKey`
-//     the real path downloads it with `fetch`; simulated (MULTIAGENT_SIMULATION_ONLY) it never calls fetch.
+//     the real path downloads it with `fetch`; simulated (CRAFTORIO_SIMULATION_ONLY) it never calls fetch.
 // - fronts/plan/engine/channels/mockups.js, new channels (channel → api method):
 //   mockups:storybook ({ projectId }) → detectStorybook of the project's folder, detectMockupStorybook;
 //   mockups:export-repo ({ projectId, slugs, kitOfficial }) → { plan, runId }: real, a

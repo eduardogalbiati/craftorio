@@ -7,7 +7,7 @@ const { WorkflowRun, takeHandoff, parseTokens } = require('../engine/workflow');
 const { Recorder } = require('../engine/recorder');
 const supervisor = require('../domains/supervisor/supervisor');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const FIXTURE = path.join(__dirname, 'fixtures', 'handoff.yaml');
 const VERDICTS = { verdict: ['changes_requested', 'changes_requested', 'approved'] };
 

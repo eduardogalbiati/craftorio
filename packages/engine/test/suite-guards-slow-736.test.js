@@ -47,11 +47,11 @@ const tmp = (t, prefix = 'suite-736-') => {
 function machineFolder(t) {
   const root = tmp(t, 'suite-736-machine-');
   const saved = {};
-  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'MULTIAGENT_LOCKS_DIR']) saved[k] = process.env[k];
+  for (const k of ['TEMP', 'TMP', 'TMPDIR', 'CRAFTORIO_LOCKS_DIR']) saved[k] = process.env[k];
   process.env.TEMP = root;
   process.env.TMP = root;
   process.env.TMPDIR = root;
-  process.env.MULTIAGENT_LOCKS_DIR = path.join(root, 'craftorio', 'locks');
+  process.env.CRAFTORIO_LOCKS_DIR = path.join(root, 'craftorio', 'locks');
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
 }
 
@@ -91,7 +91,7 @@ function fakeSuite() {
   const failing = new Set();
   const calls = [];
   const run = async ({ command, env, logFile }) => {
-    const listFile = env?.MULTIAGENT_TEST_FILES;
+    const listFile = env?.CRAFTORIO_TEST_FILES;
     const listed = listFile ? fs.readFileSync(path.resolve(listFile), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean) : [];
     const named = String(command).match(TEST_PATH) || [];
     const files = listed.length || named.length ? [...new Set([...listed, ...named])].sort() : null;

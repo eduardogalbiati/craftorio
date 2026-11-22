@@ -163,18 +163,18 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   `--add-dir` folders. A read-only agent (the reviewer: `bash: git`) gets no write utility and no
   `acceptEdits`, so its redirects are still refused. `bash` (any command) is unchanged.
 - **Env prefix**: providers.runCli starts every agent with `AGENT_ENV`
-  (`MULTIAGENT_SIMULATION_ONLY=1`); `MULTIAGENT_MOCK_DELAY_SCALE` passes through when the app has
-  it. A prefix that still appears is allowed as `Bash(MULTIAGENT_SIMULATION_ONLY=1 <command>:*)`
+  (`CRAFTORIO_SIMULATION_ONLY=1`); `CRAFTORIO_MOCK_DELAY_SCALE` passes through when the app has
+  it. A prefix that still appears is allowed as `Bash(CRAFTORIO_SIMULATION_ONLY=1 <command>:*)`
   for the agent's own commands only (never a free `VAR=` prefix: it would allow any command).
 - **Scratch workspace (#120)**: in a run with a worktree, `capabilities.agentEnv` adds
-  `MULTIAGENT_WORKSPACE` and `MULTIAGENT_USER_DATA` pointing to `<run_dir>/scratch/` (see
+  `CRAFTORIO_WORKSPACE` and `CRAFTORIO_USER_DATA` pointing to `<run_dir>/scratch/` (see
   worktrees.md), passed to `runCli` as `agentEnv`; their prefixes are allowed like `AGENT_ENV`'s and
   the command guide names the folder. The app's tools an agent runs (`npm run run`, `npm run
   screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
 - **Test workers (#367)**: every run gets the machine profile's test workers per run
   (`packages/engine/domains/machine/machine-profile.js`, Settings › Execution › Concurrent runs: auto from the machine, or the
-  owner's manual value) as `MULTIAGENT_TEST_WORKERS` and `MULTIAGENT_E2E_WORKERS` (the same number;
+  owner's manual value) as `CRAFTORIO_TEST_WORKERS` and `CRAFTORIO_E2E_WORKERS` (the same number;
   this repository's `playwright.config.js` reads the second one). `capabilities.agentEnv(scratch,
   { testWorkers })` adds them to the agents' env (so their prefixes are allowed and the command guide
   names them), `WorkflowRun` gets them from `testWorkers` (packages/engine/service/areas/runs.js), child runs
@@ -273,7 +273,7 @@ list`, `issue view`, `label list` and `run list` / `ci list` only, built by the 
 never a command from the model); and the `checker` delegate (`packages/engine/domains/oracle/oracle-check.js`): one test
 runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
 no npx, npm exec, go run, pip) with plain arguments, no shell syntax or inline code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
-`MULTIAGENT_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
+`CRAFTORIO_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
 the owner confirms. The service, not the model, writes its
 files (storage.md).
 

@@ -113,9 +113,9 @@ actions, or any code that deletes or checks out branches.
   helpers in `packages/engine/domains/local/local-preview.js`) runs `install && command` (install only when node_modules is
   missing or the lockfile hash changed since the run's last preview) in the worktree, in a pty of
   `packages/engine/domains/machine/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
-  `MULTIAGENT_SIMULATION_ONLY=1`, `MULTIAGENT_WORKSPACE` = a scratch copy under
+  `CRAFTORIO_SIMULATION_ONLY=1`, `CRAFTORIO_WORKSPACE` = a scratch copy under
   `<workspace>/local-previews/<run>/workspace` (projects, agents, skills, workflows, settings; never
-  runs) and `MULTIAGENT_USER_DATA` (read by `apps/desktop/host/main.js`, dev only) unless the owner chose the
+  runs) and `CRAFTORIO_USER_DATA` (read by `apps/desktop/host/main.js`, dev only) unless the owner chose the
   real workspace. Stopped on `approval.resolved` and `workflow.finished` (and by `terminals.killAll`
   at quit); it never answers the gate. `local_preview.started` / `local_preview.stopped` events land
   in the run's history and chat. Mock runs have no worktree: `work_dir` is `repo_path`.
@@ -128,14 +128,14 @@ actions, or any code that deletes or checks out branches.
   inside `work_dir`; the lockfile check (install) stays at the root. `localPreview:save` writes the
   file to the project's folder (the owner's checkout, never the run's worktree).
 - **The app started by hand in a worktree (#112)**: `npm start` in `<workspace>/worktrees/<id>`
-  (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
+  (dev only, no `CRAFTORIO_WORKSPACE`) gets a scratch workspace and user data folder under
   `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
   `packages/engine/domains/local/local-preview.js`, used by `apps/desktop/host/main.js`): it never opens the owner's workspace. Prefer **Run App**.
 - **The run's scratch workspace (#120)**: a run with a worktree gets `runs/<id>/scratch/{workspace,
   user-data}` (`WorkflowRun.scratchWorkspace`, same content rules as `scratchWorkspace` in
   `packages/engine/domains/local/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
   folders; never runs, repos or worktrees), created on the first agent turn. Every agent of the run
-  gets it as `MULTIAGENT_WORKSPACE` / `MULTIAGENT_USER_DATA` (`capabilities.agentEnv`), so
+  gets it as `CRAFTORIO_WORKSPACE` / `CRAFTORIO_USER_DATA` (`capabilities.agentEnv`), so
   `npm run run -- --mock`, `npm run screenshot`, `npm start` and `node -e` engine scripts from the
   worktree write there, never to the owner's runs, roadmap, queue or backlog. Removed with the
   worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
@@ -144,7 +144,7 @@ actions, or any code that deletes or checks out branches.
   `walkFiles` (`packages/engine/domains/run/run-artifacts.js`) skips `scratch/` like `sessions/`; a `file.saved` under it is
   still listed. The
   evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
-  the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
+  the variable, `resolveWorkspace` under `CRAFTORIO_SIMULATION_ONLY=1` falls back to
   `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.
 - **The run's temp folder (#414)**: `runs/<id>/tmp`, one of `RUN_DIRS` (so Claude Code gets it with
   `--add-dir`). `TMP`, `TEMP` and `TMPDIR` point to it for the agents of a non-mock run with a

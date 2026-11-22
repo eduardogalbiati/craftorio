@@ -4,7 +4,7 @@
 // 'regression' with its evidence; the keys regressed now are kept in <oracle>/regressions.json, so a
 // restart does not log them again, and a step that recovers leaves the list, so its next rise is
 // logged again. The delay runs on mocked timers; the Oracle's wake-ups are off (wakeScope 'off'), no
-// model is asked and the service runs with MULTIAGENT_SIMULATION_ONLY=1.
+// model is asked and the service runs with CRAFTORIO_SIMULATION_ONLY=1.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

@@ -4,6 +4,7 @@
 // Execution › Engine, apps/desktop/host/engine-connection.js) the process runs no engine and opens no workspace:
 // its window shows the engine another computer serves (apps/desktop/host/engine-connection-window.js).
 
+require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -77,36 +78,36 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s
 
 // A copy started by Run locally at a gate (packages/engine/domains/local/local-preview.js) keeps its own user data folder,
 // so it never shares the owner's sign-in or window state
-if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData', path.resolve(process.env.MULTIAGENT_USER_DATA));
+if (!app.isPackaged && process.env.CRAFTORIO_USER_DATA) app.setPath('userData', path.resolve(process.env.CRAFTORIO_USER_DATA));
 
 // ---- one app per workspace (#112) ------------------------------------------------------------
 // Two copies on one workspace judge each other's runs as interrupted and start them twice.
 // - An app started by hand from a run's worktree (<workspace>/worktrees/<id>) opens a scratch
 //   workspace with its own user data folder, simulations only, as Run locally does.
-// - The owner's app (no MULTIAGENT_WORKSPACE) holds Electron's single-instance lock for its user
+// - The owner's app (no CRAFTORIO_WORKSPACE) holds Electron's single-instance lock for its user
 //   data folder; a second copy gets a user data folder of its own and offers a scratch copy or quit.
 // - Whatever the user data folder, the app locks the workspace it opens (<workspace>/.lock with a
 //   heartbeat, packages/engine/domains/run/run-owner.js); a locked workspace is never opened read-write by a second copy.
 // Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
 const APP_DIR = path.join(__dirname, '..', '..', '..');
-// true when the user data folder is a throwaway one (MULTIAGENT_USER_DATA, or a scratch one chosen below)
-let scratchUserData = !!process.env.MULTIAGENT_USER_DATA;
-if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
+// true when the user data folder is a throwaway one (CRAFTORIO_USER_DATA, or a scratch one chosen below)
+let scratchUserData = !!process.env.CRAFTORIO_USER_DATA;
+if (!app.isPackaged && !process.env.CRAFTORIO_WORKSPACE) {
   const scratch = localPreview.worktreeAppScratch(APP_DIR);
   if (scratch) {
-    process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
-    process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-    if (!process.env.MULTIAGENT_USER_DATA) { app.setPath('userData', scratch.userData); scratchUserData = true; }
+    process.env.CRAFTORIO_WORKSPACE = scratch.workspace;
+    process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+    if (!process.env.CRAFTORIO_USER_DATA) { app.setPath('userData', scratch.userData); scratchUserData = true; }
     console.log(`Started from a worktree of ${scratch.owner}: using the scratch workspace ${scratch.workspace} (simulations only).`);
   }
 }
 // An agent's check started without its run's scratch workspace (#120): simulations only never open
 // the owner's workspace (workspace.resolveWorkspace) nor the owner's user data (sign-in, #112).
-// Agents of a run with a worktree get MULTIAGENT_WORKSPACE and MULTIAGENT_USER_DATA from the engine.
-if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE && process.env.MULTIAGENT_SIMULATION_ONLY === '1') {
+// Agents of a run with a worktree get CRAFTORIO_WORKSPACE and CRAFTORIO_USER_DATA from the engine.
+if (!app.isPackaged && !process.env.CRAFTORIO_WORKSPACE && process.env.CRAFTORIO_SIMULATION_ONLY === '1') {
   const scratch = workspace.simulationWorkspace();
-  process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
-  if (!process.env.MULTIAGENT_USER_DATA) { app.setPath('userData', scratch.userData); scratchUserData = true; }
+  process.env.CRAFTORIO_WORKSPACE = scratch.workspace;
+  if (!process.env.CRAFTORIO_USER_DATA) { app.setPath('userData', scratch.userData); scratchUserData = true; }
   console.log(`Simulation only: using the scratch workspace ${scratch.workspace}.`);
 }
 // A simulation on a throwaway user data folder never reaches the owner's keychain: on macOS,
@@ -114,10 +115,10 @@ if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE && process.env.MULTIAGE
 // launch of a scratch copy (the smoke, the screenshots, each E2E scenario), and the dialog blocks the
 // run until it is dismissed. Chromium's mock keychain answers in memory instead: a scratch copy's
 // account.bin is throwaway anyway. Never on the owner's own user data (a dev launch with
-// MULTIAGENT_SIMULATION_ONLY and a workspace of its own but no MULTIAGENT_USER_DATA keeps the real
+// CRAFTORIO_SIMULATION_ONLY and a workspace of its own but no CRAFTORIO_USER_DATA keeps the real
 // keychain, so its account.bin stays readable by the next normal launch), never in the packaged app.
-if (!app.isPackaged && process.env.MULTIAGENT_SIMULATION_ONLY === '1' && scratchUserData) app.commandLine.appendSwitch('use-mock-keychain');
-const secondCopy = !process.env.MULTIAGENT_WORKSPACE && !app.requestSingleInstanceLock();
+if (!app.isPackaged && process.env.CRAFTORIO_SIMULATION_ONLY === '1' && scratchUserData) app.commandLine.appendSwitch('use-mock-keychain');
+const secondCopy = !process.env.CRAFTORIO_WORKSPACE && !app.requestSingleInstanceLock();
 if (secondCopy) {
   const dir = workspace.resolveWorkspace().dir || os.tmpdir();
   app.setPath('userData', path.join(dir, 'local-previews', `app-${process.pid}`, 'user-data'));
@@ -134,7 +135,7 @@ let win = null;
 // reads the stored session as soon as it is created (reading it too early lost the session and
 // asked for a new sign-in at every start).
 const devEnv = app.isPackaged ? {} : process.env;
-const authOff = !authConfig.enabled || devEnv.MULTIAGENT_AUTH === 'off';
+const authOff = !authConfig.enabled || devEnv.CRAFTORIO_AUTH === 'off';
 let auth = null;
 async function createAccount() {
   // the async check: the sync isEncryptionAvailable is deprecated on Electron 45 (#578); read once,
@@ -144,11 +145,11 @@ async function createAccount() {
     console.warn('account: this computer offers no encryption (safeStorage): the account session in account.bin is stored as plain text.');
   }
   auth = createAuth({
-    url: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_URL || authConfig.url,
-    key: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_KEY || authConfig.publishableKey,
+    url: authOff ? '' : devEnv.CRAFTORIO_SUPABASE_URL || authConfig.url,
+    key: authOff ? '' : devEnv.CRAFTORIO_SUPABASE_KEY || authConfig.publishableKey,
     providers: authConfig.providers,
     // development builds without a Supabase project run without sign-in; with sign-in on, the packaged app never does
-    required: !authOff && (app.isPackaged || !!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL)),
+    required: !authOff && (app.isPackaged || !!(authConfig.url || devEnv.CRAFTORIO_SUPABASE_URL)),
     storage: fileStorage(path.join(app.getPath('userData'), 'account.bin'), {
       encrypt: (s) => (encrypted ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
       decrypt: (b) => (encrypted ? safeStorage.decryptString(b) : b.toString('utf8')),
@@ -349,7 +350,7 @@ async function claimWorkspace(ws) {
   });
   if (response !== 0) return null;
   const scratch = localPreview.scratchWorkspace(ws, path.join(ws.root, 'local-previews', `app-${process.pid}`));
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   const next = workspace.setupWorkspace(scratch.workspace, { persist: false });
   workspaceLock = runOwner.lockWorkspace(next.root, { app: APP_DIR });
   return next;
@@ -440,8 +441,8 @@ function createWindow() {
   // the Agents window goes with the main one (#263)
   win.on('closed', () => { for (const w of [agentsWindow?.current(), mockupsWindow?.current()]) if (w) w.close(); });
   // Packaged-app smoke (scripts/smoke-package.js, the release jobs): in simulation only, the app
-  // writes MULTIAGENT_SMOKE_FILE a few seconds after its page loads and quits by itself
-  const smokeFile = process.env.MULTIAGENT_SIMULATION_ONLY === '1' && process.env.MULTIAGENT_SMOKE_FILE;
+  // writes CRAFTORIO_SMOKE_FILE a few seconds after its page loads and quits by itself
+  const smokeFile = process.env.CRAFTORIO_SIMULATION_ONLY === '1' && process.env.CRAFTORIO_SMOKE_FILE;
   if (smokeFile) {
     win.webContents.once('did-fail-load', (_e, code, desc) => { console.error(`Smoke: the page did not load: ${desc} (${code})`); app.exit(1); });
     win.webContents.once('render-process-gone', (_e, details) => { console.error(`Smoke: the page crashed: ${details.reason}`); app.exit(1); });

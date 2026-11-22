@@ -6,7 +6,7 @@
 //              onboarding:changed: a simulated analysis may end before the capture)
 //   duplicate  that page, then the Start drawer on analyze-project for that project and Start: the refusal
 //              in #start-error (packages/ui-kit/start-drawer.js startRun), nothing started
-// Nothing reaches the network nor a model (MULTIAGENT_SIMULATION_ONLY).
+// Nothing reaches the network nor a model (CRAFTORIO_SIMULATION_ONLY).
 
 const fs = require('fs');
 const path = require('path');

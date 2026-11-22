@@ -63,7 +63,7 @@ the workspace folder.
   `scripts/release-assets.js` turns a build into the release files (Windows zip, macOS zip made with
   `ditto`, Linux `.tar.gz` and AppImage through `appimagetool`), and `scripts/smoke-package.js`
   starts a packaged app in simulation on a scratch workspace and waits for it to quit by itself
-  (`MULTIAGENT_SMOKE_FILE`, honoured only with `MULTIAGENT_SIMULATION_ONLY=1`, `apps/desktop/host/main.js`).
+  (`CRAFTORIO_SMOKE_FILE`, honoured only with `CRAFTORIO_SIMULATION_ONLY=1`, `apps/desktop/host/main.js`).
   On macOS the packaged smoke and the screenshot tool run on Chromium's mock keychain (`use-mock-keychain`, #623).
 - **Release jobs**: `deploy.yml` (a `vX.Y.Z` tag or a manual dispatch) runs one build job per target on `windows-latest`
   (win32 x64), `macos-latest` (darwin arm64), `macos-15-intel` (darwin x64) and `ubuntu-latest`
@@ -78,7 +78,7 @@ the workspace folder.
   from Settings into `%APPDATA%\<app>\speech-models` (Electron's userData; the engine server uses
   `%APPDATA%\craftorio\speech-models`). Tests use a fake CLI, never the real one.
 - Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\Craftorio\WorkspacePath`,
-  overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
+  overridable with `CRAFTORIO_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),
   `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `craftorio`
   points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repository is public, MIT).
@@ -142,7 +142,7 @@ One repository, one `node_modules` (default hoisting), the workspaces of the roo
   (`workflows/`, `skills/`, `pipelines/`, `seeds/`, `fragments/`), the app version and the server's static
   root come from the first `package.json` above the module with `workspaces` or a `multiagent` section
   (the repository's; `resources/app`'s in the packaged app, where the packager strips `workspaces`),
-  never from a package's own folder (`__dirname`); `MULTIAGENT_APP_ROOT` overrides it. The root
+  never from a package's own folder (`__dirname`); `CRAFTORIO_APP_ROOT` overrides it. The root
   `package.json`'s `craftorio.ui` names the UI folder the engine server serves.
 - **Packaging**: the packaged app is still the workspace root. `@electron/packager` dereferences the
   workspace links, so the asar holds `packages/`, `apps/` and the copies under `node_modules/@craftorio/`
@@ -182,7 +182,7 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   the page in `apps/desktop/renderer/connection/` with its own preload (`apps/desktop/host/engine-connection-preload.js`).
 - `apps/desktop/host/main.js` decides at `whenReady` (`decideMode`): remote mode creates no workspace, lock,
   account, keep-awake, control channel or cleanup timer; the service is constructed but never gets a
-  workspace. `MULTIAGENT_ENGINE=local` forces local; under `MULTIAGENT_SIMULATION_ONLY=1` a remote
+  workspace. `CRAFTORIO_ENGINE=local` forces local; under `CRAFTORIO_SIMULATION_ONLY=1` a remote
   engine is used only on 127.0.0.1 (a check never drives an engine that can start real runs).
 - The remote window has only the capture preload (`remote-window-preload.js`, #751: `captureWindow`
   uses it; [findings.md](renderer/findings.md)), `sandbox`, its own session (`persist:remote-engine`, user agent
@@ -196,5 +196,5 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   (`service/areas/cli-setup.js`; output, one-time code and URL on `cli-setup:changed`; the CLI is re-checked at
   the end; behind the token, #479). Only `gh` / `glab` sign in headless; `claude`, `codex`, `grok` answer
   `status: manual` with the command for a server terminal. Simulation installs nothing
-  (`domains/machine/simulated-clis.js`; `MULTIAGENT_E2E_CLI_MISSING=<id>` hides a CLI until the simulated
+  (`domains/machine/simulated-clis.js`; `CRAFTORIO_E2E_CLI_MISSING=<id>` hides a CLI until the simulated
   install). The desktop app keeps its terminal dock for a sign-in.

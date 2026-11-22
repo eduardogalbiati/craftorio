@@ -107,7 +107,7 @@ test('#279 #285 trigger: a real item that merged and ended its stage pauses the 
   let relaunched = 0;
   const { service, api } = makeService(t, {
     appDir: r.appDir,
-    relaunch: () => { relaunched++; process.env.MULTIAGENT_SIMULATION_ONLY = '1'; },
+    relaunch: () => { relaunched++; process.env.CRAFTORIO_SIMULATION_ONLY = '1'; },
   });
   const ws = service.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-no-agent.yaml'), NO_AGENT_WORKFLOW);
@@ -139,12 +139,12 @@ test('#279 #285 trigger: a real item that merged and ended its stage pauses the 
   // the update is real work (it is refused in simulation-only mode): the guard is lifted only for the
   // dispatch that triggers it and put back right after (and by the injected restart); the roadmap's
   // workflow has no agent, so even a regression that started stage 2 could not call a model
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { process.env.CRAFTORIO_SIMULATION_ONLY = '1'; });
   try {
     await api['roadmap:start']({ projectId: p.id, simulated: false });
   } finally {
-    process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+    process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   }
 
   await until(() => relaunched === 1);
@@ -184,12 +184,12 @@ test('#279 #285 trigger: with the switch off, a real item that merged and ended 
   }));
   await new Promise((resolve) => setTimeout(resolve, 50));
 
-  delete process.env.MULTIAGENT_SIMULATION_ONLY;
-  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  delete process.env.CRAFTORIO_SIMULATION_ONLY;
+  t.after(() => { process.env.CRAFTORIO_SIMULATION_ONLY = '1'; });
   try {
     await api['roadmap:start']({ projectId: p.id, simulated: false });
   } finally {
-    process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+    process.env.CRAFTORIO_SIMULATION_ONLY = '1';
   }
   await until(() => roadmapModel.readRoadmap(ws.backlog, p.id).state === 'done');
   await new Promise((resolve) => setTimeout(resolve, 200));

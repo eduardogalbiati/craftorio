@@ -1,11 +1,11 @@
 // packages/engine/service/channels/product-owner.js: po:ask (#149) notifies the bell for a real answer, never
 // for a simulated one (the drawer's avatar dot is enough for that). The test workspace always runs
-// with MULTIAGENT_SIMULATION_ONLY=1 (see docs/agents/testing.md), so a "real" answer is exercised by
+// with CRAFTORIO_SIMULATION_ONLY=1 (see docs/agents/testing.md), so a "real" answer is exercised by
 // stubbing packages/engine/domains/po/product-owner.js's own ask() and forcing simulation.simulationOnly() false just for
 // that call: no model or CLI is ever started here.
 // Live progress (#180): po:ask's turn is pushed on chat:progress and chat:cancel stops it; mockSteps'
 // delays are scaled down (like the mock provider) so these tests stay fast.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const productOwner = require('../../domains/po/product-owner');
@@ -40,14 +40,14 @@ test('po:ask: a simulated (mock) answer raises no notification; a real answer ra
   assert.equal(shown[0].target.openPO, true);
 });
 
-test('po:ask: MULTIAGENT_SIMULATION_ONLY forces the simulated path (no notice) even when the caller did not ask for a mock', async (t) => {
+test('po:ask: CRAFTORIO_SIMULATION_ONLY forces the simulated path (no notice) even when the caller did not ask for a mock', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();
   const p = await roadmapProject(api, ws, t, [1], 'po-notify-forced');
   const shown = [];
   service.events.on('notify', (n) => shown.push(n));
 
-  // mock: false, but this process always runs with MULTIAGENT_SIMULATION_ONLY=1 (see helpers.makeService)
+  // mock: false, but this process always runs with CRAFTORIO_SIMULATION_ONLY=1 (see helpers.makeService)
   const out = await api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: false, mode: 'plan', attachments: [], issues: [] });
   assert.ok(out.message);
   assert.deepEqual(shown, []);

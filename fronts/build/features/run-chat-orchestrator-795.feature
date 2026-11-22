@@ -9,9 +9,9 @@ Feature: The run's Chat shows the orchestrator working
   # - A simulated Feature run (features/support/workflows.js) with Validation left Automatic goes on
   #   past Develop and the review to "Run suite (Unit)" (step `suite`) without a gate.
   # - A simulated suite step is instant today, so its running state cannot be watched. The scenarios
-  #   use a new E2E hook of the simulation (only when MULTIAGENT_SIMULATION_ONLY=1, like the
-  #   onboarding's MULTIAGENT_E2E_ONBOARDING_* hooks): MULTIAGENT_E2E_SUITE_DELAY_MS=<ms> with
-  #   MULTIAGENT_E2E_SUITE_DELAY_STEP=<step id> keeps that simulated suite step's round running that
+  #   use a new E2E hook of the simulation (only when CRAFTORIO_SIMULATION_ONLY=1, like the
+  #   onboarding's CRAFTORIO_E2E_ONBOARDING_* hooks): CRAFTORIO_E2E_SUITE_DELAY_MS=<ms> with
+  #   CRAFTORIO_E2E_SUITE_DELAY_STEP=<step id> keeps that simulated suite step's round running that
   #   long, its log header already written (packages/engine/engine/suite-step.js mock branch), before
   #   its simulated result. See fronts/build/features/steps/run-chat-orchestrator.steps.js.
   # - The failed outcome comes from the simulation's mockSequences.suite (suite-step.js mockSuite

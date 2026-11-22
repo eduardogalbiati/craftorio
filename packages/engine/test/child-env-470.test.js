@@ -46,9 +46,9 @@ async function agentTurn(t, { tools, top = [] }) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
   const outer = {
-    MULTIAGENT_SIMULATION_ONLY: process.env.MULTIAGENT_SIMULATION_ONLY,
-    MULTIAGENT_WORKSPACE: process.env.MULTIAGENT_WORKSPACE,
-    MULTIAGENT_USER_DATA: process.env.MULTIAGENT_USER_DATA,
+    CRAFTORIO_SIMULATION_ONLY: process.env.CRAFTORIO_SIMULATION_ONLY,
+    CRAFTORIO_WORKSPACE: process.env.CRAFTORIO_WORKSPACE,
+    CRAFTORIO_USER_DATA: process.env.CRAFTORIO_USER_DATA,
   };
   for (const k of Object.keys(outer)) delete process.env[k];
   t.after(() => { for (const [k, v] of Object.entries(outer)) { if (v !== undefined) process.env[k] = v; } });
@@ -84,7 +84,7 @@ test('an agent with bash:git gets PATH, GIT_*, LANG and the engine\'s AGENT_ENV,
   assert.ok(keys.includes('PATH'), keys.join(','));
   assert.ok(keys.includes('GIT_MARKER_470'), 'GIT_* is allowlisted');
   assert.ok(keys.includes('LANG'), 'LANG is allowlisted');
-  assert.ok(keys.includes('MULTIAGENT_SIMULATION_ONLY'), 'the engine\'s AGENT_ENV still reaches the agent');
+  assert.ok(keys.includes('CRAFTORIO_SIMULATION_ONLY'), 'the engine\'s AGENT_ENV still reaches the agent');
   for (const k of [...Object.keys(SECRETS), ...Object.keys(PLATFORM), ...Object.keys(PASSTHROUGH)]) {
     assert.ok(!keys.includes(k), `${k} must not reach an agent with bash:git`);
   }

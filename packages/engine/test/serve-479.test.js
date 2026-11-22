@@ -45,10 +45,10 @@ function serve(t, dir, args, { noTailscale = false, tailscale = null } = {}) {
   const home = path.join(dir, 'home');
   fs.mkdirSync(home, { recursive: true });
   const env = {
-    ...process.env, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_AUTH: 'off', MULTIAGENT_SERVER_TOKEN: 'serve-479-test-0123456789',
-    MULTIAGENT_USER_DATA: path.join(home, 'user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
+    ...process.env, CRAFTORIO_SIMULATION_ONLY: '1', CRAFTORIO_AUTH: 'off', CRAFTORIO_SERVER_TOKEN: 'serve-479-test-0123456789',
+    CRAFTORIO_USER_DATA: path.join(home, 'user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
-  delete env.MULTIAGENT_WORKSPACE;
+  delete env.CRAFTORIO_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
   // #541: no `tailscale` command on the PATH (an empty folder), as on a machine where Tailscale is
   // not installed or not running

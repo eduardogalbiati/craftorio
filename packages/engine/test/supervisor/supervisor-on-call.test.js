@@ -16,8 +16,8 @@ const { WorkflowRun, loadWorkflow, repeatKey } = require('../../engine/workflow'
 const supervisor = require('../../domains/supervisor/supervisor');
 const root = path.join(__dirname, '..', '..', '..', '..');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
-process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.05';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
 
 function writeTmp(yaml) {
   const file = path.join(os.tmpdir(), `wf-oncall-${process.pid}-${Math.random().toString(36).slice(2)}.yaml`);

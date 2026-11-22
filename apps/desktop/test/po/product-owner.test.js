@@ -4,7 +4,7 @@
 // folder in the runs folder, filing and discarding a draft.
 // Live progress (#180): ask's onItem/signal stream and stop a mock turn fast (mockSteps' delays
 // scaled down, like the mock provider).
-process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

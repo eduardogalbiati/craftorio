@@ -1,7 +1,7 @@
 // A project's Refactor tab (#357): its refactor proposals (packages/engine/domains/refactor/refactor-proposals.js: sent from the
 // Architecture tab or written by the owner, refactor:add), each with its issue's open state and its
 // roadmap item's status (planned, running, failed, done, skipped); the Product Owner's ranking
-// (packages/engine/domains/refactor/refactor-priority.js: one read-only turn, simulated under `mock` or MULTIAGENT_SIMULATION_ONLY,
+// (packages/engine/domains/refactor/refactor-priority.js: one read-only turn, simulated under `mock` or CRAFTORIO_SIMULATION_ONLY,
 // one at a time per project) saved on the proposals; Dismiss with a reason; "File as issue"
 // (packages/engine/domains/refactor/refactor-issues.js: the `refactor` label, a preview in simulation, never gh/glab; host.fileIssue
 // stands in for gh/glab when given, #435); "Add to roadmap now" on the Refactor workflow, in the

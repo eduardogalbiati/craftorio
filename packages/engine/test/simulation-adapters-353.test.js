@@ -16,7 +16,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun } = require('../engine/workflow');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.02';
 const root = path.join(__dirname, '..', '..', '..');
 const RUN_DIR = path.join(root, 'packages', 'engine', 'engine', 'run');
 const FIXTURE = path.join(__dirname, 'fixtures', 'conditional-action.yaml');
@@ -218,9 +218,9 @@ test('#353 the injected adapter runs the run\'s machine actions', async (t) => {
 // ---- the safety rule ------------------------------------------------------------------------
 
 test('#353 with simulation only, a real run is still refused before any CLI starts', async (t) => {
-  const before = process.env.MULTIAGENT_SIMULATION_ONLY;
-  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  t.after(() => { if (before === undefined) delete process.env.MULTIAGENT_SIMULATION_ONLY; else process.env.MULTIAGENT_SIMULATION_ONLY = before; });
+  const before = process.env.CRAFTORIO_SIMULATION_ONLY;
+  process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_SIMULATION_ONLY; else process.env.CRAFTORIO_SIMULATION_ONLY = before; });
   const dir = tempDir(t, 'sim-353-wf-');
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, [
@@ -234,7 +234,7 @@ test('#353 with simulation only, a real run is still refused before any CLI star
   const events = [];
   run.on('event', (ev) => events.push(ev));
   await run.start().catch(() => {});
-  assert.match(JSON.stringify(events),/Simulation only \(MULTIAGENT_SIMULATION_ONLY=1\): refusing to start the claude-code provider/);
+  assert.match(JSON.stringify(events),/Simulation only \(CRAFTORIO_SIMULATION_ONLY=1\): refusing to start the claude-code provider/);
   assert.equal(events.some((e) => e.type === 'step.completed' && e.step_id === 'work' && e.status === 'success'), false);
 });
 

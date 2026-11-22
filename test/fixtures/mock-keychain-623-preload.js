@@ -29,7 +29,7 @@ childProcess.spawn = (command, args, options) => {
   child.stderr = new EventEmitter();
   child.kill = () => {};
   setImmediate(() => {
-    const report = options && options.env && options.env.MULTIAGENT_SMOKE_FILE;
+    const report = options && options.env && options.env.CRAFTORIO_SMOKE_FILE;
     if (report) fs.writeFileSync(report, 'window loaded');
     child.emit('exit', 0, null);
   });

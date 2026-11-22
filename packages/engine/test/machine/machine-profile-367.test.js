@@ -31,12 +31,12 @@
 //     count, any other type is ignored; only the 7 days before `now` count; a suggestion needs 2+
 //     distinct days and proposes concurrentRuns - 1 (never under 1: at 1 there is no suggestion).
 //     Pure: it changes nothing (the owner's Apply click does).
-//   workerEnv({ testWorkers }) -> { MULTIAGENT_TEST_WORKERS: '<n>', MULTIAGENT_E2E_WORKERS: '<n>' }
+//   workerEnv({ testWorkers }) -> { CRAFTORIO_TEST_WORKERS: '<n>', CRAFTORIO_E2E_WORKERS: '<n>' }
 //
 // Existing seams that gain the env (packages/engine/engine/capabilities.js, packages/engine/engine/suite-step.js):
 //   capabilities.agentEnv(scratch, { testWorkers }) adds workerEnv; without the second argument it
 //     is unchanged (test/capabilities.test.js).
-//   suiteEnv(env, { locksDir, testWorkers }) sets both variables (it drops the inherited MULTIAGENT_*).
+//   suiteEnv(env, { locksDir, testWorkers }) sets both variables (it drops the inherited CRAFTORIO_*).
 //
 // Note: the #366 "machine's workers" rule is not in the repository yet, so the test-worker numbers
 // are checked against machineWorkers(threads) rather than literal values.
@@ -211,32 +211,32 @@ test('suggestFromMemoryGuard changes nothing by itself: the events and the setti
   assert.equal(resolveLimits(settings, machine(20, 32 * GIB)).concurrentRuns, 4);
 });
 
-test('workerEnv: the per-run value as MULTIAGENT_TEST_WORKERS and MULTIAGENT_E2E_WORKERS (strings)', () => {
+test('workerEnv: the per-run value as CRAFTORIO_TEST_WORKERS and CRAFTORIO_E2E_WORKERS (strings)', () => {
   const { workerEnv } = load();
-  assert.equal(JSON.stringify(workerEnv({ testWorkers: 3 })), JSON.stringify({ MULTIAGENT_TEST_WORKERS: '3', MULTIAGENT_E2E_WORKERS: '3' }));
+  assert.equal(JSON.stringify(workerEnv({ testWorkers: 3 })), JSON.stringify({ CRAFTORIO_TEST_WORKERS: '3', CRAFTORIO_E2E_WORKERS: '3' }));
 });
 
 test('a run\'s agents get the workers in their environment (capabilities.agentEnv), unchanged without them', () => {
   const scratch = { workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' };
   const env = capabilities.agentEnv(scratch, { testWorkers: 2 });
-  assert.equal(env.MULTIAGENT_TEST_WORKERS, '2');
-  assert.equal(env.MULTIAGENT_E2E_WORKERS, '2');
-  assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1');
-  assert.equal(env.MULTIAGENT_WORKSPACE, scratch.workspace);
-  assert.equal('MULTIAGENT_TEST_WORKERS' in capabilities.agentEnv(scratch), false);
+  assert.equal(env.CRAFTORIO_TEST_WORKERS, '2');
+  assert.equal(env.CRAFTORIO_E2E_WORKERS, '2');
+  assert.equal(env.CRAFTORIO_SIMULATION_ONLY, '1');
+  assert.equal(env.CRAFTORIO_WORKSPACE, scratch.workspace);
+  assert.equal('CRAFTORIO_TEST_WORKERS' in capabilities.agentEnv(scratch), false);
 });
 
 test('the suite the engine runs gets the run\'s workers, not an inherited value (suiteEnv)', () => {
-  const { env } = suiteStep.suiteEnv({ PATH: '/bin', MULTIAGENT_TEST_WORKERS: '9', MULTIAGENT_E2E_WORKERS: '9' }, { testWorkers: 2 });
-  assert.equal(env.MULTIAGENT_TEST_WORKERS, '2');
-  assert.equal(env.MULTIAGENT_E2E_WORKERS, '2');
+  const { env } = suiteStep.suiteEnv({ PATH: '/bin', CRAFTORIO_TEST_WORKERS: '9', CRAFTORIO_E2E_WORKERS: '9' }, { testWorkers: 2 });
+  assert.equal(env.CRAFTORIO_TEST_WORKERS, '2');
+  assert.equal(env.CRAFTORIO_E2E_WORKERS, '2');
   assert.equal(env.PATH, '/bin');
 });
 
-test('test and build skills tell agents to pass MULTIAGENT_TEST_WORKERS to the runner', () => {
+test('test and build skills tell agents to pass CRAFTORIO_TEST_WORKERS to the runner', () => {
   const skills = path.join(__dirname, '..', '..', '..', '..', 'skills');
   const names = fs.readdirSync(skills).filter((n) => /^(unit-test-writer|e2e-test-writer|build-audit)-/.test(n)).sort();
   assert.equal(names.length >= 18, true, `found ${names.join(', ')}`);
-  const missing = names.filter((n) => !fs.readFileSync(path.join(skills, n, 'SKILL.md'), 'utf8').includes('MULTIAGENT_TEST_WORKERS'));
+  const missing = names.filter((n) => !fs.readFileSync(path.join(skills, n, 'SKILL.md'), 'utf8').includes('CRAFTORIO_TEST_WORKERS'));
   assert.deepEqual(missing, []);
 });

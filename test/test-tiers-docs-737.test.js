@@ -31,7 +31,7 @@ test('#737 the testing topic documents the template repository, the stall helper
   assert.match(doc, /repoFromTemplate/);
   assert.match(doc, /helpers\/run-watch\.js/);
   assert.match(doc, /runUntilStall/);
-  assert.match(doc, /MULTIAGENT_TEST_TIMINGS_FILE/);
+  assert.match(doc, /CRAFTORIO_TEST_TIMINGS_FILE/);
 });
 
 test('#737 the integration helpers exist where the docs point', () => {

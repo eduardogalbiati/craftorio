@@ -47,7 +47,7 @@ test('scripts/test.js: a file a leftover handle keeps alive exits about 5 s afte
   const dir = tmpDir(t);
   const pass = fixture(dir, 'gracefx-alpha');
   const fail = fixture(dir, 'gracefx-bravo', { fail: true, title: FAILING_TEST });
-  const env = cleanEnv({ MULTIAGENT_TEST_CONCURRENCY: '2', MULTIAGENT_AGENT_MODE: '1', MULTIAGENT_TEST_HUMAN_LOG: path.join(dir, 'human.log') });
+  const env = cleanEnv({ CRAFTORIO_TEST_CONCURRENCY: '2', CRAFTORIO_AGENT_MODE: '1', CRAFTORIO_TEST_HUMAN_LOG: path.join(dir, 'human.log') });
   const r = spawnSync(process.execPath, ['scripts/test.js', pass.file, fail.file], { cwd: root, encoding: 'utf8', env, timeout: 60000 });
   const ended = Date.now();
   assert.equal(r.error?.code, undefined, 'the run ends on its own, long before the fixtures would');

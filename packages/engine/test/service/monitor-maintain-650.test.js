@@ -4,7 +4,7 @@
 // Seam assumed: monitor:diagnose { projectId, fingerprint, item } (the item of the project's repository
 // the error belongs to); without `item` it behaves as in #634 (monitor-634.test.js). The writing itself
 // is the Documents service's recordIncident (fronts/plan/test/docs-maintain-650.test.js).
-// No model is called (MULTIAGENT_SIMULATION_ONLY=1, set by makeService).
+// No model is called (CRAFTORIO_SIMULATION_ONLY=1, set by makeService).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

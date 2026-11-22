@@ -51,7 +51,7 @@ Feature: The project wizard's step 3 and review say what really happens
     Then the wizard's suggested workflows offer "Analyze the repository" and "Define manually" and no workflow yet
     And the wizard's "Analyze the repository" choice is labelled "Recommended"
 
-  # The simulated project map and facts jobs are held running (MULTIAGENT_E2E_ONBOARDING_HOLD=facts,projectMap,
+  # The simulated project map and facts jobs are held running (CRAFTORIO_E2E_ONBOARDING_HOLD=facts,projectMap,
   # see onboarding.steps.js), so the review is reached while they still run
   @issue-852
   Scenario: While the project map runs, the review's City and Findings cards both say so and the city can still be opened

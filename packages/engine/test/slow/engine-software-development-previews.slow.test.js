@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { runSoftwareDevelopment } = require('../engine-helpers');
 
 const run = ({ inputs = {}, ...rest } = {}) => runSoftwareDevelopment({ file: 'feature.yaml', ...rest, inputs: { mode: 'remote', ...inputs } });

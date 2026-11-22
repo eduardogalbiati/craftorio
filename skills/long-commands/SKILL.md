@@ -76,7 +76,7 @@ stop it before you answer (the engine stops it after 90 s).
   Each refusal costs a whole model call over your context.
 - Your current folder already is the worktree: run commands directly, never `cd <worktree> && …`.
   For another folder use the tool's own path option (`git -C <dir>`, `npm --prefix <dir>`).
-- The environment variables the project needs for checks (e.g. `MULTIAGENT_SIMULATION_ONLY=1`)
+- The environment variables the project needs for checks (e.g. `CRAFTORIO_SIMULATION_ONLY=1`)
   are already set: never prefix a command with `VAR=value`.
 - Avoid shell expansions the CLI cannot check statically (`$VAR`, `$(...)`, `echo "exit=$?"`):
   they are refused too. Write paths out; the tool already reports the exit code.

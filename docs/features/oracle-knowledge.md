@@ -36,7 +36,7 @@ order: 150.2
   through gh / glab, read-only. An issue card uses existing labels and says whether a duplicate
   was searched.
 - **Verify by running**: the `checker` runs a test file or command on a scratch checkout of a
-  branch with `MULTIAGENT_SIMULATION_ONLY=1` and returns the result with its evidence (the checkout
+  branch with `CRAFTORIO_SIMULATION_ONLY=1` and returns the result with its evidence (the checkout
   is removed after). A check that costs money or takes longer than ~2 min is a **Run a check** card.
 - **Small context**: besides the 150k-token context threshold, an answer that re-read more than
   1M tokens of cache over its tool calls makes the next question start a fresh session

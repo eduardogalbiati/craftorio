@@ -54,7 +54,7 @@ test('AGENTS.md keeps every hard rule CLAUDE.md had before the move (#331)', () 
   ];
   const agents = read('AGENTS.md');
   for (const lead of leads) assert.ok(agents.includes(lead), `hard rule missing from AGENTS.md: ${lead}`);
-  for (const s of ['MULTIAGENT_SIMULATION_ONLY=1', 'human_approval', 'Co-Authored-By']) assert.ok(agents.includes(s), s);
+  for (const s of ['CRAFTORIO_SIMULATION_ONLY=1', 'human_approval', 'Co-Authored-By']) assert.ok(agents.includes(s), s);
 });
 
 test('AGENTS.md never names the owner\'s chat language (workflow agents answer in English, #94)', () => {

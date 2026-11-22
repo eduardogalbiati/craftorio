@@ -4,7 +4,7 @@
 // item's maintain.md gets the post-mortem under ## Post-mortems, naming the incident's new intent.
 // One whole simulated run (mock provider, scratch workspace, a throwaway git repository as the project);
 // every human gate is answered with its approving choice.
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

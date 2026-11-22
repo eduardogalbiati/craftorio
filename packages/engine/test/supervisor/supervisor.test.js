@@ -7,8 +7,8 @@ const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 const supervisor = require('../../domains/supervisor/supervisor');
 
-process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
-process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
+process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
 const SKILLS_DIR = path.join(__dirname, '..', '..', '..', '..', 'skills'); // the bundled run-supervisor skill
 
 const WF = `
