@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "envMode": "loose",
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/scripts/**",
+        "$TURBO_ROOT$/workflows/**",
+        "$TURBO_ROOT$/fragments/**",
+        "$TURBO_ROOT$/skills/**",
+        "$TURBO_ROOT$/seeds/**",
+        "$TURBO_ROOT$/pipelines/**",
+        "$TURBO_ROOT$/.craftorio/**"
+      ],
+      "outputs": []
+    },
+    "//#test:root": {
+      "cache": false,
+      "outputs": []
+    }
+  }
+}

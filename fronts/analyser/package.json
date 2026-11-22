@@ -9,11 +9,14 @@
     "front": "analyser"
   },
   "scripts": {
-    "test": "node ../../scripts/test.js --workspace .",
+    "test": "node ../../scripts/test-workspace.js",
     "test:e2e": "node ../../scripts/e2e.js --front analyser"
   },
   "dependencies": {
     "@craftorio/engine": "*",
     "@craftorio/shared": "*"
+  },
+  "devDependencies": {
+    "@craftorio/ui-kit": "*"
   }
 }

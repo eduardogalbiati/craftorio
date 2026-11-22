@@ -6,7 +6,7 @@
   "license": "MIT",
   "author": "Eduardo Galbiati",
   "scripts": {
-    "test": "node ../../scripts/test.js --workspace ."
+    "test": "node ../../scripts/test-workspace.js"
   },
   "dependencies": {
     "acorn": "8.19.0"

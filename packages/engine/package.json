@@ -9,7 +9,7 @@
     "craftorio-engine": "bin/craftorio-engine.js"
   },
   "scripts": {
-    "test": "node ../../scripts/test.js --workspace ."
+    "test": "node ../../scripts/test-workspace.js"
   },
   "dependencies": {
     "@craftorio/shared": "*",

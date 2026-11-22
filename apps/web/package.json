@@ -4,5 +4,17 @@
   "private": true,
   "description": "The browser UI the engine server serves at /: its page (renderer/index.html, generated from its composition) and api-http.js, which builds window.api over the server's HTTP and WebSocket API.",
   "license": "MIT",
-  "author": "Eduardo Galbiati"
+  "author": "Eduardo Galbiati",
+  "dependencies": {
+    "@craftorio/engine": "*",
+    "@craftorio/front-ai": "*",
+    "@craftorio/front-analyser": "*",
+    "@craftorio/front-build": "*",
+    "@craftorio/front-plan": "*",
+    "@craftorio/shared": "*",
+    "@craftorio/ui-kit": "*"
+  },
+  "scripts": {
+    "test": "node ../../scripts/test-workspace.js"
+  }
 }

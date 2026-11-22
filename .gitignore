@@ -23,3 +23,5 @@ generated/
 .features-gen/
 test-results/
 playwright-report/
+# Turborepo's local cache (T5)
+.turbo/

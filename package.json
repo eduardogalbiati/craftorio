@@ -46,10 +46,13 @@
     "site": "node scripts/site.js",
     "start": "electron .",
     "test": "node scripts/test.js",
+    "test:affected": "node scripts/turbo-affected.js",
     "test:coverage": "node scripts/test.js --experimental-test-coverage",
     "test:e2e": "node scripts/e2e.js",
     "test:e2e:update": "node scripts/e2e.js -- --update-snapshots",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Engine test\"",
+    "test:root": "node scripts/test.js --workspace .",
+    "test:turbo": "turbo run test test:root --concurrency=2 --ui=stream",
     "typecheck": "tsc --noEmit -p jsconfig.json"
   },
   "dependencies": {
@@ -73,6 +76,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.187.0",
+    "turbo": "^2.11.13",
     "typescript": "^6.0.3"
   },
   "allowScripts": {
@@ -80,5 +84,6 @@
   },
   "craftorio": {
     "ui": "apps/web/renderer"
-  }
+  },
+  "packageManager": "npm@11.19.1"
 }

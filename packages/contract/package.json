@@ -7,6 +7,9 @@
   "author": "Eduardo Galbiati",
   "main": "index.js",
   "scripts": {
-    "test": "node ../../scripts/test.js --workspace ."
+    "test": "node ../../scripts/test-workspace.js"
+  },
+  "devDependencies": {
+    "@craftorio/engine": "*"
   }
 }
