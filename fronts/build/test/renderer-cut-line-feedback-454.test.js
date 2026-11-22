@@ -12,7 +12,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const T1 = '2026-10-21T10:00:00.000Z';
 const T2 = '2026-10-21T10:05:00.000Z';

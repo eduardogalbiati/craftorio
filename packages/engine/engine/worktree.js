@@ -548,7 +548,7 @@ async function prepareBaseWorktree({ repo, base, dir, log = () => {}, remote = t
 // onboarding's injected one), answering null on an error.
 async function identityArgs(repo, run = tryGit) {
   const email = await run(['config', 'user.email'], repo);
-  return email ? [] : ['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost'];
+  return email ? [] : ['-c', 'user.name=Craftorio', '-c', 'user.email=orchestrator@localhost'];
 }
 
 // A rebase stopped half-way (a conflict) leaves one of these folders in the worktree's git dir

@@ -26,7 +26,7 @@
 // it per field; differing / differHtml: the saved values that differ from the project's.
 // Browser: window.WorkflowInputs (pills and show_if wired once on the document); Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const cssEsc = (s) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'));
   const MAX_PILLS = 5;
@@ -302,7 +302,7 @@
   // #630: a workflow's auto | validated toggle: its `validation` input when it has one (feature, whose
   // `mode` is local | remote), else `mode`. `old`: an item saved before still says `mode: validated`,
   // read as that value. `context`: the toggle's value (or default) for show_if.
-  const defaultWorkflow = () => (typeof module === 'object' && module.exports ? require('@multiagent/shared/default-workflow') : root.DefaultWorkflow);
+  const defaultWorkflow = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/default-workflow') : root.DefaultWorkflow);
   function modeInput(defs = {}, inputs = {}) {
     const key = defs.validation ? 'validation' : 'mode';
     const old = key === 'validation' && defaultWorkflow().VALIDATION.includes(inputs?.mode);
@@ -323,7 +323,7 @@
   // `runDefaults`) > the workflow's default.
   const SOURCES = { project: 'workflow_inputs.from_project', roadmap: 'workflow_inputs.from_item', typed: 'workflow_inputs.from_item', workflow: 'workflow_inputs.from_workflow' };
   const sourceText = (source) => (SOURCES[source] ? t(SOURCES[source]) : '');
-  const runInputs = () => (typeof module === 'object' && module.exports ? require('@multiagent/shared/run-inputs') : root.RunInputs);
+  const runInputs = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/run-inputs') : root.RunInputs);
   const shownDefault = (...a) => runInputs().shownDefault(...a);
   const sameValue = (...a) => runInputs().sameValue(...a);
 

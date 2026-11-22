@@ -268,7 +268,7 @@ test('runSuite: a hold older than SUITE_MAX_HOLD_MS is taken over without waitin
 // (slotDir) both lead to <root>/multiagent-orchestrator/locks
 function machineFolder(t) {
   const root = tmp(t, 'suite-slot-machine-');
-  const dir = path.join(root, 'multiagent-orchestrator', 'locks');
+  const dir = path.join(root, 'craftorio', 'locks');
   const saved = {};
   for (const k of ['TEMP', 'TMP', 'TMPDIR', 'MULTIAGENT_LOCKS_DIR']) saved[k] = process.env[k];
   process.env.TEMP = root;

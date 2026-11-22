@@ -5,7 +5,7 @@
 // is linked to the card. The real page in the renderer harness with a fake window.api.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const PROJECTS = [
   { id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' },

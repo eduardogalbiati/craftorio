@@ -73,7 +73,7 @@ async function remoteWindow() {
     store,
     version: { app: '9.9.9', contract: 'abc123' },
     mode: 'remote',
-    windowOptions: { width: 1500, height: 950, title: 'Multiagent Orchestrator' },
+    windowOptions: { width: 1500, height: 950, title: 'Craftorio' },
     relaunch: () => {},
     fetch: async () => ({ status: 200, ok: true, json: async () => ({ app: '9.9.9', contract: 'abc123' }) }),
   });

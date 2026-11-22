@@ -20,8 +20,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { captureScreenshots } = require('@multiagent/engine/engine/screenshot-step');
-const { fakeRoot, loadPanel, waitTick } = require('@multiagent/ui-kit/test/artifacts-panel-helpers');
+const { captureScreenshots } = require('@craftorio/engine/engine/screenshot-step');
+const { fakeRoot, loadPanel, waitTick } = require('@craftorio/ui-kit/test/artifacts-panel-helpers');
 
 function tmpDir(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

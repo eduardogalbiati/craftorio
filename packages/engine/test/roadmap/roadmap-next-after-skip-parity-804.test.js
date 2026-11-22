@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const roadmaps = require('../../domains/roadmap/roadmap');
-const { nextAfterSkip } = require('@multiagent/shared/roadmap-model');
+const { nextAfterSkip } = require('@craftorio/shared/roadmap-model');
 
 const item = (id, status = 'planned', over = {}) => ({
   id, workflow: 'w.yaml', workflowName: 'w', inputs: {}, mock: false, number: Number(id.slice(1)), url: `https://x/${id}`, title: id, body: '',

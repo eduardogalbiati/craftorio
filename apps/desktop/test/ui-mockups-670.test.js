@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
+const { loadWorkflow, evalExpr } = require('@craftorio/engine/engine/workflow');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const DIRS = [path.join(ROOT, 'workflows'), path.join(ROOT, '.multiagent', 'workflows')];
@@ -167,13 +167,13 @@ test('#670 after testid_check, a UI change without screens goes back to develop 
 // ---- the `mockups` template filter: the issue's mockups as the prompts see them ----------------------
 
 test('#670 the `mockups` filter lists an issue\'s mockup images and repository HTML mockups, each once', () => {
-  const { render } = require('@multiagent/engine/engine/run/templates');
+  const { render } = require('@craftorio/engine/engine/run/templates');
   const text = `${MOCKUP_TASK}\n\nAgain: ![mock-1.jpg](https://example.com/files/mock-1.jpg)\nSettings: docs/work/home-screen/mock-2.html\n`;
   assert.equal(render('{% for m in t | mockups %}{{ m.file }};{% endfor %}', { t: text }), 'mock-1.jpg;mock-2.html;');
 });
 
 test('#670 the `mockups` filter ignores an outside HTML page and text without mockups', () => {
-  const { render } = require('@multiagent/engine/engine/run/templates');
+  const { render } = require('@craftorio/engine/engine/run/templates');
   assert.equal(render('{{ t | mockups | length }}', { t: 'See [the guide](https://example.com/guide.html) and R1, R2.' }), '0');
   assert.equal(render('{{ t | mockups | length }}', { t: '' }), '0');
 });

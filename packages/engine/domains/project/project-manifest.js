@@ -90,7 +90,7 @@ function requiresProblem(appVersion, range) {
 }
 
 // #791: the kinds a manifest may map (packages/shared/default-workflow.js KIND_ENTRIES; a refactor uses the Feature entry)
-const { KIND_ENTRIES, label } = require('@multiagent/shared/default-workflow');
+const { KIND_ENTRIES, label } = require('@craftorio/shared/default-workflow');
 const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [], triggers: [], triggerErrors: [], refusedTriggers: [] });
 const { validateTriggers } = require('../triggers/triggers');
 

@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { ISSUE_WORKFLOW, makeService, roadmapIssue, until, untilTrue } = require('@multiagent/engine/test/service/helpers');
+const { ISSUE_WORKFLOW, makeService, roadmapIssue, until, untilTrue } = require('@craftorio/engine/test/service/helpers');
 
 // Stands for the issue-tracker -> software-development-local-hero pair: an `issues` output of
 // created issues (number, url, title), a human gate that decides success or failure, and a `task`

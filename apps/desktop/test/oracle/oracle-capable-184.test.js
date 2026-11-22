@@ -16,13 +16,13 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..', '..'), rel);
 const { execFileSync } = require('child_process');
-const { createService, BUNDLED_SKILLS_DIR } = require('@multiagent/engine/service');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService, BUNDLED_SKILLS_DIR } = require('@craftorio/engine/service');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
-const loadTools = () => require('@multiagent/engine/domains/oracle/oracle-tools');
-const loadOracle = () => require('@multiagent/engine/domains/oracle/oracle');
-const loadActions = () => require('@multiagent/engine/domains/oracle/oracle-actions');
+const loadTools = () => require('@craftorio/engine/domains/oracle/oracle-tools');
+const loadOracle = () => require('@craftorio/engine/domains/oracle/oracle');
+const loadActions = () => require('@craftorio/engine/domains/oracle/oracle-actions');
 const KNOWLEDGE_SKILLS = ['backlog-product-owner', 'run-supervisor', 'issue-writing', 'context-economy'];
 const near = (actual, expected, msg) => assert.ok(Math.abs(Number(actual) - expected) < 1e-6, `${msg}: expected ${expected}, got ${actual}`);
 
@@ -137,7 +137,7 @@ function digestHashes(id) {
   const lf = Buffer.from(raw.toString('utf8').replace(/\r\n/g, '\n'));
   const hashes = [];
   for (const algo of ['sha256', 'sha1', 'md5']) for (const b of [raw, lf]) hashes.push(crypto.createHash(algo).update(b).digest('hex'));
-  const kind = require('@multiagent/engine/domains/agents/skills').SKILL_KIND;
+  const kind = require('@craftorio/engine/domains/agents/skills').SKILL_KIND;
   if (typeof kind?.hash === 'function') hashes.push(kind.hash(BUNDLED_SKILLS_DIR, id));
   return hashes.map((h) => h.slice(0, 12));
 }
@@ -159,7 +159,7 @@ test('knowledge: a new Oracle session loads backlog-product-owner, run-superviso
   const { service, api } = makeService(t);
   await api['oracle:ask']({ question: 'What do you know?', mock: true });
   const session = fs.readFileSync(path.join(service.workspace().oracle, 'session.md'), 'utf8').replace(/\r\n/g, '\n');
-  const { resolveSkill } = require('@multiagent/engine/domains/agents/skills');
+  const { resolveSkill } = require('@craftorio/engine/domains/agents/skills');
   const digests = digestTexts();
   for (const id of KNOWLEDGE_SKILLS) {
     const body = resolveSkill([BUNDLED_SKILLS_DIR], id).body.replace(/\r\n/g, '\n').trim();

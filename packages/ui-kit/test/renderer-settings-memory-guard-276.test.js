@@ -80,7 +80,7 @@ function loadMemoryGuard({ memoryGuard, totalMemoryBytes = 32 * GIB } = {}) {
   const sandbox = {
     $: find,
     t,
-    I18n: require('@multiagent/shared/i18n'),
+    I18n: require('@craftorio/shared/i18n'),
     esc: (s) => String(s ?? ''),
     errMsg: (e) => String(e?.message || e),
     renderHeader() {},

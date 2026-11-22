@@ -8,11 +8,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
-const CityConnections = require('@multiagent/shared/city-connections');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
+const CityConnections = require('@craftorio/shared/city-connections');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const hash = '11'.repeat(20);

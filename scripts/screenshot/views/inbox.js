@@ -9,7 +9,7 @@ const { solidPng } = require('../helpers');
 // two notes; one from another author; one with a long title, an audio file and a PDF) and one
 // already in Triage (a target for Merge into…).
 function demoDiscovery(ws, projectId) {
-  const discovery = require('@multiagent/engine/domains/discovery/discovery');
+  const discovery = require('@craftorio/engine/domains/discovery/discovery');
   const min = 60000;
   const card = (minsAgo, author, title, text, column) => {
     const c = discovery.createCard(ws.discovery, projectId, { title, text, author, column });

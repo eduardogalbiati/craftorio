@@ -14,11 +14,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const actions = require('@multiagent/engine/domains/oracle/oracle-actions');
-const night = require('@multiagent/engine/domains/night/night-watch');
-const workspace = require('@multiagent/engine/domains/workspace/workspace');
-const budget = require('@multiagent/engine/domains/usage/budget');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const actions = require('@craftorio/engine/domains/oracle/oracle-actions');
+const night = require('@craftorio/engine/domains/night/night-watch');
+const workspace = require('@craftorio/engine/domains/workspace/workspace');
+const budget = require('@craftorio/engine/domains/usage/budget');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
 // The same mapping as apps/desktop/host/preload.js payload(): positional arguments -> the channel's argument.
 function payload(params, args) {

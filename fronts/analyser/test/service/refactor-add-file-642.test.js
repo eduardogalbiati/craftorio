@@ -7,8 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
-const { makeService, gitRepo, roadmapIssue } = require('@multiagent/engine/test/service/helpers');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
+const { makeService, gitRepo, roadmapIssue } = require('@craftorio/engine/test/service/helpers');
 
 async function setup(t, { synced = true, repo } = {}) {
   const drafts = [];

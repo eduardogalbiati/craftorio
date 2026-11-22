@@ -5,7 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
-const RunProgress = require('@multiagent/shared/run-progress-model.js');
+const RunProgress = require('@craftorio/shared/run-progress-model.js');
 
 const MIN = H.MIN;
 const START = H.NOW - 20 * MIN;

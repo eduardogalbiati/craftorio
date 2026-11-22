@@ -16,7 +16,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const registry = () => require('@multiagent/shared/providers');
+const registry = () => require('@craftorio/shared/providers');
 const local = (y, m, d, h, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 
 test('#312 quotaResetAt reads Claude\'s epoch from "usage limit reached|<epoch>"', () => {

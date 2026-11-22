@@ -35,7 +35,7 @@ test('#630 openQuestions never asks solo or team', () => {
 // #726: the model's profile labels became i18n keys; #847: the engine's questions carry the keys and the
 // Ways of working drawer resolves them in the interface's language (they read in English in en)
 test('#726 openQuestions\' mode, ci and tests options are the model\'s i18n keys, English in en', () => {
-  const I18n = require('@multiagent/shared/i18n');
+  const I18n = require('@craftorio/shared/i18n');
   const qs = load().openQuestions({});
   const labels = (id) => qs.find((q) => q.id === id).options.map((o) => [o.value, I18n.t(o.label, undefined, 'en')]);
   // #738: the third way of working, Fork + PR

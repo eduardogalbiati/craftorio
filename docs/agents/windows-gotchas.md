@@ -48,11 +48,11 @@ Use `canonicalPath`/`samePath` from `packages/engine/engine/worktree.js`.
   DevTools off and `--remote-debugging-port` exits when `app.isPackaged`. So the packaged app can't
   spawn itself as node: anything that must run as a node child ships unpacked (`asar.unpack`) and
   runs under the system `node` (e.g. the external live terminal). The supervisor's MCP server is
-  the exception since #341: the Rust `multiagent-mcp.exe` in `resources/bin/` needs no node.
+  the exception since #341: the Rust `craftorio-mcp.exe` in `resources/bin/` needs no node.
 - Rust on Windows (#341) builds with the **MSVC** toolchain: `link.exe` comes from the Visual Studio
   Build Tools ("Desktop development with C++"). `cargo build` failing with "link.exe not found" (or
   Git Bash's `/usr/bin/link` picked instead) means those tools are missing; the GNU toolchain is not
-  used. A running `multiagent-mcp.exe` (a live Supervisor or Oracle session) locks
+  used. A running `craftorio-mcp.exe` (a live Supervisor or Oracle session) locks
   `native/target/release/`: cargo then fails with "Access is denied" until that session ends.
 - The packaged `.exe` returns immediately to the shell; its stdout doesn't show in Git Bash/PowerShell.
 - Orphan test processes can lock `build/` (EBUSY/ENOTEMPTY): find them by command line before

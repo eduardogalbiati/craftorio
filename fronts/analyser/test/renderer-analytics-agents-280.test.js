@@ -22,8 +22,8 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const { displayName } = require('@multiagent/shared/display-name.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const { displayName } = require('@craftorio/shared/display-name.js');
 
 const FILE = pageFileOf('views/analytics/analytics-agents.js');
 const RANGE = { from: '2026-09-01', to: '2026-09-30' };

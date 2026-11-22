@@ -24,7 +24,7 @@ const tick = async (n = 10) => { for (let i = 0; i < n; i++) await new Promise((
 
 function loadUsageScreen() {
   const { createDom } = require('../../../packages/ui-kit/test/mini-dom.js');
-  const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+  const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
   const usageFile = require('../../../scripts/source-tree').pageFile(ROOT, 'views/usage/usage.js');
   const appSrc = fs.readFileSync(path.join(UI_KIT, 'app.js'), 'utf8');
   const pick = (re, what) => { const m = re.exec(appSrc); assert.ok(m, `${what} not found in app.js: the source moved`); return m[0]; };

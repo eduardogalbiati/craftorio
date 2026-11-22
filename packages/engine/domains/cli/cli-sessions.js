@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
-const registry = require('@multiagent/shared/providers');
+const registry = require('@craftorio/shared/providers');
 
 const HEAD_BYTES = 512 * 1024;
 const TAIL_BYTES = 256 * 1024;

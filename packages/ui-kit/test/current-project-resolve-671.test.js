@@ -3,7 +3,7 @@
 // page loaded in the renderer harness without its start (no DOMContentLoaded).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const PROJECTS = [
   { id: 'p2', name: 'No repo', folder: 'C:/two' },

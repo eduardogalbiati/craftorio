@@ -8,8 +8,8 @@
 //   and 11th (`inputs`) carry nothing: the PO chooses them for each recommendation.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const en = require('@multiagent/shared/i18n/en.json');
-const ptBR = require('@multiagent/shared/i18n/pt-BR.json');
+const en = require('@craftorio/shared/i18n/en.json');
+const ptBR = require('@craftorio/shared/i18n/pt-BR.json');
 const { openDrawer, click, isHidden, send, textOf, settle } = require('./backlog-po-785-harness');
 
 const MAIN = ['Analisar o backlog e propor runs', 'Montar um roadmap', 'Registrar uma issue'];

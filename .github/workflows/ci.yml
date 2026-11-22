@@ -70,7 +70,7 @@ jobs:
       # Windows and macOS, a node-gyp build on Linux
       - run: npm ci
       # The cargo workspace of the native sidecars (native/, #341): checked on every OS; npm test then
-      # builds multiagent-mcp in release and runs the MCP cases against it (CI never skips them)
+      # builds craftorio-mcp in release and runs the MCP cases against it (CI never skips them)
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

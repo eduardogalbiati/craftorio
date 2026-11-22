@@ -11,7 +11,7 @@
 
 const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
-const Platforms = require('@multiagent/shared/platforms');
+const Platforms = require('@craftorio/shared/platforms');
 
 // the backlog's platforms: the adapters, and Bitbucket (no sync yet)
 const PLATFORMS = {

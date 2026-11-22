@@ -12,10 +12,10 @@
 //   tests do not care whether the wizard writes workflowKinds or leaves its picks in `workflows`.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
-const load = () => require('@multiagent/engine/domains/project/projects');
+const load = () => require('@craftorio/engine/domains/project/projects');
 
 const { PID, clone, jobs, CLI_OK } = W;
 const PROFILE = { mode: 'remote', ci: 'release', tests: 'unit+e2e' };

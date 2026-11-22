@@ -56,7 +56,7 @@ function fileStorage(file, { encrypt = (s) => Buffer.from(s, 'utf8'), decrypt = 
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const callbackPage = (message) => `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Multiagent Orchestrator</title></head>
+const callbackPage = (message) => `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Craftorio</title></head>
 <body style="font:15px system-ui,sans-serif;background:#0e1014;color:#e6e8ee;display:grid;place-items:center;height:100vh;margin:0">
 <p>${escapeHtml(message)}</p></body></html>`;
 
@@ -156,7 +156,7 @@ function createAuth({
         const code = u.searchParams.get('code');
         const ok = code && !err;
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', Connection: 'close' })
-          .end(callbackPage(ok ? 'Signed in. You can close this tab and go back to Multiagent Orchestrator.' : `Sign-in failed: ${err || 'no authorization code'}.`));
+          .end(callbackPage(ok ? 'Signed in. You can close this tab and go back to Craftorio.' : `Sign-in failed: ${err || 'no authorization code'}.`));
         finish(ok ? null : new Error(`Sign-in failed: ${err || 'no authorization code.'}`), code);
       });
       const timer = setTimeout(() => finish(new Error('Sign-in timed out. Try again.')), LOGIN_TIMEOUT_MS);

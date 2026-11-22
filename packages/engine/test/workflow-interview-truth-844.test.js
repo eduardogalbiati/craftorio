@@ -23,7 +23,7 @@ const { execFileSync } = require('child_process');
 const { setupWorkspace } = require('../domains/workspace/workspace');
 const projects = require('../domains/project/projects');
 const seeds = require('../domains/seed/seeds');
-const OnboardingModel = require('@multiagent/shared/onboarding-model');
+const OnboardingModel = require('@craftorio/shared/onboarding-model');
 
 const loadArea = () => require('../service/areas/workflow-interview');
 

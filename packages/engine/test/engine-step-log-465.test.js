@@ -36,7 +36,7 @@ const tmp = (t, prefix = 'step-log-465-') => {
 // the machine-wide locks folder in a temp folder (the suite slot of #455 is taken there)
 function machineFolder(t) {
   const root = tmp(t, 'step-log-465-machine-');
-  const dir = path.join(root, 'multiagent-orchestrator', 'locks');
+  const dir = path.join(root, 'craftorio', 'locks');
   const saved = {};
   for (const k of ['TEMP', 'TMP', 'TMPDIR', 'MULTIAGENT_LOCKS_DIR']) saved[k] = process.env[k];
   process.env.TEMP = root;

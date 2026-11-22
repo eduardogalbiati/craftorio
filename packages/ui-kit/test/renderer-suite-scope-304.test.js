@@ -14,8 +14,8 @@ const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
 const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const { displayName } = require('@multiagent/shared/display-name.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const { displayName } = require('@craftorio/shared/display-name.js');
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // what a person reads: tags (and their attributes) dropped

@@ -1,5 +1,5 @@
 // The engine server's side of the addresses (#479, taken from the host's engine-connection.js in phase 2
-// of docs/reorganisation-study-2026-10.md, so the `multiagent-engine` bin needs nothing of the desktop
+// of docs/reorganisation-study-2026-10.md, so the `craftorio-engine` bin needs nothing of the desktop
 // app): which address `--host` means, and the addresses another computer can type. Pure: the
 // interfaces are given (os.networkInterfaces()). The desktop app's engine-connection re-exports these.
 //

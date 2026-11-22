@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const task = { task: {} };
 const INSTALLED = [

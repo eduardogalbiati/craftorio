@@ -15,7 +15,7 @@ const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
 const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
 const vm = require('vm');
-const I18n = require('@multiagent/shared/i18n.js');
+const I18n = require('@craftorio/shared/i18n.js');
 
 const VOID = new Set(['input', 'br', 'img', 'hr', 'meta', 'link']);
 
@@ -227,7 +227,7 @@ test('#330 a live switch repaints a markup a mount drew elsewhere with ViewRegis
 
 test('#330 the real page booted in English shows the Backlog\'s tabs in pt-BR after InterfaceLanguage.apply, without a reload', async (t) => {
   t.after(() => I18n.setLanguage('en'));
-  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+  const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
   // without a tree walker every screen is drawn and mounted again: Settings' mount reads data the fake
   // api does not give (voice, tools), so its scripts are left out of this page
   const app = loadApp({

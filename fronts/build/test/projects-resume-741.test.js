@@ -23,8 +23,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 const W = require('./project-wizard-helpers');
 
 const CATALOGS = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n');

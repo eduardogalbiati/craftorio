@@ -35,7 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const issues = require('../backlog/issues');
 const roadmaps = require('../roadmap/roadmap');
-const { LOCAL } = require('@multiagent/shared/default-workflow');
+const { LOCAL } = require('@craftorio/shared/default-workflow');
 const {
   git,
   prepareBaseWorktree,

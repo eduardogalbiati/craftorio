@@ -14,7 +14,7 @@ const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
 const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'artifacts-panel.js'), 'utf8');
 const html = fs.readFileSync(page('index.html'), 'utf8');

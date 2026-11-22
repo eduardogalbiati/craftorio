@@ -16,8 +16,8 @@
 // merged into an existing card instead. Used by the discovery:import-* channels
 // (fronts/plan/engine/channels/discovery.js); cards stay private: an import never files an issue (#261).
 
-const clarity = require('@multiagent/engine/domains/discovery/clarity');
-const discovery = require('@multiagent/engine/domains/discovery/discovery');
+const clarity = require('@craftorio/engine/domains/discovery/clarity');
+const discovery = require('@craftorio/engine/domains/discovery/discovery');
 
 // over this many cards an import asks first (importItems' confirmLarge)
 const MAX_IMPORT_ITEMS = 200;

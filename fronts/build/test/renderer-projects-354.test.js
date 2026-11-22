@@ -23,8 +23,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const H = require('./roadmap-status-helpers');
-const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, pageMarkup, region, tabsOf } = require('@multiagent/front-analyser/test/project-page-helpers');
+const { loadApp, navEntries, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, pageMarkup, region, tabsOf } = require('@craftorio/front-analyser/test/project-page-helpers');
 
 const NAV_GROUPS = path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'nav-groups.js');
 const navGroups = () => require(NAV_GROUPS);

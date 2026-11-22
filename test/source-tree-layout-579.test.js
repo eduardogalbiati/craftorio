@@ -24,14 +24,14 @@ const pkg = (name) => JSON.stringify({ name });
 
 test('appPages, pageDirs and featureDirs on a tree with the kit, two fronts and two apps', (t) => {
   const root = tmpRoot(t, {
-    'packages/ui-kit/package.json': pkg('@multiagent/ui-kit'),
-    'fronts/build/package.json': pkg('@multiagent/front-build'),
-    'fronts/ai/package.json': pkg('@multiagent/front-ai'),
-    'apps/desktop/package.json': pkg('@multiagent/desktop'),
+    'packages/ui-kit/package.json': pkg('@craftorio/ui-kit'),
+    'fronts/build/package.json': pkg('@craftorio/front-build'),
+    'fronts/ai/package.json': pkg('@craftorio/front-ai'),
+    'apps/desktop/package.json': pkg('@craftorio/desktop'),
     'apps/desktop/renderer/index.html': '',
-    'apps/web/package.json': pkg('@multiagent/web'),
+    'apps/web/package.json': pkg('@craftorio/web'),
     'apps/web/renderer/index.html': '',
-    'apps/cli/package.json': pkg('@multiagent/cli'),
+    'apps/cli/package.json': pkg('@craftorio/cli'),
   });
   assert.deepEqual(appPages(root), [{ app: 'apps/desktop', page: 'apps/desktop/renderer' }, { app: 'apps/web', page: 'apps/web/renderer' }], 'an app without a renderer/ folder has no page');
   assert.deepEqual(pageDirs(root), ['packages/ui-kit', 'fronts/ai', 'fronts/build', 'apps/desktop/renderer', 'apps/web/renderer']);
@@ -39,7 +39,7 @@ test('appPages, pageDirs and featureDirs on a tree with the kit, two fronts and 
 });
 
 test('before phase 3 (no kit, no front): the page folder alone, the root features alone', (t) => {
-  const root = tmpRoot(t, { 'apps/desktop/package.json': pkg('@multiagent/desktop'), 'apps/desktop/renderer/index.html': '' });
+  const root = tmpRoot(t, { 'apps/desktop/package.json': pkg('@craftorio/desktop'), 'apps/desktop/renderer/index.html': '' });
   assert.deepEqual(pageDirs(root), ['apps/desktop/renderer']);
   assert.deepEqual(featureDirs(root), ['features']);
   assert.deepEqual(appPages(tmpRoot(t, {})), [], 'no apps folder: no pages');

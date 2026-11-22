@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { validateSchema } = require('../workspace/json-schema');
-const { KINDS, REPORT_SCHEMA, SEVERITIES } = require('@multiagent/shared/architecture-report');
+const { KINDS, REPORT_SCHEMA, SEVERITIES } = require('@craftorio/shared/architecture-report');
 
 const ESTIMATE_BASIS = 5;
 const PROMPT_ROWS = 15;

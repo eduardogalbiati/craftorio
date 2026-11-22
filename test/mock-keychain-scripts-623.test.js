@@ -45,27 +45,27 @@ const smoke = (t, platform, exe, extraEnv = {}) => {
 };
 
 test('the packaged smoke passes --use-mock-keychain to the app on macOS, next to its scratch --user-data-dir', (t) => {
-  const r = smoke(t, 'darwin', '/Applications/MultiagentOrchestrator.app/Contents/MacOS/MultiagentOrchestrator');
+  const r = smoke(t, 'darwin', '/Applications/Craftorio.app/Contents/MacOS/Craftorio');
   assert.equal(r.args.includes('--use-mock-keychain'), true, `spawn arguments: ${JSON.stringify(r.args)}`);
   assert.equal(r.args.some((a) => a.startsWith('--user-data-dir=')), true, `spawn arguments: ${JSON.stringify(r.args)}`);
   assert.equal(r.status, 0, r.output);
 });
 
 test('the packaged smoke does not pass --use-mock-keychain on Windows', (t) => {
-  const r = smoke(t, 'win32', 'C:\\dist\\MultiagentOrchestrator.exe');
+  const r = smoke(t, 'win32', 'C:\\dist\\Craftorio.exe');
   assert.equal(r.args.includes('--use-mock-keychain'), false, `spawn arguments: ${JSON.stringify(r.args)}`);
   assert.equal(r.args.some((a) => a.startsWith('--user-data-dir=')), true, `spawn arguments: ${JSON.stringify(r.args)}`);
   assert.equal(r.status, 0, r.output);
 });
 
 test('the packaged smoke does not pass --use-mock-keychain on Linux', (t) => {
-  const r = smoke(t, 'linux', '/dist/MultiagentOrchestrator-linux-x64/multiagent-orchestrator');
+  const r = smoke(t, 'linux', '/dist/Craftorio-linux-x64/multiagent-orchestrator');
   assert.equal(r.args.includes('--use-mock-keychain'), false, `spawn arguments: ${JSON.stringify(r.args)}`);
   assert.equal(r.status, 0, r.output);
 });
 
 test('on Linux the smoke still fails an AppImage started without the sandbox that prints no warning (#476)', (t) => {
-  const r = smoke(t, 'linux', '/dist/MultiagentOrchestrator-x86_64.AppImage', { KEYCHAIN_623_NO_USERNS: '1' });
+  const r = smoke(t, 'linux', '/dist/Craftorio-x86_64.AppImage', { KEYCHAIN_623_NO_USERNS: '1' });
   assert.equal(r.args.includes('--use-mock-keychain'), false, `spawn arguments: ${JSON.stringify(r.args)}`);
   assert.equal(r.status, 1, r.output);
   assert.match(r.output, /#476/);

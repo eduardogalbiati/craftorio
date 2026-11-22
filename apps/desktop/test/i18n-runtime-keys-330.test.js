@@ -15,8 +15,8 @@ const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const en = require('@multiagent/shared/i18n/en.json');
-const pt = require('@multiagent/shared/i18n/pt-BR.json');
+const en = require('@craftorio/shared/i18n/en.json');
+const pt = require('@craftorio/shared/i18n/pt-BR.json');
 
 function jsFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

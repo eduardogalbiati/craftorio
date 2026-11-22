@@ -78,7 +78,7 @@ module.exports = (ctx) => {
     // #470 (SEC-5): the allowlisted environment, not the app's whole one (no CLAUDECODE either)
     const env = cliEnv();
     if (mode === 'live') {
-      // the multiagent-tail binary (#342), else session-tail.js under node (packages/engine/domains/machine/native-bin.js)
+      // the craftorio-tail binary (#342), else session-tail.js under node (packages/engine/domains/machine/native-bin.js)
       const tail = tailCommand(!!host.isPackaged, resolveCommand);
       return {
         title: sess.agent === 'orchestrator' ? 'orchestrator · live' : `${sess.agent} (${sess.id}) · live`,

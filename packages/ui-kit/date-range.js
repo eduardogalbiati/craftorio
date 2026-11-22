@@ -12,8 +12,8 @@
 // Browser: window.DateRange; Node: module.exports.
 // load: early (the screens' panels are built with it as they load)
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
-  const TZ = typeof module === 'object' && module.exports ? require('@multiagent/shared/time-zone.js') : root.TimeZone;
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const TZ = typeof module === 'object' && module.exports ? require('@craftorio/shared/time-zone.js') : root.TimeZone;
 
   // id → days before today
   const PRESETS = [

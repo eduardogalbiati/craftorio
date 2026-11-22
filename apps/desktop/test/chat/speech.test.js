@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const speech = require('@multiagent/engine/domains/chat/speech');
-const { installCommand } = require('@multiagent/engine/domains/machine/install-commands');
-const { encodeWav } = require('@multiagent/ui-kit/voice.js');
+const speech = require('@craftorio/engine/domains/chat/speech');
+const { installCommand } = require('@craftorio/engine/domains/machine/install-commands');
+const { encodeWav } = require('@craftorio/ui-kit/voice.js');
 
 const FAKE_CLI = process.platform === 'win32'
   ? path.join(__dirname, '..', '..', '..', '..', 'packages', 'engine', 'test', 'fixtures', 'fake-whisper.cmd')
@@ -176,19 +176,19 @@ test('modelsDir(): under the given userData folder on Windows, macOS and Linux',
   }
 });
 
-test('modelsDir(): without userData, macOS uses ~/Library/Application Support/multiagent-orchestrator', () => {
+test('modelsDir(): without userData, macOS uses ~/Library/Application Support/craftorio', () => {
   const dir = speech.modelsDir(undefined, { platform: 'darwin', env: { APPDATA: 'C:\\nope' }, home: '/Users/u' });
-  assert.equal(slash(dir), '/Users/u/Library/Application Support/multiagent-orchestrator/speech-models');
+  assert.equal(slash(dir), '/Users/u/Library/Application Support/craftorio/speech-models');
 });
 
-test('modelsDir(): without userData, Linux uses $XDG_CONFIG_HOME, else ~/.config, /multiagent-orchestrator', () => {
+test('modelsDir(): without userData, Linux uses $XDG_CONFIG_HOME, else ~/.config, /craftorio', () => {
   const xdg = speech.modelsDir(undefined, { platform: 'linux', env: { XDG_CONFIG_HOME: '/home/u/cfg' }, home: '/home/u' });
-  assert.equal(slash(xdg), '/home/u/cfg/multiagent-orchestrator/speech-models');
+  assert.equal(slash(xdg), '/home/u/cfg/craftorio/speech-models');
   const def = speech.modelsDir(undefined, { platform: 'linux', env: {}, home: '/home/u' });
-  assert.equal(slash(def), '/home/u/.config/multiagent-orchestrator/speech-models');
+  assert.equal(slash(def), '/home/u/.config/craftorio/speech-models');
 });
 
-test('modelsDir(): without userData, Windows is unchanged (%APPDATA%/multiagent-orchestrator), so an existing folder is reused', () => {
+test('modelsDir(): without userData, Windows is unchanged (%APPDATA%/craftorio), so an existing folder is reused', () => {
   const dir = speech.modelsDir(undefined, { platform: 'win32', env: { APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, home: 'C:\\Users\\u' });
-  assert.equal(slash(dir), 'C:/Users/u/AppData/Roaming/multiagent-orchestrator/speech-models');
+  assert.equal(slash(dir), 'C:/Users/u/AppData/Roaming/craftorio/speech-models');
 });

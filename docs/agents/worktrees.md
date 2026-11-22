@@ -44,7 +44,7 @@ actions, or any code that deletes or checks out branches.
   prompt says "uncommitted work from the previous attempt". The kept-work question (#170,
   `runWorktreeWork` in `packages/engine/service/areas/resume.js`) counts the run's own commits on its branch, in
   the repository, once the folder is gone. **Cleanup** (`cleanupWorktrees`, service
-  `cleanupRunWorktrees`): at start and every 30 minutes (`apps/desktop/host/main.js`, `packages/engine/bin/multiagent-engine.js`), one pass
+  `cleanupRunWorktrees`): at start and every 30 minutes (`apps/desktop/host/main.js`, `packages/engine/bin/craftorio-engine.js`), one pass
   at a time. It never touches the runs in progress here (`active`), a run live in another app process
   (`owner.json` alive, #112) or a run waiting at a human gate (`approval.requested` without
   `approval.resolved`); any other run's worktree is retired the same way (interrupted runs included)
@@ -82,7 +82,7 @@ actions, or any code that deletes or checks out branches.
   worktree's `node_modules` is a real folder of links marked by `.deps-cache.json`: a junction per
   top-level item of the entry (a scope with a workspace package is a folder of links to its hoisted
   children), a copy of the hidden lockfile (a package added there marks the entry unusable), and one
-  absolute link per workspace package into that worktree, so `require('@multiagent/shared')` loads
+  absolute link per workspace package into that worktree, so `require('@craftorio/shared')` loads
   the worktree's own files from the root and from `packages/*`, `fronts/*`, `apps/*`. The key gains
   the workspace set (folder=name) and a hash of the manifests' dependency fields. Each workspace
   package's lifecycle scripts run on a hit, then the root's; the `dependencies (…)` log line says

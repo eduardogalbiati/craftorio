@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { RunChatModel } = require('../views/runchat/run-chat-model');
-const { runLogPath } = require('@multiagent/shared/run-log-path.js');
+const { runLogPath } = require('@craftorio/shared/run-log-path.js');
 
 const T = (m, s = 0) => new Date(Date.UTC(2026, 10, 13, 15, m, s)).toISOString();
 const chatOf = (events) => {

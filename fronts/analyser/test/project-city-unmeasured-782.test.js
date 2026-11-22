@@ -18,11 +18,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const I18n = require('@multiagent/shared/i18n.js');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const I18n = require('@craftorio/shared/i18n.js');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const hash = '11'.repeat(20);

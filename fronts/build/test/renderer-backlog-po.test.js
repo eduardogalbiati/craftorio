@@ -9,8 +9,8 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const en = require('@multiagent/shared/i18n/en.json');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const en = require('@craftorio/shared/i18n/en.json');
 
 const src = fs.readFileSync(pageFileOf('views/backlog/backlog-po.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
@@ -329,7 +329,7 @@ function loadAsk() {
     render: () => calls.render.push(true),
     // #180: ask() starts a live turn (window.LiveTurn.create) and a 1 s ticker (renderLive); the
     // real live-turn.js runs here too, so po.live has its real shape
-    window: { LiveTurn: require('@multiagent/ui-kit/live-turn'), BacklogPoSettings: { override: () => settings.override, costOverride: () => settings.costOverride, clearOverride: settings.clearOverride } },
+    window: { LiveTurn: require('@craftorio/ui-kit/live-turn'), BacklogPoSettings: { override: () => settings.override, costOverride: () => settings.costOverride, clearOverride: settings.clearOverride } },
     renderLive: () => {},
     // #234: the question just sent kept in view (needs a real layout)
     questionInView: () => {},

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
-const en = require('@multiagent/shared/i18n/en.json');
+const en = require('@craftorio/shared/i18n/en.json');
 
 const src = fs.readFileSync(pageFileOf('views/backlog/backlog.js'), 'utf8');
 

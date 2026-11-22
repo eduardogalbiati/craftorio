@@ -42,7 +42,7 @@ Given('the demo project\'s repository declares a local preview with the install 
   expect(folder, 'the demo project has a folder').toBeTruthy();
   const vars = parseEnv(env);
   const lines = [
-    '# How this repository runs locally (Run App in the multiagent orchestrator).',
+    '# How this repository runs locally (Run App in the Craftorio).',
     `install: ${yamlString(install)}`,
     `command: ${yamlString(command)}`,
     'env:',

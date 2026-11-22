@@ -5,7 +5,7 @@
 // stopping at its human gate). Every channel takes one object (`params: 'opts'`), the way the view
 // calls them (`api.monitorState({ projectId })`).
 
-const { requireObject } = require('@multiagent/engine/service/common');
+const { requireObject } = require('@craftorio/engine/service/common');
 const {
   ANY,
   args,
@@ -18,7 +18,7 @@ const {
   shape,
   STRING,
   text,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_ID, ...properties }, ['projectId', ...required]);
 const FINGERPRINT = text(64);

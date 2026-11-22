@@ -20,9 +20,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const docs = require('../domains/docs');
-const projects = require('@multiagent/engine/domains/project/projects');
-const { clientError, gitOut } = require('@multiagent/engine/service/common');
-const schemas = require('@multiagent/engine/service/schemas');
+const projects = require('@craftorio/engine/domains/project/projects');
+const { clientError, gitOut } = require('@craftorio/engine/service/common');
+const schemas = require('@craftorio/engine/service/schemas');
 
 const { args, INT, listOf, nullable, OBJECT, PROJECT_ID, RUN_ID, shape, STRING, text } = schemas;
 

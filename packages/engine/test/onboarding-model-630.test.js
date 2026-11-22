@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('@multiagent/shared/onboarding-model');
+const load = () => require('@craftorio/shared/onboarding-model');
 
 const NEW = ['feature', 'fix', 'release'];
 const PROFILES = [];
@@ -16,7 +16,7 @@ for (const mode of ['local', 'remote']) {
     for (const tests of ['unit', 'unit+e2e']) PROFILES.push({ mode, ci, tests });
   }
 }
-const I18n = require('@multiagent/shared/i18n');
+const I18n = require('@craftorio/shared/i18n');
 
 // #726: a reason is a key or { key, params }: its English text
 const english = (x) => (x && typeof x === 'object'

@@ -38,12 +38,12 @@ const {
   globRe,
   LIZARD_INSTALL,
   parseIgnoreRevs,
-} = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
+} = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
 const {
   measures,
   measureSource,
-} = require('@multiagent/shared/code-complexity');
+} = require('@craftorio/shared/code-complexity');
 const { resolveCommand } = require('../../engine/providers');
 
 const GIT_TIMEOUT_MS = 120e3;

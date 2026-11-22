@@ -54,9 +54,9 @@ bundled by `scripts/build-3d.js` into `generated/`. Modules both sides use live 
 `native/` is a cargo workspace with one small Rust binary per crate, shipped next to the app in
 `resources/bin/` (outside `app.asar`) and found by `packages/engine/domains/machine/native-bin.js`:
 
-- `multiagent-mcp`: the supervisor's MCP server (the JS fallback is `packages/engine/domains/supervisor/supervisor-mcp.js`).
-- `multiagent-tail`: follows a live agent session in an external terminal.
-- `multiagent-ctl`: the control channel's command-line client.
+- `craftorio-mcp`: the supervisor's MCP server (the JS fallback is `packages/engine/domains/supervisor/supervisor-mcp.js`).
+- `craftorio-tail`: follows a live agent session in an external terminal.
+- `craftorio-ctl`: the control channel's command-line client.
 
 They exist so that nothing in the packaged app needs a system Node. `apps/desktop/scripts/package.js` builds
 them for the target before packaging.

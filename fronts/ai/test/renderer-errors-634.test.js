@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(ROOT, rel);

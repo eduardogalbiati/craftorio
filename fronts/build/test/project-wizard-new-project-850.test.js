@@ -20,9 +20,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { pageMarkup } = require('@multiagent/front-analyser/test/project-page-helpers');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { pageMarkup } = require('@craftorio/front-analyser/test/project-page-helpers');
 const W = require('./project-wizard-helpers');
 
 const I18N = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n');

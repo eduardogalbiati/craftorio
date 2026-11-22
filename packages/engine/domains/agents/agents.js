@@ -18,8 +18,8 @@
 const fs = require('fs');
 const path = require('path');
 const capabilities = require('../../engine/capabilities');
-const calibration = require('@multiagent/shared/po-calibration');
-const { displayName } = require('@multiagent/shared/display-name');
+const calibration = require('@craftorio/shared/po-calibration');
+const { displayName } = require('@craftorio/shared/display-name');
 const { loadWorkflow, render } = require('../../engine/workflow');
 const { slugify } = require('../project/projects');
 const { isWorkflowFile } = require('../workflow/workflows');

@@ -7,7 +7,7 @@
 // backlog-roadmap.js html() passes its view's showAll.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const RoadmapModel = require('@multiagent/shared/roadmap-model.js');
+const RoadmapModel = require('@craftorio/shared/roadmap-model.js');
 const H = require('./roadmap-status-helpers');
 
 const done = (id, n, runId) => H.item(id, 'done', n, `Issue ${n}`, { runId, runs: [runId] });

@@ -14,7 +14,7 @@
 // fronts/plan/engine/channels/mockups.js: `(ctx) => [{ channel, method, params, schema, fn }]`, every channel
 // `mockups:*` (front-channels-590 covers its schemas and duplicates once the file exists).
 // The service makes its own commits: each test gets a temp workspace and an isolated git config with an
-// identity (GIT_CONFIG_GLOBAL, like @multiagent/engine/test/repo-workflow-fixtures-485), env restored after.
+// identity (GIT_CONFIG_GLOBAL, like @craftorio/engine/test/repo-workflow-fixtures-485), env restored after.
 // Every call is awaited (the service may be sync or async).
 const test = require('node:test');
 const assert = require('node:assert/strict');

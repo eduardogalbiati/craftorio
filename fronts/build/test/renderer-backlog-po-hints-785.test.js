@@ -3,7 +3,7 @@
 // or saves for the project in view.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { deferred } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { deferred } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 const { HINTS, RUN_DEFAULTS, plain, openDrawer, recommendation, click, byTestId, textOf, settle } = require('./backlog-po-785-harness');
 
 test('#785 without the project\'s hints, a value the PO chose on purpose still goes to the roadmap', { timeout: 30000 }, async () => {

@@ -12,7 +12,7 @@ function demoActionsUsage() {
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
   const item = (sku, quantity, price) => ({ date, product: 'actions', sku, unitType: 'minutes', quantity, grossAmount: quantity * price, netAmount: 0 });
-  const { summarizeActionsUsage } = require('@multiagent/engine/domains/usage/actions-usage'); // only apps that have the channel ask
+  const { summarizeActionsUsage } = require('@craftorio/engine/domains/usage/actions-usage'); // only apps that have the channel ask
   return { login: 'demo-user', ...summarizeActionsUsage({ usageItems: [item('Actions Linux', 353, 0.008), item('Actions Windows', 560, 0.016), item('Actions macOS', 35, 0.08)] }, { includedMinutes: 2000, now }) };
 }
 

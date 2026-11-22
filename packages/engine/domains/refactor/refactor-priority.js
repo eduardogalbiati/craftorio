@@ -14,10 +14,10 @@
 const conflictMaps = require('../project/conflict-map');
 const proposalsStore = require('./refactor-proposals');
 const roadmaps = require('../roadmap/roadmap');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 const { validateSchema } = require('../workspace/json-schema');
 const { filesOf, pathOf } = require('./refactor-cadence');
-const { unfinishedItems } = require('@multiagent/shared/roadmap-model');
+const { unfinishedItems } = require('@craftorio/shared/roadmap-model');
 
 const SKILLS = ['backlog-product-owner'];
 const STEP_ID = 'product-owner-refactor';

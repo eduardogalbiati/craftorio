@@ -6,7 +6,7 @@
 // by request, the review with anchored notes and the sign-off gate. The #647 behaviour is unchanged.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ITEMS = [
   { item: 'write-doc', stage: 'design', docs: [

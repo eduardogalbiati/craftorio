@@ -16,7 +16,7 @@
 // Titles and bodies are in the interface language (#329, packages/shared/i18n.js, set by
 // packages/engine/service/areas/interface-language.js); what they quote (titles, messages, commands) is not translated.
 
-const { t } = require('@multiagent/shared/i18n');
+const { t } = require('@craftorio/shared/i18n');
 
 const SETTING = { oracle: 'notifyOracle', po: 'notifyPO', run: 'notifyRuns', session: 'notifySessions' };
 // the event names (English, never translated); their words come from notify.status.*

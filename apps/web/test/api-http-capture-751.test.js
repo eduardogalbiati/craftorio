@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const Module = require('module');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const API_HTTP = path.join(ROOT, 'apps', 'web', 'renderer', 'api-http.js');
@@ -45,7 +45,7 @@ function makeDocument() {
 
 // api-http.js in a sandbox; `bridge`: the preload's window.desktopCapture (or none: a browser tab)
 function loadPage({ bridge = null, remote = !!bridge } = {}) {
-  const manifest = (() => { const { DESKTOP } = require('@multiagent/engine/service/manifest'); return DESKTOP; })();
+  const manifest = (() => { const { DESKTOP } = require('@craftorio/engine/service/manifest'); return DESKTOP; })();
   assert.ok(manifest.some((e) => e.method === 'captureWindow'), 'the manifest still declares captureWindow');
   const posts = [];
   function FakeXHR() { this.readyState = 0; }

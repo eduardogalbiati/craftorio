@@ -15,7 +15,7 @@
 'use strict';
 
 const path = require('path');
-const { runShim } = require('@multiagent/engine/domains/machine/shell');
+const { runShim } = require('@craftorio/engine/domains/machine/shell');
 const { fronts } = require('./source-tree');
 
 const ROOT = path.join(__dirname, '..');

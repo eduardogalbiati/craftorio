@@ -5,7 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('@multiagent/engine/domains/analytics/time-zone');
+const load = () => require('@craftorio/engine/domains/analytics/time-zone');
 const HOUR = 3600e3;
 
 test('#273 dayKey: 22:00 in Sao Paulo (01:00Z the next day) is still the local day', () => {

@@ -24,11 +24,11 @@ const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
 const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 // resolved inside each test: the module does not exist until the change lands
 const load = () => {
-  const m = require('@multiagent/desktop/host/open-guard.js');
+  const m = require('@craftorio/desktop/host/open-guard.js');
   assert.equal(typeof m.checkOpenable, 'function', 'apps/desktop/host/open-guard.js exports checkOpenable (#477)');
   return m;
 };

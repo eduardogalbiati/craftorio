@@ -23,7 +23,7 @@
 // the commit dialog through test/discovery-board-harness.js. Values are compared as primitives.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 const { boardApi, card, openBoard, settle, P } = require('./discovery-board-harness');
 
 const SLUG = 'orders-dashboard';

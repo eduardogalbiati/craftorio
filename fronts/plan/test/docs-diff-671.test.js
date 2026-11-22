@@ -5,7 +5,7 @@
 // the source at the change's parent and at it (git show), a non-commit refused.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { makeRepo } = require('@multiagent/engine/test/repo-workflow-fixtures-485');
+const { makeRepo } = require('@craftorio/engine/test/repo-workflow-fixtures-485');
 const DocModel = require('../../../packages/shared/doc-model');
 const { compare, words } = require('../views/docs/docs-diff');
 const docs = require('../engine/domains/docs');

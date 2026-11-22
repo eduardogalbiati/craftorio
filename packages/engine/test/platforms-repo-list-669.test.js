@@ -3,8 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const github = () => require('@multiagent/shared/platforms/github');
-const gitlab = () => require('@multiagent/shared/platforms/gitlab');
+const github = () => require('@craftorio/shared/platforms/github');
+const gitlab = () => require('@craftorio/shared/platforms/gitlab');
 const onboarding = () => require('../service/areas/project-onboarding');
 
 test('#669 repoListCommand: each adapter lists the account repositories as JSON with its own CLI', () => {

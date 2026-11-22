@@ -74,10 +74,10 @@ test('#317 parseArgs: an unknown option is refused, not taken as the output fold
 
 test('#317 executablePath: the .exe on Windows, the binary inside the .app on macOS, the ELF on Linux', () => {
   const { executablePath } = load();
-  const build = path.join(root, 'dist', 'MultiagentOrchestrator-x');
-  assert.equal(executablePath(build, 'win32'), path.join(build, 'MultiagentOrchestrator.exe'));
-  assert.equal(executablePath(build, 'darwin'), path.join(build, 'MultiagentOrchestrator.app', 'Contents', 'MacOS', 'MultiagentOrchestrator'));
-  assert.equal(executablePath(build, 'linux'), path.join(build, 'MultiagentOrchestrator'));
+  const build = path.join(root, 'dist', 'Craftorio-x');
+  assert.equal(executablePath(build, 'win32'), path.join(build, 'Craftorio.exe'));
+  assert.equal(executablePath(build, 'darwin'), path.join(build, 'Craftorio.app', 'Contents', 'MacOS', 'Craftorio'));
+  assert.equal(executablePath(build, 'linux'), path.join(build, 'Craftorio'));
 });
 
 test('#317 package.js: on macOS the ad-hoc signature is reset after the fuses flip', () => {
@@ -100,7 +100,7 @@ test('#317 packagerOptions: the target platform and arch, and the same ignore an
   opts.forEach((o, i) => {
     assert.equal(o.platform, PLATFORMS[i]);
     assert.equal(o.arch, 'x64');
-    assert.equal(o.name, 'MultiagentOrchestrator');
+    assert.equal(o.name, 'Craftorio');
     assert.ok(Array.isArray(o.ignore) && o.ignore.length > 0, `${PLATFORMS[i]}: an ignore list`);
   });
   const ignores = opts.map((o) => o.ignore.map(String));

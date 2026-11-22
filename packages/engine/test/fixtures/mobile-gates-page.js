@@ -25,7 +25,7 @@ async function phoneGatesFixture() {
   gate.requested_at = new Date(state.time - 12 * 60000).toISOString();
   const run = {
     runId: 'simulated-mobile', title: 'Phone gates: accessible recovery', gates: [gate],
-    projectId: 'multiagent-orchestrator', issues: [{ number: 226 }],
+    projectId: 'craftorio', issues: [{ number: 226 }],
     nextTurns: [{ agent: 'developer', turn: { kind: 'warm', tokens: 20000 } }],
   };
   const server = createMobileGatesServer({

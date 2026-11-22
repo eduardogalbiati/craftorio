@@ -216,7 +216,7 @@ test('onClick: the steps toggle flips stepsOpen and re-renders; a click elsewher
 // Its text comes from the catalog through t(); what it quotes (paths, patterns, commands, the agent's
 // name, the answer) stays verbatim; a step's label follows the language at render time. The English
 // texts are the ones above. Each test puts English back.
-const I18n = require('@multiagent/shared/i18n');
+const I18n = require('@craftorio/shared/i18n');
 const inPortuguese = () => I18n.setLanguage('pt-BR');
 test.afterEach(() => I18n.setLanguage('en'));
 
@@ -376,7 +376,7 @@ test('#423 the answer is not translated: visibleText and the text block keep wha
 test('#423 the untranslated-text check (#329, test/untranslated-text.js) scans live-turn.js and finds nothing', () => {
   const fs = require('fs');
   const path = require('path');
-  const { sourceFiles, untranslated, report } = require('@multiagent/desktop/test/untranslated-text');
+  const { sourceFiles, untranslated, report } = require('@craftorio/desktop/test/untranslated-text');
   const renderer = path.join(__dirname, '..');
   const file = path.join(renderer, 'live-turn.js');
   assert.ok(sourceFiles(renderer).includes(file), 'the whole-renderer check (test/i18n-every-screen-330) covers live-turn.js');

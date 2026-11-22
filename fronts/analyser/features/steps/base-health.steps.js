@@ -126,7 +126,7 @@ const OTHER_RUN = '20261023-120000-cccc3333';
 // suite slot held by "another run": this test process, alive on this host (machine-slot.js's holder)
 Given("the app is open while another run holds the machine's suite slot", async ({ e2e }) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
-  const locks = path.join(tmp, 'multiagent-orchestrator', 'locks');
+  const locks = path.join(tmp, 'craftorio', 'locks');
   fs.mkdirSync(locks, { recursive: true });
   const slot = path.join(locks, 'suite.slot');
   fs.writeFileSync(slot, JSON.stringify({ pid: process.pid, host: os.hostname(), token: 'e2e-other-run', started: Date.now(), holder: OTHER_RUN }), { flag: 'wx' });
@@ -182,7 +182,7 @@ Then("the roadmap's base check reads {string}", async ({ e2e }, text) => {
 // folder and MULTIAGENT_LOCKS_DIR, as #527), free, so no other suite on the machine makes the check wait.
 Given("the app is open with the machine's suite slot free", async ({ e2e }) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
-  const locks = path.join(tmp, 'multiagent-orchestrator', 'locks');
+  const locks = path.join(tmp, 'craftorio', 'locks');
   fs.mkdirSync(locks, { recursive: true });
   await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, MULTIAGENT_LOCKS_DIR: locks } });
   const close = e2e.close;

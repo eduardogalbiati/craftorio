@@ -15,6 +15,6 @@ test('#632 identityArgs adds nothing when the injected git knows user.email', as
 for (const [label, answer] of [['null', null], ['an empty string', '']]) {
   test(`#632 identityArgs falls back to a fixed identity when the injected git answers ${label}`, async () => {
     const args = await identityArgs('C:/ws/projects/field-notes', async () => answer);
-    assert.deepEqual(args, ['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost']);
+    assert.deepEqual(args, ['-c', 'user.name=Craftorio', '-c', 'user.email=orchestrator@localhost']);
   });
 }

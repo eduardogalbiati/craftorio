@@ -10,7 +10,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./roadmap-status-helpers');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const STEPS = [{ id: 'develop', agent: 'dev' }, { id: 'suite', type: 'suite' }];
 

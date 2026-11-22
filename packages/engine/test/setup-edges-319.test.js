@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const { claudeAccount, claudeSignedIn } = require('../domains/cli/claude-auth');
 const { workflowRequirements } = require('../domains/workflow/workflow-requirements');
-const { missingLabel, workflowId } = require('@multiagent/shared/setup-model');
+const { missingLabel, workflowId } = require('@craftorio/shared/setup-model');
 const { layout, readSettings, writeSettings } = require('../domains/workspace/workspace');
 
 const tmp = (t) => {

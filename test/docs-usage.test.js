@@ -61,7 +61,7 @@ const edit = (day, m, sid, file) => call(day, m, sid, 'Edit', { file_path: file,
 const writeTool = (day, m, sid, file) => call(day, m, sid, 'Write', { file_path: file, content: 'x' });
 const bash = (day, m, sid, command) => call(day, m, sid, 'Bash', { command });
 
-const PROJECT = 'multiagent-orchestrator';
+const PROJECT = 'craftorio';
 const SINCE = '2026-10-01';
 
 // A repository with three topic docs, AGENTS.md and two skills, and a workspace with:

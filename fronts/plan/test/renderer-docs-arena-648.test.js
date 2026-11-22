@@ -4,7 +4,7 @@
 // code: the real page in the renderer harness with a fake window.api.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 // startRun answers, in order (the last one repeats): e.g. an ended run's kept work, then a run
 async function docsApp({ answers = [{ runId: 'r9' }] } = {}) {

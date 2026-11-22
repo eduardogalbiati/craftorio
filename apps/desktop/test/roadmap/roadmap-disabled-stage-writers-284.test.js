@@ -11,7 +11,7 @@ const os = require('os');
 const path = require('path');
 
 const { keepAwakeLabel, workToDo } = require('../../host/keep-awake');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-disabled-writers-'));

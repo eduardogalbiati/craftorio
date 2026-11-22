@@ -7,7 +7,7 @@
 // writeDocPostMortem({ projectId, item, intent?, text }) → { commit }: the post-mortem under the item's
 // Post-mortems (domains/docs.js writePostMortem), called when the Monitor's fix run succeeds.
 
-const projects = require('@multiagent/engine/domains/project/projects');
+const projects = require('@craftorio/engine/domains/project/projects');
 const docs = require('../domains/docs');
 
 module.exports = (ctx) => {

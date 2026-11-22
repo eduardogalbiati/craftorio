@@ -5,8 +5,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const { read, esc } = require('@multiagent/ui-kit/test/page-pieces');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const { read, esc } = require('@craftorio/ui-kit/test/page-pieces');
 
 function load() {
   const box = { dataset: {}, classList: { toggle() {} }, innerHTML: '' };

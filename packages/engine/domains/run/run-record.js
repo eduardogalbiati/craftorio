@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { summaryNeedsEvents, upgradeRunRecord } = require('@multiagent/shared/run-record');
+const { summaryNeedsEvents, upgradeRunRecord } = require('@craftorio/shared/run-record');
 
 function readEvents(file) {
   let text;

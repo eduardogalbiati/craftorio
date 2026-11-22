@@ -16,10 +16,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
-const proposals = require('@multiagent/engine/domains/refactor/refactor-proposals');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
-const { makeService, gitRepo, roadmapIssue } = require('@multiagent/engine/test/service/helpers');
+const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
+const proposals = require('@craftorio/engine/domains/refactor/refactor-proposals');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
+const { makeService, gitRepo, roadmapIssue } = require('@craftorio/engine/test/service/helpers');
 
 const FIRST_ISSUE = 432;
 const URL_OF = (n) => `https://github.com/o/r/issues/${n}`;

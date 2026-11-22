@@ -152,7 +152,7 @@ test('#555 advance: a disabled stage before a release is skipped; once the enabl
 });
 
 test('#555 RoadmapModel.pendingRelease: a disabled stage before the release does not drop it', () => {
-  const { pendingRelease } = require('@multiagent/shared/roadmap-model');
+  const { pendingRelease } = require('@craftorio/shared/roadmap-model');
   const r = mkRoadmap([
     { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
     { id: 's2', disabled: true, items: [mkItem('i2', 2)] },

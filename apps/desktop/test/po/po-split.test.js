@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const poSplit = require('@multiagent/engine/domains/po/po-split');
+const poSplit = require('@craftorio/engine/domains/po/po-split');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-split-'));

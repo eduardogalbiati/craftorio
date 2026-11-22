@@ -57,7 +57,7 @@ argument. The JS engine's answers are the reference a second engine (the Rust ph
 - **Which engine**: `ENGINE_URL` (+ `ENGINE_TOKEN`, the server's token) names one, e.g.
   `npm run serve -- --port 7300` with `MULTIAGENT_SERVER_TOKEN` set, then
   `ENGINE_URL=http://127.0.0.1:7300 ENGINE_TOKEN=<token> node --test packages/engine/test/contract/`. Without it the
-  suite starts `node packages/engine/bin/multiagent-engine.js` itself on a scratch workspace in simulation, with no account,
+  suite starts `node packages/engine/bin/craftorio-engine.js` itself on a scratch workspace in simulation, with no account,
   and stops it after; that is how it runs in `npm test` (about 10 s). Never point it at a workspace
   you use: fixtures create projects, cards, agents, skills and simulated runs.
 - **Fixtures**: `{ arg, status?, invalid?, setup?, teardown? }`; `setup` makes the state the call

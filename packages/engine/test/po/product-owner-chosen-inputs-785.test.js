@@ -18,7 +18,7 @@ const os = require('os');
 const path = require('path');
 const yaml = require('js-yaml');
 const productOwner = require('../../domains/po/product-owner');
-const poCalibration = require('@multiagent/shared/po-calibration');
+const poCalibration = require('@craftorio/shared/po-calibration');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const FEATURE = (() => {

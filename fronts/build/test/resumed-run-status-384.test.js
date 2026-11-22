@@ -38,9 +38,9 @@ const RESUMED = '20261014-110000-resumed1';
 const T0 = Date.parse('2026-10-14T10:00:00.000Z');
 const iso = (ms) => new Date(ms).toISOString();
 
-const loadRuns = () => require('@multiagent/engine/domains/run/runs');
-const loadHelpers = () => require('@multiagent/engine/test/service/helpers');
-const loadRoadmaps = () => require('@multiagent/engine/domains/roadmap/roadmap');
+const loadRuns = () => require('@craftorio/engine/domains/run/runs');
+const loadHelpers = () => require('@craftorio/engine/test/service/helpers');
+const loadRoadmaps = () => require('@craftorio/engine/domains/roadmap/roadmap');
 
 /**
  * Writes a run folder as the engine leaves it. status 'running': no summary.json, an owner.json of

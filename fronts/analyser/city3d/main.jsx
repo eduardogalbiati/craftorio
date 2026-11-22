@@ -25,7 +25,7 @@
 import { Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
-import { labelsShown } from '@multiagent/shared/city-layout.js';
+import { labelsShown } from '@craftorio/shared/city-layout.js';
 import { lifeCount } from './props.js';
 import { buildingsOf, CityScene } from './scene.jsx';
 import { cityTheme } from './theme.js';

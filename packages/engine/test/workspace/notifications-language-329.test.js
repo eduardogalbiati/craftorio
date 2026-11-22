@@ -6,7 +6,7 @@ const test = require('node:test');
 const { afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
-const i18n = () => require('@multiagent/shared/i18n.js');
+const i18n = () => require('@craftorio/shared/i18n.js');
 const load = () => require('../../domains/workspace/notifications');
 
 afterEach(() => {

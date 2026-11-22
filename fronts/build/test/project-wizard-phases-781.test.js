@@ -21,7 +21,7 @@
 // - Continue (wizard-next) is never blocked in any of those states (#725).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
 const { PID, byTestId, classesOf, clone, emit, press, wizardMarkup } = W;

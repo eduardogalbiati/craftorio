@@ -46,9 +46,9 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { execFileSync } = require('child_process');
-const MockupModel = require('@multiagent/shared/mockup-model');
-const simulation = require('@multiagent/engine/engine/simulation');
-const { gitOut } = require('@multiagent/engine/service/common');
+const MockupModel = require('@craftorio/shared/mockup-model');
+const simulation = require('@craftorio/engine/engine/simulation');
+const { gitOut } = require('@craftorio/engine/service/common');
 const { commit, git } = require('./docs');
 
 const FOLDERS = ['kit', 'screens', 'flows', 'refs', 'chat'];

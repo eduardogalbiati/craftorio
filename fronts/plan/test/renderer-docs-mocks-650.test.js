@@ -7,7 +7,7 @@
 // Strings only cross the vm boundary (never a sandbox object handed to an assertion).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const MOCK = '<button id="pay" onclick="this.textContent=\'Paid\'">Pay now</button><script>document.title = "mock";</script>';
 

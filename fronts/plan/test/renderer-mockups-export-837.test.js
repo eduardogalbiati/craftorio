@@ -4,7 +4,7 @@
 // path with chosen screens is covered by the @issue-837 BDD scenario.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 async function mockupsScreen() {
   const app = loadApp({

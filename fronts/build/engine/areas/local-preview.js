@@ -4,10 +4,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const projects = require('@multiagent/engine/domains/project/projects');
-const localPreview = require('@multiagent/engine/domains/local/local-preview');
-const { cliEnv } = require('@multiagent/engine/service/common');
-const { isUnder } = require('@multiagent/engine/engine/worktree');
+const projects = require('@craftorio/engine/domains/project/projects');
+const localPreview = require('@craftorio/engine/domains/local/local-preview');
+const { cliEnv } = require('@craftorio/engine/service/common');
+const { isUnder } = require('@craftorio/engine/engine/worktree');
 
 module.exports = (ctx) => {
   const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { makeService } = require('./helpers');
 const { requiresProblem, parseManifest } = require('../../domains/project/project-manifest');
-const { summarize } = require('@multiagent/shared/workflow-compose');
+const { summarize } = require('@craftorio/shared/workflow-compose');
 
 const FLOW = `apiVersion: multiagent/v1
 kind: Workflow

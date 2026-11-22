@@ -37,9 +37,9 @@
 //   data-act="retry" button (api.retryOnboarding with the project).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, existing } = require('@multiagent/front-analyser/test/project-page-helpers');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, existing } = require('@craftorio/front-analyser/test/project-page-helpers');
 
 const PID = 'p-new';
 const REPO = 'https://github.com/o/new.git';

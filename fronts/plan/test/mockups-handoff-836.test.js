@@ -39,8 +39,8 @@ const { execFileSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..', '..');
 const load = () => require('../engine/domains/mockups');
 const loadChannels = () => require('../engine/channels/mockups');
-const loadModel = () => require('@multiagent/shared/mockup-model');
-const loadCommit = () => require('@multiagent/engine/domains/discovery/discovery-commit');
+const loadModel = () => require('@craftorio/shared/mockup-model');
+const loadCommit = () => require('@craftorio/engine/domains/discovery/discovery-commit');
 
 const GIT_VARS = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
 

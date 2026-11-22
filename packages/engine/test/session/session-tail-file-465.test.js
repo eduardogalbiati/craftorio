@@ -3,7 +3,7 @@
 // - packages/engine/domains/session/session-tail.js exports followFile(file, write) → stop(), like followSession: it prints a
 //   plain log as it grows (no JSON, no formatting of its lines), waits for a file that does not exist
 //   yet, and keeps following it.
-// - as a script, and its Rust twin multiagent-tail (native/, as test/session/session-tail-342.test.js builds
+// - as a script, and its Rust twin craftorio-tail (native/, as test/session/session-tail-342.test.js builds
 //   and runs it): `<tail> <runDir> --file <path relative to the run folder>` follows that file; the
 //   binary prints exactly what the script prints. Without cargo the binary's cases are skipped with
 //   one line (CI never skips them), as in test/session/session-tail-342.test.js.
@@ -17,18 +17,18 @@ const { spawn, spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const SCRIPT = path.join(ROOT, 'packages', 'engine', 'domains', 'session', 'session-tail.js');
 const NATIVE = path.join(ROOT, 'native');
-const BINARY_NAME = process.platform === 'win32' ? 'multiagent-tail.exe' : 'multiagent-tail';
+const BINARY_NAME = process.platform === 'win32' ? 'craftorio-tail.exe' : 'craftorio-tail';
 const BINARY = path.join(process.env.CARGO_TARGET_DIR || path.join(NATIVE, 'target'), 'release', BINARY_NAME);
 
 const hasCargo = () => spawnSync('cargo', ['--version'], { stdio: 'ignore' }).status === 0;
-const SKIP_BINARY = !process.env.CI && !hasCargo() ? 'cargo is not installed: multiagent-tail\'s cases are skipped (CI runs them)' : false;
+const SKIP_BINARY = !process.env.CI && !hasCargo() ? 'cargo is not installed: craftorio-tail\'s cases are skipped (CI runs them)' : false;
 
 let built = null;
 function buildBinary() {
   if (built) return built;
-  const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'multiagent-tail'], { encoding: 'utf8', timeout: 9 * 60 * 1000 });
-  if (r.status !== 0) built = { error: `cargo build of multiagent-tail failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
-  else if (!fs.existsSync(BINARY)) built = { error: `cargo built multiagent-tail but ${BINARY} does not exist` };
+  const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'craftorio-tail'], { encoding: 'utf8', timeout: 9 * 60 * 1000 });
+  if (r.status !== 0) built = { error: `cargo build of craftorio-tail failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
+  else if (!fs.existsSync(BINARY)) built = { error: `cargo built craftorio-tail but ${BINARY} does not exist` };
   else built = { file: BINARY };
   return built;
 }
@@ -36,7 +36,7 @@ function buildBinary() {
 const TAILS = [
   { label: 'session-tail.js (Node)', command: () => ({ file: process.execPath, args: [SCRIPT] }) },
   {
-    label: 'multiagent-tail (Rust binary)',
+    label: 'craftorio-tail (Rust binary)',
     skip: SKIP_BINARY,
     command: () => {
       const b = buildBinary();
@@ -138,7 +138,7 @@ for (const tail of TAILS) {
 }
 
 for (const [label, env] of [['FORCE_COLOR=1', { FORCE_COLOR: '1' }], ['no FORCE_COLOR', {}]]) {
-  test(`#465 multiagent-tail --file prints a log byte for byte like session-tail.js (${label})`, { skip: BIN.skip }, async (t) => {
+  test(`#465 craftorio-tail --file prints a log byte for byte like session-tail.js (${label})`, { skip: BIN.skip }, async (t) => {
     const runDir = runFolder(t);
     fs.mkdirSync(path.join(runDir, 'logs'));
     fs.writeFileSync(path.join(runDir, 'logs', 'check-2.log'), '$ npm run check\nlayers: src/a.js:2 requires src/b.js\nchecks: 1 finding ✓ café\nEND-OF-LOG\n');

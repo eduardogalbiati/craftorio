@@ -62,7 +62,7 @@ module.exports = (ctx) => {
   const e2eIssuesFail = (proj) => {
     const mode = process.env.MULTIAGENT_E2E_ISSUES_FAIL;
     if (!simulation.simulationOnly() || !['disabled', 'network'].includes(mode) || !proj) return null;
-    const github = require('@multiagent/shared/platforms/github');
+    const github = require('@craftorio/shared/platforms/github');
     const { E2E_LOGIN } = require('../areas/project-onboarding'); // (lazy: only this hook needs it)
     const repo = `${E2E_LOGIN}/${path.basename(String(proj.folder || proj.id))}`;
     const reason = mode === 'disabled' ? `the '${repo}' repository has disabled issues` : `error connecting to api.${github.host}`;

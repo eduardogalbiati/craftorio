@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const backlog = require('../backlog/backlog');
 const epics = require('../backlog/epics');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 const {
   issueMockups,
   MOCKUP_EXTENSIONS,

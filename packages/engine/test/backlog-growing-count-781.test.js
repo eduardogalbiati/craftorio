@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fetchIssues, MAX_ISSUES } = require('../domains/backlog/issues');
-const { findPlatform } = require('@multiagent/shared/platforms');
+const { findPlatform } = require('@craftorio/shared/platforms');
 
 const flag = (args, name) => Number(args[args.indexOf(name) + 1]);
 const isList = (args) => args[0] === 'issue' && args[1] === 'list';

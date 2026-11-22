@@ -30,9 +30,9 @@ const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand } = require('../../engine/check-step');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { detectLanguage, listBranches } = require('./project-inputs');
-const { modeOfPicks, modeOfVariant } = require('@multiagent/shared/default-workflow');
-const { PROFILE, PROJECT_KINDS: KINDS } = require('@multiagent/shared/onboarding-model');
-const { resolveRunInputs, withAliases } = require('@multiagent/shared/run-inputs');
+const { modeOfPicks, modeOfVariant } = require('@craftorio/shared/default-workflow');
+const { PROFILE, PROJECT_KINDS: KINDS } = require('@craftorio/shared/onboarding-model');
+const { resolveRunInputs, withAliases } = require('@craftorio/shared/run-inputs');
 
 // #738: local, remote and fork (Fork + PR), the profile's modes
 const MODES = PROFILE.mode;

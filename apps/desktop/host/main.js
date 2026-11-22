@@ -33,38 +33,38 @@ const {
   createMockupsWindow,
   serveMockup,
 } = require('./mockups-window');
-const { resolveCommand } = require('@multiagent/engine/engine/providers');
+const { resolveCommand } = require('@craftorio/engine/engine/providers');
 const {
   externalTerminal,
   NO_TERMINAL,
   terminalLaunch,
 } = require('./external-terminal');
-const { pathKey } = require('@multiagent/engine/domains/machine/platform-paths');
-const { psQuote } = require('@multiagent/engine/domains/machine/shell');
-const I18n = require('@multiagent/shared/i18n');
+const { pathKey } = require('@craftorio/engine/domains/machine/platform-paths');
+const { psQuote } = require('@craftorio/engine/domains/machine/shell');
+const I18n = require('@craftorio/shared/i18n');
 const { t } = I18n;
-const workspace = require('@multiagent/engine/domains/workspace/workspace');
-const localPreview = require('@multiagent/engine/domains/local/local-preview');
-const runOwner = require('@multiagent/engine/domains/run/run-owner');
+const workspace = require('@craftorio/engine/domains/workspace/workspace');
+const localPreview = require('@craftorio/engine/domains/local/local-preview');
+const runOwner = require('@craftorio/engine/domains/run/run-owner');
 const { allowPermission } = require('./permissions');
 const { guardIpc } = require('./ipc-guard');
 const { guardWindow } = require('./window-guards');
 const { checkOpenable } = require('./open-guard');
-const { createService } = require('@multiagent/engine/service');
-const { createControlChannel } = require('@multiagent/engine/control');
-const { nativeBinaryPath } = require('@multiagent/engine/domains/machine/native-bin');
+const { createService } = require('@craftorio/engine/service');
+const { createControlChannel } = require('@craftorio/engine/control');
+const { nativeBinaryPath } = require('@craftorio/engine/domains/machine/native-bin');
 const {
   authChannels,
   PUSHED_EVENTS,
-} = require('@multiagent/engine/service/manifest');
-const { contractHash } = require('@multiagent/engine/service/contract');
+} = require('@craftorio/engine/service/manifest');
+const { contractHash } = require('@craftorio/engine/service/contract');
 const engineConnection = require('./engine-connection');
 const { createEngineConnection } = require('./engine-connection-window');
-const { createAuth, fileStorage } = require('@multiagent/engine/domains/account/auth');
-const authConfig = require('@multiagent/engine/domains/account/auth-config');
+const { createAuth, fileStorage } = require('@craftorio/engine/domains/account/auth');
+const authConfig = require('@craftorio/engine/domains/account/auth-config');
 const { createKeepAwake } = require('./keep-awake');
 const { createSecrets } = require('./secrets');
-const mainLog = require('@multiagent/engine/domains/workspace/main-log');
+const mainLog = require('@craftorio/engine/domains/workspace/main-log');
 
 // the last lines of this process's console, for a finding's context (#361)
 mainLog.capture();
@@ -271,7 +271,7 @@ ipc.handle('keepAwake:state', () => keepAwake.update());
 // ---- control channel (#336) ------------------------------------------------------------
 // Outside sessions drive this app through its own channels (packages/engine/control): opened and closed with
 // the setting, closed on quit; the Settings screen shows its port and endpoint file.
-const control = createControlChannel({ service, ctlPath: nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }) });
+const control = createControlChannel({ service, ctlPath: nativeBinaryPath('craftorio-ctl', { isPackaged: app.isPackaged }) });
 const updateControl = () => control.update().then((s) => { broadcast('control:changed', s); return s; });
 service.events.on('settings:changed', () => { updateControl().catch((e) => console.error('control channel:', e.message)); });
 ipc.handle('control:state', () => updateControl());
@@ -377,7 +377,7 @@ const WINDOW = {
   minWidth: 1100,
   minHeight: 700,
   backgroundColor: '#0e1014',
-  title: 'Multiagent Orchestrator',
+  title: 'Craftorio',
   // Linux takes the window icon from here (Windows and macOS from the packaged executable)
   ...(process.platform === 'linux' && { icon: path.join(__dirname, '..', 'assets', 'icon.png') }),
   autoHideMenuBar: true,
@@ -576,7 +576,7 @@ function restartApp() {
 }
 
 // Windows shows notifications under the app's AppUserModelID (the exe itself in development).
-if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'MultiagentOrchestrator' : process.execPath);
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'Craftorio' : process.execPath);
 // #625: the mockup canvas's own scheme (relative links to the kit resolve, served with no network)
 protocol?.registerSchemesAsPrivileged?.([{ scheme: 'mockup', privileges: { standard: true, secure: true } }]);
 

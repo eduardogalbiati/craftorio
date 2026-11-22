@@ -2,7 +2,7 @@
 // localhost port (never the engine server of packages/engine/server/index.js), reached by a paired device.
 // Tests-first: packages/engine/domains/workspace/mobile-gates.js does not exist yet; this header is the interface it implements.
 //
-// const { createMobileGatesServer } = require('@multiagent/engine/domains/workspace/mobile-gates');
+// const { createMobileGatesServer } = require('@craftorio/engine/domains/workspace/mobile-gates');
 // const m = createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 30 * 60e3 })
 //   service    the engine service (packages/engine/service): its open gates (runs:active → gates) and the answer
 //   secret     the key gate links are signed with (HMAC); a fresh random one when absent
@@ -36,9 +36,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeService, untilTrue } = require('@multiagent/engine/test/service/helpers');
+const { makeService, untilTrue } = require('@craftorio/engine/test/service/helpers');
 
-const load = () => require('@multiagent/engine/domains/workspace/mobile-gates');
+const load = () => require('@craftorio/engine/domains/workspace/mobile-gates');
 const SECRET = 'mobile-gates-test-secret-0123456789';
 const MIN = 60e3;
 

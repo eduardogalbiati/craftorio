@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const productOwner = require('@multiagent/engine/domains/po/product-owner');
+const productOwner = require('@craftorio/engine/domains/po/product-owner');
 const { FEATURE, HINTS, RUN_DEFAULTS, plain, click, byTestId, settle, textOf, loadPage } = require('./backlog-po-785-harness');
 
 const ROOT = path.join(__dirname, '..', '..', '..');

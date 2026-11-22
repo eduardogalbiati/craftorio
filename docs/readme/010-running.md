@@ -66,8 +66,8 @@ waited past the cache's lifetime starts fresh instead of resuming cold.
 Running from source requires Node 24 LTS (`.nvmrc`; `engines` in package.json). The app runs on
 Electron 44, which bundles Node 24 too. The packaged app needs no Node: what it starts outside its
 own process (the supervisor's MCP server, the external live terminal, the control channel's
-client) are the Rust binaries shipped in `resources/bin/` (`multiagent-mcp`, `multiagent-tail`,
-`multiagent-ctl`). npm 11 only runs install scripts that are approved in `allowScripts`
+client) are the Rust binaries shipped in `resources/bin/` (`craftorio-mcp`, `craftorio-tail`,
+`craftorio-ctl`). npm 11 only runs install scripts that are approved in `allowScripts`
 (package.json): `node-pty` is approved; after upgrading it, run `npm approve-scripts node-pty`.
 
 From the terminal (no UI):

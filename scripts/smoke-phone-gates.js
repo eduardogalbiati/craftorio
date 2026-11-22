@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert/strict');
 const { app, BrowserWindow } = require('electron');
-const { phoneGatesFixture } = require('@multiagent/engine/test/fixtures/mobile-gates-page');
+const { phoneGatesFixture } = require('@craftorio/engine/test/fixtures/mobile-gates-page');
 
 async function waitFor(win, expression) {
   for (let i = 0; i < 100; i++) {

@@ -34,7 +34,7 @@ const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
 const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const RENDERER = path.join(__dirname, '..');
 const read = (...p) => fs.readFileSync(path.join(RENDERER, ...p), 'utf8');

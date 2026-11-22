@@ -30,7 +30,7 @@ const DEV_WORKFLOWS = ['feature.yaml', 'fix.yaml'];
 
 // a bundled workflow as api.listWorkflows gives it (packages/engine/service/areas/workflows.js), with its groups
 function wfEntry(file) {
-  const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
+  const { loadWorkflow } = require('@craftorio/engine/engine/workflow');
   const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', file));
   return {
     file,

@@ -4,7 +4,7 @@
 // test/contract/contract.test.js, this file's own tests test/contract-harness-339.test.js.
 //
 //   resolveEngine(env)   ENGINE_URL (+ ENGINE_TOKEN) names an engine; without it the suite starts one
-//   startEngine()        `npm run serve` (the multiagent-engine bin) on a scratch workspace, in simulation
+//   startEngine()        `npm run serve` (the craftorio-engine bin) on a scratch workspace, in simulation
 //   checkChannel(...)    one channel's call against its manifest entry: status, schema.result, a 400
 //   runFixture(...)      a fixture's setup, its checked call, then its teardown
 //   coverage(...)        the request/reply channels with a schema, with and without a fixture
@@ -19,7 +19,7 @@ const { spawn } = require('child_process');
 const { validateSchema } = require('../../domains/workspace/json-schema');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
-const BIN = path.join(__dirname, '..', '..', 'bin', 'multiagent-engine.js');
+const BIN = path.join(__dirname, '..', '..', 'bin', 'craftorio-engine.js');
 
 // { url, token, external: true } when ENGINE_URL names an engine; { external: false } otherwise
 function resolveEngine(env = process.env) {

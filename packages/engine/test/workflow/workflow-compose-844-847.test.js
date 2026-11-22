@@ -11,9 +11,9 @@
 //   label they hold is a key present in both packages/shared/i18n/en.json and pt-BR.json.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const EN = require('@multiagent/shared/i18n/en.json');
-const PT = require('@multiagent/shared/i18n/pt-BR.json');
-const OnboardingModel = require('@multiagent/shared/onboarding-model');
+const EN = require('@craftorio/shared/i18n/en.json');
+const PT = require('@craftorio/shared/i18n/pt-BR.json');
+const OnboardingModel = require('@craftorio/shared/onboarding-model');
 
 const load = () => require('../../domains/workflow/workflow-compose');
 

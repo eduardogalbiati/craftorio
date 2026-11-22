@@ -1,4 +1,4 @@
-# Multiagent Orchestrator
+# Craftorio
 
 ### PARA OS BETA USERS
 Seus betinhas, obrigado por participar do beta
@@ -121,8 +121,8 @@ waited past the cache's lifetime starts fresh instead of resuming cold.
 Running from source requires Node 24 LTS (`.nvmrc`; `engines` in package.json). The app runs on
 Electron 44, which bundles Node 24 too. The packaged app needs no Node: what it starts outside its
 own process (the supervisor's MCP server, the external live terminal, the control channel's
-client) are the Rust binaries shipped in `resources/bin/` (`multiagent-mcp`, `multiagent-tail`,
-`multiagent-ctl`). npm 11 only runs install scripts that are approved in `allowScripts`
+client) are the Rust binaries shipped in `resources/bin/` (`craftorio-mcp`, `craftorio-tail`,
+`craftorio-ctl`). npm 11 only runs install scripts that are approved in `allowScripts`
 (package.json): `node-pty` is approved; after upgrading it, run `npm approve-scripts node-pty`.
 
 From the terminal (no UI):
@@ -268,20 +268,20 @@ picks another target (the macOS signature step needs a Mac).
 ## Install
 
 Download the file for your system from the latest
-[GitHub Release](https://github.com/eduardogalbiati/multiagent-orchestrator/releases/latest). The
+[GitHub Release](https://github.com/eduardogalbiati/craftorio/releases/latest). The
 builds are not signed yet, so each system warns once before the first start.
 
-- **Windows** (x64): `MultiagentOrchestrator-win32-x64.zip`. Unzip it anywhere and run
-  `MultiagentOrchestrator.exe`. If SmartScreen says "Windows protected your PC", click **More info**,
+- **Windows** (x64): `Craftorio-win32-x64.zip`. Unzip it anywhere and run
+  `Craftorio.exe`. If SmartScreen says "Windows protected your PC", click **More info**,
   then **Run anyway**.
-- **macOS** (Apple Silicon: `MultiagentOrchestrator-darwin-arm64.zip`; Intel:
-  `MultiagentOrchestrator-darwin-x64.zip`). Unzip it and move `MultiagentOrchestrator.app` to
+- **macOS** (Apple Silicon: `Craftorio-darwin-arm64.zip`; Intel:
+  `Craftorio-darwin-x64.zip`). Unzip it and move `Craftorio.app` to
   Applications. The app is not notarized, so the first start is blocked: open it once, then
   **System Settings › Privacy & Security**, and click **Open Anyway** next to the message about
-  the app (or, in Terminal: `xattr -dr com.apple.quarantine /Applications/MultiagentOrchestrator.app`).
+  the app (or, in Terminal: `xattr -dr com.apple.quarantine /Applications/Craftorio.app`).
   Voice input asks for the microphone the first time you use it.
-- **Linux** (x64): `MultiagentOrchestrator-linux-x64.AppImage`. Make it executable and run it:
-  `chmod +x MultiagentOrchestrator-linux-x64.AppImage && ./MultiagentOrchestrator-linux-x64.AppImage`
+- **Linux** (x64): `Craftorio-linux-x64.AppImage`. Make it executable and run it:
+  `chmod +x Craftorio-linux-x64.AppImage && ./Craftorio-linux-x64.AppImage`
   (if it does not start because FUSE is missing, run it with `--appimage-extract-and-run`). On systems that forbid unprivileged user namespaces (Ubuntu 23.10
   and later, the AppArmor default) the AppImage can only start with Chromium's sandbox off: it says
   so on stderr and in **Settings › About**. Without the sandbox, a compromised page of the app is a
@@ -289,8 +289,8 @@ builds are not signed yet, so each system warns once before the first start.
   `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0` (for every start: a file in
   `/etc/sysctl.d/` with `kernel.apparmor_restrict_unprivileged_userns=0`). That is your choice, with
   its trade-off: it applies to the whole system, so every program may create user namespaces again,
-  a kernel attack surface Ubuntu closed on purpose. `MultiagentOrchestrator-linux-x64.tar.gz`
-  is the same app as a folder: run `./MultiagentOrchestrator` inside it; if it stops with "The SUID
+  a kernel attack surface Ubuntu closed on purpose. `Craftorio-linux-x64.tar.gz`
+  is the same app as a folder: run `./Craftorio` inside it; if it stops with "The SUID
   sandbox helper binary was found, but is not configured correctly", give the sandbox helper its
   rights once: `sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox`.
 
@@ -299,16 +299,16 @@ then its name), the same sums in its notes, and `SHA256SUMS.sigstore.json`, a si
 `SHA256SUMS` to this repository's Deploy workflow. Download them next to your package, compute the
 hash of the package and compare it with its line in `SHA256SUMS` (or in the release notes):
 
-- **Windows** (PowerShell): `Get-FileHash -Algorithm SHA256 MultiagentOrchestrator-win32-x64.zip`.
-- **macOS**: `shasum -a 256 MultiagentOrchestrator-darwin-arm64.zip` (or `shasum -a 256 --ignore-missing -c SHA256SUMS`).
-- **Linux**: `sha256sum MultiagentOrchestrator-linux-x64.AppImage` (or `sha256sum --ignore-missing -c SHA256SUMS`).
+- **Windows** (PowerShell): `Get-FileHash -Algorithm SHA256 Craftorio-win32-x64.zip`.
+- **macOS**: `shasum -a 256 Craftorio-darwin-arm64.zip` (or `shasum -a 256 --ignore-missing -c SHA256SUMS`).
+- **Linux**: `sha256sum Craftorio-linux-x64.AppImage` (or `sha256sum --ignore-missing -c SHA256SUMS`).
 
 Then check that `SHA256SUMS` itself comes from this repository, with
 [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) (any system):
 
 ```
 cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/eduardogalbiati/multiagent-orchestrator/.github/workflows/deploy.yml@refs/(tags/v.+|heads/main)$' \
+  --certificate-identity-regexp '^https://github.com/eduardogalbiati/craftorio/.github/workflows/deploy.yml@refs/(tags/v.+|heads/main)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -614,17 +614,17 @@ and the file's path.
 - The endpoint is part of the running app: nothing here opens a second engine on the workspace (#112).
 
 Calling a channel (`POST /api/<channel>`, body `{ "arg": ... }`, answer `{ "result": ... }` or
-`{ "error": "..." }`). With the client shipped next to the app, `multiagent-ctl` (#342, no Node
+`{ "error": "..." }`). With the client shipped next to the app, `craftorio-ctl` (#342, no Node
 needed; Settings › Execution shows its path to copy while the switch is on: `resources/bin/` in
 the installed app). It reads `endpoint.json` from `MULTIAGENT_WORKSPACE` or `--workspace <dir>`,
 checks the app's contract version (`GET /api/version`) and prints the result as JSON:
 
 ```
-multiagent-ctl roadmap:get "{\"projectId\":\"my-app\"}" --workspace C:/Users/me/multiagent-workspace
-multiagent-ctl --list
+craftorio-ctl roadmap:get "{\"projectId\":\"my-app\"}" --workspace C:/Users/me/multiagent-workspace
+craftorio-ctl --list
 ```
 
-`multiagent-ctl --list` prints the allowed channels with their argument schemas (`GET /api/channels`).
+`craftorio-ctl --list` prints the allowed channels with their argument schemas (`GET /api/channels`).
 Exit codes: `0` the result printed, `1` a refused or failed call (the reason on stderr), `2` no
 endpoint (the switch is off), `3` the app speaks another contract version (use the client shipped
 with that app). In a development checkout, `scripts/ctl.js` does the same under Node.
@@ -2597,7 +2597,7 @@ Everything the app produces lives in a local workspace folder:
 - On startup the app looks for `%USERPROFILE%\multiagent-workspace`. If it does not exist, it asks
   whether to create it or pick another folder.
 - The chosen path is stored in the Windows registry at
-  `HKCU\Software\MultiagentOrchestrator\WorkspacePath` and reloaded on the next launches
+  `HKCU\Software\Craftorio\WorkspacePath` and reloaded on the next launches
   (on other OSes, in `~/.multiagent-orchestrator.json`). If the stored folder disappears, the app asks again.
 - Settings shows the current workspace, with **Open** and **Change…**.
 - The `repo_path` input accepts a git URL (`https://…` or `git@…`): the app clones it into

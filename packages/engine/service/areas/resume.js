@@ -8,9 +8,9 @@ const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const { inputsRead } = require('../../engine/run/templates');
 const { isAnyQuotaError } = require('../../engine/providers');
-const { displayName } = require('@multiagent/shared/display-name');
+const { displayName } = require('@craftorio/shared/display-name');
 const runs = require('../../domains/run/runs');
-const sessionCache = require('@multiagent/shared/session-cache');
+const sessionCache = require('@craftorio/shared/session-cache');
 const supervisor = require('../../domains/supervisor/supervisor');
 const { gitOut } = require('../common');
 

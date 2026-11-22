@@ -1,4 +1,4 @@
-// Packages the app for one OS into dist/MultiagentOrchestrator-<platform>-<arch>/: the current machine
+// Packages the app for one OS into dist/Craftorio-<platform>-<arch>/: the current machine
 // by default. Requires Node 24 (see .nvmrc). The release jobs (deploy.yml, preview.yml) run it on each OS.
 //   node apps/desktop/scripts/package.js [--platform win32|darwin|linux] [--arch x64|arm64] [output-folder]   (default: dist/)
 // Icons: apps/desktop/assets/icon.ico, .icns and .png, generated from one source image by scripts/icons.js.
@@ -10,7 +10,7 @@ const path = require('path');
 
 // the repository root: the app packaged is the npm workspace root (its package.json names the desktop app's main)
 const root = path.join(__dirname, '..', '..', '..');
-const NAME = 'MultiagentOrchestrator';
+const NAME = 'Craftorio';
 const PLATFORMS = ['darwin', 'linux', 'win32'];
 const ARCHS = ['arm64', 'x64'];
 const ICON_EXT = { darwin: '.icns', linux: '.png', win32: '.ico' };
@@ -67,9 +67,9 @@ const RUST_TARGETS = {
   'win32-x64': 'x86_64-pc-windows-msvc',
 };
 const NATIVE_BINARIES = [
-  'multiagent-ctl',
-  'multiagent-mcp',
-  'multiagent-tail',
+  'craftorio-ctl',
+  'craftorio-mcp',
+  'craftorio-tail',
 ];
 
 // The folder packaged as resources/bin/ for one platform and arch (filled by buildNative).
@@ -130,26 +130,26 @@ function packagerOptions({ platform, arch, out }) {
     // through extraResource, and resources/ (the license file) through afterCopy
     // phase 2 of docs/reorganisation-study-2026-10.md: the app is the npm workspace root (packages/*, apps/*,
     // one node_modules); the workspaces' test folders and the desktop app's own scripts/ stay out, and so
-    // do the tests inside the dereferenced copies of the workspaces under node_modules/@multiagent/ (the
-    // packager follows the workspace links: the asar holds those copies, which `require('@multiagent/…')`
+    // do the tests inside the dereferenced copies of the workspaces under node_modules/@craftorio/ (the
+    // packager follows the workspace links: the asar holds those copies, which `require('@craftorio/…')`
     // resolves, next to packages/ and apps/ themselves, which the renderer's <script> paths reach)
     ignore: [
       /^\/(runs|dist|build|scripts|test|supabase|poc|native|resources|\.github|\.claude|\.test-output|\.features-gen)(\/|$)/,
       // phase 3 (#579): what a workspace holds that is not the app, in the workspace itself and in its
-      // dereferenced copy under node_modules/@multiagent/: its tests and scripts, its Playwright
+      // dereferenced copy under node_modules/@craftorio/: its tests and scripts, its Playwright
       // features, its proofs of concept (the analyser's city layout POC and screenshots), the 3D views'
       // JSX sources (run3d/ in the kit, city3d/ in the analyser; bundled into generated/)
-      /^\/(packages|apps|fronts|node_modules\/@multiagent)\/[^/]+\/(test|scripts|features|poc|run3d|city3d)(\/|$)/,
+      /^\/(packages|apps|fronts|node_modules\/@craftorio)\/[^/]+\/(test|scripts|features|poc|run3d|city3d)(\/|$)/,
       /^\/apps\/desktop\/renderer\/city3d(\/|$)/,
-      // the engine package itself: the host requires @multiagent/engine, which the asar resolves to the
+      // the engine package itself: the host requires @craftorio/engine, which the asar resolves to the
       // dereferenced copy under node_modules/; packages/shared stays (the renderer's <script> paths name it)
       /^\/packages\/engine(\/|$)/,
       // the browser app (apps/web, and its copy): the engine serves it; a desktop app on a remote engine
       // loads the page from the engine
-      /^\/(apps|node_modules\/@multiagent)\/web(\/|$)/,
+      /^\/(apps|node_modules\/@craftorio)\/web(\/|$)/,
     ],
     ...(platform === 'darwin' && {
-      appBundleId: 'io.github.eduardogalbiati.multiagent-orchestrator',
+      appBundleId: 'io.github.eduardogalbiati.craftorio',
       appCategoryType: 'public.app-category.developer-tools',
       // Info.plist: macOS asks for the microphone with this text (voice input)
       extendInfo: { NSMicrophoneUsageDescription: 'Voice input transcribes what you say into the task field.' },

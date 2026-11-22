@@ -9,7 +9,7 @@
 // Browser: window.StatusPill; Node: module.exports.
 // load: early (app.js draws the header's and the sidebar's statuses with it)
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // id → [pill colour (style.css .pill-<colour>), label]
   const STATUS = {
     cancelled: ['cancelled', 'Cancelled'],

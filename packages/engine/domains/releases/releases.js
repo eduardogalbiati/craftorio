@@ -33,7 +33,7 @@ const {
   repoRoot,
 } = require('../../engine/worktree');
 const { defaultBase, pushBase } = require('../local/local-push');
-const { suggestVersion } = require('@multiagent/shared/release-version');
+const { suggestVersion } = require('@craftorio/shared/release-version');
 const { writeJsonSafe } = require('../workspace/state-file');
 
 const PUSH_TIMEOUT_MS = 120e3;

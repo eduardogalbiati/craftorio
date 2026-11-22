@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('@multiagent/shared/architecture-facts-view.js');
+const load = () => require('@craftorio/shared/architecture-facts-view.js');
 
 // the Danger Zone of packages/shared/architecture-model.js: [{ file, score }], score = √(u² + v²) in 0..√2
 const DZ = [

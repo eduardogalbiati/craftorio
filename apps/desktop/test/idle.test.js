@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { IdleWatch } = require('@multiagent/engine/engine/idle');
-const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
-const { RunChatModel } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
+const { IdleWatch } = require('@craftorio/engine/engine/idle');
+const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
+const { RunChatModel } = require('@craftorio/front-build/views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
 const FIXTURE = path.join(__dirname, '..', '..', '..', 'packages', 'engine', 'test', 'fixtures', 'handoff.yaml');

@@ -63,8 +63,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('../backlog/issues');
-const { normalizeThen } = require('@multiagent/shared/chain-model');
-const { isArchived } = require('@multiagent/shared/backlog-archive');
+const { normalizeThen } = require('@craftorio/shared/chain-model');
+const { isArchived } = require('@craftorio/shared/backlog-archive');
 const { dropWaitingSuffix } = require('../refactor/refactor-cadence');
 const {
   allowedActions,
@@ -79,7 +79,7 @@ const {
   stageNumber,
   STATES,
   waitsFor,
-} = require('@multiagent/shared/roadmap-model');
+} = require('@craftorio/shared/roadmap-model');
 const { writeJsonSafe } = require('../workspace/state-file');
 const {
   assertEarlierDependencies,
@@ -98,7 +98,7 @@ const {
   withStatus,
 } = require('./roadmap-status');
 
-/** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
+/** @typedef {import('@craftorio/shared/types').Roadmap} Roadmap */
 /** @typedef {((runId: string) => any) | null} Alive `alive(runId)`: as for `runIsAlive` */
 
 // #205: a test-backfill item tests the issues the items before it implemented (#631: and an item

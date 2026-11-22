@@ -6,7 +6,7 @@
 // the #233/#277 tests (test/run-costs*.test.js), which pin the upgrades' costs per event. Pure: the
 // files are read by the callers and never rewritten.
 
-const { upgradeRunRecord } = require('@multiagent/shared/run-record');
+const { upgradeRunRecord } = require('@craftorio/shared/run-record');
 
 const isTurn = (e) => e.type === 'session.message_received';
 
@@ -15,8 +15,8 @@ const isTurn = (e) => e.type === 'session.message_received';
  * session.message_received or session.attempt_stopped events, `overcount` per session id (what its
  * recorded cost_usd counted twice), `stopped` the attempts stopped before their result
  * ({ agent, sessionId, step, t, costUsd, estimated, notRecorded }).
- * @param {import('@multiagent/shared/types').RunEvent[]} [events]
- * @param {import('@multiagent/shared/types').RunSummary | null} [summary]
+ * @param {import('@craftorio/shared/types').RunEvent[]} [events]
+ * @param {import('@craftorio/shared/types').RunSummary | null} [summary]
  */
 function runCosts(events = [], summary = null) {
   const upgraded = upgradeRunRecord({ summary, events }).events;

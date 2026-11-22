@@ -28,7 +28,7 @@
 // Uses app.js's globals at call time (esc, markdownHtml, fmtCost, errMsg) when present.
 // Browser: window.AgentChat; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const NEAR_END = 40;
   const SLOTS = ['head', 'top', 'pills', 'compose', 'actions', 'foot'];
   /* global esc, markdownHtml, fmtCost, errMsg */

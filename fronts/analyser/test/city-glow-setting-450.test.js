@@ -6,16 +6,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const hash = '22'.repeat(20);
 const FILES = [{ path: 'src/engine/run.js', lines: 100 }, { path: 'docs/a.md', lines: 5 }];
 
 function facts() {
-  const { buildModel } = require('@multiagent/shared/architecture-model');
+  const { buildModel } = require('@craftorio/shared/architecture-model');
   return buildModel({
     head: { commit: hash, date: '2026-01-05T12:00:00Z' }, branch: 'main', shallow: false, window: { since: null, until: null },
     files: FILES.map((f) => ({ ...f })), log: `\x01${hash} 2026-01-05T12:00:00Z\n\n${FILES.map((f) => `A\t${f.path}`).join('\n')}\n`,
@@ -24,7 +24,7 @@ function facts() {
 }
 
 async function openCity(settings) {
-  const { buildCity } = require('@multiagent/shared/city-model');
+  const { buildCity } = require('@craftorio/shared/city-model');
   const answer = { state: 'ok', ...buildCity({ plan: null, facts: facts() }) };
   const mounts = [];
   const noop = () => {};

@@ -14,10 +14,10 @@ const fs = require('fs');
 const path = require('path');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const DIR = pageFileOf('views/project');
@@ -43,7 +43,7 @@ const q = (el, id) => el.querySelector(`[data-testid="${id}"]`);
 const text = (el) => String(el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
 function load({ bridge }) {
-  const { DESKTOP } = require('@multiagent/engine/service/manifest');
+  const { DESKTOP } = require('@craftorio/engine/service/manifest');
   const calls = { anchors: [], drawn: [], captures: 0 };
   function FakeXHR() { this.readyState = 0; }
   FakeXHR.prototype.open = function open(_m, url) { this.url = url; };

@@ -23,7 +23,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeService, roadmapProject } = require('@multiagent/engine/test/service/helpers');
+const { makeService, roadmapProject } = require('@craftorio/engine/test/service/helpers');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 

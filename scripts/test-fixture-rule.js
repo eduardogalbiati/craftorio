@@ -9,8 +9,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { readsOf } = require('@multiagent/engine/engine/test-reads');
-const { withoutComments } = require('@multiagent/engine/engine/source-text');
+const { readsOf } = require('@craftorio/engine/engine/test-reads');
+const { withoutComments } = require('@craftorio/engine/engine/source-text');
 const { sourceDirs } = require('./source-tree');
 
 const LIVE = /^docs\/work(\/|$)/;

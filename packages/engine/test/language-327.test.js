@@ -10,7 +10,7 @@ const path = require('path');
 const vm = require('vm');
 const { taskProgress } = require('../domains/backlog/issues');
 
-const load = () => require('@multiagent/shared/language');
+const load = () => require('@craftorio/shared/language');
 const PT = { language: { agents: 'pt-BR' } };
 
 test('#327 LANGUAGES lists the nine languages, in order, with their own names', () => {

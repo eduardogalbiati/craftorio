@@ -18,7 +18,7 @@ const {
   isRelease,
   releaseEntries,
   stageNumber,
-} = require('@multiagent/shared/roadmap-model');
+} = require('@craftorio/shared/roadmap-model');
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);

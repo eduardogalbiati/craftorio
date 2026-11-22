@@ -17,7 +17,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { buildingBox, flatPlane, KINDS, mix, partGeometries, poolTexture, skyMaterial, stars } from './geometry.js';
 import { carsOf, propsOf } from './props.js';
-import { rngOf } from '@multiagent/shared/city-buildings.js';
+import { rngOf } from '@craftorio/shared/city-buildings.js';
 
 export const LIFE_DIM = 0.72; // City life off: the lights go down to this share
 const LIFE_KINDS = ['box', 'cyl', 'green', 'light', 'mast']; // the props' part kinds (KINDS)

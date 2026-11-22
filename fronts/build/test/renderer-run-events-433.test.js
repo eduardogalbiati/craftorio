@@ -6,7 +6,7 @@
 // events handed to the handlers it registered with window.api.onEvent, as the preload does.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ts = (s) => `2026-09-30T10:00:${String(s).padStart(2, '0')}.000Z`;
 const T0 = Date.parse(ts(0));

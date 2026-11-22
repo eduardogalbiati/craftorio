@@ -172,7 +172,7 @@ test('#480 requests to the engine\'s origin carry Authorization: Bearer <token>,
 
 test('#480 requests to another origin carry no Authorization header', async () => {
   const s = await remoteWindow('http://127.0.0.1:7300');
-  const headers = sendHeaders(s, 'https://github.com/eduardogalbiati/multiagent-orchestrator');
+  const headers = sendHeaders(s, 'https://github.com/eduardogalbiati/craftorio');
   assert.equal(headers.Authorization, undefined);
   assert.equal(headers.authorization, undefined);
 });

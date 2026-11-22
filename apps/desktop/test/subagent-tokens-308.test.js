@@ -15,10 +15,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseClaude, parseGrok } = require('@multiagent/engine/engine/providers');
-const { runFigures } = require('@multiagent/engine/domains/run/run-analysis');
-const { runReport } = require('@multiagent/engine/domains/supervisor/supervisor');
-const M = require('@multiagent/ui-kit/run3d-model');
+const { parseClaude, parseGrok } = require('@craftorio/engine/engine/providers');
+const { runFigures } = require('@craftorio/engine/domains/run/run-analysis');
+const { runReport } = require('@craftorio/engine/domains/supervisor/supervisor');
+const M = require('@craftorio/ui-kit/run3d-model');
 
 const newSid = () => `sess-308-${crypto.randomUUID()}`;
 const apiUsage = (input, output, cacheRead, cacheWrite) => ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheWrite });
@@ -31,7 +31,7 @@ const tokens = (input, output, cacheRead, cacheWrite) => ({ input, output, cache
 const four = (u) => ({ input: u.input, output: u.output, cache_read: u.cache_read, cache_write: u.cache_write });
 
 function parsedTurn(parser, events) {
-  const { turnResult } = require('@multiagent/engine/engine/providers');
+  const { turnResult } = require('@craftorio/engine/engine/providers');
   const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId: null, error: null };
   for (const ev of events) parser(ev, () => {}, acc);
   return turnResult(acc);
@@ -94,7 +94,7 @@ test('a Claude turn with two result events (#277): usage_main is the largest of 
 });
 
 test('a Codex turn has no subagents field', () => {
-  const { parseCodex } = require('@multiagent/engine/engine/providers');
+  const { parseCodex } = require('@craftorio/engine/engine/providers');
   const res = parsedTurn(parseCodex, [
     { type: 'thread.started', thread_id: 'th-308' },
     { type: 'item.completed', item: { id: 'i1', type: 'agent_message', text: 'done' } },

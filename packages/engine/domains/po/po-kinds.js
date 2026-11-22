@@ -9,7 +9,7 @@
 // turn's prompt says of them. The workflows offered are only the project's
 // (DefaultWorkflow.projectWorkflows, #790).
 
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 const poChosen = require('./po-chosen-inputs');
 
 // what a label says of an issue's kind, with the one-line reason the plan shows and its i18n key

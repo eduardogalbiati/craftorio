@@ -1,5 +1,5 @@
 [package]
-name = "multiagent-tail"
+name = "craftorio-tail"
 version = "1.0.0"
 description = "The external live terminal's follower: prints a session's or a run's log as it grows, like src/session-tail.js"
 edition.workspace = true

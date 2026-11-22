@@ -12,7 +12,7 @@
 // engine opens the workspace (#112). Two reads for the client (#342), with the token, not logged:
 //   GET /api/version    ->  { version }: CONTROL_VERSION, the client refuses another one (exit 3)
 //   GET /api/channels   ->  { channels: [{ channel, params, schema }] }: the allowlist, argument schemas
-// The client: the multiagent-ctl binary (native/multiagent-ctl, its path in the status as ctlPath);
+// The client: the craftorio-ctl binary (native/craftorio-ctl, its path in the status as ctlPath);
 // scripts/ctl.js for development.
 
 const crypto = require('crypto');
@@ -50,10 +50,10 @@ const GUARDS = {
 };
 
 // The version of this HTTP contract (routes, bodies, exit codes the client relies on). Bump it with
-// CONTROL_VERSION in native/multiagent-ctl/src/main.rs when either changes incompatibly.
+// CONTROL_VERSION in native/craftorio-ctl/src/main.rs when either changes incompatibly.
 const CONTROL_VERSION = '1';
 
-// the allowlisted channels with their argument schemas (#338), for `multiagent-ctl --list`
+// the allowlisted channels with their argument schemas (#338), for `craftorio-ctl --list`
 function describeChannels(service) {
   const byChannel = new Map((service.manifest || []).filter((e) => e.channel).map((e) => [e.channel, e]));
   return [...CHANNELS].filter((c) => Object.hasOwn(service.api, c)).map((channel) => {
@@ -74,11 +74,11 @@ const controlDir = (ws) => path.join(ws.root, 'control');
 
 /**
  * @param service  the running app's engine service (packages/engine/service)
- * @param ctlPath  where the multiagent-ctl client is (main.js: nativeBinaryPath for app.isPackaged)
+ * @param ctlPath  where the craftorio-ctl client is (main.js: nativeBinaryPath for app.isPackaged)
  * @returns { update(), stop(), status() }: update() follows the setting and resolves the status
  *          { enabled, url, port, file, error, ctlPath }
  */
-function createControlChannel({ service, ctlPath = nativeBinaryPath('multiagent-ctl', { isPackaged: false }) }) {
+function createControlChannel({ service, ctlPath = nativeBinaryPath('craftorio-ctl', { isPackaged: false }) }) {
   let server = null;
   let open = null; // { url, port, file, root }
   let error = null;

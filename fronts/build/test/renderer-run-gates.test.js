@@ -11,7 +11,7 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'app.js'), 'utf8');
 const gateSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'gate-panel.js'), 'utf8');
@@ -818,7 +818,7 @@ test('gateChoices: out_of_rounds offers the same save-to-issue choice when it al
 // The card's markup (gateCardHtml, gateBriefHtml, the Run screen's .run-gate-message) is cascaded with
 // style.css by test/css-layout.js (no browser): a line of prose wraps (long words too) instead of being
 // cut at the card's edge; a line that ends in "…" keeps its whole text in a title.
-const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('@multiagent/ui-kit/test/css-layout.js');
+const { parseHtml, styleSheet, layoutOf, elements, textOf } = require('@craftorio/ui-kit/test/css-layout.js');
 const NARROW = 260;
 const LONG_WORD = 'fronts/build/views/run/suite_card_overflow_guard_with_a_very_long_name.js';
 

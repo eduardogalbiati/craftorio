@@ -9,7 +9,7 @@
 // subscribes (project-wizard.js, projects.js, app.js) is covered.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const PID = 'p-new';
 const FOLDER = 'C:/ws/projects/p-new';

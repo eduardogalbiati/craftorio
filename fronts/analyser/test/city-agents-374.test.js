@@ -34,13 +34,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildModel } = require('@craftorio/shared/architecture-model');
 
 const root = path.join(__dirname, '..', '..', '..');
 const FILE = path.join(root, 'packages', 'shared', 'city-agents.js');
-const load = () => require('@multiagent/shared/city-agents.js');
-const loadLayout = () => require('@multiagent/shared/city-layout.js');
-const loadModel = () => require('@multiagent/shared/city-model.js');
+const load = () => require('@craftorio/shared/city-agents.js');
+const loadLayout = () => require('@craftorio/shared/city-layout.js');
+const loadModel = () => require('@craftorio/shared/city-model.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const EPS = 1e-6;
 

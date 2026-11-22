@@ -66,10 +66,10 @@ function appAndClone(t, { ahead = 3 } = {}) {
 test('#279 app-update:state: a project cloned from the app repository applies, with its name, short commit and how far behind the app is', async (t) => {
   const r = appAndClone(t, { ahead: 3 });
   const { api } = makeService(t, { appDir: r.appDir });
-  await api['projects:create']({ name: 'multiagent-orchestrator', folder: r.cloneDir });
+  await api['projects:create']({ name: 'craftorio', folder: r.cloneDir });
   const s = await api['app-update:state']({ fresh: true });
   assert.equal(s.applies, true);
-  assert.equal(s.project.name, 'multiagent-orchestrator');
+  assert.equal(s.project.name, 'craftorio');
   assert.equal(s.behind, 3);
   assert.ok(r.to.startsWith(s.short) && s.short.length >= 7);
 });
@@ -82,7 +82,7 @@ test('#279 app-update:state: no matching project, or a packaged app, does not ap
   assert.match(none.reason, /no project of this workspace is this app's repository/);
 
   const packaged = makeService(t, { appDir: r.appDir, isPackaged: true });
-  await packaged.api['projects:create']({ name: 'multiagent-orchestrator', folder: r.cloneDir });
+  await packaged.api['projects:create']({ name: 'craftorio', folder: r.cloneDir });
   const p = await packaged.api['app-update:state']({ fresh: true });
   assert.equal(p.applies, false);
   assert.match(p.reason, /packaged app updates with a new install/);
@@ -111,7 +111,7 @@ test('#279 #285 trigger: a real item that merged and ended its stage pauses the 
   });
   const ws = service.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-no-agent.yaml'), NO_AGENT_WORKFLOW);
-  const p = await api['projects:create']({ name: 'multiagent-orchestrator', folder: r.cloneDir });
+  const p = await api['projects:create']({ name: 'craftorio', folder: r.cloneDir });
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [roadmapIssue(1), roadmapIssue(2)] }));
   const prev = api['settings:get']();
@@ -166,7 +166,7 @@ test('#279 #285 trigger: with the switch off, a real item that merged and ended 
   const { service, api } = makeService(t, { appDir: r.appDir, relaunch: () => { relaunched++; } });
   const ws = service.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-no-agent.yaml'), NO_AGENT_WORKFLOW);
-  const p = await api['projects:create']({ name: 'multiagent-orchestrator', folder: r.cloneDir });
+  const p = await api['projects:create']({ name: 'craftorio', folder: r.cloneDir });
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [roadmapIssue(1)] }));
   const prev = api['settings:get']();

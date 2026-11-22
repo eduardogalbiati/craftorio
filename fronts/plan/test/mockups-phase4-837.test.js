@@ -214,7 +214,7 @@ test('#837 simulated, mockups:export-repo answers the plan and starts no workflo
 const EXPORT_WORKFLOW = path.join(ROOT, 'workflows', 'mockups-export.yaml');
 
 test('#837 workflows/mockups-export.yaml loads with the workflow loader and takes the export inputs', () => {
-  const wf = require('@multiagent/engine/engine/workflow').loadWorkflow(EXPORT_WORKFLOW);
+  const wf = require('@craftorio/engine/engine/workflow').loadWorkflow(EXPORT_WORKFLOW);
   const inputs = Object.keys(wf.inputs || {});
   assert.deepEqual([wf.metadata?.name, ['project_path', 'mockup_dir', 'slugs', 'kit_official'].filter((k) => !inputs.includes(k))], ['mockups-export', []]);
 });

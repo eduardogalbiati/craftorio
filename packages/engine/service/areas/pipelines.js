@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
-const chain = require('@multiagent/shared/chain-model');
+const chain = require('@craftorio/shared/chain-model');
 const pipelines = require('../../domains/workflow/pipelines');
 const runs = require('../../domains/run/runs');
 

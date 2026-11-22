@@ -77,7 +77,7 @@ function writeRepoConfig(dir, config) {
   if (!cfg) throw new Error('No command to write.');
   const file = path.join(dir, REPO_FILES[0]);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const header = '# How this repository runs locally (Run App in the multiagent orchestrator).\n';
+  const header = '# How this repository runs locally (Run App in the Craftorio).\n';
   fs.writeFileSync(file, header + yaml.dump(cfg, { lineWidth: -1 }));
   return file;
 }

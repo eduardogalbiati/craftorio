@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'agent-overrides.js'), 'utf8');
 
@@ -54,7 +54,7 @@ steps:
 `;
 
 function listed(t) {
-  const { makeService } = require('@multiagent/engine/test/service/helpers');
+  const { makeService } = require('@craftorio/engine/test/service/helpers');
   const { service, api } = makeService(t);
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-renderer-ao-262.yaml'), FIXTURE);
   return api['workflows:list']().find((w) => w.file === 'fixture-renderer-ao-262.yaml');

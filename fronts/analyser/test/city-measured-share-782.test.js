@@ -9,10 +9,10 @@
 // defaultColourBy(model): 'churn' when share > 0.5; else 'quadrant' when measured; else 'zone' (today).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
 
-const load = () => require('@multiagent/shared/city-layout.js');
+const load = () => require('@craftorio/shared/city-layout.js');
 
 const hash = '11'.repeat(20);
 const numbered = (n, make) => Array.from({ length: n }, (_, i) => make(i));
@@ -65,7 +65,7 @@ test('#782 a city with no file has share 0 and no language', () => {
 });
 
 test('#782 architecture-model.js exports the tools of the languages', () => {
-  const { COMPLEXITY_TOOLS } = require('@multiagent/shared/architecture-model');
+  const { COMPLEXITY_TOOLS } = require('@craftorio/shared/architecture-model');
   assert.equal(COMPLEXITY_TOOLS?.Rust, 'clippy or rust-code-analysis');
   assert.equal(COMPLEXITY_TOOLS?.Go, 'gocyclo');
 });

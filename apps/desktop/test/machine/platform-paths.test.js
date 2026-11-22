@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const load = () => require('@multiagent/engine/domains/machine/platform-paths');
+const load = () => require('@craftorio/engine/domains/machine/platform-paths');
 
 test('samePath: Windows ignores case', () => {
   assert.equal(load().samePath('C:\\Repo\\X', 'c:\\repo\\x', 'win32'), true);
@@ -52,7 +52,7 @@ test('samePath/pathKey: the platform defaults to process.platform', () => {
 
 test('worktree.samePath agrees with platform-paths on this OS', () => {
   const { samePath } = load();
-  const worktree = require('@multiagent/engine/engine/worktree');
+  const worktree = require('@craftorio/engine/engine/worktree');
   const p = path.join(os.tmpdir(), 'Platform-Paths-Missing', 'Repo');
   for (const other of [p, p.toLowerCase(), p.toUpperCase()]) {
     assert.equal(worktree.samePath(p, other), samePath(p, other), other);

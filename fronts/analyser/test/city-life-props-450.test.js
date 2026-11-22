@@ -36,8 +36,8 @@ async function bundle(t, file) {
     external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@react-three/*', 'postprocessing'], logLevel: 'silent',
   });
   globalThis.window ||= {};
-  globalThis.window.Run3DTheme ||= require('@multiagent/ui-kit/run3d-theme.js');
-  globalThis.t ||= require('@multiagent/shared/i18n.js').t;
+  globalThis.window.Run3DTheme ||= require('@craftorio/ui-kit/run3d-theme.js');
+  globalThis.t ||= require('@craftorio/shared/i18n.js').t;
   const m = new Module(path.join(CITY3D, `${file}.bundle.js`));
   m.require = (id) => (/^(react|react-dom|@react-three|postprocessing)(\/|$)/.test(id) ? stubFor(id) : require(id));
   m._compile(out.outputFiles[0].text, m.id);

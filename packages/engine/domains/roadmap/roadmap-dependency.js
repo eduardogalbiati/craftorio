@@ -3,9 +3,9 @@
 // branch on the fork, and its pull request waits for the parent to merge upstream (then it is rebased onto
 // the synced default branch: worktree.js restackOnBase) or opens at once with "Depends on #<PR>", per the
 // project's fork.dependentPr setting. roadmap.js checks the order on every save and re-exports dependencyBase.
-const { isRelease } = require('@multiagent/shared/roadmap-model');
+const { isRelease } = require('@craftorio/shared/roadmap-model');
 
-/** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
+/** @typedef {import('@craftorio/shared/types').Roadmap} Roadmap */
 
 /**
  * The dependency field of a cleaned item: the raw one, else the stored one; '' removes it.

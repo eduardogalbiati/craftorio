@@ -9,12 +9,12 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { executablePath } = require('@multiagent/desktop/scripts/package');
+const { executablePath } = require('@craftorio/desktop/scripts/package');
 
 const root = path.join(__dirname, '..');
 const DEADLINE_MS = 120000;
 
-const exe = path.resolve(process.argv[2] || executablePath(path.join(root, 'dist', `MultiagentOrchestrator-${process.platform}-${process.arch}`), process.platform));
+const exe = path.resolve(process.argv[2] || executablePath(path.join(root, 'dist', `Craftorio-${process.platform}-${process.arch}`), process.platform));
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-'));
 const report = path.join(scratch, 'loaded.txt');
 const workspace = path.join(scratch, 'workspace');

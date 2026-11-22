@@ -66,7 +66,7 @@ test('#590 a kernel file calls a front\'s helper only optionally, a front anothe
 
 test('#590 every installed front declares itself, and the service files have unique names across the kernel and the fronts', () => {
   const fronts = installedFronts(ROOT);
-  assert.ok(fronts.length >= 1, 'no front declares multiagent.front');
+  assert.ok(fronts.length >= 1, 'no front declares craftorio.front');
   for (const f of fronts) assert.ok(fs.existsSync(path.join(f.dir, 'package.json')), f.id);
   assert.deepEqual(fronts.map((f) => f.id), [...fronts.map((f) => f.id)].sort(), 'by id');
   // the loaders refuse a duplicate: a channel file keeps its name when it moves to a front

@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'gate-oracle.js'), 'utf8');
 

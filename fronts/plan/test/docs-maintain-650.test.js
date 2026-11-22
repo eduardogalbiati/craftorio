@@ -17,7 +17,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { makeRepo } = require('@multiagent/engine/test/repo-workflow-fixtures-485');
+const { makeRepo } = require('@craftorio/engine/test/repo-workflow-fixtures-485');
 
 const load = () => require('../engine/domains/docs');
 

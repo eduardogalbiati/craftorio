@@ -1,9 +1,9 @@
 // Phone gates' self-contained HTML: fixed interface text follows the workspace's language,
 // while gate content stays verbatim. Only the small client and its translated strings are inlined.
 const crypto = require('crypto');
-const I18n = require('@multiagent/shared/i18n');
+const I18n = require('@craftorio/shared/i18n');
 const { continueText } = require('../session/session-cache');
-const { displayName } = require('@multiagent/shared/display-name');
+const { displayName } = require('@craftorio/shared/display-name');
 const { firstSentences } = require('../../engine/gate-summary');
 const { phoneGateProgress } = require('./mobile-gates-progress');
 const { phoneGatesClient } = require('./mobile-gates-client');

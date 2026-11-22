@@ -17,8 +17,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const MockupModel = require('@multiagent/shared/mockup-model');
-const agentsUsage = require('@multiagent/engine/domains/agents/agents-usage');
+const MockupModel = require('@craftorio/shared/mockup-model');
+const agentsUsage = require('@craftorio/engine/domains/agents/agents-usage');
 const mockups = require('./mockups');
 
 const FRESH_AFTER_IDLE_MS = 55 * 60 * 1000;
@@ -49,23 +49,23 @@ function handoffNote(history) {
 
 function skillBody(skillsDirs) {
   try {
-    const { resolveSkill } = require('@multiagent/engine/domains/agents/skills');
+    const { resolveSkill } = require('@craftorio/engine/domains/agents/skills');
     return resolveSkill((skillsDirs || []).filter(Boolean), 'mockup-design').body || '';
   } catch { return ''; }
 }
 
 function realRunTurn() {
-  return require('@multiagent/engine/engine/providers').runTurn;
+  return require('@craftorio/engine/engine/providers').runTurn;
 }
 
 async function modelTurn({ dir, slug, prompt, sessionId, model, projectFolder, runTurn }) {
   // an injected runTurn (tests) never reaches a CLI
-  if (!runTurn) require('@multiagent/engine/engine/simulation').refuseReal('the mockup designer\'s CLI (claude)');
-  const { render } = require('@multiagent/engine/engine/workflow');
-  const { providerArgs, dedupeFlags } = require('@multiagent/engine/engine/capabilities');
-  const { PROVIDERS } = require('@multiagent/engine/domains/workflow/workflow-builder');
+  if (!runTurn) require('@craftorio/engine/engine/simulation').refuseReal('the mockup designer\'s CLI (claude)');
+  const { render } = require('@craftorio/engine/engine/workflow');
+  const { providerArgs, dedupeFlags } = require('@craftorio/engine/engine/capabilities');
+  const { PROVIDERS } = require('@craftorio/engine/domains/workflow/workflow-builder');
   const provider = PROVIDERS.claude;
-  const providers = require('@multiagent/engine/engine/providers');
+  const providers = require('@craftorio/engine/engine/providers');
   // #233: a resumed session reports its cumulative cost; the turn costs its own
   if (sessionId) providers.seedClaudeTotal?.(sessionId, agentsUsage.readLines(path.join(dir, 'chat', 'usage.jsonl')).filter((u) => u.sessionId === sessionId).at(-1)?.cumulativeUsd);
   const readOnly = ['--tools', 'Read,Glob,Grep', '--allowedTools', 'Read Glob Grep'];

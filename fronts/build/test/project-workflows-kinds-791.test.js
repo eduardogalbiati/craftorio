@@ -6,7 +6,7 @@
 // over the installed workflows; a change saves api.updateProject(id, { workflowKinds }).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const task = { task: {} };
 const INSTALLED = [

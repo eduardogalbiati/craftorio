@@ -9,8 +9,8 @@
 // today).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const RUN = { runId: 'run-20261015-409attach', workflow: 'software-development', status: 'failed', error: 'Tests are red.', mock: true, issues: [{ number: 409, title: 'Run card actions' }] };
 const askCalls = (page) => page.calls.filter(([name]) => /^ask/i.test(name)).map(([name]) => name);

@@ -13,9 +13,9 @@ const { assetNames } = require('../scripts/release-assets');
 const root = path.join(__dirname, '..');
 
 test('release assets: a zip on Windows and macOS, an AppImage and a tar.gz on Linux, named with the OS and arch', () => {
-  assert.deepEqual(assetNames({ platform: 'win32', arch: 'x64' }), ['MultiagentOrchestrator-win32-x64.zip']);
-  assert.deepEqual(assetNames({ platform: 'darwin', arch: 'arm64' }), ['MultiagentOrchestrator-darwin-arm64.zip']);
-  assert.deepEqual(assetNames({ platform: 'linux', arch: 'x64' }), ['MultiagentOrchestrator-linux-x64.tar.gz', 'MultiagentOrchestrator-linux-x64.AppImage']);
+  assert.deepEqual(assetNames({ platform: 'win32', arch: 'x64' }), ['Craftorio-win32-x64.zip']);
+  assert.deepEqual(assetNames({ platform: 'darwin', arch: 'arm64' }), ['Craftorio-darwin-arm64.zip']);
+  assert.deepEqual(assetNames({ platform: 'linux', arch: 'x64' }), ['Craftorio-linux-x64.tar.gz', 'Craftorio-linux-x64.AppImage']);
 });
 
 test('release assets: every deploy.yml build uploads exactly the files the script writes', () => {
@@ -67,25 +67,25 @@ function runSumsStep(t, files) {
 }
 
 test('#557 release assets: SHA256SUMS has one "<hash>  <file name>" line per package and nothing else', (t) => {
-  const out = runSumsStep(t, { 'MultiagentOrchestrator-win32-x64.zip': 'abc', 'MultiagentOrchestrator-linux-x64.tar.gz': '' });
+  const out = runSumsStep(t, { 'Craftorio-win32-x64.zip': 'abc', 'Craftorio-linux-x64.tar.gz': '' });
   if (!out) return;
   assert.equal(out.status, 0, out.stderr);
   // "<hash>  <name>" on the Ubuntu runner; Git Bash on Windows writes binary mode "<hash> *<name>",
   // which `sha256sum -c` reads the same
   const lines = out.sums.trim().split('\n').map((l) => l.replace(/\r$/, '').replace(/^([0-9a-f]{64}) \*/, '$1  ')).sort();
   assert.deepEqual(lines, [
-    `${SHA_ABC}  MultiagentOrchestrator-win32-x64.zip`,
-    `${SHA_EMPTY}  MultiagentOrchestrator-linux-x64.tar.gz`,
+    `${SHA_ABC}  Craftorio-win32-x64.zip`,
+    `${SHA_EMPTY}  Craftorio-linux-x64.tar.gz`,
   ]);
 });
 
 test('#557 release assets: the release notes list each package with its SHA-256', (t) => {
-  const out = runSumsStep(t, { 'MultiagentOrchestrator-win32-x64.zip': 'abc', 'MultiagentOrchestrator-linux-x64.tar.gz': '' });
+  const out = runSumsStep(t, { 'Craftorio-win32-x64.zip': 'abc', 'Craftorio-linux-x64.tar.gz': '' });
   if (!out) return;
   assert.equal(out.status, 0, out.stderr);
   const row = (name) => out.notes.split('\n').find((l) => l.includes(name)) || '';
-  assert.equal(row('MultiagentOrchestrator-win32-x64.zip').includes(SHA_ABC), true, 'win32 zip row has its hash');
-  assert.equal(row('MultiagentOrchestrator-linux-x64.tar.gz').includes(SHA_EMPTY), true, 'linux tar.gz row has its hash');
+  assert.equal(row('Craftorio-win32-x64.zip').includes(SHA_ABC), true, 'win32 zip row has its hash');
+  assert.equal(row('Craftorio-linux-x64.tar.gz').includes(SHA_EMPTY), true, 'linux tar.gz row has its hash');
   assert.equal(row('SHA256SUMS  ').length, 0, 'SHA256SUMS itself is not listed as an asset');
 });
 

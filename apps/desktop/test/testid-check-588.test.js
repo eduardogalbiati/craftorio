@@ -9,12 +9,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { WorkflowRun, loadWorkflow } = require('@multiagent/engine/engine/workflow');
+const { WorkflowRun, loadWorkflow } = require('@craftorio/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const WORKFLOW = path.join(ROOT, 'workflows', 'feature.yaml');
-const load = () => require('@multiagent/engine/engine/test-ids');
+const load = () => require('@craftorio/engine/engine/test-ids');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 const write = (dir, rel, text) => {
@@ -78,7 +78,7 @@ test('#588 missingTestIds: a step definition inside a UI folder does not define 
 // ---- the ui_files filter of the workflows' conditions ----------------------------------------------
 
 test('#588 ui_files: the changed files under the UI folders, one folder or a list, slashes normalised, src/renderer by default', () => {
-  const { render } = require('@multiagent/engine/engine/run/templates');
+  const { render } = require('@craftorio/engine/engine/run/templates');
   const under = (files, folders) => Number(render('{{ files | ui_files(folders) | length }}', { files, folders }));
   assert.equal(under(['fronts/build/views/run.js'], ['packages/ui-kit/', 'fronts/']), 1);
   assert.equal(under(['fronts\\build\\views\\run.js', 'packages/ui-kit/app.js', 'docs/x.md'], ['packages/ui-kit', 'fronts']), 2);

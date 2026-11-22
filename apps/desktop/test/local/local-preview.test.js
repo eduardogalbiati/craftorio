@@ -6,7 +6,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const lp = require('@multiagent/engine/domains/local/local-preview');
+const lp = require('@craftorio/engine/domains/local/local-preview');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-'));

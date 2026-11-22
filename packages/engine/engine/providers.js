@@ -25,8 +25,8 @@ const { AGENT_ENV } = require('./capabilities');
 const { childEnv } = require('./child-env');
 const { runShim } = require('../domains/machine/shell');
 const { setBrewLookup } = require('../domains/machine/install-commands');
-const registry = require('@multiagent/shared/providers');
-const { emptyUsage } = require('@multiagent/shared/providers/usage');
+const registry = require('@craftorio/shared/providers');
+const { emptyUsage } = require('@craftorio/shared/providers/usage');
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {

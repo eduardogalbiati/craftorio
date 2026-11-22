@@ -20,7 +20,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('@multiagent/shared/city-impact.js');
+const load = () => require('@craftorio/shared/city-impact.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // ---------- #427: line ranges ----------

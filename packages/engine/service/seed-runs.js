@@ -12,7 +12,7 @@
 
 const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 const agents = require('../domains/agents/agents');
 const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../domains/project/projects');

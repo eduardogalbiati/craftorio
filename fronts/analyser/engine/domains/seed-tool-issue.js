@@ -13,7 +13,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const issues = require('@multiagent/engine/domains/backlog/issues');
+const issues = require('@craftorio/engine/domains/backlog/issues');
 
 const LABEL = 'analysis-tool';
 const LABEL_COLOR = '5319e7';

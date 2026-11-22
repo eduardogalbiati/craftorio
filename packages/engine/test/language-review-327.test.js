@@ -14,7 +14,7 @@ const providers = require('../engine/providers');
 const supervisor = require('../domains/supervisor/supervisor');
 const { prioritize } = require('../domains/refactor/refactor-priority');
 const epics = require('../domains/backlog/epics');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 
 const SKILLS = path.join(__dirname, '..', '..', '..', 'skills');
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');

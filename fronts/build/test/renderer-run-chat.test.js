@@ -9,7 +9,7 @@ const path = require('path');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 const { providerType } = require('../views/runchat/run-chat-model.js');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 
 const src = fs.readFileSync(pageFileOf('views/runchat/runchat.js'), 'utf8');
 
@@ -77,7 +77,7 @@ test('robot(): without a saved look, draws the provider\'s robot as before', () 
 function loadColoredRobot(looks = {}) {
   const block = /const isSupervisor = [\s\S]*?\n  function robot\(who, st = 'idle', opts = \{\}\) \{[\s\S]*?\n  \}/.exec(src)?.[0];
   assert.ok(block, 'the avatar helpers (isSupervisor … robot) not found in runchat.js: the source moved');
-  const AgentColors = require('@multiagent/ui-kit/agent-colors.js');
+  const AgentColors = require('@craftorio/ui-kit/agent-colors.js');
   const yaml = require('js-yaml');
   const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'), 'utf8'));
   const sandbox = {
@@ -177,7 +177,7 @@ test('turnHtml activity: a failed sub-agent call still gets the err class alongs
 });
 
 test('#330 turnHtml activity: the summary counts tool calls and sub-agents in the interface language', (t) => {
-  const I18n = require('@multiagent/shared/i18n.js');
+  const I18n = require('@craftorio/shared/i18n.js');
   t.after(() => I18n.setLanguage('en'));
   const calls = [
     { kind: 'tool', name: 'Task', input: '{}', subagent: { type: 'Explore', description: 'Map it' } },

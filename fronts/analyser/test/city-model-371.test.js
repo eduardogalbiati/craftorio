@@ -15,11 +15,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { validateSchema } = require('@multiagent/engine/domains/workspace/json-schema');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { validateSchema } = require('@craftorio/engine/domains/workspace/json-schema');
 
 const root = path.join(__dirname, '..', '..', '..');
-const load = () => require('@multiagent/shared/city-model');
+const load = () => require('@craftorio/shared/city-model');
 
 // ---------- the fixture: #356 facts of a small repository ----------
 

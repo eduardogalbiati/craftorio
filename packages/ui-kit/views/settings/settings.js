@@ -27,7 +27,7 @@ function renderTimeZone() {
 }
 
 // Control channel (#336, packages/engine/control): main's endpoint state { enabled, port, file, error, ctlPath }.
-// While on, the multiagent-ctl client's path (#342) with a Copy button. The browser client (npm run
+// While on, the craftorio-ctl client's path (#342) with a Copy button. The browser client (npm run
 // serve) has no endpoint: the switch is disabled there.
 const controlChannelAvailable = () => api.platform !== 'browser' && typeof api.controlChannelState === 'function';
 function renderControlChannel(s, failure) {

@@ -13,7 +13,7 @@ source: milestone.md (English)
 
 ## O que acontece
 
-1. **Revisão final** do app e do repositório: o [checklist de open source](https://github.com/eduardogalbiati/multiagent-orchestrator/blob/main/docs/open-source-checklist.md) e a revisão de segurança de 22/10/2026 (#466 a #483).
+1. **Revisão final** do app e do repositório: o [checklist de open source](https://github.com/eduardogalbiati/craftorio/blob/main/docs/open-source-checklist.md) e a revisão de segurança de 22/10/2026 (#466 a #483).
 2. **Beta fechado**, previsto para quinta-feira, 5 de novembro: os beta testers instalam o app e ajudam a validar com os próprios projetos (o onboarding do primeiro projeto, os workflows, os builds de release).
 3. O que eles encontrarem vira issue no backlog; o que bloqueia a liberação é corrigido primeiro.
 4. **Open source**: o repositório vira público, e com ele esta página e as releases.

@@ -22,9 +22,9 @@ const {
 const { childEnv, PLATFORM_CLIS } = require('./child-env');
 const { installHint } = require('../domains/machine/install-commands');
 const { execShim } = require('../domains/machine/shell');
-const github = require('@multiagent/shared/platforms/github');
-const gitlab = require('@multiagent/shared/platforms/gitlab');
-const { PLATFORMS, findPlatform, resolvePlatform } = require('@multiagent/shared/platforms');
+const github = require('@craftorio/shared/platforms/github');
+const gitlab = require('@craftorio/shared/platforms/gitlab');
+const { PLATFORMS, findPlatform, resolvePlatform } = require('@craftorio/shared/platforms');
 // defined with the field rules (wait.probe), which load without Node (#488)
 const { PROBES } = require('./run/field-rules');
 

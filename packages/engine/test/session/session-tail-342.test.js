@@ -1,5 +1,5 @@
 // The external live terminal's follower (#342): packages/engine/domains/session/session-tail.js as a script and its Rust twin
-// multiagent-tail (native/, built here once with `cargo build --release -p multiagent-tail`) run the
+// craftorio-tail (native/, built here once with `cargo build --release -p craftorio-tail`) run the
 // same cases, invoked alike: `<tail> <runDir> <sessionId>` ("orchestrator" follows <run>/events.jsonl,
 // any other id <run>/sessions/<id>.jsonl). The binary must print exactly what the script prints (the
 // window title, the "Following" line, the colours, the clipping, local times): its stdout is compared
@@ -20,20 +20,20 @@ const { spawn, spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const SCRIPT = path.join(ROOT, 'packages', 'engine', 'domains', 'session', 'session-tail.js');
 const NATIVE = path.join(ROOT, 'native');
-const BINARY_NAME = process.platform === 'win32' ? 'multiagent-tail.exe' : 'multiagent-tail';
+const BINARY_NAME = process.platform === 'win32' ? 'craftorio-tail.exe' : 'craftorio-tail';
 const BINARY = path.join(process.env.CARGO_TARGET_DIR || path.join(NATIVE, 'target'), 'release', BINARY_NAME);
 
 const hasCargo = () => spawnSync('cargo', ['--version'], { stdio: 'ignore' }).status === 0;
-const SKIP_BINARY = !process.env.CI && !hasCargo() ? 'cargo is not installed: multiagent-tail\'s cases are skipped (CI runs them)' : false;
+const SKIP_BINARY = !process.env.CI && !hasCargo() ? 'cargo is not installed: craftorio-tail\'s cases are skipped (CI runs them)' : false;
 
 let built = null;
 function buildBinary() {
   if (built) return built;
-  const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'multiagent-tail'], {
+  const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'craftorio-tail'], {
     encoding: 'utf8', timeout: 9 * 60 * 1000,
   });
-  if (r.status !== 0) built = { error: `cargo build of multiagent-tail failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
-  else if (!fs.existsSync(BINARY)) built = { error: `cargo built multiagent-tail but ${BINARY} does not exist` };
+  if (r.status !== 0) built = { error: `cargo build of craftorio-tail failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
+  else if (!fs.existsSync(BINARY)) built = { error: `cargo built craftorio-tail but ${BINARY} does not exist` };
   else built = { file: BINARY };
   return built;
 }
@@ -41,7 +41,7 @@ function buildBinary() {
 const TAILS = [
   { label: 'session-tail.js (Node)', command: () => ({ file: process.execPath, args: [SCRIPT] }) },
   {
-    label: 'multiagent-tail (Rust binary)',
+    label: 'craftorio-tail (Rust binary)',
     skip: SKIP_BINARY,
     command: () => {
       const b = buildBinary();
@@ -235,14 +235,14 @@ for (const tail of TAILS) {
 // ---- the binary prints exactly what the script prints ----------------------------------------------
 
 for (const [label, env] of [['FORCE_COLOR=1', { FORCE_COLOR: '1' }], ['no FORCE_COLOR', {}]]) {
-  test(`#342 multiagent-tail prints a session log byte for byte like session-tail.js (${label})`, { skip: BIN.skip }, async (t) => {
+  test(`#342 craftorio-tail prints a session log byte for byte like session-tail.js (${label})`, { skip: BIN.skip }, async (t) => {
     const runDir = runFolder(t, { session: `${jsonl(SESSION_EVENTS.slice(0, 5))}{not json\n${jsonl(SESSION_EVENTS.slice(5))}` });
     const expected = await printed(t, JS, runDir, 'developer-1', 'session closed: success', env);
     const actual = await printed(t, BIN, runDir, 'developer-1', 'session closed: success', env);
     assert.equal(actual, expected);
   });
 
-  test(`#342 multiagent-tail prints a whole run byte for byte like session-tail.js (${label})`, { skip: BIN.skip }, async (t) => {
+  test(`#342 craftorio-tail prints a whole run byte for byte like session-tail.js (${label})`, { skip: BIN.skip }, async (t) => {
     const runDir = runFolder(t, { events: jsonl(RUN_EVENTS) });
     const expected = await printed(t, JS, runDir, 'orchestrator', '61s · $1.25', env);
     const actual = await printed(t, BIN, runDir, 'orchestrator', '61s · $1.25', env);
@@ -251,9 +251,9 @@ for (const [label, env] of [['FORCE_COLOR=1', { FORCE_COLOR: '1' }], ['no FORCE_
 }
 
 // An intended divergence: session-tail.js decodes each read on its own, so a character split across
-// two reads prints as U+FFFD; multiagent-tail keeps the bytes between reads and prints it intact. The
+// two reads prints as U+FFFD; craftorio-tail keeps the bytes between reads and prints it intact. The
 // byte-for-byte comparisons above never split a character.
-test('#342 multiagent-tail: a multibyte character split across two reads prints intact', { skip: BIN.skip }, async (t) => {
+test('#342 craftorio-tail: a multibyte character split across two reads prints intact', { skip: BIN.skip }, async (t) => {
   const runDir = runFolder(t, { session: jsonl(SESSION_EVENTS.slice(0, 1)) });
   const file = path.join(runDir, 'sessions', 'developer-1.jsonl');
   const run = startTail(t, BIN, runDir, 'developer-1');

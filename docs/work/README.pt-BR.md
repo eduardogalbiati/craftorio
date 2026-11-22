@@ -1,8 +1,8 @@
 ---
-title: Multiagent Orchestrator
+title: Craftorio
 kicker: "Construindo em público"
 tagline: "Workflows multiagente em YAML, rodados por agentes de código headless, com pessoas em cada gate."
-repo: eduardogalbiati/multiagent-orchestrator
+repo: eduardogalbiati/craftorio
 source: README.md (English)
 ---
 

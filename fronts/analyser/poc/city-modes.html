@@ -650,7 +650,7 @@ body.with-bar .r3d.pc-city.pc-modal.edge { top: 34px; }
   <div class="main">
     <div class="topbar">
       <span class="brand">multiagent <span>orchestrator</span></span>
-      <span class="sel">Project <b>multiagent-orchestrator</b></span>
+      <span class="sel">Project <b>craftorio</b></span>
       <span class="right"><i>?</i><i>✉</i></span>
     </div>
     <div class="content" id="content"></div>
@@ -2267,7 +2267,7 @@ const CONNECTED = (() => {
   return model.buildings.map((b, i) => ({ path: b.path, requires: out.get(i) || 0, requiredBy: inn.get(i) || 0 })).sort((a, b) => (b.requires + b.requiredBy) - (a.requires + a.requiredBy)).slice(0, 8);
 })();
 const EXPLORE = {
-  plan: { file: 'multiagent-orchestrator.city-plan.json', built: '2026-10-13', coverage: 100 },
+  plan: { file: 'craftorio.city-plan.json', built: '2026-10-13', coverage: 100 },
   problems: ['scripts/build-3d.js is not in the repository at this commit (a landmark or a port\'s file).'],
   estimate: '≈ 14 min · $1.20', estimateTitle: 'From the last 3 real runs of the project map and the Oracle\'s analysis',
 };
@@ -2478,7 +2478,7 @@ const MODES = {
 const NAV = [['Home'], ['Inbox'], ['Discovery'], ['Projects', 'project'], ['Backlog'], ['Roadmap', 'roadmap'], ['Releases', 'releases'], ['Workflows'], ['Runs', 'run'], ['Agents'], ['Skills'], ['Analytics'], ['Settings']];
 const navIcon = '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/></svg>';
 function screenHtml(screen) {
-  if (screen === 'project') return `<div class="page-head"><div><h1>multiagent-orchestrator</h1><p>C:\\Users\\Eduardo\\multiagent-workspace\\repos\\eduardogalbiati-multiagent-orchestrator · main</p></div><span class="pill pill-running">1 run in progress</span></div>
+  if (screen === 'project') return `<div class="page-head"><div><h1>craftorio</h1><p>C:\\Users\\Eduardo\\multiagent-workspace\\repos\\eduardogalbiati-multiagent-orchestrator · main</p></div><span class="pill pill-running">1 run in progress</span></div>
     <div class="tabs" role="tablist">${['Overview', 'Conflicts', 'Architecture', 'Refactor'].map((t) => `<button class="tab${t === 'Architecture' ? ' active' : ''}" role="tab">${t}</button>`).join('')}</div>
     <div class="arch-row"><div class="seg arch-mode"><button>Facts</button><button class="on">City</button></div><span class="muted small">The project as a city; "Facts" has the same numbers as tables.</span></div>
     <div class="arch-city-slot" id="slot"></div>`;
@@ -2492,7 +2492,7 @@ function screenHtml(screen) {
   }
   if (screen === 'releases') {
     const rel = (v, date, note, cls = '') => `<div class="rel"><b>v${v}</b><span class="muted">${date}</span><span class="grow">${esc(note)}</span><span class="pill ${cls || 'pill-success'}">${cls ? 'draft' : 'published'}</span><button class="btn sm">Release notes</button><button class="btn sm" data-open="release">Show on the map</button></div>`;
-    return `<div class="page-head"><div><h1>Releases</h1><p>multiagent-orchestrator · 5 releases · the next is 1.1.3</p></div><button class="btn primary">New release</button></div>
+    return `<div class="page-head"><div><h1>Releases</h1><p>craftorio · 5 releases · the next is 1.1.3</p></div><button class="btn primary">New release</button></div>
       <div class="rel-list">${rel('1.1.2', '2026-10-20', '452 added, 360 changed, 8 renamed, 1 removed · 14 issues')}${rel('1.1.1', '2026-10-15', '118 added, 97 changed · 6 issues')}${rel('1.1.0', '2026-10-12', '301 added, 240 changed, 3 removed · 11 issues')}${rel('1.0.1', '2026-10-08', '12 changed · 2 issues')}${rel('1.0.0', '2026-10-05', 'the first release')}</div>`;
   }
   return `<div class="run-head"><h1 style="margin:0;font-size:22px">Run ${esc(REPLAY.short)}</h1><span class="pill pill-success">done</span><span class="muted">#426 Run earlier/later moves a stage past the next visible stage, not a hidden one · AI development · 17:02 → 17:48 · $2.14</span><span class="grow" style="flex:1"></span><button class="btn">Open the PR</button><button class="btn" data-open="replay">Replay on the map</button></div>

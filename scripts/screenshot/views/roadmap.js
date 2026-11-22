@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const evidence = require('@multiagent/engine/domains/evidence/evidence');
+const evidence = require('@craftorio/engine/domains/evidence/evidence');
 const {
   DEMO_ISSUES,
   DEMO_REPO,

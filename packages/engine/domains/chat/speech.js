@@ -49,7 +49,7 @@ function appDataBase({ platform, env, home }) {
 function modelsDir(dataDir, host = {}) {
   const { platform = process.platform, env = process.env, home = os.homedir() } = host;
   const flavour = platform === 'win32' ? path.win32 : path.posix;
-  const base = dataDir || flavour.join(appDataBase({ platform, env, home }), 'multiagent-orchestrator');
+  const base = dataDir || flavour.join(appDataBase({ platform, env, home }), 'craftorio');
   return flavour.join(base, 'speech-models');
 }
 

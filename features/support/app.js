@@ -19,7 +19,7 @@ const os = require('os');
 const path = require('path');
 const { _electron: electron } = require('@playwright/test');
 const demo = require('../../scripts/screenshot');
-const machineSlot = require('@multiagent/engine/engine/machine-slot');
+const machineSlot = require('@craftorio/engine/engine/machine-slot');
 const { shiftClock } = require('./fixed-clock');
 const workflows = require('./workflows');
 

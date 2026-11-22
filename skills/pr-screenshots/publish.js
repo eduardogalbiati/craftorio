@@ -114,7 +114,7 @@ function updateBranch({ cwd, remote, branch, requireBranch = false }, edit) {
   const env = { ...process.env, GIT_INDEX_FILE: path.join(tmp, 'index') };
   const git = (args, input) => run('git', args, { cwd, env, input }).trim();
   const hasIdentity = (() => { try { return !!git(['config', 'user.email']); } catch { return false; } })();
-  const id = hasIdentity ? [] : ['-c', 'user.name=multiagent-orchestrator', '-c', 'user.email=multiagent-orchestrator@users.noreply.github.com'];
+  const id = hasIdentity ? [] : ['-c', 'user.name=craftorio', '-c', 'user.email=craftorio@users.noreply.github.com'];
   try {
     for (let attempt = 1; ; attempt++) {
       let parent = null;

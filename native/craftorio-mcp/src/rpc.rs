@@ -5,7 +5,7 @@
 use serde_json::{Map, Value, json};
 
 pub const PROTOCOL: &str = "2025-06-18";
-const INSTRUCTIONS: &str = "Read-only tools over the Multiagent Orchestrator app: workflows, projects, runs, skills, agents, usage and analytics.";
+const INSTRUCTIONS: &str = "Read-only tools over the Craftorio app: workflows, projects, runs, skills, agents, usage and analytics.";
 const INTERNAL_ERROR: i64 = -32603;
 const METHOD_NOT_FOUND: i64 = -32601;
 const PARSE_ERROR: i64 = -32700;

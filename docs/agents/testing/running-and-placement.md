@@ -20,7 +20,7 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
 - A domain module's tests (`packages/engine/domains/<domain>/<module>.js`) live in `packages/engine/test/<domain>/`, the Electron
   host's (`apps/desktop/host/`) in `test/host/`; a workspace package's tests in its own `test/` folder, required
   relative to it (`../<module>`), and from another package through the package name
-  (`@multiagent/shared/test/i18n-sandbox`, `@multiagent/engine/test/contract/harness`):
+  (`@craftorio/shared/test/i18n-sandbox`, `@craftorio/engine/test/contract/harness`):
   `packages/engine/test/` holds the engine's, the service's (`service/`), the domains' (`<domain>/`),
   the contract suite (`contract/`), the slow runs (`slow/`), the fixtures (`fixtures/`) and the helpers
   `engine-helpers.js`, `worktree-helpers.js`; `packages/shared/test/` the shared modules'. The root

@@ -25,8 +25,8 @@ const {
   repoLabels,
   runCommand,
 } = require('./issues');
-const { namesOf } = require('@multiagent/shared/default-workflow');
-const Language = require('@multiagent/shared/language');
+const { namesOf } = require('@craftorio/shared/default-workflow');
+const Language = require('@craftorio/shared/language');
 
 const EPIC_LABEL = 'epic';
 const SCOPE = 'epic::';

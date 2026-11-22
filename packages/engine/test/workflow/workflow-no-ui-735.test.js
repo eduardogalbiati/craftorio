@@ -21,7 +21,7 @@ const { evalExpr } = require('../../engine/run/templates');
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', '..', 'workflows');
 const workflow = (name) => yaml.load(fs.readFileSync(path.join(WORKFLOWS, name), 'utf8'));
 const stepOf = (wf, id) => wf.steps.find((s) => s.id === id);
-const loadPlan = () => require('@multiagent/shared/run-plan');
+const loadPlan = () => require('@craftorio/shared/run-plan');
 
 // a backend project's run: no UI folders, no screenshots, no E2E (#735's run defaults)
 const NO_UI = { task: 'Add retries', validation: 'auto', validate_every_round: false, screenshots: 'off', ui_folders: [], steps_folders: [], e2e_tests: 'off', e2e_command: '', issues: [] };

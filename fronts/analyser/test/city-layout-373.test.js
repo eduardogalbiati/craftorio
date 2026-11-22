@@ -14,11 +14,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildModel } = require('@craftorio/shared/architecture-model');
 
 const root = path.join(__dirname, '..', '..', '..');
-const load = () => require('@multiagent/shared/city-layout.js');
-const loadModel = () => require('@multiagent/shared/city-model.js');
+const load = () => require('@craftorio/shared/city-layout.js');
+const loadModel = () => require('@craftorio/shared/city-model.js');
 const EPS = 1e-6;
 
 // ---------- fixtures: #356 facts and #371 city models ----------

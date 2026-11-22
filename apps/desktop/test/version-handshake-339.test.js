@@ -41,10 +41,10 @@ const path = require('path');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const http = require('http');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-const { createService } = require('@multiagent/engine/service');
-const { createServer } = require('@multiagent/engine/server');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+const { createService } = require('@craftorio/engine/service');
+const { createServer } = require('@craftorio/engine/server');
 
 const PKG = require('../../../package.json');
 const TOKEN = 'test-token-339-0123456789abcdef';
@@ -53,7 +53,7 @@ const API_HTTP = pageFileOf('api-http.js');
 
 // the module the change adds to: required inside each test (the export does not exist yet)
 const contractHash = () => {
-  const { contractHash: fn } = require('@multiagent/engine/service/contract');
+  const { contractHash: fn } = require('@craftorio/engine/service/contract');
   assert.equal(typeof fn, 'function', 'packages/engine/service/contract.js exports contractHash(manifest)');
   return fn;
 };

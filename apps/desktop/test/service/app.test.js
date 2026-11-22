@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
 // #83: the restart banner and the safe-restart refusals.
 test('app:codeVersion reports this process\'s own version, unchanged right after start', async (t) => {

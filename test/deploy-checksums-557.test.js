@@ -130,7 +130,7 @@ test('#557 Install docs: the signature check matches the workflow\'s signer and 
     const verify = doc.split('\n').filter((l, i, all) => /cosign verify-blob/.test(l) || /cosign verify-blob/.test(all.slice(Math.max(0, i - 6), i).join('\n'))).join('\n');
     assert.match(verify, /cosign verify-blob/);
     assert.match(verify, /SHA256SUMS/);
-    assert.match(verify, /--certificate-identity(-regexp)?[\s=][^\n]*eduardogalbiati\/multiagent-orchestrator\/\.github\/workflows\/deploy\.yml/, 'the identity is this repository\'s deploy.yml');
+    assert.match(verify, /--certificate-identity(-regexp)?[\s=][^\n]*eduardogalbiati\/craftorio\/\.github\/workflows\/deploy\.yml/, 'the identity is this repository\'s deploy.yml');
     assert.match(verify, /--certificate-oidc-issuer[\s=]+["']?https:\/\/token\.actions\.githubusercontent\.com/, 'GitHub Actions is the issuer');
   } else {
     assert.equal(kind, 'gpg', 'the workflow signs SHA256SUMS');

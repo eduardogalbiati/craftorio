@@ -3,7 +3,7 @@
 // packages/engine/service/areas/workflows.js to label each entry local/remote/none).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 
 // ---- resolve(setting, files) --------------------------------------------------------------------
 

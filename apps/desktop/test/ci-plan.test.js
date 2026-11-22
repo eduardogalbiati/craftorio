@@ -41,7 +41,7 @@ test('#672 planOs: a Markdown fixture of the tests is not docs-only (the doc-edi
 });
 
 test('#341 planOs: every file of the cargo workspace (native/**) is code, its Markdown too', () => {
-  for (const file of ['native/Cargo.toml', 'native/Cargo.lock', 'native/multiagent-mcp/src/main.rs', 'native/multiagent-mcp/README.md', 'native/README.md']) {
+  for (const file of ['native/Cargo.toml', 'native/Cargo.lock', 'native/craftorio-mcp/src/main.rs', 'native/craftorio-mcp/README.md', 'native/README.md']) {
     const os = planOs({ event: 'pull_request', files: ['README.md', file] });
     assert.ok(os.includes('ubuntu-latest') && os.includes('windows-latest'), `${file}: ${JSON.stringify(os)}`);
   }

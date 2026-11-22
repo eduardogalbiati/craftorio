@@ -5,8 +5,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const github = () => require('@multiagent/shared/platforms/github');
-const gitlab = () => require('@multiagent/shared/platforms/gitlab');
+const github = () => require('@craftorio/shared/platforms/github');
+const gitlab = () => require('@craftorio/shared/platforms/gitlab');
 const runPr = () => require('../../domains/run/run-pr');
 
 const run = (name, status, conclusion = null) => ({ __typename: 'CheckRun', name, status, conclusion });

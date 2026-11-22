@@ -25,7 +25,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createDom } = require('./mini-dom');
 
-const load = () => require('@multiagent/shared/findings-model');
+const load = () => require('@craftorio/shared/findings-model');
 
 // A run screen: a run section, a step row with its stage, a Retry button carrying a session id.
 function runScreen() {

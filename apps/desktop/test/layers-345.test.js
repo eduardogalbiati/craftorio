@@ -180,9 +180,9 @@ test('#345 every <script src> of src/renderer/index.html names an existing file,
 
 test('#345 the browser server serves the packages/shared/ modules', async (t) => {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1';
-  const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-  const { createService } = require('@multiagent/engine/service');
-  const { createServer } = require('@multiagent/engine/server');
+  const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+  const { createService } = require('@craftorio/engine/service');
+  const { createServer } = require('@craftorio/engine/server');
   const TOKEN = 'test-token-0123456789abcdef';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'layers-345-ws-'));
   const service = createService({ host: { trashItem: async () => {}, appVersion: '1.2.3', isPackaged: false } });

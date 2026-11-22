@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Assets: MultiagentOrchestrator-<platform>-<arch>.<ext> (scripts/release-assets.js)
+  # Assets: Craftorio-<platform>-<arch>.<ext> (scripts/release-assets.js)
   build:
     name: build (${{ matrix.platform }} ${{ matrix.arch }})
     strategy:
@@ -36,21 +36,21 @@ jobs:
           - os: windows-latest
             platform: win32
             arch: x64
-            assets: MultiagentOrchestrator-win32-x64.zip
+            assets: Craftorio-win32-x64.zip
           - os: macos-latest      # Apple Silicon
             platform: darwin
             arch: arm64
-            assets: MultiagentOrchestrator-darwin-arm64.zip
+            assets: Craftorio-darwin-arm64.zip
           - os: macos-15-intel    # Intel: its smoke test runs natively
             platform: darwin
             arch: x64
-            assets: MultiagentOrchestrator-darwin-x64.zip
+            assets: Craftorio-darwin-x64.zip
           - os: ubuntu-latest
             platform: linux
             arch: x64
             assets: |
-              MultiagentOrchestrator-linux-x64.AppImage
-              MultiagentOrchestrator-linux-x64.tar.gz
+              Craftorio-linux-x64.AppImage
+              Craftorio-linux-x64.tar.gz
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90   # a hung job must not eat the quota; the Windows `npm test` alone takes ~75 min
     defaults:
@@ -113,7 +113,7 @@ jobs:
         env:
           MULTIAGENT_SIMULATION_ONLY: "1"
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: xvfb-run -a node scripts/smoke-package.js MultiagentOrchestrator-linux-x64.AppImage
+        run: xvfb-run -a node scripts/smoke-package.js Craftorio-linux-x64.AppImage
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.platform }}-${{ matrix.arch }}
@@ -125,7 +125,7 @@ jobs:
     needs: build
     # a vX.Y.Z tag or main, never a fork: the signature's identity is deploy.yml@refs/tags/vX.Y.Z
     # (deploy.yml@refs/heads/main for an rc by hand) (#557)
-    if: ${{ (github.ref_type == 'tag' || github.ref == 'refs/heads/main') && github.repository == 'eduardogalbiati/multiagent-orchestrator' }}
+    if: ${{ (github.ref_type == 'tag' || github.ref == 'refs/heads/main') && github.repository == 'eduardogalbiati/craftorio' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write   # gh release create

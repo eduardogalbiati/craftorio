@@ -1,5 +1,5 @@
 {
-  "name": "multiagent-orchestrator",
+  "name": "craftorio",
   "version": "1.5.0",
   "private": true,
   "description": "Desktop app that runs multi-agent workflows defined in YAML, with Claude Code, Codex CLI and Grok Build as the agents, and records everything in a local workspace.",
@@ -7,9 +7,9 @@
   "author": "Eduardo Galbiati",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eduardogalbiati/multiagent-orchestrator.git"
+    "url": "git+https://github.com/eduardogalbiati/craftorio.git"
   },
-  "homepage": "https://github.com/eduardogalbiati/multiagent-orchestrator#readme",
+  "homepage": "https://github.com/eduardogalbiati/craftorio#readme",
   "bugs": {
     "url": "https://github.com/eduardogalbiati/multiagent-orchestrator/issues"
   },
@@ -33,7 +33,7 @@
     "prestart": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "start": "electron .",
     "run": "node scripts/run.js",
-    "serve": "multiagent-engine",
+    "serve": "craftorio-engine",
     "site": "node scripts/site.js",
     "pretest": "node scripts/docs.js --derived",
     "test": "node scripts/test.js",
@@ -52,9 +52,9 @@
     "package": "node apps/desktop/scripts/package.js"
   },
   "dependencies": {
-    "@multiagent/desktop": "*",
-    "@multiagent/engine": "*",
-    "@multiagent/shared": "*",
+    "@craftorio/desktop": "*",
+    "@craftorio/engine": "*",
+    "@craftorio/shared": "*",
     "acorn": "8.19.0",
     "js-yaml": "^4.1.0"
   },
@@ -77,7 +77,7 @@
   "allowScripts": {
     "node-pty@1.1.0": true
   },
-  "multiagent": {
+  "craftorio": {
     "ui": "apps/web/renderer"
   }
 }

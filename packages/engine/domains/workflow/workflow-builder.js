@@ -24,7 +24,7 @@
 (function (root) {
   const node = typeof module === 'object' && module.exports;
   const yaml = node ? require('js-yaml') : root.jsyaml;
-  const registry = node ? require('@multiagent/shared/providers') : root.Providers;
+  const registry = node ? require('@craftorio/shared/providers') : root.Providers;
   const { WORKFLOW_CATEGORIES } = node ? require('./workflow-categories') : root.WorkflowCategories;
 
   // The workflow provider definitions the builder writes, by CLI id: each adapter's `definition`.

@@ -18,7 +18,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
 const I18N = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n');

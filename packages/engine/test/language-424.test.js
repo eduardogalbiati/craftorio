@@ -12,8 +12,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeService } = require('./service/helpers');
 
-const load = () => require('@multiagent/shared/language');
-const I18n = () => require('@multiagent/shared/i18n');
+const load = () => require('@craftorio/shared/language');
+const I18n = () => require('@craftorio/shared/i18n');
 const area = (locale) => require('../service/areas/interface-language')({ events: { on() {} }, host: { locale } });
 // the computer's language is `locale`, nothing saved for the interface
 const onComputer = (locale, settings = {}) => area(locale).applyInterfaceLanguage(settings);

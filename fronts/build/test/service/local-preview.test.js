@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { GATE_RUN_APP_WORKFLOW, GATE_WORKFLOW, gitRepo, makeService, openGateFixture, resolveAndWait, untilTrue } = require('@multiagent/engine/test/service/helpers');
+const { GATE_RUN_APP_WORKFLOW, GATE_WORKFLOW, gitRepo, makeService, openGateFixture, resolveAndWait, untilTrue } = require('@craftorio/engine/test/service/helpers');
 
 test('localPreview:start: offered only when the gate sets local_preview, runs in its work_dir, and never answers the gate', async (t) => {
   const { service, api } = makeService(t);

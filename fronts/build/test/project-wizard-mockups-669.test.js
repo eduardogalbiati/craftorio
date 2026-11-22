@@ -34,9 +34,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, existing, pageMarkup } = require('@multiagent/front-analyser/test/project-page-helpers');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, existing, pageMarkup } = require('@craftorio/front-analyser/test/project-page-helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const PID = 'p-new';

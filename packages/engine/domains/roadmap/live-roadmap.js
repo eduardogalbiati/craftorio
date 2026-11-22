@@ -20,7 +20,7 @@ const roadmaps = require('./roadmap');
 const {
   itemRuns,
   unfinishedItems,
-} = require('@multiagent/shared/roadmap-model');
+} = require('@craftorio/shared/roadmap-model');
 
 const DEFAULTS = { complexityCap: 2, maxStages: 3, dailyBudgetUsd: 50, refreshFirst: true };
 const DAY_MS = 24 * 3600e3;

@@ -9,8 +9,8 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const { displayName } = require('@multiagent/shared/display-name.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const { displayName } = require('@craftorio/shared/display-name.js');
 
 const FILE = pageFileOf('views/analytics/analytics-run.js');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -42,7 +42,7 @@ async function renderTab(figures = FIGURES) {
   const window = {};
   const sandbox = {
     window, console, displayName,
-    StatusPill: require('@multiagent/ui-kit/status-pill.js'), // the real readable statuses (#266)
+    StatusPill: require('@craftorio/ui-kit/status-pill.js'), // the real readable statuses (#266)
     sessionStorage: { getItem: () => null, setItem: () => {} },
     api: { getRunAnalysis: async () => ({ runs: [{ runId: figures.runId, title: figures.title, status: 'success', workflow: figures.workflow }], figures, comparison: null }) },
     esc, errMsg: (e) => String(e?.message || e),

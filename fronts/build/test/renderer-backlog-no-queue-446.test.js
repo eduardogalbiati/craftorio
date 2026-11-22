@@ -10,8 +10,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const QUEUE_ERROR = 'Run run-7 failed: 2 tests failed';
 const ref = (number) => ({ number, title: `Issue ${number}`, url: `https://github.com/o/r/issues/${number}` });

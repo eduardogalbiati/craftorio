@@ -14,7 +14,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('@multiagent/shared/onboarding-model');
+const load = () => require('@craftorio/shared/onboarding-model');
 const phases = (args) => load().analysisPhases(args);
 const states = (args) => phases(args).map((p) => p.state);
 

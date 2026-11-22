@@ -11,7 +11,7 @@
 
 'use strict';
 
-const RoadmapModel = require('@multiagent/shared/roadmap-model');
+const RoadmapModel = require('@craftorio/shared/roadmap-model');
 
 const CADENCE_MIN = 3;
 const CADENCE_MAX = 50;

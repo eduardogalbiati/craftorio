@@ -1,4 +1,4 @@
-// The plain log mode (#465): `multiagent-tail <runDir> --file <path in the run folder>` follows a machine
+// The plain log mode (#465): `craftorio-tail <runDir> --file <path in the run folder>` follows a machine
 // step's log (a suite, check or screenshots command's output) and prints it as it is, like followFile
 // in src/session-tail.js: what was appended since the last read, a UTF-8 character cut between two
 // reads printed once complete (as Node's StringDecoder), a file that shrinks read again from its start.

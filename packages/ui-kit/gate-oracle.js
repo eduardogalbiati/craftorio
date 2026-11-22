@@ -18,7 +18,7 @@
 // fillGateFeedback, failureContext, failureButtonHtml: tested in test/gate-oracle-183.test.js and
 // test/renderer-roadmap-ask-oracle-271.test.js).
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   const STARTERS = [
     'What was implemented, in plain words?',
     'Does it cover every task of the issue?',

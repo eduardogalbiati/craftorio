@@ -29,10 +29,10 @@ const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
 const runPr = require('../../domains/run/run-pr');
 const seedRuns = require('../seed-runs');
-const chain = require('@multiagent/shared/chain-model');
-const DocModel = require('@multiagent/shared/doc-model');
-const RoadmapModel = require('@multiagent/shared/roadmap-model');
-const RunProgress = require('@multiagent/shared/run-progress-model');
+const chain = require('@craftorio/shared/chain-model');
+const DocModel = require('@craftorio/shared/doc-model');
+const RoadmapModel = require('@craftorio/shared/roadmap-model');
+const RunProgress = require('@craftorio/shared/run-progress-model');
 const { clientError } = require('../common');
 
 module.exports = (ctx) => {

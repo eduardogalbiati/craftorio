@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { PLATFORMS } = require('@multiagent/shared/platforms');
+const { PLATFORMS } = require('@craftorio/shared/platforms');
 
 // Exact names: the paths and folders a CLI, git, node and npm need; the toolchain homes of the
 // languages the skills support (java, go, csharp, python, rust: folders, not secrets); Windows'

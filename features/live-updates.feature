@@ -5,7 +5,7 @@ Feature: Live updates from the engine
   gate answered elsewhere says so, and a dropped channel shows a small "reconnecting" indicator
   until the window has reconnected on its own.
 
-  # #603. The served engine (packages/engine/bin/multiagent-engine.js on a scratch workspace, its UI in
+  # #603. The served engine (packages/engine/bin/craftorio-engine.js on a scratch workspace, its UI in
   # an Electron window with no preload: features/support/served.js) is the only public surface where
   # the pushed channel can be held back or cut: the desktop app's own engine pushes over IPC. The
   # browser's WebSocket (/ws) goes through a Playwright relay (page.routeWebSocket): it forwards both

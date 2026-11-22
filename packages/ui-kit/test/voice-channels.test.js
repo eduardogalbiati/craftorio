@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-const { createService } = require('@multiagent/engine/service');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+const { createService } = require('@craftorio/engine/service');
 const { encodeWav } = require('../voice.js');
 
 const FAKE_CLI = process.platform === 'win32'

@@ -42,8 +42,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const DocModel = require('@multiagent/shared/doc-model');
-const { gitOut } = require('@multiagent/engine/service/common');
+const DocModel = require('@craftorio/shared/doc-model');
+const { gitOut } = require('@craftorio/engine/service/common');
 
 const DOCS = ['intent', 'spec', 'plan']; // #633: the plan, the pre-flow's third document
 const LISTED = [...DOCS, 'test']; // #702: test.md (written by the runs, sdlc-record / sdlc-test) is listed, never created here

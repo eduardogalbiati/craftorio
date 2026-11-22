@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const backlog = require('@multiagent/engine/domains/backlog/backlog');
+const backlog = require('@craftorio/engine/domains/backlog/backlog');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'backlog-745-'));

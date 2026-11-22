@@ -8,7 +8,7 @@
 
 const os = require('os');
 const path = require('path');
-const registry = require('@multiagent/shared/providers');
+const registry = require('@craftorio/shared/providers');
 
 function cliConfigDirs(home) {
   const env = home ? {} : process.env;

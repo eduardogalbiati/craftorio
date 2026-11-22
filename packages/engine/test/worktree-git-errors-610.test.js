@@ -26,7 +26,7 @@ const WARNING = 'bash.exe: warning: could not find /tmp, please create!';
 
 test('#610 git: an error with -c pairs in front names the git command, not -c', async (t) => {
   const f = fixture(t);
-  const msg = await failure(git(['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost', 'rev-parse', '--verify', 'refs/heads/no-such-branch'], f.repo));
+  const msg = await failure(git(['-c', 'user.name=Craftorio', '-c', 'user.email=orchestrator@localhost', 'rev-parse', '--verify', 'refs/heads/no-such-branch'], f.repo));
   assert.match(msg, /^git rev-parse failed: /);
   assert.doesNotMatch(msg, /git -c failed/);
 });

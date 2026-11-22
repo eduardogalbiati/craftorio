@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
@@ -90,5 +90,5 @@ test('#375 the Backlog issue card has a "Show on the map" button', () => {
   assert.ok(m, 'the issue card markup (const card = (i) => `...`) is in backlog.js');
   // #330: the label comes from the catalog
   assert.match(m[0], /<button[^>]*data-testid="show-on-map"[^>]*>\$\{t\('backlog\.show_on_the_map'\)\}<\/button>/);
-  assert.equal(require('@multiagent/shared/i18n.js').t('backlog.show_on_the_map'), 'Show on the map');
+  assert.equal(require('@craftorio/shared/i18n.js').t('backlog.show_on_the_map'), 'Show on the map');
 });

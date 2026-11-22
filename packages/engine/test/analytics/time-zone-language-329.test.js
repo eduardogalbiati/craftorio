@@ -13,7 +13,7 @@ const load = () => require('../../domains/analytics/time-zone');
 const AT = Date.UTC(2026, 9, 4, 22, 14);
 
 afterEach(() => {
-  try { require('@multiagent/shared/i18n.js').setLanguage('en'); } catch { /* the module does not exist yet */ }
+  try { require('@craftorio/shared/i18n.js').setLanguage('en'); } catch { /* the module does not exist yet */ }
 });
 
 test('#329 formatLocale: a short date in pt-BR is dd/mm/yyyy, in English m/d/yy', () => {
@@ -32,8 +32,8 @@ test('#329 formatLocale: month names in the language, in the given zone', () => 
 
 test('#329 formatLocale: without a language, the interface language set in i18n.js', () => {
   const { formatLocale } = load();
-  require('@multiagent/shared/i18n.js').setLanguage('pt-BR');
+  require('@craftorio/shared/i18n.js').setLanguage('pt-BR');
   assert.equal(formatLocale(AT, { dateStyle: 'short' }, 'UTC'), '04/10/2026');
-  require('@multiagent/shared/i18n.js').setLanguage('en');
+  require('@craftorio/shared/i18n.js').setLanguage('en');
   assert.equal(formatLocale(AT, { dateStyle: 'short' }, 'UTC'), '10/4/26');
 });

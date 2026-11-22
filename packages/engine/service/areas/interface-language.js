@@ -6,8 +6,8 @@
 // interface" default for an unset interface: the computer's language, as the screens resolve it (#424).
 
 const workspace = require('../../domains/workspace/workspace');
-const I18n = require('@multiagent/shared/i18n');
-const Language = require('@multiagent/shared/language');
+const I18n = require('@craftorio/shared/i18n');
+const Language = require('@craftorio/shared/language');
 
 module.exports = (ctx) => {
   function applyInterfaceLanguage(settings) {

@@ -19,7 +19,7 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { FileXHR, setCurrentScript } = require('@multiagent/shared/test/page-i18n');
+const { FileXHR, setCurrentScript } = require('@craftorio/shared/test/page-i18n');
 
 const RENDERER = path.join(__dirname, '..', '..', '..', 'apps', 'desktop', 'renderer');
 // window.api's plain values (not methods), as apps/desktop/host/preload.js exposes them

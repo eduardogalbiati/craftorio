@@ -10,7 +10,7 @@ const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 
 const root = path.join(__dirname, '..', '..', '..', '..');
-const load = () => require('@multiagent/shared/language');
+const load = () => require('@craftorio/shared/language');
 const PT = { agents: 'pt-BR', issues: 'en' };
 
 test('#327 software-development with agents in pt-BR: every step output parses and every prompt has the pt-BR line', { timeout: 120000 }, async (t) => {

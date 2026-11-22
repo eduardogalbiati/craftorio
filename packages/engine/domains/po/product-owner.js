@@ -79,13 +79,13 @@ const path = require('path');
 const agentInbox = require('../agents/agent-inbox');
 const agentsUsage = require('../agents/agents-usage');
 const backlog = require('../backlog/backlog');
-const { isArchived } = require('@multiagent/shared/backlog-archive');
+const { isArchived } = require('@craftorio/shared/backlog-archive');
 const costEstimate = require('../usage/cost-estimate');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 const discoveryCommit = require('../discovery/discovery-commit');
 const epics = require('../backlog/epics');
-const poCalibration = require('@multiagent/shared/po-calibration');
-const RoadmapModel = require('@multiagent/shared/roadmap-model');
+const poCalibration = require('@craftorio/shared/po-calibration');
+const RoadmapModel = require('@craftorio/shared/roadmap-model');
 const poSplit = require('./po-split');
 const poMockups = require('./po-mockups');
 const poChosen = require('./po-chosen-inputs');
@@ -106,7 +106,7 @@ const {
 const { conflictsOf } = require('../project/repo-performance');
 const { storeFor } = require('../workspace/store');
 const { readEvents } = require('../supervisor/supervisor');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 const TimeZone = require('../analytics/time-zone');
 
 const MAX_REPORT = 60000;
@@ -123,7 +123,7 @@ const CONTEXT_WARN_AT = 7;
 const TEST_TIME_WARN_AT = 5;
 const DEFAULT_COMPLEXITY = 3;
 // how to enrich an issue: the README's Write doc section (#648: the Backlog's Enrich starts write-doc)
-const ENRICH_GUIDE = 'https://github.com/eduardogalbiati/multiagent-orchestrator#write-doc-workflowswrite-docyaml';
+const ENRICH_GUIDE = 'https://github.com/eduardogalbiati/craftorio#write-doc-workflowswrite-docyaml';
 
 const ANSWER_SCHEMA = {
   type: 'object',

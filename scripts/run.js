@@ -16,34 +16,34 @@
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
-const { aliasInputs } = require('@multiagent/shared/default-workflow');
-const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
-const { Recorder } = require('@multiagent/engine/engine/recorder');
-const { runOptionsFromSettings } = require('@multiagent/engine/engine/run-settings');
+const { aliasInputs } = require('@craftorio/shared/default-workflow');
+const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
+const { Recorder } = require('@craftorio/engine/engine/recorder');
+const { runOptionsFromSettings } = require('@craftorio/engine/engine/run-settings');
 const {
   readSettings,
   resolveWorkspace,
   setupWorkspace,
-} = require('@multiagent/engine/domains/workspace/workspace');
-const usage = require('@multiagent/engine/domains/usage/usage');
-const { resolveCommand } = require('@multiagent/engine/engine/providers');
+} = require('@craftorio/engine/domains/workspace/workspace');
+const usage = require('@craftorio/engine/domains/usage/usage');
+const { resolveCommand } = require('@craftorio/engine/engine/providers');
 const {
   BUNDLED_WORKFLOWS_DIR,
   resolveWorkflow,
   seedWorkflows,
-} = require('@multiagent/engine/domains/workflow/workflows');
-const { seedSkills } = require('@multiagent/engine/domains/agents/skills');
+} = require('@craftorio/engine/domains/workflow/workflows');
+const { seedSkills } = require('@craftorio/engine/domains/agents/skills');
 const {
   listProjects,
   readProject,
-} = require('@multiagent/engine/domains/project/projects');
+} = require('@craftorio/engine/domains/project/projects');
 const {
   resolveRunInputs,
   runDefaultsWith,
   savedProfile,
-} = require('@multiagent/engine/domains/project/project-run-defaults');
-const { seedsRoot } = require('@multiagent/engine/service/seed-runs');
-const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
+} = require('@craftorio/engine/domains/project/project-run-defaults');
+const { seedsRoot } = require('@craftorio/engine/service/seed-runs');
+const { loadWorkflow } = require('@craftorio/engine/engine/workflow');
 
 const root = path.join(__dirname, '..');
 
@@ -100,7 +100,7 @@ const project = projectFor(ws.projects, args.project, args.inputs.repo_path);
 args.inputs.repo_path ??= project?.folder || root;
 const settings = readSettings(ws);
 const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
-const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@multiagent/engine/domains/local/local-usage').readLocalUsage() : null });
+const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('@craftorio/engine/domains/local/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: wfFile.file,
   // #630: an old workflow name brings its variant's inputs, under the given ones (an old

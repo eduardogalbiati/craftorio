@@ -1,7 +1,7 @@
 // The fronts installed next to the engine and the engine-side code each one carries (phase 4 of
 // docs/reorganisation-study-2026-10.md, #590). A front is a package whose package.json declares
-// `multiagent.front: "<id>"` (`fronts/<id>/` in the checkout, `@multiagent/front-<id>` under
-// node_modules once installed or packaged); its engine side is the folder `multiagent.engine` names
+// `craftorio.front: "<id>"` (`fronts/<id>/` in the checkout, `@craftorio/front-<id>` under
+// node_modules once installed or packaged); its engine side is the folder `craftorio.engine` names
 // (`engine/` by default): `channels/*.js` and `areas/*.js`, loaded next to the kernel's own
 // (packages/engine/service/manifest.js loadChannels, packages/engine/service/index.js loadAreas),
 // and `domains/*.js`, which only that front's engine files require. The service serves the fronts a
@@ -10,7 +10,7 @@
 //
 //   frontManifest(dir)            the front fields of a package folder: { id, engine } (id null when
 //                                 the package declares no front); throws on an unreadable package.json
-//                                 or a `multiagent.front` that is not an id (a non-empty lower-case
+//                                 or a `craftorio.front` that is not an id (a non-empty lower-case
 //                                 name: letters, digits, dashes, usable as a layer and folder name)
 //   installedFronts(root)         [{ id, name, dir, engine }] by id: dir the package folder, engine the
 //                                 absolute engine-side folder or null (a UI-only front). The same
@@ -33,8 +33,8 @@ const FRONT_ENGINE_DIR = 'engine';
 const FRONT_ID = /^[a-z][a-z0-9-]*$/;
 
 // the folders a front package may sit in: the checkout's fronts/ (first, so it wins over the
-// node_modules link or copy of the same package) and the installed @multiagent packages
-const PARENTS = ['fronts', path.join('node_modules', '@multiagent')];
+// node_modules link or copy of the same package) and the installed @craftorio packages
+const PARENTS = ['fronts', path.join('node_modules', '@craftorio')];
 
 const byCodeUnit = (key) => (a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
 
@@ -42,11 +42,11 @@ function frontManifest(dir) {
   const file = path.join(dir, 'package.json');
   let pkg;
   try { pkg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { throw new Error(`${file}: cannot be read as a package manifest (${e.message}).`); }
-  const front = pkg?.multiagent?.front;
+  const front = pkg?.craftorio?.front;
   if (front === undefined) return { id: null, name: pkg?.name || null, engine: FRONT_ENGINE_DIR };
-  if (typeof front !== 'string' || !FRONT_ID.test(front)) throw new Error(`${file}: multiagent.front must be a front id (lower-case letters, digits and dashes), got ${JSON.stringify(front)}.`);
-  const engine = pkg.multiagent.engine === undefined ? FRONT_ENGINE_DIR : pkg.multiagent.engine;
-  if (typeof engine !== 'string' || !engine) throw new Error(`${file}: multiagent.engine must name a folder.`);
+  if (typeof front !== 'string' || !FRONT_ID.test(front)) throw new Error(`${file}: craftorio.front must be a front id (lower-case letters, digits and dashes), got ${JSON.stringify(front)}.`);
+  const engine = pkg.craftorio.engine === undefined ? FRONT_ENGINE_DIR : pkg.craftorio.engine;
+  if (typeof engine !== 'string' || !engine) throw new Error(`${file}: craftorio.engine must name a folder.`);
   return { id: front, name: pkg.name || null, engine };
 }
 

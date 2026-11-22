@@ -43,7 +43,7 @@ function servedEnv(scratch, { size }) {
 
 // Starts scripts/serve.js on a free port → { child, url } (url carries the token once)
 function startServer(scratch, env) {
-  const child = spawn(process.execPath, [path.join(root, 'packages', 'engine', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'workspace')], {
+  const child = spawn(process.execPath, [path.join(root, 'packages', 'engine', 'bin', 'craftorio-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'workspace')], {
     cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   });
   return new Promise((resolve, reject) => {

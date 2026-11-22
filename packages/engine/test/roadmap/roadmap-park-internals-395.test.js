@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const roadmaps = require('../../domains/roadmap/roadmap');
-const model = require('@multiagent/shared/roadmap-model');
+const model = require('@craftorio/shared/roadmap-model');
 const undo = require('../../domains/roadmap/roadmap-undo');
 
 const item = (id, status, extra = {}) => ({ id, workflow: 'software-development.yaml', inputs: {}, mock: true, number: Number(id.replace(/\D/g, '')) || 1, status, runId: null, runs: [], error: null, ...extra });

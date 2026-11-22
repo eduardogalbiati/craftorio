@@ -4,7 +4,7 @@
 // Acceptance tests written before the code.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I18n = require('@multiagent/shared/i18n');
+const I18n = require('@craftorio/shared/i18n');
 const WorkflowInputs = require('../workflow-inputs');
 
 const DEFS = { mode: { label: 'Mode', enum: ['local', 'fork'], default: 'local' } };

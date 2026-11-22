@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { render } = require('./templates');
 const { isUnder } = require('../worktree');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 
 // ---------------------------------------------------------------------------
 // Structured output

@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const { execFileSync } = require('child_process');
-const appUpdate = require('@multiagent/engine/domains/workspace/app-update');
+const appUpdate = require('@craftorio/engine/domains/workspace/app-update');
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -92,7 +92,7 @@ const settingsSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..',
 function appUpdateHtml(o, info) {
   const src = /function appUpdateHtml\(o, info\) \{[\s\S]*?\n\}/.exec(settingsSrc)?.[0];
   assert.ok(src, 'appUpdateHtml not found in settings.js');
-  const sandbox = { esc, t: require('@multiagent/ui-kit/test/settings-source-329').t }; // #329: the row's texts come from the catalog
+  const sandbox = { esc, t: require('@craftorio/ui-kit/test/settings-source-329').t }; // #329: the row's texts come from the catalog
   vm.runInNewContext(`${src}\nthis.appUpdateHtml = appUpdateHtml;`, sandbox);
   return sandbox.appUpdateHtml(o, info);
 }
@@ -106,10 +106,10 @@ test('#279 Settings row: unavailable says why, off and disabled, with no source 
 });
 
 test('#279 Settings row: applies, with the source and the switch; Self-healing off disables it', () => {
-  const info = { applies: true, project: { id: 'p1', name: 'multiagent-orchestrator' }, short: '5d9be33', behind: 3 };
+  const info = { applies: true, project: { id: 'p1', name: 'craftorio' }, short: '5d9be33', behind: 3 };
   const on = appUpdateHtml({ selfHealing: true, appUpdate: true }, info);
   assert.match(on, /data-testid="app-update-source"/);
-  assert.match(on, /multiagent-orchestrator/);
+  assert.match(on, /craftorio/);
   assert.match(on, /5d9be33/);
   assert.match(on, /3 commits ahead of this app/);
   assert.match(on, /id="set-app-update"[^>]* checked/);
@@ -118,7 +118,7 @@ test('#279 Settings row: applies, with the source and the switch; Self-healing o
   assert.match(off, /id="set-app-update"[^>]* disabled/);
 });
 
-const APPLIES = { applies: true, project: { id: 'p1', name: 'multiagent-orchestrator' }, short: '5d9be33', behind: 3 };
+const APPLIES = { applies: true, project: { id: 'p1', name: 'craftorio' }, short: '5d9be33', behind: 3 };
 
 test('#285 Settings row: no "When" choice is rendered, even with a stored appUpdateWhen', () => {
   const html = appUpdateHtml({ selfHealing: true, appUpdate: true, appUpdateWhen: 'marked' }, APPLIES);

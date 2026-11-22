@@ -2,7 +2,7 @@
 // document in Build, Test and Deploy. Acceptance tests, written before the code.
 //
 // The interface assumed here (workflows loaded with packages/engine/engine/run/load.js loadWorkflow, as
-// sdlc-flows-633.test.js does; the chain's inputs computed with @multiagent/shared/chain-model nextInputs):
+// sdlc-flows-633.test.js does; the chain's inputs computed with @craftorio/shared/chain-model nextInputs):
 // - a Code & Build run (feature, fix) hands its result to the post-flow as declared outputs only:
 //   `merged_commit`, `pr_url`, `issues` and `evidence` (an object: the suite, the E2E scenarios, the
 //   screenshots and the axe check);
@@ -22,7 +22,7 @@ const root = path.join(__dirname, '..', '..', '..', '..');
 const WORKFLOWS = path.join(root, 'workflows');
 
 const engine = () => require('../../engine/run/load');
-const chain = () => require('@multiagent/shared/chain-model');
+const chain = () => require('@craftorio/shared/chain-model');
 const loadBundled = (name) => engine().loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`));
 
 const step = (wf, id) => (wf.steps || []).find((s) => s?.id === id);

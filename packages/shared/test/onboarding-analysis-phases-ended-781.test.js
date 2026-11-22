@@ -1,7 +1,7 @@
 // #781: a job that ended settles what a late read of the interview left unended, so no line runs for ever.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { analysisPhases } = require('@multiagent/shared/onboarding-model');
+const { analysisPhases } = require('@craftorio/shared/onboarding-model');
 
 const states = (args) => analysisPhases(args).map((p) => p.state);
 const interview = (git, files, oracle) => ({ phases: { git: { status: git }, files: { status: files }, oracle: { status: oracle } } });

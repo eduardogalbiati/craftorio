@@ -19,8 +19,8 @@
 //   picks.workModel), and a resumed wizard (the onboarding state's wizard.picks.workModel) shows it checked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 const W = require('./project-wizard-helpers');
 
 const NAME = 'Shop';

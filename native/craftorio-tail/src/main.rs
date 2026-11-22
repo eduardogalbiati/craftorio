@@ -1,11 +1,11 @@
-// multiagent-tail (#342): the external live terminal's follower, the Rust twin of src/session-tail.js
+// craftorio-tail (#342): the external live terminal's follower, the Rust twin of src/session-tail.js
 // (the app starts this binary when it exists, else the script under node; see tailCommand in
-// src/native-bin.js). `multiagent-tail <runDir> <sessionId>` follows <run>/sessions/<id>.jsonl, or with
+// src/native-bin.js). `craftorio-tail <runDir> <sessionId>` follows <run>/sessions/<id>.jsonl, or with
 // the id "orchestrator" the whole run (<run>/events.jsonl), and prints exactly what the script prints:
 // the window title, the "Following" line, the colours, the clipping, local times. It waits for a file
 // that does not exist yet, reads what was appended every 400 ms (a partial line once complete), and
 // ends on Ctrl+C or when its window closes (stdout gone).
-// `multiagent-tail <runDir> --file <path in the run folder>` (#465, file.rs) follows a plain log instead.
+// `craftorio-tail <runDir> --file <path in the run folder>` (#465, file.rs) follows a plain log instead.
 
 mod file;
 mod format;

@@ -83,7 +83,7 @@ const head = (git, dir) => git(dir, 'rev-parse', 'HEAD');
 test('#279 source: a packaged app never updates itself and says why', (t) => {
   const { findSource } = load();
   const r = appAndClone(t);
-  const s = findSource({ appDir: r.appDir, isPackaged: true, projects: [{ id: 'p1', name: 'multiagent-orchestrator', dir: r.cloneDir }] });
+  const s = findSource({ appDir: r.appDir, isPackaged: true, projects: [{ id: 'p1', name: 'craftorio', dir: r.cloneDir }] });
   assert.equal(s.ok, false);
   assert.match(s.reason, /packaged app updates with a new install/);
 });
@@ -105,10 +105,10 @@ test('#279 source: no project of the workspace is the app repository, the row sa
 test('#279 source: a clone with the same origin is the source, with its main short commit and how far the app is behind', (t) => {
   const { findSource } = load();
   const r = appAndClone(t, { ahead: 3 });
-  const s = findSource({ appDir: r.appDir, isPackaged: false, projects: [{ id: 'p1', name: 'multiagent-orchestrator', dir: r.cloneDir }] });
+  const s = findSource({ appDir: r.appDir, isPackaged: false, projects: [{ id: 'p1', name: 'craftorio', dir: r.cloneDir }] });
   assert.equal(s.ok, true);
   assert.equal(s.project.id, 'p1');
-  assert.equal(s.project.name, 'multiagent-orchestrator');
+  assert.equal(s.project.name, 'craftorio');
   assert.equal(s.behind, 3);
   assert.ok(s.short.length >= 7 && r.to.startsWith(s.short), `short ${s.short} is not ${r.to}`);
 });

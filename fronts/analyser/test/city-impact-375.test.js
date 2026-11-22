@@ -41,13 +41,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildModel } = require('@craftorio/shared/architecture-model');
 
 const root = path.join(__dirname, '..', '..', '..');
 const FILE = path.join(root, 'packages', 'shared', 'city-impact.js');
-const load = () => require('@multiagent/shared/city-impact.js');
-const loadLayout = () => require('@multiagent/shared/city-layout.js');
-const loadModel = () => require('@multiagent/shared/city-model.js');
+const load = () => require('@craftorio/shared/city-impact.js');
+const loadLayout = () => require('@craftorio/shared/city-layout.js');
+const loadModel = () => require('@craftorio/shared/city-model.js');
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 // ---------- the module ----------
@@ -353,7 +353,7 @@ test('#375 stageFootprint: one item, an item with no files, or a file listed twi
 
 test('#375 stageFootprint: the conflict red is the agents overlay\'s collision red (#374)', () => {
   const { CONFLICT_COLOUR } = load();
-  assert.equal(CONFLICT_COLOUR, require('@multiagent/shared/city-agents.js').COLLISION_COLOUR);
+  assert.equal(CONFLICT_COLOUR, require('@craftorio/shared/city-agents.js').COLLISION_COLOUR);
 });
 
 test('#375 stageFootprint: works in the browser, loaded after city-agents.js', () => {

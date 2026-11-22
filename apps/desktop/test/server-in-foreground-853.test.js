@@ -15,10 +15,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const providers = require('@multiagent/engine/engine/providers');
-const { RunChatModel } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
+const providers = require('@craftorio/engine/engine/providers');
+const { RunChatModel } = require('@craftorio/front-build/views/runchat/run-chat-model.js');
 
-const WORKFLOW = require.resolve('@multiagent/engine/engine/workflow');
+const WORKFLOW = require.resolve('@craftorio/engine/engine/workflow');
 const THRESHOLD_MS = 400;
 
 const YAML = `apiVersion: multiagent/v1
@@ -130,7 +130,7 @@ async function runWith(t, { background, withBackgroundFirst = false }) {
 }
 
 test('the guard\'s default threshold is 90 s, next to the idle watch\'s', () => {
-  const turns = require('@multiagent/engine/engine/run/turns');
+  const turns = require('@craftorio/engine/engine/run/turns');
   assert.equal(turns.SERVER_FOREGROUND_MS, 90000);
   assert.equal(typeof turns.IDLE_WARN_MS, 'number');
 });

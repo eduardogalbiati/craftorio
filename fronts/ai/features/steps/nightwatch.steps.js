@@ -131,7 +131,7 @@ const appUpdateRow = (page) => page.getByTestId('app-update-row');
 const MIN = 6e4;
 const HOUR = 60 * MIN;
 const WORKFLOW = 'software-development-local-hero';
-const { trailOf } = require('@multiagent/shared/run-progress-model');
+const { trailOf } = require('@craftorio/shared/run-progress-model');
 const regressions = (page) => page.getByTestId('nw-regression');
 const regressionOf = (page, step) => regressions(page).filter({ hasText: new RegExp(`^\\s*${escapeRe(step)}:`) });
 const morningCard = (page) => page.getByRole('button', { name: 'Open Night watch', exact: true });

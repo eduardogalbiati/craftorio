@@ -4,7 +4,7 @@
 // from pages, ...) and every other page is denied.
 
 const { fileURLToPath } = require('url');
-const { pathKey } = require('@multiagent/engine/domains/machine/platform-paths');
+const { pathKey } = require('@craftorio/engine/domains/machine/platform-paths');
 
 const norm = (p) => pathKey(p);
 

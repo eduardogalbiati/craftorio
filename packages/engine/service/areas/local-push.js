@@ -7,7 +7,7 @@
 // goes on from the base as it is; a diverged base is never moved. run:start, pipelines:run and the Roadmap call them.
 
 const path = require('path');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
 const { worktreeTarget } = require('../../engine/run/checkout');
 const { inputValues } = require('../../engine/run/setup');

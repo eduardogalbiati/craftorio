@@ -65,8 +65,8 @@ const path = require('path');
 const actions = require('./oracle-actions');
 const agentsUsage = require('../agents/agents-usage');
 const TimeZone = require('../analytics/time-zone');
-const Language = require('@multiagent/shared/language');
-const I18n = require('@multiagent/shared/i18n');
+const Language = require('@craftorio/shared/language');
+const I18n = require('@craftorio/shared/i18n');
 const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('../chat/chat-progress');
 const night = require('../night/night-watch');
@@ -521,7 +521,7 @@ function createOracle({
     let note = '';
     try { note = fs.readFileSync(files().stateNote, 'utf8').trim(); } catch { note = latestHandoff().trim(); }
     const prompt = [
-      skill || 'You are the Oracle of the Multiagent Orchestrator: read-only, grounded in your tools, answer and write everything for the product in the languages the Language line of each turn names.',
+      skill || 'You are the Oracle of the Craftorio: read-only, grounded in your tools, answer and write everything for the product in the languages the Language line of each turn names.',
       known,
       `## Memory (the owner's standing decisions; only the owner changes it)\n${mem || '(empty)'}`,
       note && `## Where the conversation stands (kept by the app; your previous session is gone)\n${note}`,

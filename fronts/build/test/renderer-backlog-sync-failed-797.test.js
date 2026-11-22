@@ -3,8 +3,8 @@
 // on the card. Through the whole page (agent-chat-page-harness), like renderer-workflows-acceptance-indicator-794.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPage, settle, deferred } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
+const { loadPage, settle, deferred } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
 
 const READ_FAILED = 'could not read the PR: gh is not installed';
 const PROJECTS = [{ id: 'p1', name: 'demo', folder: 'C:/demo', repo: true }];

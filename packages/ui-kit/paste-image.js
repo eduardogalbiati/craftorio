@@ -14,7 +14,7 @@
 // it. Pure helpers (pastedFiles, checkImage, formatSize) are exported for the tests.
 // load: after voice.js
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // the limits of a turn's attachments (packages/engine/engine/providers.js ATTACHMENT_LIMITS)
   const LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
   const TYPES = { 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };

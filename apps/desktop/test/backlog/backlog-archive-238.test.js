@@ -23,11 +23,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const productOwner = require('@multiagent/engine/domains/po/product-owner');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+const productOwner = require('@craftorio/engine/domains/po/product-owner');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
-const loadBacklog = () => require('@multiagent/engine/domains/backlog/backlog');
+const loadBacklog = () => require('@craftorio/engine/domains/backlog/backlog');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-238-'));

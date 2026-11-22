@@ -25,7 +25,7 @@ function findRoot(from) {
     if (fs.existsSync(file)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (pkg.workspaces || pkg.multiagent) return dir;
+        if (pkg.workspaces || pkg.craftorio) return dir;
       } catch { /* not the manifest we want */ }
     }
     const parent = path.dirname(dir);

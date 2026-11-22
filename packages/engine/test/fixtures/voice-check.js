@@ -40,7 +40,7 @@ const FAKE_CLI = process.platform === 'win32'
   : path.join(__dirname, 'fake-whisper.js');
 if (process.platform !== 'win32') fs.chmodSync(FAKE_CLI, 0o755);
 
-require('@multiagent/desktop/host/main');
+require('@craftorio/desktop/host/main');
 
 setTimeout(() => { console.error('voice-check: timed out'); app.exit(1); }, 60000);
 

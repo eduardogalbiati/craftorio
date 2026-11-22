@@ -23,7 +23,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { makeRepo } = require('./repo-workflow-fixtures-485');
-const DocModel = require('@multiagent/shared/doc-model');
+const DocModel = require('@craftorio/shared/doc-model');
 
 const load = () => require('../engine/record-docs-step');
 

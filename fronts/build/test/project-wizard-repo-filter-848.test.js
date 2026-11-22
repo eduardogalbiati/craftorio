@@ -12,7 +12,7 @@
 // wizard (#project-wizard's innerHTML) and a write into the slot are both recorded, and the latest wins.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 const M = require('../../../packages/shared/onboarding-model.js');
 

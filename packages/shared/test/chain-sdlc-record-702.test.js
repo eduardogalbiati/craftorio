@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const load = () => require('@multiagent/shared/chain-model');
+const load = () => require('@craftorio/shared/chain-model');
 
 const BODY = 'Step two of the plan.\n\nPlan: `docs/work/write-doc/plan.md`, step 2.\n';
 const run = (status, body = BODY) => ({ status, task: `Add the editor\n\n${body}`, issues: [{ number: 12, title: 'Add the editor', body }] });

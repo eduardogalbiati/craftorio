@@ -6,7 +6,7 @@
 // No DOM here: views/oracle/oracle.js renders it, a test feeds it plain objects.
 // Browser: window.OracleChatModel; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // packages/engine/domains/oracle/oracle.js ATTACHMENT_LIMITS (the service checks them again)
   const LIMITS = Object.freeze({ maxBytes: 5 * 1048576, maxCount: 4 });
   const IMAGE_TYPES = ['image/gif', 'image/jpeg', 'image/png', 'image/webp'];
@@ -153,7 +153,7 @@
 
   /** The default end of a Night watch: the next 07:00 in the owner's zone (#273, time-zone.js; unset: the computer's), as a datetime-local value. */
   function defaultNightEnd(now = new Date(), timeZone = null) {
-    const TZ = typeof TimeZone !== 'undefined' ? TimeZone : require('@multiagent/shared/time-zone');
+    const TZ = typeof TimeZone !== 'undefined' ? TimeZone : require('@craftorio/shared/time-zone');
     return TZ.inputValue(TZ.nextAt(7, 0, timeZone, now), timeZone);
   }
 

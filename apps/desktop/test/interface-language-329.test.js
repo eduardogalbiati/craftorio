@@ -11,7 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'interface-language.js'), 'utf8');
-const I18N_PATH = require.resolve('@multiagent/shared/i18n.js');
+const I18N_PATH = require.resolve('@craftorio/shared/i18n.js');
 
 /** A fresh i18n instance (its language and listeners are module state). */
 function freshI18n() {

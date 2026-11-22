@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fronts, viewsOf } = require('../../../scripts/source-tree');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ROOT = require('path').join(__dirname, '..', '..', '..');
 const FRONTS = fronts(ROOT).map((f) => f.id);

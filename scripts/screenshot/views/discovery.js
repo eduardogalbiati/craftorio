@@ -14,7 +14,7 @@ const { demoReleases } = require('./releases');
 // a PRD with tags, a clarity score, an estimate, acceptance criteria, an image, notes and a
 // Write & Review result (a version and a thread entry).
 function demoDiscoveryBoard(ws, projectId) {
-  const discovery = require('@multiagent/engine/domains/discovery/discovery');
+  const discovery = require('@craftorio/engine/domains/discovery/discovery');
   const dir = ws.discovery;
   const hour = 3600000;
   const columns = ['triage', 'shape', 'define', 'ready'];
@@ -83,7 +83,7 @@ function demoDiscoveryBoard(ws, projectId) {
 // and one whose issue (#8) the release v0.9 shipped. The Discovery board lists them beside its
 // columns with their delivery; the Backlog shows each of these issues with its card's badge.
 function demoCommittedCards(ws, projectId) {
-  const discovery = require('@multiagent/engine/domains/discovery/discovery');
+  const discovery = require('@craftorio/engine/domains/discovery/discovery');
   const dir = ws.discovery;
   const committed = ({ title, text, acceptance, clarity, issues }) => {
     const c = discovery.createCard(dir, projectId, { title, text, type: 'prd', author: 'maintainer', column: 'triage' });

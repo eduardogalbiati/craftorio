@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// The `multiagent-engine` bin (the engine package's, phase 2 of docs/reorganisation-study-2026-10.md;
+// The `craftorio-engine` bin (the engine package's, phase 2 of docs/reorganisation-study-2026-10.md;
 // `npm run serve` at the repository root). Runs the engine as a server: the HTTP/WebSocket API
-// (packages/engine/server) and the UI in a browser (the folder the root package.json's `multiagent.ui`
+// (packages/engine/server) and the UI in a browser (the folder the root package.json's `craftorio.ui`
 // names, served from the app root), or in
 // the desktop app of another computer (Settings › Execution › Engine, apps/desktop/host/engine-connection.js).
 //   npm run serve -- [--port 7300] [--host 127.0.0.1 | tailscale | <ip>] [--allow-host <name>]... [--insecure-http] [--workspace <dir>] [--fronts <id,id>]
@@ -103,7 +103,7 @@ function readMagicDnsName() {
 
 // the composition of the UI app this server serves (apps/web/composition.js: `{ fronts: [ids] }`), if any
 function uiComposition() {
-  const ui = appPackage().multiagent?.ui;
+  const ui = appPackage().craftorio?.ui;
   const file = ui ? path.join(appRoot(), ui, '..', 'composition.js') : null;
   if (!file || !fs.existsSync(file)) return null;
   const def = require(file);
@@ -203,7 +203,7 @@ function printAllowedHosts(names, magic) {
     const { port } = server.address();
     const host = listen.host;
     const shown = host === '0.0.0.0' || host === '::' ? os.hostname() : host.includes(':') ? `[${host}]` : host;
-    console.log(`Multiagent Orchestrator engine server — workspace ${ws.root}`);
+    console.log(`Craftorio engine server — workspace ${ws.root}`);
     console.warn('The token is full control of this machine (a shell, gate approval, paid runs): share it only with yourself.');
     console.log(`Open: http://${shown}:${port}/?token=${encodeURIComponent(token)}`);
     console.log('  (shown once: the page keeps it in a cookie; clear this line from the shell history and the terminal\'s scrollback if others can read them.)');

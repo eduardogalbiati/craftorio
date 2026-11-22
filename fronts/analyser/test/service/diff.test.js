@@ -12,7 +12,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const diffArea = require('../../engine/areas/diff');
-const { gitRepo } = require('@multiagent/engine/test/service/helpers');
+const { gitRepo } = require('@craftorio/engine/test/service/helpers');
 
 // A minimal ctx for diff.js: a real runs/ folder (ctx.runFolder behaves like workspace.js's, an
 // events.jsonl is required) and `active`, a fake stand-in for the engine's live WorkflowRun map.

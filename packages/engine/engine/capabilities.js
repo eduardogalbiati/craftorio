@@ -19,7 +19,7 @@ const path = require('path');
 const { PLATFORM_CLIS } = require('./child-env');
 const { workerEnv } = require('../domains/machine/machine-profile');
 const { machineSlotDir } = require('./machine-slot');
-const registry = require('@multiagent/shared/providers');
+const registry = require('@craftorio/shared/providers');
 
 const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
 const KEYS = ['tools', 'web', 'mcp', 'subagents', 'screenshots'];

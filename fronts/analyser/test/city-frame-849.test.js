@@ -10,9 +10,9 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const Module = require('module');
 const THREE = require('three');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
-const L = require('@multiagent/shared/city-layout');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
+const L = require('@craftorio/shared/city-layout');
 
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);

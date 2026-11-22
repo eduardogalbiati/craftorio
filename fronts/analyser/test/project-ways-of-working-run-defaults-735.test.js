@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const OnboardingModel = require('@multiagent/shared/onboarding-model');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const OnboardingModel = require('@craftorio/shared/onboarding-model');
 
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const FILE = pageFileOf('views/project/project-ways-of-working.js');

@@ -20,7 +20,7 @@ const path = require('path');
 const vm = require('vm');
 
 const FILE = path.join(__dirname, '..', '..', 'shared', 'onboarding-model.js');
-const load = () => require('@multiagent/shared/onboarding-model');
+const load = () => require('@craftorio/shared/onboarding-model');
 
 // the workflows bundled today (workflows/*.yaml): the wizard suggests only among these (#630:
 // feature, fix and release replace the old development and release workflows; #631: analyze-project,

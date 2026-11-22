@@ -7,7 +7,7 @@
 // fake DOM parses nothing, so the control is found in the markup strings the view produced.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const SD = 'software-development.yaml';
 const BF = 'bug-fix.yaml';

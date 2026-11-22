@@ -6,9 +6,9 @@
 // drives the review. The city the review reads (api.architectureCity) has the plan the onboarding drew.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, existing } = require('@multiagent/front-analyser/test/project-page-helpers');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, existing } = require('@craftorio/front-analyser/test/project-page-helpers');
 
 const PID = 'p-city';
 const REPO = 'https://github.com/o/city.git';

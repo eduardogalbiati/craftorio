@@ -11,9 +11,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
-const SP = require('@multiagent/ui-kit/status-pill.js');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
+const SP = require('@craftorio/ui-kit/status-pill.js');
 
 const FAILED = '20261014-100000-failed01';
 const RESUMED = '20261014-110000-resumed1';
@@ -144,7 +144,7 @@ function writeRun(runsDir, runId, { status, resumedFrom = null, startMs }) {
 const T0 = Date.parse('2026-10-14T10:00:00.000Z');
 
 test('#384 findRun: a resume written right after a lookup (within 2 s) is still found', async (t) => {
-  const { makeService } = require('@multiagent/engine/test/service/helpers');
+  const { makeService } = require('@craftorio/engine/test/service/helpers');
   const { service, api } = makeService(t);
   const runsDir = service.workspace().runs;
   writeRun(runsDir, FAILED, { status: 'failed', startMs: T0 });
@@ -156,7 +156,7 @@ test('#384 findRun: a resume written right after a lookup (within 2 s) is still 
 });
 
 test('#384 findRun: an unchanged runs folder is not listed again within 2 s', async (t) => {
-  const { makeService } = require('@multiagent/engine/test/service/helpers');
+  const { makeService } = require('@craftorio/engine/test/service/helpers');
   const { service, api } = makeService(t);
   const runsDir = service.workspace().runs;
   writeRun(runsDir, FAILED, { status: 'failed', startMs: T0 });

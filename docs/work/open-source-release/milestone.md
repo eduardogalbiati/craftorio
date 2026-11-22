@@ -13,7 +13,7 @@ translation: milestone.pt-BR.md
 
 ## What happens
 
-1. **Final review** of the app and the repository: the [open-source checklist](https://github.com/eduardogalbiati/multiagent-orchestrator/blob/main/docs/open-source-checklist.md) and the security review of 2026-10-22 (#466 to #483).
+1. **Final review** of the app and the repository: the [open-source checklist](https://github.com/eduardogalbiati/craftorio/blob/main/docs/open-source-checklist.md) and the security review of 2026-10-22 (#466 to #483).
 2. **Closed beta**, expected on Thursday, November 5: beta testers install the app and help validate it with their own projects (the first project onboarding, the workflows, the release builds).
 3. Their findings become issues on the backlog; what blocks the release is fixed first.
 4. **Open source**: the repository goes public, and with it this page and the releases.

@@ -15,7 +15,7 @@ const path = require('path');
 const { installCommand } = require('../machine/install-commands');
 const { readRunSummary } = require('../run/run-record');
 const { runSummaries } = require('../run/runs');
-const registry = require('@multiagent/shared/providers');
+const registry = require('@craftorio/shared/providers');
 const { cacheWriteUsd } = require('../session/session-cache');
 const TimeZone = require('../analytics/time-zone');
 

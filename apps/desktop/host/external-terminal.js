@@ -11,7 +11,7 @@
 // the command line. No terminal found (Linux): terminalLaunch is null and externalTerminal says why,
 // so the renderer disables the button (packages/ui-kit/term-dock.js termButtons).
 
-const { shQuote } = require('@multiagent/engine/domains/machine/shell');
+const { shQuote } = require('@craftorio/engine/domains/machine/shell');
 
 const LINUX_TERMINALS = [
   'x-terminal-emulator',

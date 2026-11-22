@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
-const { Recorder } = require('@multiagent/engine/engine/recorder');
-const { runEvents } = require('@multiagent/engine/domains/run/runs');
+const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
+const { Recorder } = require('@craftorio/engine/engine/recorder');
+const { runEvents } = require('@craftorio/engine/domains/run/runs');
 const { RunChatModel, splitAnswer, providerType } = require('../views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';

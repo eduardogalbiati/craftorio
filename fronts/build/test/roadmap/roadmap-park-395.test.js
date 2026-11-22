@@ -30,9 +30,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const model = () => require('@multiagent/shared/roadmap-model');
-const roadmaps = () => require('@multiagent/engine/domains/roadmap/roadmap');
-const night = () => require('@multiagent/engine/domains/night/night-watch');
+const model = () => require('@craftorio/shared/roadmap-model');
+const roadmaps = () => require('@craftorio/engine/domains/roadmap/roadmap');
+const night = () => require('@craftorio/engine/domains/night/night-watch');
 
 const item = (id, status, extra = {}) => ({ id, workflow: 'software-development.yaml', inputs: {}, mock: true, number: Number(id.replace(/\D/g, '')) || 1, status, runId: null, runs: [], error: null, ...extra });
 const stage = (id, items, extra = {}) => ({ id, name: '', note: '', items, ...extra });
@@ -136,7 +136,7 @@ test('#395 parkStage: refused while an item of the stage runs a turn, naming "Pa
 
 // ---- Through the service (mock runs, the fixture's human gate) -----------------------------------
 
-function svc() { return require('@multiagent/engine/test/service/helpers'); }
+function svc() { return require('@craftorio/engine/test/service/helpers'); }
 const hasIssue = (r, n) => (r.issues || []).some((i) => i.number === n);
 const ticks = (ms = 500) => new Promise((r) => setTimeout(r, ms));
 

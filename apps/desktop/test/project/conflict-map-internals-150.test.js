@@ -7,8 +7,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { buildConflictMap, carry, parsePatch } = require('@multiagent/engine/domains/project/conflict-map');
-const productOwner = require('@multiagent/engine/domains/po/product-owner');
+const { buildConflictMap, carry, parsePatch } = require('@craftorio/engine/domains/project/conflict-map');
+const productOwner = require('@craftorio/engine/domains/po/product-owner');
 
 // Isolated identity on every call: nothing depends on the machine's git config.
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();

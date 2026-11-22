@@ -66,7 +66,7 @@ function serve(t, dir, args, { noTailscale = false, tailscale = null } = {}) {
     env.FAKE_TAILSCALE = tailscale;
     cwd = fake.cwd;
   }
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(dir, 'workspace'), ...args], { env, cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'craftorio-engine.js'), '--port', '0', '--workspace', path.join(dir, 'workspace'), ...args], { env, cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let text = '';
   child.stdout.on('data', (c) => { text += c; });
   child.stderr.on('data', (c) => { text += c; });

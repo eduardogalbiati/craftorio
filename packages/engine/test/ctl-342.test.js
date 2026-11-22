@@ -1,10 +1,10 @@
-// The control channel's Rust client multiagent-ctl (#342; scripts/ctl.js stays for dev checkouts),
-// built here once with `cargo build --release -p multiagent-ctl` and run against a real control channel
+// The control channel's Rust client craftorio-ctl (#342; scripts/ctl.js stays for dev checkouts),
+// built here once with `cargo build --release -p craftorio-ctl` and run against a real control channel
 // (packages/engine/control/index.js over a simulation service in a temp workspace, opened as
 // test/control-channel-336.test.js does). Without cargo its cases are skipped with one line; CI (CI set)
 // never skips them, and a failed build fails them with cargo's message.
-//   multiagent-ctl <channel> [json-argument] [--workspace <dir>]   (else MULTIAGENT_WORKSPACE)
-//   multiagent-ctl --list                                           (the allowlist with argument schemas)
+//   craftorio-ctl <channel> [json-argument] [--workspace <dir>]   (else MULTIAGENT_WORKSPACE)
+//   craftorio-ctl --list                                           (the allowlist with argument schemas)
 // Exit codes: 0 the JSON result printed; 1 a refused or failed call (reason on stderr); 2 no
 // <workspace>/control/endpoint.json (the switch is off); 3 the app's contract version differs.
 // Assumed: the client first calls `GET /api/version` (Bearer token) and the app answers
@@ -24,20 +24,20 @@ const { makeService } = require('./service/helpers');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const NATIVE = path.join(ROOT, 'native');
-const BINARY_NAME = process.platform === 'win32' ? 'multiagent-ctl.exe' : 'multiagent-ctl';
+const BINARY_NAME = process.platform === 'win32' ? 'craftorio-ctl.exe' : 'craftorio-ctl';
 const BINARY = path.join(process.env.CARGO_TARGET_DIR || path.join(NATIVE, 'target'), 'release', BINARY_NAME);
 
 const hasCargo = () => spawnSync('cargo', ['--version'], { stdio: 'ignore' }).status === 0;
-const SKIP = !process.env.CI && !hasCargo() ? 'cargo is not installed: multiagent-ctl\'s cases are skipped (CI runs them)' : false;
+const SKIP = !process.env.CI && !hasCargo() ? 'cargo is not installed: craftorio-ctl\'s cases are skipped (CI runs them)' : false;
 
 let built = null;
 function binary() {
   if (!built) {
-    const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'multiagent-ctl'], {
+    const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'craftorio-ctl'], {
       encoding: 'utf8', timeout: 9 * 60 * 1000,
     });
-    if (r.status !== 0) built = { error: `cargo build of multiagent-ctl failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
-    else if (!fs.existsSync(BINARY)) built = { error: `cargo built multiagent-ctl but ${BINARY} does not exist` };
+    if (r.status !== 0) built = { error: `cargo build of craftorio-ctl failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
+    else if (!fs.existsSync(BINARY)) built = { error: `cargo built craftorio-ctl but ${BINARY} does not exist` };
     else built = { file: BINARY };
   }
   if (built.error) throw new Error(built.error);
@@ -70,7 +70,7 @@ const resultOf = (stdout) => {
   return printed && typeof printed === 'object' && Object.hasOwn(printed, 'result') ? printed.result : printed;
 };
 
-test('#342 multiagent-ctl: an allowed channel exits 0 and prints its JSON result', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: an allowed channel exits 0 and prints its JSON result', { skip: SKIP }, async (t) => {
   const { service } = makeService(t);
   await openChannel(t, service);
   const r = await ctl(['settings:get'], envFor(service.workspace().root));
@@ -78,7 +78,7 @@ test('#342 multiagent-ctl: an allowed channel exits 0 and prints its JSON result
   assert.equal(resultOf(r.stdout).controlChannel, true);
 });
 
-test('#342 multiagent-ctl: a JSON argument is sent as { arg }', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: a JSON argument is sent as { arg }', { skip: SKIP }, async (t) => {
   const { service, api } = makeService(t);
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ctl-project-342-'));
   t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
@@ -90,7 +90,7 @@ test('#342 multiagent-ctl: a JSON argument is sent as { arg }', { skip: SKIP }, 
   assert.equal(roadmap !== null && typeof roadmap === 'object', true, 'the project\'s roadmap');
 });
 
-test('#342 multiagent-ctl: a channel outside the allowlist exits 1 with the reason on stderr', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: a channel outside the allowlist exits 1 with the reason on stderr', { skip: SKIP }, async (t) => {
   const { service } = makeService(t);
   await openChannel(t, service);
   const r = await ctl(['approval:resolve', '{"runId":"r","id":"g","answer":true}'], envFor(service.workspace().root));
@@ -98,14 +98,14 @@ test('#342 multiagent-ctl: a channel outside the allowlist exits 1 with the reas
   assert.match(r.stderr, /approval:resolve/);
 });
 
-test('#342 multiagent-ctl: no endpoint.json (the switch is off) exits 2 naming the endpoint', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: no endpoint.json (the switch is off) exits 2 naming the endpoint', { skip: SKIP }, async (t) => {
   const { service } = makeService(t);
   const r = await ctl(['settings:get'], envFor(service.workspace().root));
   assert.equal(r.code, 2);
   assert.match(r.stderr, /endpoint/i);
 });
 
-test('#342 multiagent-ctl: another contract version (GET /api/version) exits 3 before calling the channel', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: another contract version (GET /api/version) exits 3 before calling the channel', { skip: SKIP }, async (t) => {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'ctl-ws-342-'));
   t.after(() => fs.rmSync(ws, { recursive: true, force: true }));
   const posts = [];
@@ -131,7 +131,7 @@ test('#342 multiagent-ctl: another contract version (GET /api/version) exits 3 b
   assert.deepEqual(posts, [], 'no channel was called');
 });
 
-test('#342 multiagent-ctl --list: exits 0 and prints every allowlisted channel with its argument schema', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl --list: exits 0 and prints every allowlisted channel with its argument schema', { skip: SKIP }, async (t) => {
   const { CHANNELS } = require('../control/allowlist');
   const { service } = makeService(t);
   await openChannel(t, service);
@@ -142,7 +142,7 @@ test('#342 multiagent-ctl --list: exits 0 and prints every allowlisted channel w
   assert.match(r.stdout, /projectId/, 'roadmap:get\'s argument schema');
 });
 
-test('#342 multiagent-ctl: --workspace <dir> instead of MULTIAGENT_WORKSPACE', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: --workspace <dir> instead of MULTIAGENT_WORKSPACE', { skip: SKIP }, async (t) => {
   const { service } = makeService(t);
   await openChannel(t, service);
   const env = { ...process.env };
@@ -161,7 +161,7 @@ function workspaceWithEndpoint(t, text) {
   return ws;
 }
 
-test('#342 multiagent-ctl: a stale endpoint.json (the app closed) exits 1 saying the app is not answering', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: a stale endpoint.json (the app closed) exits 1 saying the app is not answering', { skip: SKIP }, async (t) => {
   // a port that was open a moment ago and is closed now
   const server = http.createServer();
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -173,7 +173,7 @@ test('#342 multiagent-ctl: a stale endpoint.json (the app closed) exits 1 saying
   assert.match(r.stderr, /not answering/);
 });
 
-test('#342 multiagent-ctl: an endpoint.json that is not JSON, or has no url, exits 2', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: an endpoint.json that is not JSON, or has no url, exits 2', { skip: SKIP }, async (t) => {
   for (const text of ['{ not json', JSON.stringify({ token: 't'.repeat(64) })]) {
     const r = await ctl(['settings:get'], envFor(workspaceWithEndpoint(t, text)));
     assert.equal(r.code, 2, `${text}: ${r.stderr}`);
@@ -181,7 +181,7 @@ test('#342 multiagent-ctl: an endpoint.json that is not JSON, or has no url, exi
   }
 });
 
-test('#342 multiagent-ctl: an older app without the version route (404) exits 3 before calling the channel', { skip: SKIP }, async (t) => {
+test('#342 craftorio-ctl: an older app without the version route (404) exits 3 before calling the channel', { skip: SKIP }, async (t) => {
   const posts = [];
   const server = http.createServer((req, res) => {
     req.resume();

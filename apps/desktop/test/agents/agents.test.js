@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const agents = require('@multiagent/engine/domains/agents/agents');
+const agents = require('@craftorio/engine/domains/agents/agents');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-'));

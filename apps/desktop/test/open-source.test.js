@@ -52,7 +52,7 @@ test('#314: package.json declares MIT, the author, the public repository, homepa
   const p = pkg();
   assert.equal(p.license, 'MIT');
   assert.ok(p.author, 'author');
-  assert.equal(typeof p.repository === 'object' ? p.repository.url : p.repository, 'git+https://github.com/eduardogalbiati/multiagent-orchestrator.git');
+  assert.equal(typeof p.repository === 'object' ? p.repository.url : p.repository, 'git+https://github.com/eduardogalbiati/craftorio.git');
   assert.ok(p.homepage, 'homepage');
   assert.ok(p.bugs, 'bugs');
   assert.equal(p.private, true);
@@ -189,7 +189,7 @@ test('#314: no tracked source or test file (packages/, apps/, test/) has the own
 });
 
 test('#314: the Product Owner\'s enrich-first link no longer points at the owner\'s repository issues', () => {
-  const productOwner = require('@multiagent/engine/domains/po/product-owner');
+  const productOwner = require('@craftorio/engine/domains/po/product-owner');
   const issues = [{ number: 3, state: 'open', title: 'C', labels: [], body: 'short' }];
   const out = productOwner.normalizeAnswer({ summary: 'ok', groups: [], conflicts: [], enrich: [{ issue: 3, reason: 'too short' }] }, { issues, history: [], workflows: [{ file: 'software-development.yaml' }] });
   assert.deepEqual(out.enrich.map((e) => e.issue), [3]);

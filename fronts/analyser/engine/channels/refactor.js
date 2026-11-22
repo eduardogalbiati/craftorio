@@ -22,23 +22,23 @@
 
 const fs = require('fs');
 const path = require('path');
-const agentsMod = require('@multiagent/engine/domains/agents/agents');
-const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
-const backlog = require('@multiagent/engine/domains/backlog/backlog');
-const cadenceRules = require('@multiagent/engine/domains/refactor/refactor-cadence');
-const commits = require('@multiagent/engine/domains/discovery/discovery-commit');
-const conflictMaps = require('@multiagent/engine/domains/project/conflict-map');
-const facts = require('@multiagent/engine/domains/project/architecture-facts');
+const agentsMod = require('@craftorio/engine/domains/agents/agents');
+const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
+const backlog = require('@craftorio/engine/domains/backlog/backlog');
+const cadenceRules = require('@craftorio/engine/domains/refactor/refactor-cadence');
+const commits = require('@craftorio/engine/domains/discovery/discovery-commit');
+const conflictMaps = require('@craftorio/engine/domains/project/conflict-map');
+const facts = require('@craftorio/engine/domains/project/architecture-facts');
 const outcomes = require('../domains/refactor-outcome');
-const priority = require('@multiagent/engine/domains/refactor/refactor-priority');
-const projects = require('@multiagent/engine/domains/project/projects');
-const proposals = require('@multiagent/engine/domains/refactor/refactor-proposals');
-const refactorIssues = require('@multiagent/engine/domains/refactor/refactor-issues');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
-const runs = require('@multiagent/engine/domains/run/runs');
-const simulation = require('@multiagent/engine/engine/simulation');
-const workspace = require('@multiagent/engine/domains/workspace/workspace');
-const { clientError, requireId } = require('@multiagent/engine/service/common');
+const priority = require('@craftorio/engine/domains/refactor/refactor-priority');
+const projects = require('@craftorio/engine/domains/project/projects');
+const proposals = require('@craftorio/engine/domains/refactor/refactor-proposals');
+const refactorIssues = require('@craftorio/engine/domains/refactor/refactor-issues');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
+const runs = require('@craftorio/engine/domains/run/runs');
+const simulation = require('@craftorio/engine/engine/simulation');
+const workspace = require('@craftorio/engine/domains/workspace/workspace');
+const { clientError, requireId } = require('@craftorio/engine/service/common');
 const {
   args,
   BOOL,
@@ -53,7 +53,7 @@ const {
   shape,
   STRING,
   text: textOf,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 const { WORKFLOW } = refactorIssues;
 const WORKFLOW_NAME = 'refactor';

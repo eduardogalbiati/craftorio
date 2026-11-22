@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 const hintSrc = fs.readFileSync(path.join(__dirname, '..', 'command-hint.js'), 'utf8');

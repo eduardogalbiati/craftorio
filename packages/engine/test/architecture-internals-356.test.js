@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const core = require('@multiagent/shared/architecture-model');
+const core = require('@craftorio/shared/architecture-model');
 const { parseLizard } = require('../domains/project/architecture-facts');
 const proposals = require('../domains/refactor/refactor-proposals');
 const arch = require('../domains/oracle/oracle-architecture');
@@ -49,7 +49,7 @@ test('#356 globRe: 8 single-star wildcards against a 200-character path that doe
 });
 
 test('#356 globMatcher: the glob rules of globToRegExp without a RegExp (worked examples and the TESTS_PATHS defaults)', () => {
-  const { globMatcher, globToRegExp, TESTS_PATHS } = require('@multiagent/shared/globs');
+  const { globMatcher, globToRegExp, TESTS_PATHS } = require('@craftorio/shared/globs');
   assert.equal(globMatcher('*.lock').test('a/b/yarn.lock'), true);
   assert.equal(globMatcher('*.lock').test('a/b/yarn.locks'), false);
   assert.equal(globMatcher('src/*.js').test('src/a/b.js'), false);

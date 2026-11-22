@@ -50,10 +50,10 @@ const {
 } = require('./issues');
 const { refreshCopies } = require('../roadmap/roadmap');
 const TimeZone = require('../analytics/time-zone');
-const { ARCHIVED_LABEL, archiveBlockReason } = require('@multiagent/shared/backlog-archive');
-const { namesOf } = require('@multiagent/shared/default-workflow');
-const { LIVE_ITEM_STATES } = require('@multiagent/shared/roadmap-model');
-const { projectPlatform } = require('@multiagent/shared/platforms');
+const { ARCHIVED_LABEL, archiveBlockReason } = require('@craftorio/shared/backlog-archive');
+const { namesOf } = require('@craftorio/shared/default-workflow');
+const { LIVE_ITEM_STATES } = require('@craftorio/shared/roadmap-model');
+const { projectPlatform } = require('@craftorio/shared/platforms');
 const { resolveRunInputs } = require('../project/project-run-defaults');
 
 // the workflows that enrich an issue's text and do not implement it: write-doc, and Write & Review's

@@ -126,7 +126,7 @@ test('#356 estimateCost with only simulated reports is null', () => {
 // ---------- analyze: one real Oracle turn (the turn itself is faked at the packages/engine/domains/oracle/oracle.js boundary) ----------
 
 // a facts model built by the core, as the service hands it to the turn
-const MODEL = require('@multiagent/shared/architecture-model').buildModel({
+const MODEL = require('@craftorio/shared/architecture-model').buildModel({
   head: { commit: 'c2', date: '2026-01-02T00:00:00Z' }, branch: 'main',
   files: [{ path: 'src/app.js', lines: 200 }],
   log: '\x01c2 2026-01-02T00:00:00Z\n\nM\tsrc/app.js\n\x01c1 2026-01-01T00:00:00Z\n\nA\tsrc/app.js\n',

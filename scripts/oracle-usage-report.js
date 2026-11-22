@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { usageLines } = require('@multiagent/engine/domains/oracle/oracle');
+const { usageLines } = require('@craftorio/engine/domains/oracle/oracle');
 
 const MATCH_MS = 10e3; // an answer is posted right after its usage line
 

@@ -47,8 +47,8 @@ import { buildingBox, flatPlane, groundTexture, KINDS, labelTexture, mastBox, mi
 import { Glow, LIFE_DIM, noRaycast, Pools, Props, Sky, Traffic, useDisposable } from './life.jsx';
 import { crosswalksOf, inset, lawnsOf, PLATE_TOP, SIDEWALK_AV, SIDEWALK_TOP, STREET, ZONE_TOP } from './props.js';
 import { useStore } from './store.js';
-import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '@multiagent/shared/city-buildings.js';
-import { labelsShown } from '@multiagent/shared/city-layout.js';
+import { buildingOf, FLOOR_H, hashOf, WIN_PITCH } from '@craftorio/shared/city-buildings.js';
+import { labelsShown } from '@craftorio/shared/city-layout.js';
 
 const Y0 = PLATE_TOP; // the buildings stand on the district plates (props.js has the slabs' tops)
 const QUAY = 6, SHORE = 170; // the floor past the ring road, the water past the floor (the POC's quay and shore)

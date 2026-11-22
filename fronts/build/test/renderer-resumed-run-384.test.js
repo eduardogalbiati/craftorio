@@ -91,7 +91,7 @@ test('#384 run list: a failed run whose resume failed too says the resume failed
 
 const HERO = 'feature.yaml';
 function wfEntry(file) {
-  const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
+  const { loadWorkflow } = require('@craftorio/engine/engine/workflow');
   const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', file));
   return {
     file, name: wf.metadata?.name || file, inputs: wf.inputs || {}, outputs: wf.outputs || {}, groups: wf.groups || [],

@@ -20,8 +20,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const I18n = require('@multiagent/shared/i18n.js');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const I18n = require('@craftorio/shared/i18n.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 const { createDom } = require('./mini-dom');
 
 const ROOT = path.join(__dirname, '..', '..', '..');

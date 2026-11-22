@@ -50,9 +50,9 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 // loaded inside each test: the wizard and the page may change shape with the fix
 function helpers() {
   return {
-    H: require('@multiagent/ui-kit/test/page-pieces'),
-    ...require('@multiagent/ui-kit/test/renderer-app-harness'),
-    ...require('@multiagent/front-analyser/test/project-page-helpers'),
+    H: require('@craftorio/ui-kit/test/page-pieces'),
+    ...require('@craftorio/ui-kit/test/renderer-app-harness'),
+    ...require('@craftorio/front-analyser/test/project-page-helpers'),
   };
 }
 

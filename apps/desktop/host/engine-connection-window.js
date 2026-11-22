@@ -87,7 +87,7 @@ function createEngineConnection({
       closable: true,
       resizable: true,
       backgroundColor: windowOptions.backgroundColor || '#0e1014',
-      title: 'Engine connection · Multiagent Orchestrator',
+      title: 'Engine connection · Craftorio',
       ...(windowOptions.icon ? { icon: windowOptions.icon } : {}),
       autoHideMenuBar: true,
       webPreferences: {
@@ -159,7 +159,7 @@ function createEngineConnection({
   function openRemoteWindow(d) {
     const origin = new URL(d.url).origin;
     prepareSession(origin, d.token);
-    const title = `Multiagent Orchestrator · engine on ${d.host}`;
+    const title = `Craftorio · engine on ${d.host}`;
     const w = new BrowserWindow({
       ...windowOptions,
       title,

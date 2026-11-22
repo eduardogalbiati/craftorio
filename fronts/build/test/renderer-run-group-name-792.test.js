@@ -4,8 +4,8 @@
 // The page is the real one (renderer-app-harness.js); the run is fed through window.api's onEvent handler.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I18n = require('@multiagent/shared/i18n.js');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const I18n = require('@craftorio/shared/i18n.js');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const STEPS = [{ id: 'develop', agent: 'dev' }, { id: 'pr_open', agent: 'dev' }];
 

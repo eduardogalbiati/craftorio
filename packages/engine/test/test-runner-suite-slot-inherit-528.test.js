@@ -28,7 +28,7 @@ const RUNNER = [
 
 const PROBE = `const test = require('node:test');
 const fs = require('fs');
-const slot = require('@multiagent/engine/engine/machine-slot');
+const slot = require('@craftorio/engine/engine/machine-slot');
 test('takes the suite slot', async () => {
   const out = { inheritEnv: process.env[slot.SUITE_SLOT_ENV] || null };
   try {
@@ -52,8 +52,8 @@ function copyRunner(t) {
     fs.copyFileSync(path.join(root, f), path.join(dir, f));
   }
   // the runner requires the engine package by name: link it as npm's workspace install does
-  fs.mkdirSync(path.join(dir, 'node_modules', '@multiagent'), { recursive: true });
-  fs.symlinkSync(path.join(dir, 'packages', 'engine'), path.join(dir, 'node_modules', '@multiagent', 'engine'), 'junction');
+  fs.mkdirSync(path.join(dir, 'node_modules', '@craftorio'), { recursive: true });
+  fs.symlinkSync(path.join(dir, 'packages', 'engine'), path.join(dir, 'node_modules', '@craftorio', 'engine'), 'junction');
   fs.mkdirSync(path.join(dir, 'test'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'test', 'probe.test.js'), PROBE);
   fs.mkdirSync(path.join(dir, 'locks'), { recursive: true });

@@ -26,7 +26,7 @@ const read = (...p) => fs.readFileSync(path.join(...p), 'utf8');
 // bare `t` alias, when the module exists
 function i18nGlobals() {
   try {
-    const I18n = require('@multiagent/shared/i18n.js');
+    const I18n = require('@craftorio/shared/i18n.js');
     return { I18n, t: (...a) => I18n.t(...a) };
   } catch { return {}; }
 }
@@ -110,7 +110,7 @@ test('#327 settings.js mounts the Language group in General, and index.html load
 // page runs in (I18n.getLanguage(): the computer's when it has a catalog, else English). A change saves
 // settings.language.interface with the other two values. Settings' markup (every script of
 // views/settings/, in index.html's order) is drawn with I18n.t: in pt-BR the General tab reads "Geral".
-const loadI18n = () => require('@multiagent/shared/i18n.js');
+const loadI18n = () => require('@craftorio/shared/i18n.js');
 
 function settingsMarkup(lang) {
   const I18n = loadI18n();

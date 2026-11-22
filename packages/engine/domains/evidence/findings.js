@@ -14,7 +14,7 @@
 // listFindings gives each one with its status: 'saved', 'sent' or 'filed'.
 const fs = require('fs');
 const path = require('path');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 const { redactBaseline } = require('../../engine/redact-baseline');
 
 const CONTEXT_KEYS = ['actions', 'app', 'calls', 'log', 'project', 'runIds', 'tab', 'theme', 'view', 'window'];

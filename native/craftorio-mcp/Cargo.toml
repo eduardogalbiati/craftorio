@@ -1,5 +1,5 @@
 [package]
-name = "multiagent-mcp"
+name = "craftorio-mcp"
 version = "1.0.0"
 description = "The supervisor's and the Oracle's stdio MCP server: forwards tools/list and tools/call to the app's loopback bridge"
 edition.workspace = true

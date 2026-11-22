@@ -7,22 +7,22 @@
 // once; everything that lays out a page (`scripts/docs.js`, the smoke and screenshot runners) asks it
 // which fronts an app ships.
 //
-//   workspaces(root)        [{ dir: 'packages/shared', name: '@multiagent/shared' }, …], from the
+//   workspaces(root)        [{ dir: 'packages/shared', name: '@craftorio/shared' }, …], from the
 //                           root package.json's `workspaces` globs (one level: `packages/*`)
 //   sourceDirs(root)        the folders holding app sources: `src` while it exists, then every
 //                           workspace folder (paths from root, with /)
 //   sourceFiles(root, opts) every .js file of sourceDirs (and `scripts/` with { scripts: true }),
 //                           paths from root with /, sorted; { match } picks another extension
 //   packageOf(root, file)   the workspace a path belongs to, or null (the root)
-//   resolvePackagePath(root, spec)  '@multiagent/shared/i18n' → 'packages/shared/i18n' (no extension
+//   resolvePackagePath(root, spec)  '@craftorio/shared/i18n' → 'packages/shared/i18n' (no extension
 //                           resolution), or null when `spec` names no workspace
-//   uiKit(root)             the UI kit workspace (`@multiagent/ui-kit`, packages/ui-kit), or null
+//   uiKit(root)             the UI kit workspace (`@craftorio/ui-kit`, packages/ui-kit), or null
 //   fronts(root)            the front workspaces, [{ id: 'build', dir: 'fronts/build', name }], by id:
-//                           the workspaces under fronts/ whose package.json declares `multiagent.front`
+//                           the workspaces under fronts/ whose package.json declares `craftorio.front`
 //                           (the id; the folder name before phase 4), the field the engine reads too
 //                           (packages/engine/service/fronts.js)
 //   frontEngineDirs(root)   the fronts' engine-side folders (phase 4, #590): [{ id, dir, engine:
-//                           'fronts/build/engine' }] for the fronts that have one (`multiagent.engine`
+//                           'fronts/build/engine' }] for the fronts that have one (`craftorio.engine`
 //                           names another folder name; { all: true } lists every front's, existing or
 //                           not); their channels/, areas/ and domains/ hold engine code the service
 //                           loads when the composition serves the front
@@ -114,7 +114,7 @@ function resolvePackagePath(root, spec) {
 }
 
 // ---- phase 3: the UI kit, the fronts and the compositions ----------------------------------------
-const UI_KIT = '@multiagent/ui-kit';
+const UI_KIT = '@craftorio/ui-kit';
 // the folder of the fronts (`fronts/<id>`, decision 7 of 2026-10-24): a front's id is its folder name
 const FRONTS_DIR = 'fronts';
 // an app's page folder: where its index.html and its own page files live
@@ -124,10 +124,10 @@ function uiKit(root) {
   return workspaces(root).find((w) => w.name === UI_KIT) || null;
 }
 
-// a front's manifest fields (phase 4): `multiagent.front` its id, `multiagent.engine` its engine folder,
+// a front's manifest fields (phase 4): `craftorio.front` its id, `craftorio.engine` its engine folder,
 // read by the engine's own reader (packages/engine/service/fronts.js: one definition of the fields and
 // of the default folder; the runtime scan itself stays in the engine, which cannot require scripts/)
-const frontManifest = (root, dir) => require('@multiagent/engine/service/fronts').frontManifest(path.join(root, dir));
+const frontManifest = (root, dir) => require('@craftorio/engine/service/fronts').frontManifest(path.join(root, dir));
 
 function fronts(root) {
   return workspaces(root).filter((w) => w.dir.startsWith(`${FRONTS_DIR}/`))

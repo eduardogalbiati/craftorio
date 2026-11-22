@@ -14,7 +14,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 const { clickRendered, pageMarkup, region, tabsOf } = require('./project-page-helpers');
 
 const ROOT = path.join(__dirname, '..', '..', '..');

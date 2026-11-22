@@ -3,7 +3,7 @@
 // (packages/ui-kit/test/renderer-app-harness.js), set up as project-tabs-730.test.js does.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const PROJECTS = [
   { id: 'p1', name: 'Project One', repo: 'https://github.com/o/one', folder: 'C:/work/one', exists: true, isGit: true },

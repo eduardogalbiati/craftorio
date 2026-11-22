@@ -3,7 +3,7 @@
 // test/service/chain.test.js; this file is the model alone (no engine, no files).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const chain = require('@multiagent/shared/chain-model');
+const chain = require('@craftorio/shared/chain-model');
 
 // ---- normalizeThen -------------------------------------------------------------------------------
 

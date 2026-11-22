@@ -18,7 +18,7 @@ const ERR2 = 'MCP server "oracle" failed to start';
 const STDERR_LINE = 'fake-claude-860: the CLI stopped while running the turn';
 const TODAY = 'Claude returned an error: error_during_execution';
 
-const loadParse = () => require('@multiagent/shared/providers').byId('claude').parse;
+const loadParse = () => require('@craftorio/shared/providers').byId('claude').parse;
 const loadProviders = () => require('../engine/providers');
 
 // feeds one result event to the adapter; returns the accumulator

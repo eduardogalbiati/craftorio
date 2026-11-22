@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { makeService } = require('./helpers');
 
-const load = () => require('@multiagent/shared/language');
+const load = () => require('@craftorio/shared/language');
 
 const FIXTURE = `apiVersion: multiagent/v1
 kind: Workflow

@@ -13,11 +13,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { classifyFailures } = require('@multiagent/engine/engine/affected-tests');
-const { runSuite } = require('@multiagent/engine/engine/suite-step');
-const { loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
-const runs = require('@multiagent/engine/domains/run/runs');
-const { RunChatModel } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
+const { classifyFailures } = require('@craftorio/engine/engine/affected-tests');
+const { runSuite } = require('@craftorio/engine/engine/suite-step');
+const { loadWorkflow, evalExpr } = require('@craftorio/engine/engine/workflow');
+const runs = require('@craftorio/engine/domains/run/runs');
+const { RunChatModel } = require('@craftorio/front-build/views/runchat/run-chat-model.js');
 
 const IN = 'in the change';
 const OUT = 'outside the change';
@@ -287,7 +287,7 @@ test('#396 routing: the owner\'s Continue at test_failed records not tested gree
 
 
 test('#396 inputs form (Start drawer, roadmap item): the policy shows as "Suite red outside the change", Ask selected by default; a chosen Continue stays selected', () => {
-  const WorkflowInputs = require('@multiagent/ui-kit/workflow-inputs');
+  const WorkflowInputs = require('@craftorio/ui-kit/workflow-inputs');
   const { suite_red_outside_change: def } = loadWorkflow(WORKFLOW).inputs;
   const defs = { suite_red_outside_change: def };
   const active = (html) => (html.match(/data-wi-pill="(\w+)" class="active"/g) || []).map((m) => m.match(/"(\w+)"/)[1]);

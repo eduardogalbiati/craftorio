@@ -22,14 +22,14 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const connectors = require('@multiagent/engine/domains/monitor/connectors');
-const grouping = require('@multiagent/engine/domains/monitor/grouping');
-const store = require('@multiagent/engine/domains/monitor/monitor-store');
-const intents = require('@multiagent/engine/domains/discovery/intents');
-const { AUTOMATION_MODES } = require('@multiagent/engine/domains/discovery/discovery');
-const projects = require('@multiagent/engine/domains/project/projects');
-const simulation = require('@multiagent/engine/engine/simulation');
-const TimeZone = require('@multiagent/engine/domains/analytics/time-zone');
+const connectors = require('@craftorio/engine/domains/monitor/connectors');
+const grouping = require('@craftorio/engine/domains/monitor/grouping');
+const store = require('@craftorio/engine/domains/monitor/monitor-store');
+const intents = require('@craftorio/engine/domains/discovery/intents');
+const { AUTOMATION_MODES } = require('@craftorio/engine/domains/discovery/discovery');
+const projects = require('@craftorio/engine/domains/project/projects');
+const simulation = require('@craftorio/engine/engine/simulation');
+const TimeZone = require('@craftorio/engine/domains/analytics/time-zone');
 
 const FIX_WORKFLOW = 'fix.yaml';
 const POLL_MS = 5 * 60 * 1000;

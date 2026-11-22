@@ -10,8 +10,8 @@
 // its close button #btn-svc-close; the fake api's askSupervisorChat, held until the test settles it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { loadPage, settle, deferred, part } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { loadPage, settle, deferred, part } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const TABS = ['definitions', 'runs', 'builder', 'pipelines'];
 const fab = (page) => page.$('#view-workflows [data-testid="supervisor-fab"]');

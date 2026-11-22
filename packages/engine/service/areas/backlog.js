@@ -16,8 +16,8 @@ const refreshes = require('../../domains/backlog/backlog-refresh');
 const { git } = require('../../engine/worktree');
 const epics = require('../../domains/backlog/epics');
 const roadmaps = require('../../domains/roadmap/roadmap');
-const { normalizeThen } = require('@multiagent/shared/chain-model');
-const { platformOrDefault } = require('@multiagent/shared/platforms');
+const { normalizeThen } = require('@craftorio/shared/chain-model');
+const { platformOrDefault } = require('@craftorio/shared/platforms');
 const runs = require('../../domains/run/runs');
 const { clientError } = require('../common');
 

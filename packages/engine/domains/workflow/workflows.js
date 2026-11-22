@@ -10,7 +10,7 @@ const yaml = require('js-yaml');
 const { seedBundle, bundleStatus, restoreBundled } = require('../seed/seed');
 const { MANIFEST_FILE, readManifest } = require('../project/project-manifest');
 const { bundledDir } = require('../workspace/app-root');
-const { aliasOf } = require('@multiagent/shared/default-workflow');
+const { aliasOf } = require('@craftorio/shared/default-workflow');
 
 const BUNDLED_WORKFLOWS_DIR = bundledDir('workflows');
 const isWorkflowFile = (f) => /\.ya?ml$/i.test(f);

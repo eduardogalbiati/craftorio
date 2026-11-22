@@ -1,10 +1,10 @@
 // #590 (phase 4 of docs/reorganisation-study-2026-10.md): an engine serves the fronts its composition
-// names. On a temporary app root with two fronts (each a package declaring `multiagent.front`, with an
+// names. On a temporary app root with two fronts (each a package declaring `craftorio.front`, with an
 // engine/channels/ file and an engine/areas/ file), a service created with `fronts: ['alpha']` answers
 // alpha's channel and the kernel's, and does not know beta's: over HTTP (packages/engine/server) the
 // call is a 404, the manifest does not list it, and GET /api/version names the served fronts outside
 // the contract hash. Without `fronts`, both are served. What fails at startup: an unknown or repeated
-// id in the composition, two packages claiming one id, a `multiagent.front` that is no id, an
+// id in the composition, two packages claiming one id, a `craftorio.front` that is no id, an
 // unreadable package.json, a channel file name a front repeats; the same package seen twice (the
 // workspace link and its folder) counts once. The load order is by code unit, not by locale. On this
 // repository: the full composition's contract hash is `main`'s, and an engine serving every front but
@@ -49,7 +49,7 @@ function tmpRoot(t) {
 function writeFront(root, dir, id, { name = `@x/front-${id}`, channelFile = `${id}.js`, manifest = null, engine = true } = {}) {
   const abs = path.join(root, dir);
   fs.mkdirSync(abs, { recursive: true });
-  fs.writeFileSync(path.join(abs, 'package.json'), manifest ?? JSON.stringify({ name, multiagent: { front: id } }));
+  fs.writeFileSync(path.join(abs, 'package.json'), manifest ?? JSON.stringify({ name, craftorio: { front: id } }));
   if (!engine) return abs;
   fs.mkdirSync(path.join(abs, 'engine', 'channels'), { recursive: true });
   fs.mkdirSync(path.join(abs, 'engine', 'areas'), { recursive: true });
@@ -85,7 +85,7 @@ const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undef
 const stubCtx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === 'ws' ? null : stub) });
 const channelsOf = (front) => serviceFiles(path.join(os.tmpdir(), 'no-kernel'), [front], 'channels').flatMap(({ file }) => require(file)(stubCtx)).map((e) => e.channel).filter(Boolean);
 
-test('#590 installedFronts: the packages declaring multiagent.front, by id, with or without an engine side', (t) => {
+test('#590 installedFronts: the packages declaring craftorio.front, by id, with or without an engine side', (t) => {
   const root = fakeRoot(t);
   const fronts = installedFronts(root);
   assert.deepEqual(fronts.map((f) => f.id), ['alpha', 'beta', 'gamma']);
@@ -104,19 +104,19 @@ test('#590 a front fails at startup when two packages claim its id, when its id 
   assert.throws(() => installedFronts(twice), /Two packages declare the front "x"/);
   for (const bad of [42, '', 'Not-An-Id', 'with space', null]) {
     const root = tmpRoot(t);
-    writeFront(root, 'fronts/a', 'a', { manifest: JSON.stringify({ name: '@x/a', multiagent: { front: bad } }) });
-    assert.throws(() => installedFronts(root), /multiagent\.front must be a front id/, `front: ${JSON.stringify(bad)}`);
+    writeFront(root, 'fronts/a', 'a', { manifest: JSON.stringify({ name: '@x/a', craftorio: { front: bad } }) });
+    assert.throws(() => installedFronts(root), /craftorio\.front must be a front id/, `front: ${JSON.stringify(bad)}`);
   }
   const broken = tmpRoot(t);
   writeFront(broken, 'fronts/a', 'a', { manifest: '{ not json' });
   assert.throws(() => installedFronts(broken), /cannot be read as a package manifest/);
   assert.throws(() => frontManifest(path.join(broken, 'fronts', 'a')), /cannot be read/);
-  // the workspace link under node_modules/@multiagent and the folder under fronts/: one front
+  // the workspace link under node_modules/@craftorio and the folder under fronts/: one front
   const linked = tmpRoot(t);
-  writeFront(linked, 'fronts/a', 'a', { name: '@multiagent/front-a' });
-  fs.mkdirSync(path.join(linked, 'node_modules', '@multiagent'), { recursive: true });
-  fs.symlinkSync(path.join(linked, 'fronts', 'a'), path.join(linked, 'node_modules', '@multiagent', 'front-a'), process.platform === 'win32' ? 'junction' : 'dir'); // a junction needs no privilege on Windows (#600)
-  writeFront(linked, 'node_modules/@multiagent/front-copy', 'a', { name: '@multiagent/front-a' }); // a packaged copy
+  writeFront(linked, 'fronts/a', 'a', { name: '@craftorio/front-a' });
+  fs.mkdirSync(path.join(linked, 'node_modules', '@craftorio'), { recursive: true });
+  fs.symlinkSync(path.join(linked, 'fronts', 'a'), path.join(linked, 'node_modules', '@craftorio', 'front-a'), process.platform === 'win32' ? 'junction' : 'dir'); // a junction needs no privilege on Windows (#600)
+  writeFront(linked, 'node_modules/@craftorio/front-copy', 'a', { name: '@craftorio/front-a' }); // a packaged copy
   assert.deepEqual(installedFronts(linked).map((f) => [f.id, path.basename(f.dir)]), [['a', 'a']]);
   assert.equal(frontManifest(path.join(linked, 'fronts', 'a')).engine, 'engine', 'the default engine folder');
 });

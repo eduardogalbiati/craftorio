@@ -28,8 +28,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const { createDom, textOf } = require('@multiagent/ui-kit/test/mini-dom');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const { createDom, textOf } = require('@craftorio/ui-kit/test/mini-dom');
 const H = require('./roadmap-status-helpers');
 
 const view = { showAll: true, since: 'total' };
@@ -380,4 +380,4 @@ test('#748 the Backlog card\'s ⋯ menu draws with the shared menu (backlog.js, 
 });
 
 // the catalog module the sandboxes use (withI18n's I18n: one per process)
-function I18nOf() { return require('@multiagent/shared/i18n.js'); }
+function I18nOf() { return require('@craftorio/shared/i18n.js'); }

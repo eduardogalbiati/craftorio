@@ -39,26 +39,26 @@ const PAGE = ['<!-- generated:styles -->', '<!-- /generated:styles -->', '<!-- g
 
 function composedRoot(t, { compositionFile = true } = {}) {
   return tmpRoot(t, {
-    'packages/shared/package.json': pkg('@multiagent/shared'),
+    'packages/shared/package.json': pkg('@craftorio/shared'),
     'packages/shared/i18n.js': '// shared\n',
-    'packages/ui-kit/package.json': pkg('@multiagent/ui-kit'),
+    'packages/ui-kit/package.json': pkg('@craftorio/ui-kit'),
     'packages/ui-kit/app.js': '// the shell\n',
     'packages/ui-kit/view-registry.js': '// load: early\n',
     'packages/ui-kit/robots.js': '// robots\n',
     'packages/ui-kit/style.css': '/* tokens\n   load: early */\n',
     'packages/ui-kit/views/dashboard/dashboard.js': '// Home\n',
     'packages/ui-kit/views/dashboard/dashboard.css': '/* Home */\n',
-    'fronts/build/package.json': pkg('@multiagent/front-build'),
+    'fronts/build/package.json': pkg('@craftorio/front-build'),
     'fronts/build/views/backlog/backlog.js': '// the Backlog\n',
     'fronts/build/views/backlog/backlog-po.js': '// load: after robots.js views/backlog/backlog.js\n',
     'fronts/build/views/backlog/backlog.css': '/* the Backlog */\n',
     'fronts/build/views/run/run.js': '// the Run screen\n',
-    'fronts/ai/package.json': pkg('@multiagent/front-ai'),
+    'fronts/ai/package.json': pkg('@craftorio/front-ai'),
     'fronts/ai/views/oracle/oracle.js': '// the Oracle\n',
-    'apps/desktop/package.json': pkg('@multiagent/desktop'),
+    'apps/desktop/package.json': pkg('@craftorio/desktop'),
     ...(compositionFile ? { 'apps/desktop/composition.js': 'module.exports = { fronts: ["build", "ai"] };\n' } : {}),
     'apps/desktop/renderer/index.html': PAGE,
-    'apps/web/package.json': pkg('@multiagent/web'),
+    'apps/web/package.json': pkg('@craftorio/web'),
     'apps/web/composition.js': 'module.exports = { fronts: ["ai"] };\n',
     'apps/web/renderer/index.html': PAGE,
     'apps/web/renderer/api-http.js': '// load: early\n',
@@ -67,12 +67,12 @@ function composedRoot(t, { compositionFile = true } = {}) {
 
 test('source-tree: fronts() lists the fronts/<id> workspaces by id; uiKit() the kit; viewsOf() a layer\'s screens; frontOf() the layer that holds a screen', (t) => {
   const root = composedRoot(t);
-  assert.deepEqual(fronts(root).map((f) => [f.id, f.dir, f.name]), [['ai', 'fronts/ai', '@multiagent/front-ai'], ['build', 'fronts/build', '@multiagent/front-build']]);
+  assert.deepEqual(fronts(root).map((f) => [f.id, f.dir, f.name]), [['ai', 'fronts/ai', '@craftorio/front-ai'], ['build', 'fronts/build', '@craftorio/front-build']]);
   assert.equal(uiKit(root).dir, 'packages/ui-kit');
   assert.deepEqual(viewsOf(root, 'fronts/build'), ['backlog', 'run']);
   assert.deepEqual(viewsOf(root, 'fronts/none'), []);
   assert.equal(frontOf(root, 'backlog').id, 'build');
-  assert.equal(frontOf(root, 'dashboard').name, '@multiagent/ui-kit');
+  assert.equal(frontOf(root, 'dashboard').name, '@craftorio/ui-kit');
   assert.equal(frontOf(root, 'nowhere'), null);
 });
 
@@ -82,7 +82,7 @@ test('source-tree: composition() reads <app>/composition.js in its order, defaul
   assert.deepEqual(composition(root, 'apps/web').fronts.map((f) => f.id), ['ai']);
   const bare = composedRoot(t, { compositionFile: false });
   assert.deepEqual(composition(bare, 'apps/desktop').fronts.map((f) => f.id), ['ai', 'build']);
-  const wrong = tmpRoot(t, { 'fronts/ai/package.json': pkg('@multiagent/front-ai'), 'apps/desktop/composition.js': 'module.exports = { fronts: ["plan"] };\n' });
+  const wrong = tmpRoot(t, { 'fronts/ai/package.json': pkg('@craftorio/front-ai'), 'apps/desktop/composition.js': 'module.exports = { fronts: ["plan"] };\n' });
   assert.throws(() => composition(wrong, 'apps/desktop'), /names the front "plan", which has no workspace fronts\/plan\//);
   const notList = tmpRoot(t, { 'apps/desktop/composition.js': 'module.exports = { fronts: "ai" };\n' });
   assert.throws(() => composition(notList, 'apps/desktop'), /`fronts` must be a list/);
@@ -135,9 +135,9 @@ test('docs: a "load: after" naming a file of another front (not the kit) is an e
 
 test('docs: before the kit has files, the page folder holds the shell (app.js first) and the layout is the one of phase 2', (t) => {
   const root = tmpRoot(t, {
-    'packages/ui-kit/package.json': pkg('@multiagent/ui-kit'),
-    'fronts/ai/package.json': pkg('@multiagent/front-ai'),
-    'apps/desktop/package.json': pkg('@multiagent/desktop'),
+    'packages/ui-kit/package.json': pkg('@craftorio/ui-kit'),
+    'fronts/ai/package.json': pkg('@craftorio/front-ai'),
+    'apps/desktop/package.json': pkg('@craftorio/desktop'),
     'apps/desktop/renderer/index.html': PAGE,
     'apps/desktop/renderer/api-http.js': '// load: early\n',
     'apps/desktop/renderer/app.js': '// the shell\n',

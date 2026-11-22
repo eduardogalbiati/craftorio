@@ -223,7 +223,7 @@ test('the test fails with a reason: bad address, no token, refused token, not an
   assert.equal(notFound.reason, 'not-engine');
   const html = await conn.testConnection({ address: 'my-pc', token: 't', fetch: answer(200) });
   assert.equal(html.reason, 'not-engine');
-  assert.match(html.message, /not a Multiagent Orchestrator engine/);
+  assert.match(html.message, /not a Craftorio engine/);
   const other = await conn.testConnection({ address: 'my-pc', token: 't', fetch: answer(200, { result: [] }) });
   assert.equal(other.reason, 'not-engine');
   const broken = await conn.testConnection({ address: 'my-pc', token: 't', fetch: answer(500, { error: 'boom' }) });
@@ -380,12 +380,12 @@ function loadApiHttp({ userAgent = '', manifest = [], language = null } = {}) {
 }
 
 const DESKTOP_MANIFEST = () => {
-  const { DESKTOP, declarations } = require('@multiagent/engine/service/manifest');
+  const { DESKTOP, declarations } = require('@craftorio/engine/service/manifest');
   return declarations(DESKTOP);
 };
 
 test('engine:openConnection is a desktop channel the preload exposes as openEngineConnection', () => {
-  const entry = require('@multiagent/engine/service/manifest').DESKTOP.find((e) => e.channel === 'engine:openConnection');
+  const entry = require('@craftorio/engine/service/manifest').DESKTOP.find((e) => e.channel === 'engine:openConnection');
   assert.equal(entry.method, 'openEngineConnection');
   assert.ok(entry.desktop);
   const main = fs.readFileSync(path.join(__dirname, '..', '..', 'host', 'main.js'), 'utf8');
@@ -423,7 +423,7 @@ const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${lang
 
 // settings-engine.js in a vm sandbox, its t the catalog's in `lang`
 function engineSettingsMarkup(lang, engineConnection, canChange = true) {
-  const I18n = require('@multiagent/shared/i18n');
+  const I18n = require('@craftorio/shared/i18n');
   const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'packages', 'ui-kit', 'views', 'settings', 'settings-engine.js'), 'utf8');
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const api = { platform: engineConnection.mode === 'local' ? 'win32' : 'browser', engineConnection, ...(canChange && { openEngineConnection: async () => true }) };

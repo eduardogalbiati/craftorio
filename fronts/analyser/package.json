@@ -1,11 +1,11 @@
 {
-  "name": "@multiagent/front-analyser",
+  "name": "@craftorio/front-analyser",
   "version": "1.3.0",
   "private": true,
   "description": "The Project Analyser front: a project's architecture, refactor proposals, seeds, conflict map and city, and the analytics; its screens, their CSS, its features, its tests, and its engine side (the architecture, refactor, seeds and diff channels).",
   "license": "MIT",
   "author": "Eduardo Galbiati",
-  "multiagent": {
+  "craftorio": {
     "front": "analyser"
   },
   "scripts": {
@@ -13,7 +13,7 @@
     "test:e2e": "node ../../scripts/e2e.js --front analyser"
   },
   "dependencies": {
-    "@multiagent/engine": "*",
-    "@multiagent/shared": "*"
+    "@craftorio/engine": "*",
+    "@craftorio/shared": "*"
   }
 }

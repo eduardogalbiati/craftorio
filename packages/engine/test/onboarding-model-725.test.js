@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const M = require('@multiagent/shared/onboarding-model');
+const M = require('@craftorio/shared/onboarding-model');
 
 const PROFILE = { mode: 'remote', ci: 'release', tests: 'unit' };
 const I18N = path.join(__dirname, '..', '..', 'shared', 'i18n');

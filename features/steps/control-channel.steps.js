@@ -3,7 +3,7 @@
 // off by default, its one-line description mentions human gates), its status
 // (data-testid="control-channel-status": the 127.0.0.1 port and the endpoint file's path) and the
 // workspace's control/endpoint.json ({ url, token }), written while the channel is on, deleted when off;
-// while on, the multiagent-ctl binary's path and a copy button (#342).
+// while on, the craftorio-ctl binary's path and a copy button (#342).
 // Opening Settings and its tabs reuses app.steps.js. Locators are roles and data-testid only
 // (skills/ui-conventions).
 
@@ -77,7 +77,7 @@ Then('the control channel status shows no port', async ({ e2e }) => {
 // #342: the binaries the switch's row offers to copy, by name: its path (data-testid="<id>-path",
 // an absolute path ending in the binary, .exe on Windows) and its copy button (data-testid="<id>-copy").
 // The clipboard is read in the main process (Electron's clipboard module).
-const BINARIES = { 'multiagent-ctl': 'control-ctl' };
+const BINARIES = { 'craftorio-ctl': 'control-ctl' };
 const binaryId = (name) => {
   if (!BINARIES[name]) throw new Error(`no control channel binary named "${name}"`);
   return BINARIES[name];

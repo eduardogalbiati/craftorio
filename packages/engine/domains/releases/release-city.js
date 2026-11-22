@@ -20,7 +20,7 @@ const {
 const {
   issuesOf,
   parseNameStatus,
-} = require('@multiagent/shared/city-release');
+} = require('@craftorio/shared/city-release');
 
 const GIT_TIMEOUT_MS = 120e3;
 const MAX_BUFFER = 1 << 28;

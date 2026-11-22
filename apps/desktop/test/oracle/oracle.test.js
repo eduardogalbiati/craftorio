@@ -12,9 +12,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createService } = require('@multiagent/engine/service');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-const oracle = require('@multiagent/engine/domains/oracle/oracle');
+const { createService } = require('@craftorio/engine/service');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+const oracle = require('@craftorio/engine/domains/oracle/oracle');
 
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-ws-'));
@@ -529,7 +529,7 @@ test('a question from another live app process is refused, naming its pid and ho
 // 'electron' only) and dispatching into the real service is what actually re-creates the bug's path.
 function loadPreloadApi(manifest, dispatch) {
   const electronPath = require.resolve('electron');
-  const preloadPath = require.resolve('@multiagent/desktop/host/preload.js');
+  const preloadPath = require.resolve('@craftorio/desktop/host/preload.js');
   let exposed = null;
   require.cache[electronPath] = {
     id: electronPath, filename: electronPath, loaded: true,

@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { aliasInputs } = require('@multiagent/shared/default-workflow');
+const { aliasInputs } = require('@craftorio/shared/default-workflow');
 const {
   childRunCost,
   loadWorkflow,

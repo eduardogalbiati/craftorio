@@ -25,8 +25,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { loadPage, settle, deferred } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { loadPage, settle, deferred } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const HEAD = 'abc1234def5678901234567890abcdef12345678';
 const CHANGED = 'c0ffee1aa5678901234567890abcdef123456789';

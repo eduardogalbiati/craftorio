@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const roadmaps = require('../../domains/roadmap/roadmap');
-const RoadmapModel = require('@multiagent/shared/roadmap-model');
+const RoadmapModel = require('@craftorio/shared/roadmap-model');
 const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject } = require('./helpers');
 
 const loadArea = () => require('../../service/areas/roadmap');

@@ -33,12 +33,12 @@ const fs = require('fs');
 const path = require('path');
 const designer = require('../domains/mockup-designer');
 const mockups = require('../domains/mockups');
-const MockupModel = require('@multiagent/shared/mockup-model');
-const localPreview = require('@multiagent/engine/domains/local/local-preview');
-const projects = require('@multiagent/engine/domains/project/projects');
-const simulation = require('@multiagent/engine/engine/simulation');
-const { clientError } = require('@multiagent/engine/service/common');
-const schemas = require('@multiagent/engine/service/schemas');
+const MockupModel = require('@craftorio/shared/mockup-model');
+const localPreview = require('@craftorio/engine/domains/local/local-preview');
+const projects = require('@craftorio/engine/domains/project/projects');
+const simulation = require('@craftorio/engine/engine/simulation');
+const { clientError } = require('@craftorio/engine/service/common');
+const schemas = require('@craftorio/engine/service/schemas');
 
 const { args, listOf, nullable, OBJECT, PROJECT_ID, shape, STRING, text } = schemas;
 

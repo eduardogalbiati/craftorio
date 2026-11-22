@@ -76,7 +76,7 @@ test('the pipeline strip shows each stage run status as its label, queued when i
   const had = Object.prototype.hasOwnProperty.call(globalThis, 'StatusPill');
   globalThis.StatusPill = require('../status-pill');
   try {
-    const chain = require('@multiagent/shared/chain-model');
+    const chain = require('@craftorio/shared/chain-model');
     const html = chain.pipelineStagesHtml(
       { stages: [{ workflow: 'a.yaml' }, { workflow: 'b.yaml' }, { workflow: 'c.yaml' }] },
       { names: { 'a.yaml': 'Stage A', 'b.yaml': 'Stage B', 'c.yaml': 'Stage C' }, runs: [{ runId: 'r1', status: 'succeeded' }, { runId: 'r2', status: 'running' }, {}] },
@@ -91,7 +91,7 @@ test('the pipeline strip shows each stage run status as its label, queued when i
 // #437: a status pill stays on one line (style.css .pill: white-space: nowrap), its label too, in
 // pt-BR. The pill's markup (StatusPill.statusPill) is cascaded with style.css by test/css-layout.js.
 test('#437 a status pill and its label keep one line (white-space: nowrap), in pt-BR', (t) => {
-  const I18n = require('@multiagent/shared/i18n.js');
+  const I18n = require('@craftorio/shared/i18n.js');
   const { parseHtml, styleSheet, layoutOf, elements } = require('./css-layout.js');
   I18n.setLanguage('pt-BR');
   t.after(() => I18n.setLanguage('en'));

@@ -21,8 +21,8 @@
 //   conversation cleared during the turn has no line to tag, and the turn's answer still counts.
 
 const fs = require('fs');
-const { costApplies } = require('@multiagent/shared/po-calibration');
-const { blank, chosen: chosenInputs } = require('@multiagent/shared/run-inputs');
+const { costApplies } = require('@craftorio/shared/po-calibration');
+const { blank, chosen: chosenInputs } = require('@craftorio/shared/run-inputs');
 
 const REGISTER = /regist(rar|re|er)|file an issue/i;
 // what the prompt names of the project's run defaults, in this order

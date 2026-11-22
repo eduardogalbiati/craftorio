@@ -29,7 +29,7 @@ const projects = require('../../domains/project/projects');
 const releases = require('../../domains/releases/releases');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const runs = require('../../domains/run/runs');
-const { isRelease } = require('@multiagent/shared/roadmap-model');
+const { isRelease } = require('@craftorio/shared/roadmap-model');
 
 const RELEASE_WORKFLOW = 'release.yaml';
 

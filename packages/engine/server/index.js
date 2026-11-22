@@ -54,13 +54,13 @@ const { appPackage, appRoot } = require('../domains/workspace/app-root');
 
 const PKG = appPackage();
 // The UI folder served (relative to the app root, with a trailing /): the root package.json's
-// `multiagent.ui` (apps/web/renderer, the browser app of phase 3), else apps/desktop/renderer/.
-const uiDir = (pkg = PKG) => `${String(pkg.multiagent?.ui || 'apps/desktop/renderer').replace(/\/+$/, '')}/`;
+// `craftorio.ui` (apps/web/renderer, the browser app of phase 3), else apps/desktop/renderer/.
+const uiDir = (pkg = PKG) => `${String(pkg.craftorio?.ui || 'apps/desktop/renderer').replace(/\/+$/, '')}/`;
 // the shared package's folder, relative to root: the workspace under root (what index.html's relative
-// <script> paths name, scripts/docs.js), else wherever @multiagent/shared resolves from here
+// <script> paths name, scripts/docs.js), else wherever @craftorio/shared resolves from here
 function sharedDir(root) {
   if (fs.existsSync(path.join(root, 'packages', 'shared', 'package.json'))) return 'packages/shared/';
-  try { return `${path.relative(root, path.dirname(require.resolve('@multiagent/shared/package.json'))).split(path.sep).join('/')}/`; } catch { return 'packages/shared/'; }
+  try { return `${path.relative(root, path.dirname(require.resolve('@craftorio/shared/package.json'))).split(path.sep).join('/')}/`; } catch { return 'packages/shared/'; }
 }
 // never served, inside an allowed folder: a package's tests and manifest
 const NOT_SERVED = /(^|\/)(test|features|node_modules)\/|(^|\/)package\.json$/;
@@ -160,7 +160,7 @@ const normalizeHostName = (name) => String(name || '').trim().toLowerCase().repl
 const overHttps = (req) => !!req.socket?.encrypted || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
 
 // what a browser without the token sees: the sign-in form (POST /session)
-const SIGN_IN_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Multiagent Orchestrator: sign in</title>
+const SIGN_IN_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Craftorio: sign in</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="font: 13px system-ui, sans-serif; background: #0f1115; color: #e6e8ee; display: grid; place-items: center; min-height: 90vh">
 <form method="post" action="/session" style="display: grid; gap: 8px; width: 320px">

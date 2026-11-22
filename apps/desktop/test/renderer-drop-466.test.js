@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 async function page() {
-  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+  const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
   const app = loadApp();
   await app.boot();
   return app;

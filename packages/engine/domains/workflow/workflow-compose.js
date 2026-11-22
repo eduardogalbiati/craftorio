@@ -16,13 +16,13 @@
 
 const path = require('path');
 const yaml = require('js-yaml');
-const registry = require('@multiagent/shared/providers');
-const { PLATFORMS } = require('@multiagent/shared/platforms');
+const registry = require('@craftorio/shared/providers');
+const { PLATFORMS } = require('@craftorio/shared/platforms');
 const {
   PROFILE,
   PROFILE_LABELS,
   suggestWorkflows,
-} = require('@multiagent/shared/onboarding-model');
+} = require('@craftorio/shared/onboarding-model');
 const { MANIFEST_FILE } = require('../project/project-manifest');
 
 const MULTIAGENT_DIR = path.posix.dirname(MANIFEST_FILE);

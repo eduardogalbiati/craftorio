@@ -9,12 +9,12 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
-const STUB = require.resolve('@multiagent/engine/test/fixtures/fake-claude-ranking.js');
+const STUB = require.resolve('@craftorio/engine/test/fixtures/fake-claude-ranking.js');
 
 function realClaudeStub(t, marker) {
-  const { PROVIDERS } = require('@multiagent/engine/domains/workflow/workflow-builder');
+  const { PROVIDERS } = require('@craftorio/engine/domains/workflow/workflow-builder');
   const claude = PROVIDERS.claude;
   const saved = { command: claude.command, args: claude.args };
   claude.command = process.execPath;

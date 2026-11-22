@@ -12,8 +12,8 @@
 // - missingRequirements(reqs, states): from apps/desktop/renderer/setup-model.js (shared with the renderer).
 
 const { render } = require('../../engine/workflow');
-const { missingRequirements } = require('@multiagent/shared/setup-model');
-const registry = require('@multiagent/shared/providers');
+const { missingRequirements } = require('@craftorio/shared/setup-model');
+const registry = require('@craftorio/shared/providers');
 
 const CLIS = registry.clis().map((a) => a.cli);
 const off = (v) => ['', 'false', '0', 'no', 'off', 'none'].includes(String(v).trim().toLowerCase());

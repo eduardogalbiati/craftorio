@@ -23,7 +23,7 @@ const { Marked } = require('marked');
 const root = path.resolve(__dirname, '..', '..');
 const outArg = process.argv.indexOf('--out');
 const outDir = path.resolve(root, outArg > 0 ? process.argv[outArg + 1] : 'build/docs-site');
-const REPO = 'https://github.com/eduardogalbiati/multiagent-orchestrator';
+const REPO = 'https://github.com/eduardogalbiati/craftorio';
 const LANGS = ['en', 'pt'];
 const STRINGS = {
   en: {
@@ -240,7 +240,7 @@ function layout({ title, active, main, side, index, lang, file }) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} · Multiagent Orchestrator docs</title>
+<title>${escapeHtml(title)} · Craftorio docs</title>
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -297,7 +297,7 @@ for (const lang of LANGS) {
   }).join('');
   fs.writeFileSync(path.join(dir, 'index.html'), layout({
     title: S.documentation, active: null, lang, file: 'index.html',
-    main: `${notice}<h1>Multiagent Orchestrator</h1>${new Marked({ gfm: true }).parse(introMd)}<div class="cards">${cards}</div>`,
+    main: `${notice}<h1>Craftorio</h1>${new Marked({ gfm: true }).parse(introMd)}<div class="cards">${cards}</div>`,
     side: '',
   }));
 }

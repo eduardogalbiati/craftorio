@@ -7,8 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const night = require('@multiagent/engine/domains/night/night-watch');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const night = require('@craftorio/engine/domains/night/night-watch');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
 // The same mapping as apps/desktop/host/preload.js payload(): positional arguments -> the channel's argument.
 function payload(params, args) {

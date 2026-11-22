@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const load = () => require('@multiagent/engine/domains/chat/mic-permission');
+const load = () => require('@craftorio/engine/domains/chat/mic-permission');
 const SETTINGS_HINT = 'System Settings › Privacy & Security › Microphone';
 
 function fakePrefs(answer) {

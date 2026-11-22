@@ -11,7 +11,7 @@
 // rendered input; the name the import sends (api.startOnboarding's `name` on Next) is checked too.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
 const AI_MEMORY = 'https://github.com/acme/ai-memory.git';

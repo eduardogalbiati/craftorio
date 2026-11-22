@@ -8,7 +8,7 @@
 // them; the renderer only shared, and nothing else requires it. The desktop entry is apps/desktop/host/ (phase 1
 // of docs/reorganisation-study-2026-10.md): the Electron host, required by nothing else.
 // Every relative `require` of every source file is read, and every `require` of a workspace package
-// (`@multiagent/shared/…`, resolved to its file), lazy ones (inside a function) included, comments skipped. A require is allowed when AREAS lets the requiring area reach the
+// (`@craftorio/shared/…`, resolved to its file), lazy ones (inside a function) included, comments skipped. A require is allowed when AREAS lets the requiring area reach the
 // required one, or when EXCEPTIONS lists it with its reason. The exceptions may only shrink: one
 // that no file has any more fails ('leave-list') until it leaves the list. A require cycle fails
 // too, however its requires are written. Where a new module goes: docs/agents/code-map.md
@@ -18,7 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { withoutComments } = require('@multiagent/engine/engine/source-text');
+const { withoutComments } = require('@craftorio/engine/engine/source-text');
 const {
   frontEngineDirs,
   fronts,
@@ -137,7 +137,7 @@ const EXCEPTIONS = [
 const posix = (p) => p.split(path.sep).join('/');
 
 // A require's target file: a relative spec from the requiring file, or a workspace package's path
-// (`@multiagent/shared/i18n` → packages/shared/i18n.js); null for an npm package or a missing file.
+// (`@craftorio/shared/i18n` → packages/shared/i18n.js); null for an npm package or a missing file.
 function resolveLocal(root, fromAbs, target) {
   const pkgPath = target.startsWith('.') ? null : resolvePackagePath(root, target);
   if (!target.startsWith('.') && !pkgPath) return null;

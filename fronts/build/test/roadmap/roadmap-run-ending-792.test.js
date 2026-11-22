@@ -16,10 +16,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const I18n = require('@multiagent/shared/i18n.js');
-const en = require('@multiagent/shared/i18n/en.json');
-const ptBR = require('@multiagent/shared/i18n/pt-BR.json');
-const { makeService, until } = require('@multiagent/engine/test/service/helpers');
+const I18n = require('@craftorio/shared/i18n.js');
+const en = require('@craftorio/shared/i18n/en.json');
+const ptBR = require('@craftorio/shared/i18n/pt-BR.json');
+const { makeService, until } = require('@craftorio/engine/test/service/helpers');
 const H = require('../roadmap-status-helpers');
 
 const HERO = 'ai-development-remote-hero.yaml';

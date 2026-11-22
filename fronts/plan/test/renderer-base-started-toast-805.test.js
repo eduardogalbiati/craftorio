@@ -3,7 +3,7 @@
 // The real page in the renderer harness, with a fake window.api; the toast is read from #toast.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const baseCheck = { base: 'main', state: 'behind', ahead: 0, behind: 16, canUpdate: true };
 const PROJECT = { id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' };

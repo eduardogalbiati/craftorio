@@ -41,8 +41,8 @@ const {
   scoreRows,
   sortKeys,
   walkHistory,
-} = require('@multiagent/shared/architecture-model');
-const { measureSource } = require('@multiagent/shared/code-complexity');
+} = require('@craftorio/shared/architecture-model');
+const { measureSource } = require('@craftorio/shared/code-complexity');
 
 const ROOT = path.join(__dirname, '..');
 const MAX_COMPLEXITY = 25;

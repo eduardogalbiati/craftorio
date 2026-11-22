@@ -2,7 +2,7 @@
 // app needs no system Node): everything but the binaries' own behaviour (test/session/session-tail-342.test.js
 // and test/ctl-342.test.js run those). Seams, loaded inside each test (they do not exist before the change):
 // - packages/engine/domains/machine/native-bin.js: nativeBinaryPath(name, { isPackaged, resourcesPath, platform }) where a native
-//   sidecar (multiagent-mcp, multiagent-tail, multiagent-ctl) lives: packaged resources/bin/<name>[.exe],
+//   sidecar (craftorio-mcp, craftorio-tail, craftorio-ctl) lives: packaged resources/bin/<name>[.exe],
 //   dev cargo's output under native/; never PATH. mcpBinaryPath (packages/engine/domains/supervisor/supervisor-bridge.js) agrees with it.
 // - packages/engine/domains/machine/native-bin.js: tailCommand(isPackaged, resolveCommand, { binary }) → { command, args, env }, the
 //   twin of mcpCommand: the binary when it exists (args []), else packages/engine/domains/session/session-tail.js under node (dev:
@@ -10,7 +10,7 @@
 //   terminalSpec(runId, sessionId, 'live') (packages/engine/service/areas/sessions.js) starts tailCommand's command
 //   with [...args, runDir, sessionId].
 // - packages/engine/control/index.js: createControlChannel({ service, ctlPath }); its status carries `ctlPath` (main.js
-//   passes nativeBinaryPath('multiagent-ctl', { isPackaged: app.isPackaged }); without it, the dev path).
+//   passes nativeBinaryPath('craftorio-ctl', { isPackaged: app.isPackaged }); without it, the dev path).
 //   Settings › Execution (renderControlChannel in packages/ui-kit/views/settings/settings.js) shows it.
 // - apps/desktop/scripts/package.js: buildNative builds and stages the three binaries; app.asar unpacks only node-pty.
 // - the files: native/ crates, THIRD_PARTY_NOTICES.md, the control-channel feature fragment,
@@ -23,16 +23,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
 const root = path.join(__dirname, '..', '..', '..');
 const abs = (p) => path.join(root, p);
 const exists = (p) => fs.existsSync(abs(p));
 const read = (p) => fs.readFileSync(abs(p), 'utf8');
-const nativeBin = () => require('@multiagent/engine/domains/machine/native-bin');
+const nativeBin = () => require('@craftorio/engine/domains/machine/native-bin');
 const exe = (name, platform = process.platform) => (platform === 'win32' ? `${name}.exe` : name);
 
-const BINARIES = ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail'];
+const BINARIES = ['craftorio-ctl', 'craftorio-mcp', 'craftorio-tail'];
 
 // A PATH that has everything (the binaries' names included): a binary must never come from it.
 const pathWithEverything = (name) => ({ file: path.join(path.sep, 'on-path', name), shell: false });
@@ -73,7 +73,7 @@ test('#342 nativeBinaryPath: packaged, every sidecar is in resources/bin, with .
 
 test('#342 nativeBinaryPath: in a dev checkout, under native/; mcpBinaryPath gives the same file', () => {
   const { nativeBinaryPath } = nativeBin();
-  const { mcpBinaryPath } = require('@multiagent/engine/domains/supervisor/supervisor-bridge');
+  const { mcpBinaryPath } = require('@craftorio/engine/domains/supervisor/supervisor-bridge');
   for (const name of BINARIES) {
     for (const platform of ['win32', 'linux']) {
       const p = nativeBinaryPath(name, { isPackaged: false, platform });
@@ -83,8 +83,8 @@ test('#342 nativeBinaryPath: in a dev checkout, under native/; mcpBinaryPath giv
     }
   }
   const res = path.join(path.sep, 'r');
-  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'win32' }), nativeBinaryPath('multiagent-mcp', { isPackaged: true, resourcesPath: res, platform: 'win32' }));
-  assert.equal(mcpBinaryPath({ isPackaged: false, platform: 'linux' }), nativeBinaryPath('multiagent-mcp', { isPackaged: false, platform: 'linux' }));
+  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'win32' }), nativeBinaryPath('craftorio-mcp', { isPackaged: true, resourcesPath: res, platform: 'win32' }));
+  assert.equal(mcpBinaryPath({ isPackaged: false, platform: 'linux' }), nativeBinaryPath('craftorio-mcp', { isPackaged: false, platform: 'linux' }));
 });
 
 // ---- how the external live terminal starts ------------------------------------------------------
@@ -92,7 +92,7 @@ test('#342 nativeBinaryPath: in a dev checkout, under native/; mcpBinaryPath giv
 test('#342 tailCommand: with the binary present (packaged or dev), it starts the binary and never looks up node', (t) => {
   const { tailCommand } = nativeBin();
   const res = fakeResources(t);
-  const binary = path.join(res, 'bin', exe('multiagent-tail'));
+  const binary = path.join(res, 'bin', exe('craftorio-tail'));
   for (const isPackaged of [true, false]) {
     const lookup = pathWithoutNode();
     const cmd = tailCommand(isPackaged, lookup.resolve, { binary });
@@ -104,7 +104,7 @@ test('#342 tailCommand: with the binary present (packaged or dev), it starts the
 
 test('#342 tailCommand: without the binary, the JS script (dev: this Node; packaged: the system node, else a Node.js error)', (t) => {
   const { tailCommand } = nativeBin();
-  const missing = missingBinary(t, 'multiagent-tail');
+  const missing = missingBinary(t, 'craftorio-tail');
 
   const dev = tailCommand(false, pathWithEverything, { binary: missing });
   assert.equal(dev.command, process.execPath);
@@ -112,7 +112,7 @@ test('#342 tailCommand: without the binary, the JS script (dev: this Node; packa
   assert.equal(path.basename(dev.args[0]), 'session-tail.js');
 
   const packaged = tailCommand(true, pathWithEverything, { binary: missing });
-  assert.equal(packaged.command, pathWithEverything('node').file, 'the system node, never a multiagent-tail found on the PATH');
+  assert.equal(packaged.command, pathWithEverything('node').file, 'the system node, never a craftorio-tail found on the PATH');
   assert.equal(path.basename(packaged.args[0]), 'session-tail.js');
 
   assert.throws(() => tailCommand(true, pathWithoutNode().resolve, { binary: missing }), /Node\.js on the PATH/);
@@ -143,24 +143,24 @@ test('#342 terminalSpec live: starts tailCommand\'s command with the run folder 
 
 test('#342 packaged with its binaries, no spawn spec resolves node from the PATH (MCP server, live terminal, control client)', (t) => {
   const { nativeBinaryPath, tailCommand } = nativeBin();
-  const { mcpCommand } = require('@multiagent/engine/domains/supervisor/supervisor-bridge');
+  const { mcpCommand } = require('@craftorio/engine/domains/supervisor/supervisor-bridge');
   const res = fakeResources(t);
   const at = (name) => nativeBinaryPath(name, { isPackaged: true, resourcesPath: res });
   const lookup = pathWithoutNode();
 
-  assert.equal(mcpCommand(true, lookup.resolve, { binary: at('multiagent-mcp') }).command, at('multiagent-mcp'));
-  assert.equal(tailCommand(true, lookup.resolve, { binary: at('multiagent-tail') }).command, at('multiagent-tail'));
+  assert.equal(mcpCommand(true, lookup.resolve, { binary: at('craftorio-mcp') }).command, at('craftorio-mcp'));
+  assert.equal(tailCommand(true, lookup.resolve, { binary: at('craftorio-tail') }).command, at('craftorio-tail'));
   assert.equal(lookup.asked.includes('node'), false, 'node is never looked up');
   for (const name of BINARIES) assert.equal(path.dirname(at(name)), path.join(res, 'bin'), name);
 });
 
 // ---- the control client's path in Settings ------------------------------------------------------
 
-test('#342 control channel status: carries the multiagent-ctl path it is given, the dev path by default', async (t) => {
-  const { createControlChannel } = require('@multiagent/engine/control');
+test('#342 control channel status: carries the craftorio-ctl path it is given, the dev path by default', async (t) => {
+  const { createControlChannel } = require('@craftorio/engine/control');
   const { nativeBinaryPath } = nativeBin();
   const { service } = makeService(t);
-  const given = path.join(path.sep, 'apps', 'Multiagent', 'resources', 'bin', exe('multiagent-ctl'));
+  const given = path.join(path.sep, 'apps', 'Multiagent', 'resources', 'bin', exe('craftorio-ctl'));
   const control = createControlChannel({ service, ctlPath: given });
   t.after(() => control.stop());
   service.api['settings:set']({ controlChannel: true });
@@ -170,7 +170,7 @@ test('#342 control channel status: carries the multiagent-ctl path it is given, 
 
   const byDefault = createControlChannel({ service });
   t.after(() => byDefault.stop());
-  assert.equal(byDefault.status().ctlPath, nativeBinaryPath('multiagent-ctl', { isPackaged: false }));
+  assert.equal(byDefault.status().ctlPath, nativeBinaryPath('craftorio-ctl', { isPackaged: false }));
 });
 
 // renderControlChannel pulled out of settings.js into a vm sandbox, as test/renderer-settings.test.js does.
@@ -181,7 +181,7 @@ function renderedControlChannel(state) {
   const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
   const sandbox = {
     $, esc: (s) => String(s ?? ''), errMsg: (e) => String(e?.message || e),
-    t: require('@multiagent/ui-kit/test/settings-source-329').t, // #329: the row's texts come from the catalog
+    t: require('@craftorio/ui-kit/test/settings-source-329').t, // #329: the row's texts come from the catalog
     document: { querySelector: () => ({ disabled: false }) },
     api: { platform: 'win32', controlChannelState: async () => state },
   };
@@ -194,8 +194,8 @@ function renderedControlChannel(state) {
   return [...els.values()].map((e) => `${e.textContent}\n${e.innerHTML}\n${e.title}`).join('\n');
 }
 
-test('#342 Settings › Execution: the control channel row shows the multiagent-ctl path to copy', () => {
-  const ctlPath = 'C:\\Apps\\Multiagent\\resources\\bin\\multiagent-ctl.exe';
+test('#342 Settings › Execution: the control channel row shows the craftorio-ctl path to copy', () => {
+  const ctlPath = 'C:\\Apps\\Multiagent\\resources\\bin\\craftorio-ctl.exe';
   const shown = renderedControlChannel({ enabled: true, port: 51234, file: 'C:/ws/control/endpoint.json', error: null, ctlPath });
   assert.equal(shown.includes(ctlPath), true, 'the path is shown');
 });
@@ -239,7 +239,7 @@ function nativeBuild(t, platform) {
   return { out: path.join(tmp, 'out'), calls, run };
 }
 
-test('#342 buildNative: builds multiagent-mcp, multiagent-tail and multiagent-ctl and stages all three in the bin folder', (t) => {
+test('#342 buildNative: builds craftorio-mcp, craftorio-tail and craftorio-ctl and stages all three in the bin folder', (t) => {
   const { buildNative } = pkgScript();
   for (const [platform, arch, triple] of [['win32', 'x64', 'x86_64-pc-windows-msvc'], ['linux', 'x64', 'x86_64-unknown-linux-gnu']]) {
     const b = nativeBuild(t, platform);
@@ -272,9 +272,9 @@ function crateDir(name) {
   return null;
 }
 
-test('#342 native/ has the multiagent-tail and multiagent-ctl crates, workspace members inheriting the lints', () => {
+test('#342 native/ has the craftorio-tail and craftorio-ctl crates, workspace members inheriting the lints', () => {
   const members = tomlSections(read('native/Cargo.toml')).workspace || '';
-  for (const name of ['multiagent-tail', 'multiagent-ctl']) {
+  for (const name of ['craftorio-tail', 'craftorio-ctl']) {
     const dir = crateDir(name);
     assert.ok(dir, `a crate under native/ named ${name}`);
     assert.ok(members.includes(`"${path.basename(dir)}"`), `${name} is a workspace member`);
@@ -296,9 +296,9 @@ function directDependencies(dir) {
   return [...names].sort();
 }
 
-test('#342 THIRD_PARTY_NOTICES.md names each direct dependency of multiagent-tail and multiagent-ctl on a row naming the crate', () => {
+test('#342 THIRD_PARTY_NOTICES.md names each direct dependency of craftorio-tail and craftorio-ctl on a row naming the crate', () => {
   const rows = read('THIRD_PARTY_NOTICES.md').split('\n').filter((l) => l.startsWith('|'));
-  for (const name of ['multiagent-tail', 'multiagent-ctl']) {
+  for (const name of ['craftorio-tail', 'craftorio-ctl']) {
     const dir = crateDir(name);
     assert.ok(dir, `the ${name} crate exists`);
     const missing = directDependencies(dir).filter((dep) => !rows.some((r) => r.startsWith(`| ${dep} |`) && r.includes(name)));
@@ -315,19 +315,19 @@ function controlFragment() {
     .find((text) => text.includes('control/endpoint.json'));
 }
 
-test('#342 docs: the control channel fragment calls multiagent-ctl, never `node scripts/ctl.js`', () => {
+test('#342 docs: the control channel fragment calls craftorio-ctl, never `node scripts/ctl.js`', () => {
   const doc = controlFragment();
   assert.ok(doc, 'a docs/features fragment documents control/endpoint.json');
-  assert.match(doc, /multiagent-ctl\b/);
+  assert.match(doc, /craftorio-ctl\b/);
   assert.equal(doc.includes('node scripts/ctl.js'), false, 'no node from the PATH in the documented client');
-  assert.match(doc, /multiagent-ctl --list/);
+  assert.match(doc, /craftorio-ctl --list/);
 });
 
 test('#342 docs: environment.md says Node is needed for development only and names the two new binaries', () => {
   const env = read('docs/agents/environment.md');
   const sentences = env.replace(/\s+/g, ' ').split(/(?<=[.!?])\s/);
   assert.equal(sentences.some((s) => /\bNode\b/.test(s) && /development only/i.test(s)), true, 'a sentence says Node is for development only');
-  for (const s of ['multiagent-tail', 'multiagent-ctl']) assert.ok(env.includes(s), s);
+  for (const s of ['craftorio-tail', 'craftorio-ctl']) assert.ok(env.includes(s), s);
 });
 
 test('#342 README: the requirements say the packaged app needs no Node', () => {

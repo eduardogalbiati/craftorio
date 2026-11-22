@@ -34,15 +34,15 @@ const {
   firstBuild,
   kindEntry,
   projectDefault,
-} = require('@multiagent/shared/default-workflow');
+} = require('@craftorio/shared/default-workflow');
 const { readManifest } = require('./project-manifest');
 // #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery);
 // #633: the work models a project may keep
 const {
   WORK_MODELS,
   slugify,
-} = require('@multiagent/shared/onboarding-model');
-const { findPlatform } = require('@multiagent/shared/platforms');
+} = require('@craftorio/shared/onboarding-model');
+const { findPlatform } = require('@craftorio/shared/platforms');
 // #735: the kinds and the keys a project's run defaults may override (read at call time: no load cycle)
 const runDefaultsModule = () => require('./project-run-defaults');
 
@@ -409,7 +409,7 @@ async function projectManifest(target, { exec, fetch = globalThis.fetch } = {}) 
     }
   }
   // no CLI that can read it: a public repository's raw file
-  const raw = require('@multiagent/shared/platforms').rawFileUrl(platform, parsed, MANIFEST_FILE);
+  const raw = require('@craftorio/shared/platforms').rawFileUrl(platform, parsed, MANIFEST_FILE);
   try {
     const res = typeof fetch === 'function' ? await fetch(raw) : null;
     if (res?.ok) return entries(await res.text());

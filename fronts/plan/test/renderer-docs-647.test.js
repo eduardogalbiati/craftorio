@@ -7,7 +7,7 @@
 // - Write & Review (duo) and AI Arena (arena) stay in the menu until phase 2.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, navEntries, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ITEMS = [
   { item: 'write-doc', stage: 'design', docs: [

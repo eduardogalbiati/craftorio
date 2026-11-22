@@ -26,7 +26,7 @@ const root = path.resolve(__dirname, '..');
 const SRC = path.join(root, 'docs', 'site');
 const outArg = process.argv.indexOf('--out');
 const outDir = path.resolve(root, outArg > 0 ? process.argv[outArg + 1] : 'build/docs-site');
-const REPO = 'https://github.com/eduardogalbiati/multiagent-orchestrator';
+const REPO = 'https://github.com/eduardogalbiati/craftorio';
 const BLOB = `${REPO}/blob/main/`;
 const LANGS = ['en', 'pt'];
 const GROUPS = ['Getting started', 'Concepts', 'Workflows', 'Skills', 'Operations', 'Reference'];
@@ -169,7 +169,7 @@ function layout({ title, active, main, side, lang, file }) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} · Multiagent Orchestrator</title>
+<title>${escapeHtml(title)} · Craftorio</title>
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -224,7 +224,7 @@ for (const lang of LANGS) {
   }).join('');
   fs.writeFileSync(path.join(dir, 'index.html'), layout({
     title: S.documentation, active: null, lang, file: 'index.html',
-    main: `<article class="doc"><h1>Multiagent Orchestrator</h1><p class="lead">${S.tagline}</p><div class="cards">${cards}</div></article>`,
+    main: `<article class="doc"><h1>Craftorio</h1><p class="lead">${S.tagline}</p><div class="cards">${cards}</div></article>`,
     side: '',
   }));
 }

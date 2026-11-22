@@ -17,8 +17,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
-const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('@multiagent/engine/test/service/helpers');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
+const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('@craftorio/engine/test/service/helpers');
 const H = require('../roadmap-status-helpers');
 
 const hasIssue = (r, n) => (r.issues || []).some((i) => i.number === n);
@@ -188,7 +188,7 @@ test('#391 the bar\'s Cancel pause (drawn from the file) asks the service to tak
 test('#391 channel roadmap:pause: its schema takes after (stage | now), says the default is now, and the service refuses another value', async (t) => {
   const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undefined });
   const ctx = new Proxy({}, { get: (target, key) => (key === 'ws' ? null : stub) });
-  const entry = require('@multiagent/engine/service/channels/roadmap')(ctx).find((e) => e.channel === 'roadmap:pause');
+  const entry = require('@craftorio/engine/service/channels/roadmap')(ctx).find((e) => e.channel === 'roadmap:pause');
   assert.equal(entry.params.includes('after'), true, `params: ${entry.params.join(', ')}`);
   const after = JSON.stringify(entry.schema.params.properties.after || null);
   assert.deepEqual([/"stage"/.test(after), /"now"/.test(after)], [true, true], after);

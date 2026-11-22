@@ -4,7 +4,7 @@
 // apps/desktop/host/main.js.
 
 const roadmaps = require('../../domains/roadmap/roadmap');
-const { stageCount, stageNumber } = require('@multiagent/shared/roadmap-model');
+const { stageCount, stageNumber } = require('@craftorio/shared/roadmap-model');
 
 module.exports = (ctx) => {
   function pendingWork() {

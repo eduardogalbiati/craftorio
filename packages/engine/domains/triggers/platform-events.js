@@ -10,8 +10,8 @@
 // issueSaveCommand / prCommentCommand, areas/triggers.js). The CLI of each reader is its platform
 // adapter's (packages/shared/platforms/); readEvents picks the reader by the adapter's id (#351).
 
-const github = require('@multiagent/shared/platforms/github');
-const gitlab = require('@multiagent/shared/platforms/gitlab');
+const github = require('@craftorio/shared/platforms/github');
+const gitlab = require('@craftorio/shared/platforms/gitlab');
 
 const RATE_LIMIT = /HTTP (403|429)/;
 // one page per endpoint and poll (the issue events: up to MAX_PAGES, they take no `since`)

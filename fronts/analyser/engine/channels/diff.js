@@ -12,7 +12,7 @@ const {
   OBJECT,
   RUN_ID,
   STRING,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 const COMMIT = nullable(STRING);
 

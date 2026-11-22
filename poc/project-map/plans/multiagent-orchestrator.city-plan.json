@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "project": "multiagent-orchestrator",
+  "project": "craftorio",
   "summary": "An Electron desktop app that runs multi-agent workflows defined in YAML, each agent turn a headless CLI (Claude Code, Codex, Grok). Layers: shared pure modules at the bottom, the run engine and the product logic in the middle, the service channels and the renderer on top; bundled skills and workflows are product content.",
   "ignore": ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.svg", "**/*.ico", "package-lock.json", "**/Cargo.lock", "poc/**", ".github/**", "docs/**", "assets/**", "generated/**"],
   "zones": [

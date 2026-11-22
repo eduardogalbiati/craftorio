@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 
 const src = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'default-workflow.js'), 'utf8');
 const WORKFLOWS = [

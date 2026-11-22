@@ -16,9 +16,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { ISSUE_WORKFLOW, makeService, roadmapProject, until, watchRuns } = require('@multiagent/engine/test/service/helpers');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { ISSUE_WORKFLOW, makeService, roadmapProject, until, watchRuns } = require('@craftorio/engine/test/service/helpers');
 const H = require('../roadmap-status-helpers');
 
 const ERROR = 'Stage 1: #1 failed.';
@@ -180,7 +180,7 @@ async function pausedByFailure(t, name) {
 test('#804 channel roadmap:item names keepPaused after confirmed, a flag', () => {
   const stub = new Proxy(function stub() {}, { get: () => stub, apply: () => undefined });
   const ctx = new Proxy({}, { get: (target, key) => (key === 'ws' ? null : stub) });
-  const entry = require('@multiagent/engine/service/channels/roadmap')(ctx).find((e) => e.channel === 'roadmap:item');
+  const entry = require('@craftorio/engine/service/channels/roadmap')(ctx).find((e) => e.channel === 'roadmap:item');
   assert.deepEqual([entry.method, entry.params], ['roadmapItem', ['projectId', 'itemId', 'action', 'confirmed', 'keepPaused']]);
   assert.deepEqual(entry.schema.params.properties.keepPaused, { type: ['boolean', 'null'] });
 });

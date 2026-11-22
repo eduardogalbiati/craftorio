@@ -1,4 +1,4 @@
-// multiagent-mcp (#341): the supervisor's and the Oracle's stdio MCP server, the Rust twin of
+// craftorio-mcp (#341): the supervisor's and the Oracle's stdio MCP server, the Rust twin of
 // src/supervisor-mcp.js (the app starts this binary when it exists, else the JS script; see
 // mcpCommand in src/supervisor-bridge.js). Newline-delimited JSON-RPC 2.0 on stdin/stdout;
 // tools/list and tools/call go to the app's loopback bridge (SUPERVISOR_BRIDGE_URL,

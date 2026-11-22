@@ -10,8 +10,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
-const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
+const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
 
 const DATE = '2026-10-20T10:00:00.000Z';
 

@@ -14,9 +14,9 @@
 // Harness: the real page (packages/ui-kit/test/renderer-app-harness.js) as project-wizard-helpers.js drives it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, existing, pageMarkup } = require('@multiagent/front-analyser/test/project-page-helpers');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, existing, pageMarkup } = require('@craftorio/front-analyser/test/project-page-helpers');
 const {
   CLONING, NAME, REPO, byTestId, clone, currentStep, emit, isHidden, press, toRepository, typeInto, wizard, wizardMarkup,
 } = require('./project-wizard-helpers');

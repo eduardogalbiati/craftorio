@@ -9,7 +9,7 @@
 // the test sets, the markup is read as a string).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const project = (runDefaults) => ({ id: 'p1', name: 'Shop', description: '', repo: 'https://github.com/o/shop.git', folder: 'C:/p/shop', exists: true, isGit: true, runDefaults });
 

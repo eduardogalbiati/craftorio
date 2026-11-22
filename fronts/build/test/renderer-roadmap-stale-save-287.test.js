@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 // a module by its page-relative name, whichever layer holds it; a shared module by its path from the page folder
 const read = (...p) => fs.readFileSync(p[0].startsWith('..') ? path.join(__dirname, '..', '..', '..', 'apps', 'desktop', 'renderer', ...p) : require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), p.join('/')), 'utf8');

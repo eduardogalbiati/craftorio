@@ -19,12 +19,12 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
-const I18n = require('@multiagent/shared/i18n.js');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
+const I18n = require('@craftorio/shared/i18n.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
 
 const FILE = pageFileOf('views/project/project-ways-of-working.js');
-const loadCompose = () => require('@multiagent/engine/domains/workflow/workflow-compose');
+const loadCompose = () => require('@craftorio/engine/domains/workflow/workflow-compose');
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const proposal = () => ({ workflows: [{ name: 'feature', category: 'feature', path: '.multiagent/workflows/feature.yaml', yaml: '' }], manifest: { path: '.multiagent/project.yaml', yaml: '' } });

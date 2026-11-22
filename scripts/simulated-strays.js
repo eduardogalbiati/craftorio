@@ -8,8 +8,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveWorkspace, layout } = require('@multiagent/engine/domains/workspace/workspace');
-const { simulationOnly } = require('@multiagent/engine/engine/simulation');
+const { resolveWorkspace, layout } = require('@craftorio/engine/domains/workspace/workspace');
+const { simulationOnly } = require('@craftorio/engine/engine/simulation');
 
 function parseArgs(argv) {
   const out = { workspace: null, delete: [] };

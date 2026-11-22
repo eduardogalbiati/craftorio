@@ -45,8 +45,8 @@ function fixture(t, text = FIXTURE) {
 }
 
 async function runRecorded(t, options) {
-  const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
-  const { Recorder } = require('@multiagent/engine/engine/recorder');
+  const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
+  const { Recorder } = require('@craftorio/engine/engine/recorder');
   const { dir, file } = fixture(t);
   const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir: path.join(dir, 'runs'), skillsDirs: [], ...options });
   const rec = new Recorder(run.runDir);
@@ -70,7 +70,7 @@ test('#262 a fallback skips an entry whose provider the workflow does not define
 });
 
 test('#262 resumeSpec: a resumed run gets the run\'s overrides, then the fallbacks its agents took', async (t) => {
-  const { resumeSpec } = require('@multiagent/engine/domains/supervisor/supervisor');
+  const { resumeSpec } = require('@craftorio/engine/domains/supervisor/supervisor');
   const { run } = await runRecorded(t, {
     agentOverrides: { reviewer: { effort: '' } },
     fallbacks: SETTINGS_CHAIN, mockSequences: { usage_limits: ['claude:claude-opus-5-5'] },
@@ -87,13 +87,13 @@ test('#262 an override equal to the workflow\'s value is no override; workflow.s
 });
 
 test('#262 an override to a provider the workflow does not define is refused', (t) => {
-  const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
+  const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
   const { dir, file } = fixture(t);
   assert.throws(() => new WorkflowRun({ file, inputs: {}, mock: true, runsDir: dir, agentOverrides: { writer: { provider: 'grok' } } }), /provider "grok"/);
 });
 
 test('#262 Settings\' models are validated like the workflow\'s: an unknown limit or a non-positive number is refused', (t) => {
-  const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
+  const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
   const { dir, file } = fixture(t);
   const make = (models) => new WorkflowRun({ file, inputs: {}, mock: true, runsDir: dir, models });
   assert.throws(() => make({ 'gpt-6-luna': { speed: 2 } }), /unknown limit "speed"/);
@@ -102,7 +102,7 @@ test('#262 Settings\' models are validated like the workflow\'s: an unknown limi
 });
 
 test('#262 listWorkflows: each agent\'s runs_on resolves its templates with the inputs\' defaults; the workflow lists its providers', (t) => {
-  const { makeService } = require('@multiagent/engine/test/service/helpers');
+  const { makeService } = require('@craftorio/engine/test/service/helpers');
   const { service, api } = makeService(t);
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-internals-262.yaml'), FIXTURE);
   const wf = api['workflows:list']().find((w) => w.file === 'fixture-internals-262.yaml');
@@ -116,7 +116,7 @@ test('#262 listWorkflows: each agent\'s runs_on resolves its templates with the 
 // ---- review findings (#262): overrides that must be refused, Settings chains, limits after a fallback ----
 
 const newRun = (t, options) => {
-  const { WorkflowRun } = require('@multiagent/engine/engine/workflow');
+  const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
   const { dir, file } = fixture(t);
   return new WorkflowRun({ file, inputs: {}, mock: true, runsDir: path.join(dir, 'runs'), skillsDirs: [], ...options });
 };

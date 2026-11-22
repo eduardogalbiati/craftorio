@@ -6,7 +6,7 @@
 // owner's UTC-3: 01:14Z reads 10:14 only in Tokyo.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const allEls = (app) => [...app.elements.values(), ...app.created];
 // a view's markup may be a function, drawn again in the interface language (#329)

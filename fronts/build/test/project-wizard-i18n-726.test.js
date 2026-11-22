@@ -19,10 +19,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, existing } = require('@multiagent/front-analyser/test/project-page-helpers');
-const I18n = require('@multiagent/shared/i18n');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, existing } = require('@craftorio/front-analyser/test/project-page-helpers');
+const I18n = require('@craftorio/shared/i18n');
 
 const CSS = path.join(__dirname, '..', 'views', 'projects', 'project-wizard.css');
 const PID = 'p-new';

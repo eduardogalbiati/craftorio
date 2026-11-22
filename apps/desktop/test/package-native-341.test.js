@@ -28,17 +28,17 @@ test('#341 buildNative: adds the target, builds in release, locked, and stages t
       const built = path.join(process.env.CARGO_TARGET_DIR, 'x86_64-pc-windows-msvc', 'release');
       fs.mkdirSync(built, { recursive: true });
       // #342: the workspace builds three sidecars
-      for (const name of ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail']) fs.writeFileSync(path.join(built, `${name}.exe`), 'bin');
+      for (const name of ['craftorio-ctl', 'craftorio-mcp', 'craftorio-tail']) fs.writeFileSync(path.join(built, `${name}.exe`), 'bin');
     }
     return { status: 0 };
   };
   const staged = buildNative(opts, run);
   assert.equal(staged, nativeBinDir(opts));
   assert.equal(path.basename(staged), 'bin');
-  assert.equal(fs.readFileSync(path.join(staged, 'multiagent-mcp.exe'), 'utf8'), 'bin');
+  assert.equal(fs.readFileSync(path.join(staged, 'craftorio-mcp.exe'), 'utf8'), 'bin');
   assert.equal(calls[0], 'rustup target add x86_64-pc-windows-msvc');
-  assert.match(calls[1], /^cargo build --release --locked --manifest-path .*Cargo\.toml --target x86_64-pc-windows-msvc( -p multiagent-[a-z]+)+$/);
-  assert.match(calls[1], / -p multiagent-mcp\b/);
+  assert.match(calls[1], /^cargo build --release --locked --manifest-path .*Cargo\.toml --target x86_64-pc-windows-msvc( -p craftorio-[a-z]+)+$/);
+  assert.match(calls[1], / -p craftorio-mcp\b/);
   assert.deepEqual(packagerOptions(opts).extraResource, [staged]);
 });
 

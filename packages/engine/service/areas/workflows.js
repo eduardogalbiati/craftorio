@@ -21,12 +21,12 @@ const builder = require('../../domains/workflow/workflow-builder');
 const skills = require('../../domains/agents/skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../domains/seed/seed');
-const { mergeOf } = require('@multiagent/shared/default-workflow');
+const { mergeOf } = require('@craftorio/shared/default-workflow');
 const {
   MANIFEST_FILE,
   requiresProblem,
 } = require('../../domains/project/project-manifest');
-const compose = require('@multiagent/shared/workflow-compose');
+const compose = require('@craftorio/shared/workflow-compose');
 const { workflowRequirements } = require('../../domains/workflow/workflow-requirements');
 
 // #488: an import by url gives up after this long, and refuses a body larger than a workflow can be

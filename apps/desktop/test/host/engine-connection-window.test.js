@@ -65,7 +65,7 @@ function setup({ mode = 'remote', saved = { mode: 'remote', address: URL_, token
     store,
     version: { app: '9.9.9', contract: 'abc123' },
     mode,
-    windowOptions: { width: 1500, height: 950, backgroundColor: '#0e1014', title: 'Multiagent Orchestrator' },
+    windowOptions: { width: 1500, height: 950, backgroundColor: '#0e1014', title: 'Craftorio' },
     mainWindow: () => main,
     prepareRestart,
     relaunch: () => relaunched.push(true),

@@ -159,9 +159,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
-const evidence = require('@multiagent/engine/domains/evidence/evidence');
-const I18n = require('@multiagent/shared/i18n');
-const machineSlot = require('@multiagent/engine/engine/machine-slot');
+const evidence = require('@craftorio/engine/domains/evidence/evidence');
+const I18n = require('@craftorio/shared/i18n');
+const machineSlot = require('@craftorio/engine/engine/machine-slot');
 const {
   demoKeepAwake,
   demoMissingClis,

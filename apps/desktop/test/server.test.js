@@ -7,9 +7,9 @@ const path = require('path');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const http = require('http');
 const WebSocket = require('ws');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-const { createService } = require('@multiagent/engine/service');
-const { createServer } = require('@multiagent/engine/server');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+const { createService } = require('@craftorio/engine/service');
+const { createServer } = require('@craftorio/engine/server');
 
 const TOKEN = 'test-token-0123456789abcdef';
 const WORKFLOW = `apiVersion: multiagent/v1
@@ -310,7 +310,7 @@ test('the browser client reports the external terminal unavailable, with a reaso
 });
 
 test('a channel manifest declaring the same channel twice is refused', () => {
-  const { declarations } = require('@multiagent/engine/service/manifest');
+  const { declarations } = require('@craftorio/engine/service/manifest');
   assert.throws(() => declarations([{ channel: 'x:y', method: 'a' }, { channel: 'x:y', method: 'b' }]), /x:y is declared twice/);
   assert.throws(() => declarations([{ channel: 'a:b', method: 'same' }, { channel: 'c:d', method: 'same' }]), /method same is declared twice/);
 });
@@ -318,7 +318,7 @@ test('a channel manifest declaring the same channel twice is refused', () => {
 // #162: Keep awake has no equivalent in the browser client (npm run serve has no powerSaveBlocker):
 // its state is desktop-only, and its change is a pushed event like any other.
 test('manifest: keepAwake:state is desktop-only, keepAwake:changed is a pushed event, and the browser client refuses to read the state', async () => {
-  const { DESKTOP, declarations } = require('@multiagent/engine/service/manifest');
+  const { DESKTOP, declarations } = require('@craftorio/engine/service/manifest');
   const stateEntry = DESKTOP.find((e) => e.channel === 'keepAwake:state');
   assert.equal(stateEntry.method, 'keepAwakeState');
   assert.ok(stateEntry.desktop, 'declared desktop-only');

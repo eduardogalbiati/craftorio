@@ -21,7 +21,7 @@
 //    the gate leaves the pending gates as in 1.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ts = (s) => `2026-10-25T10:00:${String(s).padStart(2, '0')}.000Z`;
 

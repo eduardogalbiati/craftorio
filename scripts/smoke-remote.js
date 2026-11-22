@@ -18,7 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { app, BrowserWindow } = require('electron');
-const { FILE } = require('@multiagent/desktop/host/engine-connection');
+const { FILE } = require('@craftorio/desktop/host/engine-connection');
 
 process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 const out = path.resolve(process.argv.slice(2).find((a) => !a.startsWith('-') && !a.endsWith('.js')) || 'smoke-remote');
@@ -52,7 +52,7 @@ function startEngine() {
     MULTIAGENT_USER_DATA: path.join(scratch, 'engine-user-data'), HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
   };
   delete env.MULTIAGENT_WORKSPACE;
-  engine = spawn(process.execPath, [path.join(__dirname, '..', 'packages', 'engine', 'bin', 'multiagent-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
+  engine = spawn(process.execPath, [path.join(__dirname, '..', 'packages', 'engine', 'bin', 'craftorio-engine.js'), '--port', '0', '--workspace', path.join(scratch, 'engine-workspace')], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -148,7 +148,7 @@ async function main() {
   fs.mkdirSync(out, { recursive: true });
   const origin = await startEngine();
   fs.writeFileSync(path.join(userData, FILE), JSON.stringify({ mode: 'remote', address: origin, token: { plain: token } }));
-  require('@multiagent/desktop/host/main');
+  require('@craftorio/desktop/host/main');
   await app.whenReady();
   const remote = await checkRemoteWindow(origin);
   await checkConnectionPage(remote, origin);

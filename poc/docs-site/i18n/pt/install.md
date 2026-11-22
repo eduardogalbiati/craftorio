@@ -1,20 +1,20 @@
 # Instalação
 
 Baixe o arquivo para o seu sistema na última
-[Release do GitHub](https://github.com/eduardogalbiati/multiagent-orchestrator/releases/latest). Os
+[Release do GitHub](https://github.com/eduardogalbiati/craftorio/releases/latest). Os
 builds ainda não são assinados, por isso cada sistema avisa uma vez antes da primeira abertura.
 
-- **Windows** (x64): `MultiagentOrchestrator-win32-x64.zip`. Descompacte em qualquer pasta e execute
-  `MultiagentOrchestrator.exe`. Se o SmartScreen disser "O Windows protegeu o computador", clique em
+- **Windows** (x64): `Craftorio-win32-x64.zip`. Descompacte em qualquer pasta e execute
+  `Craftorio.exe`. Se o SmartScreen disser "O Windows protegeu o computador", clique em
   **Mais informações** e depois em **Executar assim mesmo**.
-- **macOS** (Apple Silicon: `MultiagentOrchestrator-darwin-arm64.zip`; Intel:
-  `MultiagentOrchestrator-darwin-x64.zip`). Descompacte e mova `MultiagentOrchestrator.app` para
+- **macOS** (Apple Silicon: `Craftorio-darwin-arm64.zip`; Intel:
+  `Craftorio-darwin-x64.zip`). Descompacte e mova `Craftorio.app` para
   Aplicativos. O app não é notarizado, então a primeira abertura é bloqueada: abra uma vez, depois vá
   em **Ajustes do Sistema › Privacidade e Segurança** e clique em **Abrir mesmo assim** ao lado da
-  mensagem sobre o app (ou, no Terminal: `xattr -dr com.apple.quarantine /Applications/MultiagentOrchestrator.app`).
+  mensagem sobre o app (ou, no Terminal: `xattr -dr com.apple.quarantine /Applications/Craftorio.app`).
   A entrada por voz pede o microfone na primeira vez que você a usa.
-- **Linux** (x64): `MultiagentOrchestrator-linux-x64.AppImage`. Dê permissão de execução e rode:
-  `chmod +x MultiagentOrchestrator-linux-x64.AppImage && ./MultiagentOrchestrator-linux-x64.AppImage`
+- **Linux** (x64): `Craftorio-linux-x64.AppImage`. Dê permissão de execução e rode:
+  `chmod +x Craftorio-linux-x64.AppImage && ./Craftorio-linux-x64.AppImage`
   (se não abrir por falta do FUSE, rode com `--appimage-extract-and-run`). Em sistemas que proíbem
   user namespaces sem privilégio (Ubuntu 23.10 em diante, o padrão do AppArmor) o AppImage só abre
   com o sandbox do Chromium desligado: ele avisa no stderr e em **Settings › About**. Sem o sandbox,
@@ -23,8 +23,8 @@ builds ainda não são assinados, por isso cada sistema avisa uma vez antes da p
   (para valer em toda abertura: um arquivo em `/etc/sysctl.d/` com
   `kernel.apparmor_restrict_unprivileged_userns=0`). A escolha é sua, com o seu custo: vale para o
   sistema inteiro, então todo programa volta a poder criar user namespaces, uma superfície de ataque
-  do kernel que o Ubuntu fechou de propósito. `MultiagentOrchestrator-linux-x64.tar.gz` é o mesmo
-  app como pasta: rode `./MultiagentOrchestrator` dentro dela; se parar com "The SUID sandbox helper
+  do kernel que o Ubuntu fechou de propósito. `Craftorio-linux-x64.tar.gz` é o mesmo
+  app como pasta: rode `./Craftorio` dentro dela; se parar com "The SUID sandbox helper
   binary was found, but is not configured correctly", dê ao helper do sandbox as permissões uma vez:
   `sudo chown root:root chrome-sandbox && sudo chmod 4755 chrome-sandbox`.
 

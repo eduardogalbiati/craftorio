@@ -1,7 +1,7 @@
 // The supervisor's stdio MCP server (#28, packages/engine/domains/supervisor/supervisor-mcp.js): a thin JSON-RPC 2.0 proxy, over
 // newline-delimited stdin/stdout, to the app's loopback bridge (packages/engine/domains/supervisor/supervisor-bridge.js), pointed
 // at a real bridge serving fake tools. Every case runs against two servers that must answer alike
-// (#341): the JS script (spawned with process.execPath) and the Rust binary multiagent-mcp
+// (#341): the JS script (spawned with process.execPath) and the Rust binary craftorio-mcp
 // (native/, built here with `cargo build --release`). Without cargo the binary's cases are skipped
 // with one line; CI (CI set) never skips them.
 const test = require('node:test');
@@ -14,7 +14,7 @@ const { createBridge } = require('../../domains/supervisor/supervisor-bridge');
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const SCRIPT = path.join(ROOT, 'packages', 'engine', 'domains', 'supervisor', 'supervisor-mcp.js');
 const NATIVE = path.join(ROOT, 'native');
-const BINARY_NAME = process.platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp';
+const BINARY_NAME = process.platform === 'win32' ? 'craftorio-mcp.exe' : 'craftorio-mcp';
 const BINARY = path.join(process.env.CARGO_TARGET_DIR || path.join(NATIVE, 'target'), 'release', BINARY_NAME);
 
 const hasCargo = () => spawnSync('cargo', ['--version'], { stdio: 'ignore' }).status === 0;
@@ -23,11 +23,11 @@ const hasCargo = () => spawnSync('cargo', ['--version'], { stdio: 'ignore' }).st
 let built = null;
 function buildBinary() {
   if (built) return built;
-  const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'multiagent-mcp'], {
+  const r = spawnSync('cargo', ['build', '--release', '--manifest-path', path.join(NATIVE, 'Cargo.toml'), '-p', 'craftorio-mcp'], {
     encoding: 'utf8', timeout: 9 * 60 * 1000,
   });
-  if (r.status !== 0) built = { error: `cargo build of multiagent-mcp failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
-  else if (!fs.existsSync(BINARY)) built = { error: `cargo built multiagent-mcp but ${BINARY} does not exist` };
+  if (r.status !== 0) built = { error: `cargo build of craftorio-mcp failed: ${(r.stderr || r.error?.message || '').slice(-1500)}` };
+  else if (!fs.existsSync(BINARY)) built = { error: `cargo built craftorio-mcp but ${BINARY} does not exist` };
   else built = { file: BINARY };
   return built;
 }
@@ -35,7 +35,7 @@ function buildBinary() {
 const SERVERS = [
   { label: 'supervisor-mcp.js (Node)', command: () => ({ file: process.execPath, args: [SCRIPT] }) },
   {
-    label: 'multiagent-mcp (Rust binary)',
+    label: 'craftorio-mcp (Rust binary)',
     skip: !process.env.CI && !hasCargo() ? 'cargo is not installed: the Rust MCP server\'s cases are skipped (CI runs them)' : false,
     command: () => {
       const b = buildBinary();

@@ -6,8 +6,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { createService } = require('@multiagent/engine/service');
-const { ISSUE_WORKFLOW, makeService, roadmapProject, until, watchRuns } = require('@multiagent/engine/test/service/helpers');
+const { createService } = require('@craftorio/engine/service');
+const { ISSUE_WORKFLOW, makeService, roadmapProject, until, watchRuns } = require('@craftorio/engine/test/service/helpers');
 
 test('pendingWork: no workspace open returns no runs, roadmaps or queued items', () => {
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });

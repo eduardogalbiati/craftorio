@@ -1,10 +1,10 @@
 // Release assets of a packaged app (apps/desktop/scripts/package.js output), named with the OS and the architecture
 // and written to the current folder. The release jobs (deploy.yml, preview.yml) run it on each OS:
 //   node scripts/release-assets.js [--platform win32|darwin|linux] [--arch x64|arm64] [dist-folder]
-// - Windows: MultiagentOrchestrator-win32-<arch>.zip (the folder's content, Compress-Archive);
-// - macOS: MultiagentOrchestrator-darwin-<arch>.zip (the .app, zipped with ditto so the bundle keeps
+// - Windows: Craftorio-win32-<arch>.zip (the folder's content, Compress-Archive);
+// - macOS: Craftorio-darwin-<arch>.zip (the .app, zipped with ditto so the bundle keeps
 //   its symlinks and its ad-hoc signature);
-// - Linux: MultiagentOrchestrator-linux-<arch>.tar.gz (the folder) and .AppImage (appimagetool, its
+// - Linux: Craftorio-linux-<arch>.tar.gz (the folder) and .AppImage (appimagetool, its
 //   path in APPIMAGETOOL). The AppImage's AppRun turns Chromium's sandbox off only when the kernel
 //   refuses unprivileged user namespaces (Ubuntu 23.10+): the setuid chrome-sandbox cannot work from
 //   the AppImage's read-only mount. Then it says so (#476): a warning on stderr, and
@@ -15,10 +15,10 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { parseArgs } = require('@multiagent/desktop/scripts/package');
+const { parseArgs } = require('@craftorio/desktop/scripts/package');
 
 const root = path.join(__dirname, '..');
-const NAME = 'MultiagentOrchestrator';
+const NAME = 'Craftorio';
 const APPIMAGE_ARCH = { arm64: 'aarch64', x64: 'x86_64' };
 
 const APP_RUN = `#!/bin/sh
@@ -26,7 +26,7 @@ const APP_RUN = `#!/bin/sh
 # namespaces (the setuid chrome-sandbox cannot work from the AppImage's read-only mount)
 HERE="$(dirname "$(readlink -f "$0")")"
 if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ] || [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null)" = "0" ]; then
-  echo "Multiagent Orchestrator: starting WITHOUT Chromium's sandbox: this system forbids unprivileged user namespaces. To keep the sandbox on, allow them (your choice, it applies to the whole system): sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 (see the README, Install)." >&2
+  echo "Craftorio: starting WITHOUT Chromium's sandbox: this system forbids unprivileged user namespaces. To keep the sandbox on, allow them (your choice, it applies to the whole system): sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 (see the README, Install)." >&2
   export MULTIAGENT_NO_SANDBOX=1
   exec "$HERE/app/${NAME}" --no-sandbox "$@"
 fi
@@ -35,10 +35,10 @@ exec "$HERE/app/${NAME}" "$@"
 
 const DESKTOP = `[Desktop Entry]
 Type=Application
-Name=Multiagent Orchestrator
+Name=Craftorio
 Comment=Runs multi-agent workflows defined in YAML
 Exec=AppRun %U
-Icon=multiagent-orchestrator
+Icon=craftorio
 Categories=Development;
 Terminal=false
 `;
@@ -56,8 +56,8 @@ function appImage(build, file, arch) {
   fs.rmSync(appDir, { recursive: true, force: true });
   fs.cpSync(build, path.join(appDir, 'app'), { recursive: true, verbatimSymlinks: true });
   fs.writeFileSync(path.join(appDir, 'AppRun'), APP_RUN, { mode: 0o755 });
-  fs.writeFileSync(path.join(appDir, 'multiagent-orchestrator.desktop'), DESKTOP);
-  fs.copyFileSync(path.join(root, 'apps', 'desktop', 'assets', 'icon.png'), path.join(appDir, 'multiagent-orchestrator.png'));
+  fs.writeFileSync(path.join(appDir, 'craftorio.desktop'), DESKTOP);
+  fs.copyFileSync(path.join(root, 'apps', 'desktop', 'assets', 'icon.png'), path.join(appDir, 'craftorio.png'));
   fs.copyFileSync(path.join(root, 'apps', 'desktop', 'assets', 'icon.png'), path.join(appDir, '.DirIcon'));
   run(process.env.APPIMAGETOOL || 'appimagetool', [appDir, file], { env: { ...process.env, ARCH: APPIMAGE_ARCH[arch] } });
 }

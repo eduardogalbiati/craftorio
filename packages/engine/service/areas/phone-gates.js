@@ -7,7 +7,7 @@
 // phone: { answered_by: 'owner', via: 'mobile', device } on the gate's approval.resolved event.
 
 const qrcode = require('qrcode-generator');
-const I18n = require('@multiagent/shared/i18n');
+const I18n = require('@craftorio/shared/i18n');
 const workspace = require('../../domains/workspace/workspace');
 const {
   createMobileGatesServer,

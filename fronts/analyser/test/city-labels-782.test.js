@@ -12,10 +12,10 @@
 // - zone labels are not its business: layoutCity keeps zones[].label.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
 
-const load = () => require('@multiagent/shared/city-layout.js');
+const load = () => require('@craftorio/shared/city-layout.js');
 
 const hash = '01'.repeat(20);
 const LANDMARK = 'packages/engine/engine/big.js';

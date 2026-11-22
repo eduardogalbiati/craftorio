@@ -8,8 +8,8 @@
 // front's tests.
 const assert = require('node:assert/strict');
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
-const pieces = require('@multiagent/ui-kit/test/page-pieces');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
+const pieces = require('@craftorio/ui-kit/test/page-pieces');
 
 const { read, exists, esc, displayName, agentLabel, NOW, installClock, evalStatusPill, loadRunList, findEl, findAll } = pieces;
 

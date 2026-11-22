@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const { checkAttachments, storeAttachments } = require('../providers');
 const { resolveSkill } = require('../../domains/agents/skills');
-const { displayName } = require('@multiagent/shared/display-name');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
+const { displayName } = require('@craftorio/shared/display-name');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 const { inputsRead, render } = require('./templates');
 const { MACHINE_STEP_TYPES, toBoolean } = require('./load');
 

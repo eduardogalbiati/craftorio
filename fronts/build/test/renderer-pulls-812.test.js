@@ -1,7 +1,7 @@
 // #812 the PRs / MRs screen in the UI (fronts/build/views/pulls/pulls.js): every open pull request of the project by
 // what it needs (Need you, Waiting, Others), each one the run's PR card (packages/shared/pr-card.js) with a link to its
 // run when it has one, a stack (#807) in merge order with Merge on its bottom PR only, a project that cannot be read
-// saying so, and the empty states. The page is the real one (@multiagent/ui-kit/test/renderer-app-harness loads
+// saying so, and the empty states. The page is the real one (@craftorio/ui-kit/test/renderer-app-harness loads
 // index.html's scripts in a vm sandbox; nothing is parsed, the tests read the markup strings the views produce).
 // Acceptance tests, written before the code: the view is reached inside each test.
 //
@@ -21,7 +21,7 @@
 //     (data-reason="none" | "no_remote" | "no_cli").
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const PROJECTS = [{ id: 'shop', name: 'Shop', repo: 'https://github.com/acme/shop' }, { id: 'site', name: 'Site', repo: 'https://gitlab.com/grp/site' }];
 const OPTS = (merge) => ({ merge, bypass: false, close: true, blockers: merge ? [] : ['ci_running'], ignores: [], askFix: false });

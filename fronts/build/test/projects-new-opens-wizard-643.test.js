@@ -11,7 +11,7 @@
 // Harness: packages/ui-kit/test/renderer-app-harness.js (the real page in a vm with a fake DOM).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const PROJECT = {
   id: 'p1', name: 'Shop', description: 'The web shop', repo: 'https://github.com/o/shop.git', folder: 'C:/p/shop', exists: true, isGit: true,

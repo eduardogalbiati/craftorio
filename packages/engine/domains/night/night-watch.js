@@ -29,7 +29,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { unfinishedItems } = require('@multiagent/shared/roadmap-model');
+const { unfinishedItems } = require('@craftorio/shared/roadmap-model');
 const { regressionLine, stepRegressions } = require('../run/step-regressions');
 
 // What the Oracle may do without asking, each with what it does and its undo. Defaults: retry and refresh.

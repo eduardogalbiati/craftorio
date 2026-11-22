@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadWorkflow } = require('@multiagent/engine/engine/run/load');
+const { loadWorkflow } = require('@craftorio/engine/engine/run/load');
 const { checkComplexity, checkDuplication } = require('./code-health');
 const { checkDecisions, checkOracleCapabilities } = require('./doc-rules');
 const { checkDocs } = require('./docs');

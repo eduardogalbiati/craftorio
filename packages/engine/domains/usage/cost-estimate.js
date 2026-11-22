@@ -18,7 +18,7 @@
 // cost of a finished item next to it) and by its budget cap (packages/engine/domains/usage/budget.js).
 
 const path = require('path');
-const { stageActualUsd } = require('@multiagent/shared/roadmap-model');
+const { stageActualUsd } = require('@craftorio/shared/roadmap-model');
 const { complexityOf } = require('../roadmap/live-roadmap');
 const { sessionCost } = require('./usage');
 
@@ -203,7 +203,7 @@ function actualTime(item, runById) {
  * (`actualMinutes`, `actualTopStep`) of each item with a run. A stage's estimate sums its items' costs
  * and takes its longest item's minutes (`missing`: items with no estimate yet); its `actualUsd` sums
  * its items' real costs, its `actualMinutes` is its longest item's.
- * @param {import('@multiagent/shared/types').Roadmap} roadmap
+ * @param {import('@craftorio/shared/types').Roadmap} roadmap
  * @param {any[] | null | undefined} runs
  * @param {{ issues?: any[], prices?: object }} [options]
  */

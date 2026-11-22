@@ -16,11 +16,11 @@ const { tokenCheck } = require('../cli/token-check');
 
 const MAX_BODY = 1024 * 1024;
 
-// Where the Rust MCP server (native/multiagent-mcp, #341) of this platform lives: packaged, in
+// Where the Rust MCP server (native/craftorio-mcp, #341) of this platform lives: packaged, in
 // resources/bin/ (apps/desktop/scripts/package.js); in a dev checkout, cargo's release output under native/.
 // Never looked up on the PATH (packages/engine/domains/machine/native-bin.js).
 function mcpBinaryPath({ isPackaged, resourcesPath = process.resourcesPath, platform = process.platform } = {}) {
-  return nativeBinaryPath('multiagent-mcp', { isPackaged, resourcesPath, platform });
+  return nativeBinaryPath('craftorio-mcp', { isPackaged, resourcesPath, platform });
 }
 
 // How `claude` starts the MCP server: the Rust binary when it exists (no Node needed), else the JS

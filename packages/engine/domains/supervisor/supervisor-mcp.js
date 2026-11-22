@@ -41,7 +41,7 @@ async function handle(msg) {
         protocolVersion: msg.params?.protocolVersion || PROTOCOL,
         capabilities: { tools: {} },
         serverInfo: { name: 'orchestrator', version: '1.0.0' },
-        instructions: 'Read-only tools over the Multiagent Orchestrator app: workflows, projects, runs, skills, agents, usage and analytics.',
+        instructions: 'Read-only tools over the Craftorio app: workflows, projects, runs, skills, agents, usage and analytics.',
       };
     case 'ping':
       return {};

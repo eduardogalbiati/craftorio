@@ -32,10 +32,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const OnboardingModel = require('@multiagent/shared/onboarding-model');
-const Platforms = require('@multiagent/shared/platforms');
+const OnboardingModel = require('@craftorio/shared/onboarding-model');
+const Platforms = require('@craftorio/shared/platforms');
 // #848: the platform the gh E2E hook stands for, the GitHub adapter's own id (#351: no platform literal here)
-const { id: E2E_REPOS_PLATFORM } = require('@multiagent/shared/platforms/github');
+const { id: E2E_REPOS_PLATFORM } = require('@craftorio/shared/platforms/github');
 const agents = require('../../domains/agents/agents');
 const issues = require('../../domains/backlog/issues');
 const { identityArgs } = require('../../engine/worktree');

@@ -22,10 +22,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const roadmapModel = require('@multiagent/shared/roadmap-model');
+const roadmapModel = require('@craftorio/shared/roadmap-model');
 const roadmap = require('../domains/roadmap/roadmap');
 const night = require('../domains/night/night-watch');
-const runProgress = require('@multiagent/shared/run-progress-model');
+const runProgress = require('@craftorio/shared/run-progress-model');
 const { prepareWorktree, cleanupWorktrees } = require('../engine/worktree');
 const { endedRun, fixture } = require('./worktree-helpers');
 

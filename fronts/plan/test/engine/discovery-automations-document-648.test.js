@@ -10,9 +10,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { layout } = require('@multiagent/engine/domains/workspace/workspace');
-const discovery = require('@multiagent/engine/domains/discovery/discovery');
-const projects = require('@multiagent/engine/domains/project/projects');
+const { layout } = require('@craftorio/engine/domains/workspace/workspace');
+const discovery = require('@craftorio/engine/domains/discovery/discovery');
+const projects = require('@craftorio/engine/domains/project/projects');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const load = () => require('../../engine/areas/discovery-automations');

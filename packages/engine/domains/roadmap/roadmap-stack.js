@@ -10,14 +10,14 @@ const {
   isFinished,
   isRelease,
   nextStage,
-} = require('@multiagent/shared/roadmap-model');
+} = require('@craftorio/shared/roadmap-model');
 const {
   parentField,
   parentOfItem,
 } = require('./roadmap-dependency');
 const { withStatus } = require('./roadmap-status');
 
-/** @typedef {import('@multiagent/shared/types').Roadmap} Roadmap */
+/** @typedef {import('@craftorio/shared/types').Roadmap} Roadmap */
 
 /**
  * The stack field of a cleaned item: the raw one, else the stored one; '' removes it.

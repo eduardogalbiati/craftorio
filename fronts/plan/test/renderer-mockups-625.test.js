@@ -18,7 +18,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, navEntries, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const SCREENS = [
   { slug: 'orders-dashboard', title: 'Orders Dashboard' },

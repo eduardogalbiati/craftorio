@@ -46,7 +46,7 @@ const { bundleStatus } = require('../seed/seed');
 const { readEvents } = require('../supervisor/supervisor');
 const { callTool, supervisorTools } = require('../supervisor/supervisor-tools');
 
-const APP_PACKAGE = 'multiagent-orchestrator';
+const APP_PACKAGE = 'craftorio';
 // the agents the Oracle can delegate to (#123)
 const DELEGATES = [
   'analyzer',

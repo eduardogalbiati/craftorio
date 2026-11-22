@@ -25,7 +25,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const DocModel = require('@multiagent/shared/doc-model');
+const DocModel = require('@craftorio/shared/doc-model');
 const { git, identityArgs } = require('./worktree');
 
 const SUITE = ['## Suite and tests', '## Suíte e testes'];

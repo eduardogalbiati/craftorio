@@ -25,7 +25,7 @@ test('sign-in off: a server without MULTIAGENT_AUTH=off requires no account and 
   delete env.MULTIAGENT_AUTH;
   delete env.MULTIAGENT_WORKSPACE;
   delete env.NODE_TEST_CONTEXT;
-  const bin = path.join(__dirname, '..', '..', 'bin', 'multiagent-engine.js');
+  const bin = path.join(__dirname, '..', '..', 'bin', 'craftorio-engine.js');
   const child = spawn(process.execPath, [bin, '--port', '0', '--workspace', path.join(dir, 'workspace')], { env });
   let out = '';
   child.stdout.on('data', (c) => { out += c; });

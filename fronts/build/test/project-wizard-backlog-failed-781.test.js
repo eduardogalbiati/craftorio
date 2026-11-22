@@ -2,7 +2,7 @@
 // platform to read from (its empty line), and a wizard resumed on a running analysis following the interview.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
 const { PID, byTestId, emit, press, wizardMarkup } = W;

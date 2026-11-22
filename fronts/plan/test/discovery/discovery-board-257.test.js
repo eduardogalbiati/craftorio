@@ -28,8 +28,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { layout, setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-const discovery = require('@multiagent/engine/domains/discovery/discovery');
+const { layout, setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+const discovery = require('@craftorio/engine/domains/discovery/discovery');
 
 const P = 'p1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -243,7 +243,7 @@ test('recordResult from AI Arena is recorded the same way with its own source', 
 
 function makeService(t) {
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
-  const { createService } = require('@multiagent/engine/service');
+  const { createService } = require('@craftorio/engine/service');
   const service = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false, userDataDir: tmp(t, 'discovery-board-ud-').root } });
   t.after(() => service.shutdown());
   const { root } = tmp(t);

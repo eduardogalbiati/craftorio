@@ -69,7 +69,7 @@
   // the static texts of connection.html (data-i18n, data-i18n-placeholder)
   function paintTexts() {
     document.documentElement.lang = I18n.getLanguage();
-    document.title = `${t('connection.title')} · Multiagent Orchestrator`;
+    document.title = `${t('connection.title')} · Craftorio`;
     document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
   }

@@ -6,7 +6,7 @@
 // packages/engine/service/areas/insights.js) reads the run record (packages/engine/domains/run/run-record.js) and caches the figures;
 // a record of an older shape is upgraded first (#350, packages/shared/run-record.js).
 
-const { upgradeRunRecord } = require('@multiagent/shared/run-record');
+const { upgradeRunRecord } = require('@craftorio/shared/run-record');
 
 const MIN_RUNS = 3;
 const HISTORY = 30;

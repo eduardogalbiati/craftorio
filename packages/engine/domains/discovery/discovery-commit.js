@@ -33,9 +33,9 @@ const fs = require('fs');
 const path = require('path');
 const backlog = require('../backlog/backlog');
 const discovery = require('./discovery');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 const poSplit = require('../po/po-split');
-const { platformOrDefault } = require('@multiagent/shared/platforms');
+const { platformOrDefault } = require('@craftorio/shared/platforms');
 
 const { COMMIT_BAR } = discovery;
 const MAX_ISSUES = 8;

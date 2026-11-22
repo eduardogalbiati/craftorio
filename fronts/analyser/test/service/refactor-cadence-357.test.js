@@ -8,9 +8,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const proposals = require('@multiagent/engine/domains/refactor/refactor-proposals');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
-const { makeService, roadmapProject } = require('@multiagent/engine/test/service/helpers');
+const proposals = require('@craftorio/engine/domains/refactor/refactor-proposals');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
+const { makeService, roadmapProject } = require('@craftorio/engine/test/service/helpers');
 
 const ISSUE = 5;
 

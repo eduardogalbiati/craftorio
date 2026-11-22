@@ -3,25 +3,25 @@
 // with its read-only tools over the service (packages/engine/domains/supervisor/supervisor-chat.js, #28), and its request inbox (#240).
 
 const path = require('path');
-const simulation = require('@multiagent/engine/engine/simulation');
-const supervisor = require('@multiagent/engine/domains/supervisor/supervisor');
-const workspace = require('@multiagent/engine/domains/workspace/workspace');
+const simulation = require('@craftorio/engine/engine/simulation');
+const supervisor = require('@craftorio/engine/domains/supervisor/supervisor');
+const workspace = require('@craftorio/engine/domains/workspace/workspace');
 const {
   createBridge,
   mcpCommand,
-} = require('@multiagent/engine/domains/supervisor/supervisor-bridge');
+} = require('@craftorio/engine/domains/supervisor/supervisor-bridge');
 const {
   CLICK_KINDS,
   CONFIRM_KINDS,
   createSupervisorChat,
-} = require('@multiagent/engine/domains/supervisor/supervisor-chat');
+} = require('@craftorio/engine/domains/supervisor/supervisor-chat');
 const { createWatches } = require('../domains/supervisor-watch');
 const {
   requireId,
   requireObject,
-} = require('@multiagent/engine/service/common');
-const { resolveCommand } = require('@multiagent/engine/engine/providers');
-const { supervisorTools } = require('@multiagent/engine/domains/supervisor/supervisor-tools');
+} = require('@craftorio/engine/service/common');
+const { resolveCommand } = require('@craftorio/engine/engine/providers');
+const { supervisorTools } = require('@craftorio/engine/domains/supervisor/supervisor-tools');
 const {
   ANY,
   args,
@@ -37,7 +37,7 @@ const {
   STEP_ID,
   STRING,
   TOOL_LIST,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 const CHAT_ANSWER = shape({ message: OBJECT, messages: MESSAGES }, ['messages']);
 

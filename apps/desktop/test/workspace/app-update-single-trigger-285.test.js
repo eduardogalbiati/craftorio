@@ -28,7 +28,7 @@ const issues = (...numbers) => numbers.map((n) => ({ number: n, title: `Issue ${
 // ---- packages/engine/domains/workspace/app-update.js ------------------------------------------------------------------------------
 
 test('#285 app-update: WHEN_MODES is gone, or no longer offers "marked"', () => {
-  const appUpdate = require('@multiagent/engine/domains/workspace/app-update');
+  const appUpdate = require('@craftorio/engine/domains/workspace/app-update');
   const modes = appUpdate.WHEN_MODES;
   assert.equal(Array.isArray(modes) && modes.includes('marked'), false);
 });
@@ -36,7 +36,7 @@ test('#285 app-update: WHEN_MODES is gone, or no longer offers "marked"', () => 
 // ---- the roadmap file ---------------------------------------------------------------------------------
 
 test('#285 roadmap: a file written with updateAfter reads without error and loses the field at the next save', (t) => {
-  const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+  const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
   const dir = tmp(t);
   const item = { id: 'item-1', workflow: 'w.yaml', workflowName: 'w', inputs: {}, mock: true, number: 1, url: 'https://github.com/o/r/issues/1', title: 'Issue 1', body: '', issues: [{ number: 1, url: 'https://github.com/o/r/issues/1', title: 'Issue 1' }], status: 'planned', runId: null, runs: [], error: null, updateAfter: true };
   fs.writeFileSync(path.join(dir, 'p1.roadmap.json'), JSON.stringify({ state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, updatedAt: null, stages: [{ id: 's1', name: '', note: '', items: [item] }] }));
@@ -48,7 +48,7 @@ test('#285 roadmap: a file written with updateAfter reads without error and lose
 });
 
 test('#285 roadmap: a proposal (the Product Owner\'s append) with updateAfter: true is stored without the field', (t) => {
-  const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
+  const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
   const dir = tmp(t);
   roadmaps.propose(dir, 'p1', [{ items: [{ workflow: 'w.yaml', issues: [1], updateAfter: true }] }], { issues: issues(1) });
   const raw = JSON.parse(fs.readFileSync(path.join(dir, 'p1.roadmap.json'), 'utf8'));
@@ -58,9 +58,9 @@ test('#285 roadmap: a proposal (the Product Owner\'s append) with updateAfter: t
 // ---- the roadmap card -------------------------------------------------------------------------------------
 
 test('#285 roadmap card: never draws "Update the app after this", even when the update applies', async () => {
-  const H = require('@multiagent/front-build/test/roadmap-status-helpers');
+  const H = require('@craftorio/front-build/test/roadmap-status-helpers');
   const { R, sandbox } = H.loadRoadmap();
-  sandbox.api.appUpdateState = async () => ({ applies: true, project: { id: 'p1', name: 'multiagent-orchestrator' }, short: '5d9be33', behind: 3 });
+  sandbox.api.appUpdateState = async () => ({ applies: true, project: { id: 'p1', name: 'craftorio' }, short: '5d9be33', behind: 3 });
   const data = () => H.roadmapOf([
     { id: 'st1', name: '', note: '', items: [H.item('i1', 'planned', 1, 'Planned one'), H.item('i2', 'planned', 2, 'Marked two', { updateAfter: true })] },
   ], { state: 'planned' });
@@ -74,7 +74,7 @@ test('#285 roadmap card: never draws "Update the app after this", even when the 
 // ---- the Oracle ------------------------------------------------------------------------------------------------
 
 test('#285 Oracle tools: no tool description mentions updateAfter', () => {
-  const { oracleTools } = require('@multiagent/engine/domains/oracle/oracle-tools');
+  const { oracleTools } = require('@craftorio/engine/domains/oracle/oracle-tools');
   const text = oracleTools({}).map((x) => `${x.description || ''} ${JSON.stringify(x.inputSchema || {})}`).join('\n');
   assert.equal(/updateAfter/.test(text), false);
 });

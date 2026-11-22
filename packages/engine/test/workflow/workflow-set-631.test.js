@@ -27,7 +27,7 @@ const PIPELINES = path.join(root, 'pipelines');
 const engine = () => require('../../engine/run/load');
 const workflows = () => require('../../domains/workflow/workflows');
 const pipelines = () => require('../../domains/workflow/pipelines');
-const defaultWorkflow = () => require('@multiagent/shared/default-workflow');
+const defaultWorkflow = () => require('@craftorio/shared/default-workflow');
 
 const loadBundled = (name) => engine().loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`));
 const bundledIds = () => fs.readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/i.test(f)).map((f) => f.replace(/\.ya?ml$/i, '')).sort();

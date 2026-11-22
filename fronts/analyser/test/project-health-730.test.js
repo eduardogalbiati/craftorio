@@ -27,11 +27,11 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const I18n = require('@multiagent/shared/i18n.js');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const { pageScripts, scriptFile } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { buildModel } = require('@multiagent/shared/architecture-model');
+const I18n = require('@craftorio/shared/i18n.js');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const { pageScripts, scriptFile } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { buildModel } = require('@craftorio/shared/architecture-model');
 
 const hash = '44'.repeat(20);
 const URL_OF = (n) => `https://github.com/o/r/issues/${n}`;

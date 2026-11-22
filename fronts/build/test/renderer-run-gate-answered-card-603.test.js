@@ -8,7 +8,7 @@
 // the click handed to onRunGateClick with a fake card, the Run screen's gates read from #run-gates.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ts = (s) => `2026-10-25T10:00:${String(s).padStart(2, '0')}.000Z`;
 const fire = (page, ev) => { for (const fn of page.apiHandlers.onEvent || []) fn(ev); };

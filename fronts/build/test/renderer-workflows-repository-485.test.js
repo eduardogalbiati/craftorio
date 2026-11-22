@@ -17,8 +17,8 @@
 //     Release.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const SHA = 'abc1234def5678901234567890abcdef12345678';
 const ACCEPTED_SHA = '9876543fedcba9876543210fedcba9876543210f';

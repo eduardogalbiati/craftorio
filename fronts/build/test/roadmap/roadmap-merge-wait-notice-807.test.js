@@ -13,8 +13,8 @@
 //   changes too (the items' `files`).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
 const H = require('../roadmap-status-helpers');
 
 const PR = (number) => ({ number, url: `https://github.com/o/r/pull/${number}`, state: 'open' });

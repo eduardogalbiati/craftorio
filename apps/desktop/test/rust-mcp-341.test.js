@@ -1,5 +1,5 @@
 // Acceptance tests for #341 (phase 1 of the path to Rust: the supervisor's MCP server as a Rust
-// binary, multiagent-mcp, so the packaged app stops depending on a system Node). Two kinds of checks:
+// binary, craftorio-mcp, so the packaged app stops depending on a system Node). Two kinds of checks:
 // - packages/engine/domains/supervisor/supervisor-bridge.js through its exports: mcpBinaryPath({ isPackaged, resourcesPath, platform })
 //   (where the binary of the current platform lives: never PATH) and
 //   mcpCommand(isPackaged, resolveCommand, { binary }) (the binary when it exists, else the JS script);
@@ -19,14 +19,14 @@ const root = path.join(__dirname, '..', '..', '..');
 const abs = (p) => path.join(root, p);
 const exists = (p) => fs.existsSync(abs(p));
 const read = (p) => fs.readFileSync(abs(p), 'utf8');
-const bridge = () => require('@multiagent/engine/domains/supervisor/supervisor-bridge');
+const bridge = () => require('@craftorio/engine/domains/supervisor/supervisor-bridge');
 
 const SCRIPT_NAME = 'supervisor-mcp.js';
 
 function tempBinary(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-bin-341-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const file = path.join(dir, process.platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp');
+  const file = path.join(dir, process.platform === 'win32' ? 'craftorio-mcp.exe' : 'craftorio-mcp');
   fs.writeFileSync(file, '');
   return file;
 }
@@ -41,9 +41,9 @@ test('#341 mcpBinaryPath: packaged, the binary is in resources/bin, with .exe on
   const { mcpBinaryPath } = bridge();
   assert.equal(typeof mcpBinaryPath, 'function', 'packages/engine/domains/supervisor/supervisor-bridge.js exports mcpBinaryPath');
   const res = path.join(path.sep, 'apps', 'Multiagent', 'resources');
-  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'win32' }), path.join(res, 'bin', 'multiagent-mcp.exe'));
-  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'darwin' }), path.join(res, 'bin', 'multiagent-mcp'));
-  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'linux' }), path.join(res, 'bin', 'multiagent-mcp'));
+  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'win32' }), path.join(res, 'bin', 'craftorio-mcp.exe'));
+  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'darwin' }), path.join(res, 'bin', 'craftorio-mcp'));
+  assert.equal(mcpBinaryPath({ isPackaged: true, resourcesPath: res, platform: 'linux' }), path.join(res, 'bin', 'craftorio-mcp'));
 });
 
 test('#341 mcpBinaryPath: in a dev checkout, the binary is the one cargo builds under native/', () => {
@@ -52,7 +52,7 @@ test('#341 mcpBinaryPath: in a dev checkout, the binary is the one cargo builds 
     const p = mcpBinaryPath({ isPackaged: false, platform });
     assert.ok(path.isAbsolute(p), p);
     assert.ok(p.startsWith(path.join(root, 'native') + path.sep), `${p} is under native/`);
-    assert.equal(path.basename(p), platform === 'win32' ? 'multiagent-mcp.exe' : 'multiagent-mcp');
+    assert.equal(path.basename(p), platform === 'win32' ? 'craftorio-mcp.exe' : 'craftorio-mcp');
   }
 });
 
@@ -76,7 +76,7 @@ test('#341 mcpCommand: in a dev checkout with the binary built, it starts the bi
 
 test('#341 mcpCommand: without the binary, it falls back to the JS script (dev: this Node; packaged: the system node)', (t) => {
   const { mcpCommand } = bridge();
-  const missing = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-none-341-')), 'multiagent-mcp.exe');
+  const missing = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-none-341-')), 'craftorio-mcp.exe');
   t.after(() => fs.rmSync(path.dirname(missing), { recursive: true, force: true }));
 
   const dev = mcpCommand(false, pathWithEverything, { binary: missing });
@@ -85,13 +85,13 @@ test('#341 mcpCommand: without the binary, it falls back to the JS script (dev: 
   assert.equal(path.basename(dev.args[0]), SCRIPT_NAME);
 
   const packaged = mcpCommand(true, pathWithEverything, { binary: missing });
-  assert.equal(packaged.command, pathWithEverything('node').file, 'the system node, never a multiagent-mcp found on the PATH');
+  assert.equal(packaged.command, pathWithEverything('node').file, 'the system node, never a craftorio-mcp found on the PATH');
   assert.equal(path.basename(packaged.args[0]), SCRIPT_NAME);
 });
 
-test('#341 mcpCommand: packaged, without the binary nor Node, it still says Node.js is needed (a multiagent-mcp on the PATH is not used)', (t) => {
+test('#341 mcpCommand: packaged, without the binary nor Node, it still says Node.js is needed (a craftorio-mcp on the PATH is not used)', (t) => {
   const { mcpCommand } = bridge();
-  const missing = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-none-341-')), 'multiagent-mcp.exe');
+  const missing = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-none-341-')), 'craftorio-mcp.exe');
   t.after(() => fs.rmSync(path.dirname(missing), { recursive: true, force: true }));
   assert.throws(() => mcpCommand(true, pathWithoutNode, { binary: missing }), /Node\.js on the PATH/);
 });
@@ -114,18 +114,18 @@ function mcpCrateDir() {
   if (!exists('native')) return null;
   for (const d of fs.readdirSync(abs('native'), { withFileTypes: true })) {
     const manifest = path.join('native', d.name, 'Cargo.toml');
-    if (d.isDirectory() && exists(manifest) && /^\s*name\s*=\s*"multiagent-mcp"/m.test(read(manifest))) return path.join('native', d.name);
+    if (d.isDirectory() && exists(manifest) && /^\s*name\s*=\s*"craftorio-mcp"/m.test(read(manifest))) return path.join('native', d.name);
   }
   return null;
 }
 
-test('#341 native/Cargo.toml is a workspace (edition 2024, unsafe code forbidden) with the multiagent-mcp crate', () => {
+test('#341 native/Cargo.toml is a workspace (edition 2024, unsafe code forbidden) with the craftorio-mcp crate', () => {
   assert.ok(exists('native/Cargo.toml'), 'native/Cargo.toml exists');
   const s = tomlSections(read('native/Cargo.toml'));
   assert.ok('workspace' in s, '[workspace]');
   assert.match(s.workspace, /members\s*=/, 'workspace members');
   const crate = mcpCrateDir();
-  assert.ok(crate, 'a crate under native/ named multiagent-mcp');
+  assert.ok(crate, 'a crate under native/ named craftorio-mcp');
   const edition = /edition\s*=\s*"(\d+)"/.exec(s['workspace.package'] || '')?.[1] || /edition\s*=\s*"(\d+)"/.exec(read(path.join(crate, 'Cargo.toml')))?.[1];
   assert.equal(edition, '2024');
   assert.match(s['workspace.lints.rust'] || '', /unsafe_code\s*=\s*"forbid"/);
@@ -152,7 +152,7 @@ test('#341 Cargo.lock is committed and the target folder is not', () => {
   assert.ok(exists('native/Cargo.lock'), 'native/Cargo.lock exists');
   const ignored = (p) => spawnSync('git', ['-C', root, 'check-ignore', '-q', '--no-index', p]).status === 0;
   assert.equal(ignored('native/Cargo.lock'), false, 'native/Cargo.lock is not gitignored');
-  assert.equal(ignored('native/target/release/multiagent-mcp'), true, 'native/target/ is gitignored');
+  assert.equal(ignored('native/target/release/craftorio-mcp'), true, 'native/target/ is gitignored');
 });
 
 // The direct (non-dev) dependencies of the crate and the workspace.
@@ -175,7 +175,7 @@ function directDependencies() {
 }
 
 test('#341 every Rust dependency is named in THIRD_PARTY_NOTICES.md', () => {
-  assert.ok(mcpCrateDir(), 'the multiagent-mcp crate exists');
+  assert.ok(mcpCrateDir(), 'the craftorio-mcp crate exists');
   const notices = read('THIRD_PARTY_NOTICES.md');
   const missing = directDependencies().filter((d) => !new RegExp(`(^|[^\\w-])${d}([^\\w-]|$)`).test(notices));
   assert.deepEqual(missing, [], 'Rust dependencies missing from THIRD_PARTY_NOTICES.md');
@@ -183,9 +183,9 @@ test('#341 every Rust dependency is named in THIRD_PARTY_NOTICES.md', () => {
 
 // ---- packaging and release ------------------------------------------------------------------------
 
-test('#341 apps/desktop/scripts/package.js builds multiagent-mcp in release for each release target and puts it in resources/bin', () => {
+test('#341 apps/desktop/scripts/package.js builds craftorio-mcp in release for each release target and puts it in resources/bin', () => {
   const src = read('apps/desktop/scripts/package.js');
-  for (const s of ['cargo', '--release', 'multiagent-mcp', 'bin']) assert.ok(src.includes(s), s);
+  for (const s of ['cargo', '--release', 'craftorio-mcp', 'bin']) assert.ok(src.includes(s), s);
   // the four release legs (scripts/release-assets.js): Windows x64, macOS arm64 and x64, Linux x64
   for (const triple of ['x86_64-pc-windows-msvc', 'aarch64-apple-darwin', 'x86_64-apple-darwin', 'x86_64-unknown-linux-gnu']) {
     assert.ok(src.includes(triple), `target ${triple}`);
@@ -203,11 +203,11 @@ test('#341 packagerOptions: app.asar gets nothing from native/ (sources, Cargo f
   for (const [platform, arch] of PACK_LEGS) {
     const { ignore } = packagerOptions({ platform, arch, out });
     const ignored = (p) => ignore.some((re) => re.test(p));
-    for (const p of ['/native', '/native/Cargo.toml', '/native/Cargo.lock', '/native/target/release/multiagent-mcp.exe', '/native/multiagent-mcp/src/main.rs']) {
+    for (const p of ['/native', '/native/Cargo.toml', '/native/Cargo.lock', '/native/target/release/craftorio-mcp.exe', '/native/craftorio-mcp/src/main.rs']) {
       assert.equal(ignored(p), true, `${platform}-${arch}: ${p} is kept in app.asar`);
     }
-    // the engine the asar runs is the copy under node_modules/@multiagent/ (packages/engine itself is left out)
-    for (const p of ['/node_modules/@multiagent/engine/domains/supervisor/supervisor-mcp.js', '/apps/desktop/host/main.js', '/nativeish.js', '/src/native/x.js']) {
+    // the engine the asar runs is the copy under node_modules/@craftorio/ (packages/engine itself is left out)
+    for (const p of ['/node_modules/@craftorio/engine/domains/supervisor/supervisor-mcp.js', '/apps/desktop/host/main.js', '/nativeish.js', '/src/native/x.js']) {
       assert.equal(ignored(p), false, `${platform}-${arch}: ${p} is dropped`);
     }
   }
@@ -244,8 +244,8 @@ function nativeBuild(t, { platform, arch, reply = () => ({ status: 0 }) }) {
       const dir = path.join(tmp, 'target', triple, 'release');
       fs.mkdirSync(dir, { recursive: true });
       // #342: the workspace builds three sidecars
-      for (const name of ['multiagent-ctl', 'multiagent-mcp', 'multiagent-tail']) {
-        fs.writeFileSync(path.join(dir, platform === 'win32' ? `${name}.exe` : name), name === 'multiagent-mcp' ? `binary for ${triple}` : name);
+      for (const name of ['craftorio-ctl', 'craftorio-mcp', 'craftorio-tail']) {
+        fs.writeFileSync(path.join(dir, platform === 'win32' ? `${name}.exe` : name), name === 'craftorio-mcp' ? `binary for ${triple}` : name);
       }
     }
     return reply(cmd, args);
@@ -253,19 +253,19 @@ function nativeBuild(t, { platform, arch, reply = () => ({ status: 0 }) }) {
   return { out: path.join(tmp, 'out'), calls, run };
 }
 
-test('#341 buildNative: builds multiagent-mcp in release for the leg\'s target and copies it into the bin folder', (t) => {
+test('#341 buildNative: builds craftorio-mcp in release for the leg\'s target and copies it into the bin folder', (t) => {
   const { buildNative, nativeBinDir } = pkgScript();
   for (const [platform, arch, triple, file] of [
-    ['win32', 'x64', 'x86_64-pc-windows-msvc', 'multiagent-mcp.exe'],
-    ['linux', 'x64', 'x86_64-unknown-linux-gnu', 'multiagent-mcp'],
+    ['win32', 'x64', 'x86_64-pc-windows-msvc', 'craftorio-mcp.exe'],
+    ['linux', 'x64', 'x86_64-unknown-linux-gnu', 'craftorio-mcp'],
   ]) {
     const b = nativeBuild(t, { platform, arch });
     const dir = buildNative({ platform, arch, out: b.out }, b.run);
     assert.equal(dir, nativeBinDir({ platform, arch, out: b.out }));
-    assert.ok(fs.readdirSync(dir).includes(file), `${file} staged (#342: next to multiagent-tail and multiagent-ctl)`);
+    assert.ok(fs.readdirSync(dir).includes(file), `${file} staged (#342: next to craftorio-tail and craftorio-ctl)`);
     assert.equal(fs.readFileSync(path.join(dir, file), 'utf8'), `binary for ${triple}`);
     const cargo = b.calls.find((c) => c[0] === 'cargo');
-    for (const a of ['build', '--release', '--target', triple, 'multiagent-mcp']) assert.ok(cargo.includes(a), `${platform}: cargo ${a}`);
+    for (const a of ['build', '--release', '--target', triple, 'craftorio-mcp']) assert.ok(cargo.includes(a), `${platform}: cargo ${a}`);
   }
 });
 
@@ -275,9 +275,9 @@ test('#341 buildNative: macOS signs the binary ad hoc when packaged on a Mac, ne
   const dir = buildNative({ platform: 'darwin', arch: 'arm64', out: b.out }, b.run);
   const sign = b.calls.filter((c) => c[0] === 'codesign');
   if (process.platform === 'darwin') {
-    // #342: one ad hoc signature per binary, multiagent-mcp's among them
+    // #342: one ad hoc signature per binary, craftorio-mcp's among them
     assert.ok(sign.length >= 1);
-    assert.ok(sign.some((c) => c.includes('-') && c.includes(path.join(dir, 'multiagent-mcp'))), JSON.stringify(sign));
+    assert.ok(sign.some((c) => c.includes('-') && c.includes(path.join(dir, 'craftorio-mcp'))), JSON.stringify(sign));
   } else {
     assert.equal(sign.length, 0, 'no codesign off macOS');
   }

@@ -21,17 +21,17 @@
 
 const os = require('os');
 const path = require('path');
-const backlog = require('@multiagent/engine/domains/backlog/backlog');
-const commits = require('@multiagent/engine/domains/discovery/discovery-commit');
+const backlog = require('@craftorio/engine/domains/backlog/backlog');
+const commits = require('@craftorio/engine/domains/discovery/discovery-commit');
 const imports = require('../domains/discovery-import');
-const discovery = require('@multiagent/engine/domains/discovery/discovery');
-const Language = require('@multiagent/shared/language');
-const productOwner = require('@multiagent/engine/domains/po/product-owner');
-const projects = require('@multiagent/engine/domains/project/projects');
-const releases = require('@multiagent/engine/domains/releases/releases');
-const simulation = require('@multiagent/engine/engine/simulation');
-const workspace = require('@multiagent/engine/domains/workspace/workspace');
-const { clientError, requireText } = require('@multiagent/engine/service/common');
+const discovery = require('@craftorio/engine/domains/discovery/discovery');
+const Language = require('@craftorio/shared/language');
+const productOwner = require('@craftorio/engine/domains/po/product-owner');
+const projects = require('@craftorio/engine/domains/project/projects');
+const releases = require('@craftorio/engine/domains/releases/releases');
+const simulation = require('@craftorio/engine/engine/simulation');
+const workspace = require('@craftorio/engine/domains/workspace/workspace');
+const { clientError, requireText } = require('@craftorio/engine/service/common');
 const {
   ANY,
   args,
@@ -48,7 +48,7 @@ const {
   shape,
   STRING,
   text,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 // Every discovery channel works on one project's cards (the store checks the rest of each value)
 const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_ID, ...properties }, ['projectId', ...required]);

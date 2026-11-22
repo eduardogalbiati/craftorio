@@ -4,8 +4,8 @@
 // (#862, packages/engine/engine/run-settings.js). workspace.js re-exports it for its callers.
 
 const fs = require('fs');
-const TimeZone = require('@multiagent/shared/time-zone');
-const { DEFAULT_PLATFORM } = require('@multiagent/shared/platforms');
+const TimeZone = require('@craftorio/shared/time-zone');
+const { DEFAULT_PLATFORM } = require('@craftorio/shared/platforms');
 
 const DEFAULT_SETTINGS = {
   // shows the Simulation checkboxes (checked by default) and the simulation scenarios; off = real runs only

@@ -26,7 +26,7 @@ const engine = () => require('../../engine/run/load');
 const workflows = () => require('../../domains/workflow/workflows');
 const pipelines = () => require('../../domains/workflow/pipelines');
 const epics = () => require('../../domains/backlog/epics');
-const defaultWorkflow = () => require('@multiagent/shared/default-workflow');
+const defaultWorkflow = () => require('@craftorio/shared/default-workflow');
 const service = () => require('../service/helpers');
 
 const loadBundled = (name) => engine().loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`));

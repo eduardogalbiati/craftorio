@@ -25,9 +25,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const yaml = require('js-yaml');
-const { WorkflowRun, loadWorkflow } = require('@multiagent/engine/engine/workflow');
-const { displayName } = require('@multiagent/shared/display-name.js');
-const runs = require('@multiagent/engine/domains/run/runs');
+const { WorkflowRun, loadWorkflow } = require('@craftorio/engine/engine/workflow');
+const { displayName } = require('@craftorio/shared/display-name.js');
+const runs = require('@craftorio/engine/domains/run/runs');
 
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', 'workflows');
 const bundled = () => fs.readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/i.test(f)).sort();

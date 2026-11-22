@@ -27,7 +27,7 @@ const agentInbox = require('../agents/agent-inbox');
 const agentsUsage = require('../agents/agents-usage');
 const { mockSteps, partialText } = require('../chat/chat-progress');
 const TimeZone = require('../analytics/time-zone');
-const Language = require('@multiagent/shared/language');
+const Language = require('@craftorio/shared/language');
 
 // the kinds another agent may ask the Supervisor for (#240)
 const REQUEST_KINDS = [
@@ -65,7 +65,7 @@ const MOCK_STEPS = [
 ];
 
 const RULES = [
-  'You are the Supervisor of the Multiagent Orchestrator, a desktop app that runs multi-agent workflows defined in YAML. You are the person\'s companion on every screen of the app, in a chat.',
+  'You are the Supervisor of the Craftorio, a desktop app that runs multi-agent workflows defined in YAML. You are the person\'s companion on every screen of the app, in a chat.',
   `Read the app's data with your tools (mcp__${MCP_NAME}__*): workflows, projects, runs, skills, agents, usage and analytics. Call them instead of guessing; you have no other tool and no access to the repositories' code.`,
   'Each message starts with "[Screen] ...": what the person is looking at. Use it to resolve "this workflow", "this run", "this range" without asking.',
   'You can explain and recommend; you cannot change anything yet. When the person asks for a change (a workflow, an agent, a skill, a project), say exactly what to change and where in the app to do it.',

@@ -19,12 +19,12 @@
 // that is gone ends the automation as interrupted.
 
 const path = require('path');
-const { childRunCost, loadWorkflow } = require('@multiagent/engine/engine/workflow');
-const simulation = require('@multiagent/engine/engine/simulation');
-const chainModel = require('@multiagent/shared/chain-model');
-const discovery = require('@multiagent/engine/domains/discovery/discovery');
-const projects = require('@multiagent/engine/domains/project/projects');
-const runs = require('@multiagent/engine/domains/run/runs');
+const { childRunCost, loadWorkflow } = require('@craftorio/engine/engine/workflow');
+const simulation = require('@craftorio/engine/engine/simulation');
+const chainModel = require('@craftorio/shared/chain-model');
+const discovery = require('@craftorio/engine/domains/discovery/discovery');
+const projects = require('@craftorio/engine/domains/project/projects');
+const runs = require('@craftorio/engine/domains/run/runs');
 const docs = require('../domains/docs');
 
 // the stages of a pipeline followed from the run folders (a chain's nextRunId), at most

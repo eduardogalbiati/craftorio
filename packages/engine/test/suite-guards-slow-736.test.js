@@ -51,7 +51,7 @@ function machineFolder(t) {
   process.env.TEMP = root;
   process.env.TMP = root;
   process.env.TMPDIR = root;
-  process.env.MULTIAGENT_LOCKS_DIR = path.join(root, 'multiagent-orchestrator', 'locks');
+  process.env.MULTIAGENT_LOCKS_DIR = path.join(root, 'craftorio', 'locks');
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
 }
 

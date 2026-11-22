@@ -12,7 +12,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const { loadApp, navEntries, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, navEntries, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const NAV_GROUPS = path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'nav-groups.js');
 const navGroups = () => require(NAV_GROUPS);

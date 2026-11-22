@@ -72,7 +72,7 @@ test('release-then-refactors pipeline: a release, then refactor proposals since 
 });
 
 test('release-then-refactors pipeline: the refactor stage gets since from the release\'s previous_version and the release\'s folder as repo_path', () => {
-  const chain = require('@multiagent/shared/chain-model');
+  const chain = require('@craftorio/shared/chain-model');
   const p = loadPipeline(fs.readFileSync(PIPELINE, 'utf8'), 'release-then-refactors.yaml');
   const then = pipelines.pipelineThen(p, 1);
   assert.equal(then.workflow, 'analyze-project.yaml');

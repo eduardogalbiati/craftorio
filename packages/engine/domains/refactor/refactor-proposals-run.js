@@ -28,7 +28,7 @@ const projects = require('../project/projects');
 const proposals = require('./refactor-proposals');
 const refactorIssues = require('./refactor-issues');
 const { filesOf } = require('./refactor-cadence');
-const { hasLabel, issueState } = require('@multiagent/shared/backlog-archive');
+const { hasLabel, issueState } = require('@craftorio/shared/backlog-archive');
 const { layout } = require('../workspace/workspace');
 
 const DANGER_ROWS = 10;

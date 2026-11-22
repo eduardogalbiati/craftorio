@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const RunPlan = require('@multiagent/shared/run-plan');
+const RunPlan = require('@craftorio/shared/run-plan');
 
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const runSrc = fs.readFileSync(pageFileOf('views/run/run.js'), 'utf8');
@@ -55,8 +55,8 @@ test('#735 a run with UI folders and E2E on dims nothing', () => {
 });
 
 test('#735 the reasons read as text in both languages ("Doesn\'t apply: no UI in this project")', () => {
-  const en = require('@multiagent/shared/i18n/en.json');
-  const pt = require('@multiagent/shared/i18n/pt-BR.json');
+  const en = require('@craftorio/shared/i18n/en.json');
+  const pt = require('@craftorio/shared/i18n/pt-BR.json');
   const get = (cat, key) => key.split('.').reduce((o, k) => (o == null ? o : o[k]), cat) ?? cat[key];
   assert.match(String(get(en, 'run.doesnt_apply_no_ui')), /doesn.t apply.*no UI/i);
   assert.equal(typeof get(pt, 'run.doesnt_apply_no_ui'), 'string');

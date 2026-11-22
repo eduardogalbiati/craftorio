@@ -13,8 +13,8 @@ front (its screens, its Home card, the composition file, the actions registry) i
 
 ```
 fronts/<id>/
-  package.json        "multiagent": { "front": "<id>" }    declares the front; its id = the menu group id
-  engine/             the engine side (`multiagent.engine` may name another folder)
+  package.json        "craftorio": { "front": "<id>" }    declares the front; its id = the menu group id
+  engine/             the engine side (`craftorio.engine` may name another folder)
     channels/*.js     (ctx) => [entries], as packages/engine/service/channels/*.js
     areas/*.js        (ctx) => { helpers }, as packages/engine/service/areas/*.js
     domains/*.js      the front's domain modules (flat; the kernel's are domains/<name>/)
@@ -34,11 +34,11 @@ fronts/<id>/
 
 ## How the engine discovers it
 
-- **Installed fronts**: the packages under `<appRoot>/fronts/*/` and `<appRoot>/node_modules/@multiagent/*/`
-  whose `package.json` has `multiagent.front`, by id (an id is lower-case letters, digits and dashes).
+- **Installed fronts**: the packages under `<appRoot>/fronts/*/` and `<appRoot>/node_modules/@craftorio/*/`
+  whose `package.json` has `craftorio.front`, by id (an id is lower-case letters, digits and dashes).
   The same package found at both places (the checkout's workspace link, the packaged copies: the same
   `name`) counts once, `fronts/<dir>` first; two different packages claiming one id, a
-  `multiagent.front` that is no id or an unreadable `package.json` fail at startup. The app root is
+  `craftorio.front` that is no id or an unreadable `package.json` fail at startup. The app root is
   `packages/engine/domains/workspace/app-root.js`'s.
 - **The service takes a composition**: `createService({ host, fronts })` with `fronts` a list of front
   ids (an unknown or a repeated one is an error) or absent (every installed front: what the tests'
@@ -55,8 +55,8 @@ fronts/<id>/
   `packages/engine/test/service/one-front-composition-590.test.js`; a channel change made on purpose
   updates the pin with its PR).
 - **Which fronts an engine serves**: the desktop app passes its `apps/desktop/composition.js` (the same
-  list its page is generated from, `apps/desktop/host/main.js`); `multiagent-engine` serves the
-  composition of the UI app it serves (`multiagent.ui` → `apps/web/composition.js`), narrowed by
+  list its page is generated from, `apps/desktop/host/main.js`); `craftorio-engine` serves the
+  composition of the UI app it serves (`craftorio.ui` → `apps/web/composition.js`), narrowed by
   `--fronts <id,id>` (a one-front engine for tests, or an engine without a UI). The page stays the
   app's generated one: a screen whose front the engine does not serve gets 404s.
 - **A one-front engine** serves the kernel's channels plus that front's; a channel of another front
@@ -119,8 +119,8 @@ files require only the kernel and shared.
 
 ## The layering rule (`scripts/layers.js`)
 
-A front's engine code is its own area `front-engine:<id>`: it may require `@multiagent/engine` (the
-kernel: `service/common`, `service/schemas`, `engine/*`, `domains/*`) and `@multiagent/shared`, and
+A front's engine code is its own area `front-engine:<id>`: it may require `@craftorio/engine` (the
+kernel: `service/common`, `service/schemas`, `engine/*`, `domains/*`) and `@craftorio/shared`, and
 its own files, **never another front and never the UI**. The kernel never requires a front (no
 exception). The front's UI (`front:<id>`) never requires its own engine code: it reaches it only
 through `window.api`. `node scripts/dep-map.js` says which package holds each channel file and flags

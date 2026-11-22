@@ -13,7 +13,7 @@
 // Not unit-testable here: the panel keeping its size across the states (no layout in the fake DOM; E2E).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
 /** Whether some markup holds the old import card. */

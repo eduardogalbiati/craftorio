@@ -20,8 +20,8 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const registry = require('@multiagent/shared/providers');
-const Language = require('@multiagent/shared/language');
+const registry = require('@craftorio/shared/providers');
+const Language = require('@craftorio/shared/language');
 
 // The supervisor's words reach the person and decisions.tsv, and its instructions reach the agents, so
 // the language is pinned instead of following the task's (#94, #121): English, or the AI agents

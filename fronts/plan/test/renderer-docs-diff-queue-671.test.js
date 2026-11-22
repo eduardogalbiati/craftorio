@@ -6,7 +6,7 @@
 // pill redrawn) and the writer's queue (a request that fails stays queued with its error).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, text } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp, text } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const ITEMS = [
   { item: 'write-doc', stage: 'design', docs: [

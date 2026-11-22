@@ -181,7 +181,7 @@ Given('a local git repository is ready to import where every change lands throug
 // where the analysis slot is held by this test process (alive, so never stale) until the app closes
 Given("the app is open while another analysis holds the machine's analysis slot", async ({ e2e }) => {
   const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-locks-'));
-  const slots = require('@multiagent/engine/engine/machine-slot');
+  const slots = require('@craftorio/engine/engine/machine-slot');
   fs.writeFileSync(slots.slotFile(slots.ANALYSIS_SLOT, locks), JSON.stringify({ pid: process.pid, host: os.hostname(), token: 'e2e-642', started: Date.now(), holder: 'another analysis (e2e)' }));
   await e2e.open({ env: { MULTIAGENT_LOCKS_DIR: locks } });
   const close = e2e.close;

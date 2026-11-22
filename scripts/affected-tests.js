@@ -7,7 +7,7 @@
 //   node scripts/affected-tests.js [--base main] [--root <dir>] [--json | --files]
 
 const path = require('path');
-const { affectedTests, selectionLines } = require('@multiagent/engine/engine/affected-tests');
+const { affectedTests, selectionLines } = require('@craftorio/engine/engine/affected-tests');
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : def; };

@@ -3,7 +3,7 @@
 // line (prefix RUN-SETTINGS-PROBE) with the options the CLI passed and the run's memory guard, then
 // exits before anything runs. No model, no git, no step: only what the CLI hands to WorkflowRun.
 const fs = require('fs');
-const workflow = require('@multiagent/engine/engine/workflow');
+const workflow = require('@craftorio/engine/engine/workflow');
 
 const Original = workflow.WorkflowRun;
 

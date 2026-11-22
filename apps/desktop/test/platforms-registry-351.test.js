@@ -11,7 +11,7 @@ const path = require('path');
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
 
-const registry = require('@multiagent/shared/platforms');
+const registry = require('@craftorio/shared/platforms');
 
 test('findPlatform: trims and ignores case; unknown or empty names give null', () => {
   assert.equal(registry.findPlatform(' GitHub ')?.id, 'github');
@@ -37,7 +37,7 @@ test('requestRef: "PR #12" on GitHub, "MR !12" on GitLab, GitHub terms when unkn
 });
 
 test('archiveConfirmText: GitLab wording for GitLab, GitHub wording otherwise', () => {
-  const { archiveConfirmText } = require('@multiagent/shared/backlog-archive');
+  const { archiveConfirmText } = require('@craftorio/shared/backlog-archive');
   assert.equal(archiveConfirmText([7], 'gitlab'), 'Close #7 on GitLab and label it archived?');
   assert.equal(archiveConfirmText([12, 13], 'github'), 'Close #12, #13 as not planned on GitHub and label them archived?');
   assert.equal(archiveConfirmText([3], 'bitbucket'), 'Close #3 as not planned on GitHub and label it archived?');
@@ -49,7 +49,7 @@ function recorder() {
 }
 
 test('fetchIssues: the short ids gh / gl build the same CLI calls as github / gitlab', async () => {
-  const { fetchIssues } = require('@multiagent/engine/domains/backlog/backlog');
+  const { fetchIssues } = require('@craftorio/engine/domains/backlog/backlog');
   const gh = recorder();
   await fetchIssues({ platform: 'gh', repo: 'https://github.com/o/r', exec: gh.exec });
   assert.deepEqual(gh.calls, ['gh issue list --repo o/r --state all --limit 300 --json number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);

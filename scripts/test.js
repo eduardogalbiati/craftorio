@@ -67,11 +67,11 @@ if (childAt >= 0) {
   return;
 }
 
-const { isAgentMode, REPORTER } = require('@multiagent/engine/engine/agent-test-report');
+const { isAgentMode, REPORTER } = require('@craftorio/engine/engine/agent-test-report');
 const { workspaces } = require('./source-tree');
-const machineSlot = require('@multiagent/engine/engine/machine-slot');
-const { TEST_FILES_ENV } = require('@multiagent/engine/engine/suite-command-line');
-const { testTier, testTimeoutMs } = require('@multiagent/engine/engine/test-timeouts');
+const machineSlot = require('@craftorio/engine/engine/machine-slot');
+const { TEST_FILES_ENV } = require('@craftorio/engine/engine/suite-command-line');
+const { testTier, testTimeoutMs } = require('@craftorio/engine/engine/test-timeouts');
 
 // decided before the variable below is set: the orchestrator's own MULTIAGENT_SIMULATION_ONLY counts
 const agent = isAgentMode(process.env, { isTTY: !!process.stdout.isTTY });

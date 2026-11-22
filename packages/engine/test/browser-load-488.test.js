@@ -23,7 +23,7 @@ const JS_YAML_BROWSER = path.join(ROOT, 'node_modules', 'js-yaml', 'dist', 'js-y
 const COMPOSE = path.join(ROOT, 'packages', 'shared', 'workflow-compose.js');
 
 const REQUIRE = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
-// a relative spec, or a workspace package's (`@multiagent/shared/providers`, scripts/source-tree.js)
+// a relative spec, or a workspace package's (`@craftorio/shared/providers`, scripts/source-tree.js)
 function resolveLocal(from, spec) {
   const pkgPath = spec.startsWith('.') ? null : require('../../../scripts/source-tree').resolvePackagePath(ROOT, spec);
   if (!spec.startsWith('.') && !pkgPath) return null;

@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { isFinished } = require('@multiagent/shared/roadmap-model');
+const { isFinished } = require('@craftorio/shared/roadmap-model');
 
 const runFailure = (runId, run) => (run.prClosed ? `PR #${run.pr.number} was closed without merging`
   : `Run ${runId} ${run.status === 'success' ? 'finished without merging: merge it, then skip the item'

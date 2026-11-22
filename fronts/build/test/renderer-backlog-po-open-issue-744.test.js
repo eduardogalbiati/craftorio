@@ -6,7 +6,7 @@
 // The whole page is loaded by packages/ui-kit/test/agent-chat-page-harness.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const PROJECTS = [
   { id: 'p1', name: 'Demo', folder: 'C:/ws/repos/demo', exists: true },

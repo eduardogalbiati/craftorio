@@ -4,7 +4,7 @@
 // project's synced backlog uses (packages/engine/domains/backlog/backlog.js cliTarget), else the project's repository URL.
 // The commands come from the platform's adapter (packages/shared/platforms/, #351; GitHub when unset).
 
-const { platformOrDefault } = require('@multiagent/shared/platforms');
+const { platformOrDefault } = require('@craftorio/shared/platforms');
 
 const ISSUE_STATES = ['all', 'closed', 'open'];
 const SEARCH_LIMIT = 30;

@@ -54,8 +54,8 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { itemName } = require('@multiagent/shared/doc-model');
-const { frozenThumbnail } = require('@multiagent/shared/mockup-model');
+const { itemName } = require('@craftorio/shared/doc-model');
+const { frozenThumbnail } = require('@craftorio/shared/mockup-model');
 const clarity = require('./clarity');
 const { slugify } = require('../project/projects');
 const { sniffImage } = require('../../engine/providers');

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const Platforms = require('@multiagent/shared/platforms');
+const Platforms = require('@craftorio/shared/platforms');
 
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const src = fs.readFileSync(pageFileOf('views/backlog/backlog.js'), 'utf8');

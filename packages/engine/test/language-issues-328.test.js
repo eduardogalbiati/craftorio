@@ -17,7 +17,7 @@ const discoveryCommit = require('../domains/discovery/discovery-commit');
 const findings = require('../domains/evidence/findings');
 const epics = require('../domains/backlog/epics');
 
-const load = () => require('@multiagent/shared/language');
+const load = () => require('@craftorio/shared/language');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'language-issues-'));

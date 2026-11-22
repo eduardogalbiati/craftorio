@@ -7,8 +7,8 @@
 // { type: 'problem', text }, { type: 'trashed', path }, { type: 'unhandled', text }, and at the end
 // { type: 'done', swept, polluted, relaunched }. A helper script: it registers no test.
 const path = require('path');
-const { createService } = require('@multiagent/engine/service');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
+const { createService } = require('@craftorio/engine/service');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
 const SKIPS = require('./channel-sweep-skips');
 
 const LIMIT_MS = 4000;

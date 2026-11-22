@@ -21,7 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { createService } = require('@multiagent/engine/service');
+const { createService } = require('@craftorio/engine/service');
 const SKIPS = require('../service/channel-sweep-skips');
 
 const RUNNER = path.join(__dirname, '..', 'service', 'channel-sweep-runner.js');

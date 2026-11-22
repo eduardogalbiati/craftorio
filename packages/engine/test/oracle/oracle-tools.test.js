@@ -359,11 +359,11 @@ test('app_source: not available without the orchestrator\'s own repository regis
   assert.match(out.text, /not available/);
 });
 
-test('app_source: available once a project\'s folder has a package.json named multiagent-orchestrator', async (t) => {
+test('app_source: available once a project\'s folder has a package.json named craftorio', async (t) => {
   const { ctx, api } = makeCtx(t);
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-tools-app-'));
   t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name: 'multiagent-orchestrator' }));
+  fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name: 'craftorio' }));
   const project = await api['projects:create']({ name: 'The app itself', folder });
 
   const tools = oracleTools(ctx);

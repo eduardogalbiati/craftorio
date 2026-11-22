@@ -52,7 +52,7 @@ order: 100
 - On startup the app looks for `%USERPROFILE%\multiagent-workspace`. If it does not exist, it asks
   whether to create it or pick another folder.
 - The chosen path is stored in the Windows registry at
-  `HKCU\Software\MultiagentOrchestrator\WorkspacePath` and reloaded on the next launches
+  `HKCU\Software\Craftorio\WorkspacePath` and reloaded on the next launches
   (on other OSes, in `~/.multiagent-orchestrator.json`). If the stored folder disappears, the app asks again.
 - Settings shows the current workspace, with **Open** and **Change…**.
 - The `repo_path` input accepts a git URL (`https://…` or `git@…`): the app clones it into

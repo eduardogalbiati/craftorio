@@ -51,13 +51,13 @@ const os = require('os');
 const path = require('path');
 const { loadWorkflow, evalExpr } = require('../../engine/workflow');
 const caps = require('../../engine/capabilities');
-const { buildModel } = require('@multiagent/shared/architecture-model');
+const { buildModel } = require('@craftorio/shared/architecture-model');
 
 const root = path.join(__dirname, '..', '..', '..', '..');
 const WORKFLOW = path.join(root, 'workflows', 'analyze-project.yaml');
 const read = (...p) => fs.readFileSync(path.join(root, ...p), 'utf8');
 const loadWf = () => loadWorkflow(WORKFLOW);
-const cityModel = () => require('@multiagent/shared/city-model');
+const cityModel = () => require('@craftorio/shared/city-model');
 const projectMap = () => require('../../domains/project/project-map');
 
 function tmp(t, prefix) {

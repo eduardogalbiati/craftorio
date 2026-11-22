@@ -9,7 +9,7 @@
 // On the real page (packages/ui-kit/test/renderer-app-harness.js): window events reach the document's listeners.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const HISTORY = [
   { role: 'user', text: 'Make the button blue' },

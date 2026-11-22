@@ -37,8 +37,8 @@ test('#590 the build front\'s engine files require the engine kernel and shared,
       const spec = m[1];
       if (spec.startsWith('.')) {
         assert.ok(path.resolve(path.dirname(file), spec).startsWith(ENGINE_SIDE), `${path.relative(ENGINE_SIDE, file)} requires ${spec}: a relative require stays inside engine/`);
-      } else if (spec.startsWith('@multiagent/')) {
-        assert.match(spec, /^@multiagent\/(engine|shared)\//, `${path.relative(ENGINE_SIDE, file)} requires ${spec}`);
+      } else if (spec.startsWith('@craftorio/')) {
+        assert.match(spec, /^@craftorio\/(engine|shared)\//, `${path.relative(ENGINE_SIDE, file)} requires ${spec}`);
       }
     }
   }

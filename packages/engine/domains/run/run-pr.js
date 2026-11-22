@@ -19,9 +19,9 @@ const {
 const { resolveCommand } = require('../../engine/providers');
 const { MAX_FIX_ROUNDS } = require('../../engine/run/pr-fix');
 const { execShim } = require('../machine/shell');
-const github = require('@multiagent/shared/platforms/github');
-const gitlab = require('@multiagent/shared/platforms/gitlab');
-const { parseRepoUrl, projectPlatform, resolvePlatform } = require('@multiagent/shared/platforms');
+const github = require('@craftorio/shared/platforms/github');
+const gitlab = require('@craftorio/shared/platforms/gitlab');
+const { parseRepoUrl, projectPlatform, resolvePlatform } = require('@craftorio/shared/platforms');
 
 // ---- the PR of a run ---------------------------------------------------------------------------
 // One step output → { number, url } or null.
@@ -374,7 +374,7 @@ function buildFixRequest({ requests = [], ids = [], note = '', round = 1 } = {})
 }
 
 // the reply the run leaves on a thread it fixed: the commit, and that an agent made it (the reviewer resolves it)
-const replyText = (commit) => `Addressed in ${String(commit || '').slice(0, 7) || 'a new commit'} by an AI agent (multiagent-orchestrator), at the repository owner's request. Resolving this thread is left to the reviewer.`;
+const replyText = (commit) => `Addressed in ${String(commit || '').slice(0, 7) || 'a new commit'} by an AI agent (craftorio), at the repository owner's request. Resolving this thread is left to the reviewer.`;
 const GH_REPLY = 'mutation($thread:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$thread,body:$body}){comment{id}}}';
 
 // One reply per fixed review thread (GitHub) / discussion (GitLab), through `run(cli, args)` → { exit_code, output };

@@ -16,8 +16,8 @@
 // - inset(rect, m), and the layout's STREET and SIDEWALK_AV (city-layout.js owns them): for scene.jsx too.
 // The same layout always gives the same city (seeded, packages/shared/city-buildings.js rngOf); each list
 // is computed once per layout.
-import { rngOf } from '@multiagent/shared/city-buildings.js';
-import { SIDEWALK, SIDEWALK_AV, STREET } from '@multiagent/shared/city-layout.js';
+import { rngOf } from '@craftorio/shared/city-buildings.js';
+import { SIDEWALK, SIDEWALK_AV, STREET } from '@craftorio/shared/city-layout.js';
 
 // the slabs: the floor's top is y = 0; the sidewalk, the zone slab and the district plate stack on it
 export const SIDEWALK_TOP = 0.22, ZONE_TOP = 0.55, PLATE_TOP = 0.95;

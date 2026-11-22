@@ -5,8 +5,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   STEPS, back, canGoNext, costSummary, initialState, next, skipAnalysis, suggestWorkflows,
-} = require('@multiagent/shared/onboarding-model');
-const I18n = require('@multiagent/shared/i18n');
+} = require('@craftorio/shared/onboarding-model');
+const I18n = require('@craftorio/shared/i18n');
 
 const ids = (r) => r.suggestions.map((s) => s.id);
 const filled = { ...initialState(), source: 'import', repository: 'owner/repo', name: 'Repo' };

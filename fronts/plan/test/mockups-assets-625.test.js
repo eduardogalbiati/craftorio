@@ -12,10 +12,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { root } = require('@multiagent/engine/test/engine-helpers');
+const { root } = require('@craftorio/engine/test/engine-helpers');
 
 const read = (rel) => fs.readFileSync(path.join(root, ...rel.split('/')), 'utf8').replace(/\r\n/g, '\n');
-const loadWorkflow = (file) => require('@multiagent/engine/engine/workflow').loadWorkflow(path.join(root, 'workflows', file));
+const loadWorkflow = (file) => require('@craftorio/engine/engine/workflow').loadWorkflow(path.join(root, 'workflows', file));
 const frontMatterName = (md) => {
   const m = /^---\n([\s\S]*?)\n---/.exec(md);
   return m ? (/^name:\s*["']?([^"'\n]+?)["']?\s*$/m.exec(m[1]) || [])[1] ?? null : null;

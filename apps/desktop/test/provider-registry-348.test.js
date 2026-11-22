@@ -15,7 +15,7 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const { sourceFiles } = require('../../../scripts/source-tree');
-const registry = () => require('@multiagent/shared/providers');
+const registry = () => require('@craftorio/shared/providers');
 const fixture = (name) => fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'engine', 'test', 'fixtures', name), 'utf8');
 const events = (text) => text.trim().split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
 const parseAll = (adapter, evs) => {
@@ -128,7 +128,7 @@ test('each adapter says how it opens attached images', () => {
 });
 
 test('each CLI adapter\'s usage-limit message is recognised as a credit error for its type, and not a plain failure', () => {
-  const { isQuotaError } = require('@multiagent/engine/engine/providers');
+  const { isQuotaError } = require('@craftorio/engine/engine/providers');
   for (const id of ['claude', 'codex', 'grok']) {
     const a = registry().resolve(id);
     assert.equal(typeof a.usageLimitMessage, 'string', `${id}.usageLimitMessage`);
@@ -143,7 +143,7 @@ test('each CLI adapter\'s usage-limit message is recognised as a credit error fo
 });
 
 test('the run chat maps CLI names and models to the backend\'s provider types, with no gemini', () => {
-  const { providerType } = require('@multiagent/front-build/views/runchat/run-chat-model.js');
+  const { providerType } = require('@craftorio/front-build/views/runchat/run-chat-model.js');
   assert.equal(providerType('claude'), 'claude-code');
   assert.equal(providerType('codex'), 'codex-cli');
   assert.equal(providerType('grok'), 'grok-cli');

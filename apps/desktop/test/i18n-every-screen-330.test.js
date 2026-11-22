@@ -73,7 +73,7 @@ test('#330 (a) the index.html check itself: a hook translates, a literal without
   assert.equal(untranslatedHtml('<input placeholder="Ask about this run" />').length, 1);
   assert.equal(untranslatedHtml('<input placeholder="Ask" data-i18n-placeholder="sup.ask" />').length, 0);
   assert.equal(untranslatedHtml('<div class="brand">Multiagent <span>Orchestrator</span></div>').length, 0);
-  assert.equal(untranslatedHtml('<title>Multiagent Orchestrator</title>').length, 0);
+  assert.equal(untranslatedHtml('<title>Craftorio</title>').length, 0);
   assert.equal(untranslatedHtml('<!-- <b>Start workflow</b> -->').length, 0);
   assert.equal(untranslatedHtml('<label for="p">Project <span class="req">*</span></label>').length, 1);
   assert.equal(untranslatedHtml('<b>Claude Code</b> <!-- i18n-ignore -->').length, 0);
@@ -219,7 +219,7 @@ function englishOnlyTexts() {
 
 /** Opens one view of the real page in `lang`; returns every text the page shows (strings only). */
 async function render(lang, view, { api = {}, storage = {}, after } = {}) {
-  const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+  const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
   const app = loadApp({
     storage: { interfaceLanguage: lang, ...storage },
     api: { getSettings: async () => ({ lastProject: 'p1', language: { interface: lang } }), ...api },

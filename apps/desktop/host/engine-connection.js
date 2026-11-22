@@ -23,7 +23,7 @@
 //                               the token as `Authorization: Bearer` instead, #480), the remote window's
 //                               navigation and permission rules (clipboard-read only over https or loopback)
 //   lanAddresses, resolveListenHost   the server's side (packages/engine/server/listen-host.js, the
-//                               multiagent-engine bin): the addresses another
+//                               craftorio-engine bin): the addresses another
 //                               computer can type, and `--host tailscale` (this computer's Tailscale address);
 //                               another non-loopback host needs `--insecure-http` (#479)
 
@@ -232,7 +232,7 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
   let body = null;
   try { body = await res.json(); } catch { /* not JSON: not an engine */ }
   if (res.status === 404 || (res.ok && (typeof body?.app !== 'string' || typeof body?.contract !== 'string'))) {
-    return { ok: false, reason: 'not-engine', ...where, status: res.status, message: `Something answers at ${parsed.host}, but not a Multiagent Orchestrator engine: check the port (npm run serve uses 7300).` };
+    return { ok: false, reason: 'not-engine', ...where, status: res.status, message: `Something answers at ${parsed.host}, but not a Craftorio engine: check the port (npm run serve uses 7300).` };
   }
   if (!res.ok) return { ok: false, reason: 'http', ...where, status: res.status, message: `${parsed.host} answered HTTP ${res.status}${body?.error ? `: ${body.error}` : '.'}` };
   const sameContract = !localContract || body.contract === localContract;
@@ -254,7 +254,7 @@ const {
   isTailscaleIp,
   lanAddresses,
   resolveListenHost,
-} = require('@multiagent/engine/server/listen-host');
+} = require('@craftorio/engine/server/listen-host');
 
 // ---- the remote window's rules ------------------------------------------------------------
 

@@ -21,20 +21,20 @@ the workspace folder.
   native/Cargo.toml --all -- --check`, `cargo clippy --manifest-path native/Cargo.toml
   --all-targets -- -D warnings`, `cargo test --manifest-path native/Cargo.toml`. The **target
   folder is per worktree** (`native/target/`, gitignored; `CARGO_TARGET_DIR` moves it, and
-  `test/supervisor/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `multiagent-mcp` in
+  `test/supervisor/supervisor-mcp.test.js` follows it): a run's first `npm test` builds `craftorio-mcp` in
   release (about a minute), later ones are incremental. Without cargo, `npm test` skips the
   binary's cases with one line; CI never does. `mcpCommand` (`packages/engine/domains/supervisor/supervisor-bridge.js`) starts
-  `native/target/release/multiagent-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
+  `native/target/release/craftorio-mcp[.exe]` when it exists (packaged: `resources/bin/`), else
   `packages/engine/domains/supervisor/supervisor-mcp.js` under Node; never a binary from PATH. `npm run package` builds the
   release target of the platform and arch (`rustup target add` first) and needs cargo.
 - **No system Node in the packaged app** (#342): it ships three sidecars in `resources/bin/`
-  (`nativeBinaryPath`, `packages/engine/domains/machine/native-bin.js`): `multiagent-mcp`, `multiagent-tail` (the external
+  (`nativeBinaryPath`, `packages/engine/domains/machine/native-bin.js`): `craftorio-mcp`, `craftorio-tail` (the external
   live terminal, `tailCommand` in `terminalSpec`; the embedded one keeps `followSession` in
-  `packages/engine/domains/session/session-tail.js`) and `multiagent-ctl` (the control channel's client, its path shown in
+  `packages/engine/domains/session/session-tail.js`) and `craftorio-ctl` (the control channel's client, its path shown in
   Settings › Execution). Node is needed for development only: `npm start`, the tests and the
   JS fallbacks of a checkout without cargo (`packages/engine/domains/session/session-tail.js`, `packages/engine/domains/supervisor/supervisor-mcp.js`,
   `scripts/ctl.js`). `test/session/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
-  binaries in release on their first run, like `multiagent-mcp`.
+  binaries in release on their first run, like `craftorio-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).
@@ -54,7 +54,7 @@ the workspace folder.
   gh, glab and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
   same list.
 - **Packaging per OS** (#317, `apps/desktop/scripts/package.js`): `npm run package` builds for the current
-  machine into `dist/MultiagentOrchestrator-<platform>-<arch>/`; `-- --platform win32|darwin|linux
+  machine into `dist/Craftorio-<platform>-<arch>/`; `-- --platform win32|darwin|linux
   --arch x64|arm64` picks another target. Same asar ignore/unpack lists everywhere; the fuses are
   flipped in the `.exe`, the `.app`'s `Contents/MacOS` binary or the ELF, and on macOS the `.app` is
   re-signed ad hoc right after (needs `codesign`, so a Mac). macOS: bundle id, `.icns`,
@@ -76,11 +76,11 @@ the workspace folder.
   `%LOCALAPPDATA%\whisper.cpp`) and add that folder to PATH, or put the full path of
   `whisper-cli.exe` in Settings › General › Voice input. Models (`ggml-<id>.bin`) are downloaded
   from Settings into `%APPDATA%\<app>\speech-models` (Electron's userData; the engine server uses
-  `%APPDATA%\multiagent-orchestrator\speech-models`). Tests use a fake CLI, never the real one.
-- Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\MultiagentOrchestrator\WorkspacePath`,
+  `%APPDATA%\craftorio\speech-models`). Tests use a fake CLI, never the real one.
+- Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\Craftorio\WorkspacePath`,
   overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),
-  `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
+  `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `craftorio`
   points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repository is public, MIT).
 - **Developing while runs are active**: pulling or merging changes the sources (`packages/`, `apps/`) under the running app.
   Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
@@ -116,24 +116,24 @@ the workspace folder.
 One repository, one `node_modules` (default hoisting), the workspaces of the root `package.json`
 (`workspaces: ["packages/*", "fronts/*", "apps/*"]`), decisions 6 and 7 of 2026-10-24:
 
-- `packages/shared/` = `@multiagent/shared`: the pure dual-load modules, files at the package root.
-- `packages/engine/` = `@multiagent/engine`: `engine/`, `service/`, `server/`, `control/`, `domains/`
-  at the package root (requires inside the package are relative), `bin/multiagent-engine.js`
+- `packages/shared/` = `@craftorio/shared`: the pure dual-load modules, files at the package root.
+- `packages/engine/` = `@craftorio/engine`: `engine/`, `service/`, `server/`, `control/`, `domains/`
+  at the package root (requires inside the package are relative), `bin/craftorio-engine.js`
   (`npm run serve`). `node-pty` is an optional peer: the desktop app provides it.
-- `packages/ui-kit/` = `@multiagent/ui-kit` (phase 3, #579): the UI kit every page starts from (the
+- `packages/ui-kit/` = `@craftorio/ui-kit` (phase 3, #579): the UI kit every page starts from (the
   shell, the run kernel, the controls, `style.css`, the shell's screens in `views/`), plain page scripts.
-- `fronts/<id>/` = `@multiagent/front-<id>` (phase 3): the four fronts `analyser`, `build`, `plan`,
+- `fronts/<id>/` = `@craftorio/front-<id>` (phase 3): the four fronts `analyser`, `build`, `plan`,
   `ai`, each its `views/`, `features/` and `test/`. An app's `composition.js` lists the fronts it ships
   ([loading-and-composition.md](renderer/loading-and-composition.md)).
-- `apps/desktop/` = `@multiagent/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
+- `apps/desktop/` = `@craftorio/desktop`: `host/` (Electron's main, the root `package.json`'s `main`),
   `renderer/` (its page, `index.html`, generated from its composition; the engine connection page),
   `assets/`, `scripts/package.js` (`npm run build`). `node-pty`, xterm, marked, dompurify and html-to-image are its
   dependencies.
-- `apps/web/` = `@multiagent/web` (phase 3): the browser UI the engine server serves at `/` (the root
-  `package.json`'s `multiagent.ui` names `apps/web/renderer`): its `composition.js`, its page and
+- `apps/web/` = `@craftorio/web` (phase 3): the browser UI the engine server serves at `/` (the root
+  `package.json`'s `craftorio.ui` names `apps/web/renderer`): its `composition.js`, its page and
   `api-http.js`. Not in the desktop asar.
-- Across packages, require by name: `@multiagent/shared/<file>`, `@multiagent/engine/<folder>/<file>`
-  (npm links the workspaces in `node_modules/@multiagent/`; `npm ci` / `npm install` at the root).
+- Across packages, require by name: `@craftorio/shared/<file>`, `@craftorio/engine/<folder>/<file>`
+  (npm links the workspaces in `node_modules/@craftorio/`; `npm ci` / `npm install` at the root).
   The engine never requires the desktop app (`node scripts/layers.js`). A new workspace is learnt once
   in `scripts/source-tree.js` (the code map, the ratchets, the layering check and the test runner read it).
 - Tests live in each workspace's `test/` (`npm test -w packages/engine` runs one; the root `npm test`
@@ -143,10 +143,10 @@ One repository, one `node_modules` (default hoisting), the workspaces of the roo
   root come from the first `package.json` above the module with `workspaces` or a `multiagent` section
   (the repository's; `resources/app`'s in the packaged app, where the packager strips `workspaces`),
   never from a package's own folder (`__dirname`); `MULTIAGENT_APP_ROOT` overrides it. The root
-  `package.json`'s `multiagent.ui` names the UI folder the engine server serves.
+  `package.json`'s `craftorio.ui` names the UI folder the engine server serves.
 - **Packaging**: the packaged app is still the workspace root. `@electron/packager` dereferences the
-  workspace links, so the asar holds `packages/`, `apps/` and the copies under `node_modules/@multiagent/`
-  that `require('@multiagent/…')` resolves (the renderer's `<script>` paths reach `packages/shared/`
+  workspace links, so the asar holds `packages/`, `apps/` and the copies under `node_modules/@craftorio/`
+  that `require('@craftorio/…')` resolves (the renderer's `<script>` paths reach `packages/shared/`
   directly); its prune follows the root's dependencies (the three workspaces) into theirs; the
   workspaces' `test/` and `scripts/` folders are ignored. `node scripts/smoke-package.js` checks a build.
 
@@ -172,7 +172,7 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   Settings. Other OSes never ask. The `NSMicrophoneUsageDescription` string belongs to packaging.
 - **App data**: Electron's `userData` on every OS (speech models in `<userData>/speech-models`).
   Without Electron (`npm run serve`, tests) `packages/engine/domains/chat/speech.js` falls back to `%APPDATA%`,
-  `~/Library/Application Support` or `$XDG_CONFIG_HOME`/`~/.config`, plus `multiagent-orchestrator`.
+  `~/Library/Application Support` or `$XDG_CONFIG_HOME`/`~/.config`, plus `craftorio`.
 
 ## Remote engine (the app as a window onto `npm run serve`)
 

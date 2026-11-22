@@ -7,7 +7,7 @@
 // instead: the capture never fails because of it.
 
 const fs = require('fs');
-const { AXE_RULES, checksPath } = require('@multiagent/engine/domains/evidence/ui-review-checks');
+const { AXE_RULES, checksPath } = require('@craftorio/engine/domains/evidence/ui-review-checks');
 
 // the page script: axe on the document, then the visible native controls' start tags
 const pageScript = (axeSource) => `(async () => {

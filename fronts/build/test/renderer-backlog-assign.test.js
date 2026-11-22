@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
-const en = require('@multiagent/shared/i18n/en.json');
+const en = require('@craftorio/shared/i18n/en.json');
 
 const src = fs.readFileSync(pageFileOf('views/backlog/backlog.js'), 'utf8');
 
@@ -30,7 +30,7 @@ test('updateAssignNote: the real-run note drops the "one at a time" / ordering c
 });
 
 test('#446 the Assign dialog\'s "Run now" reads "Run now" in English and its Portuguese text in pt-BR', () => {
-  const I18n = require('@multiagent/shared/i18n.js');
+  const I18n = require('@craftorio/shared/i18n.js');
   assert.equal(I18n.t('backlog.run_now', {}, 'en'), 'Run now');
   assert.equal(I18n.t('backlog.run_now', {}, 'pt-BR'), 'Executar agora');
   assert.ok(I18n.t('backlog.run_now_hint', {}, 'en'));

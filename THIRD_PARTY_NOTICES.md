@@ -1,6 +1,6 @@
 # Third-party notices
 
-Multiagent Orchestrator is released under the MIT License (see [LICENSE](LICENSE)). Some of its
+Craftorio is released under the MIT License (see [LICENSE](LICENSE)). Some of its
 bundled skills, workflows and analysis seeds are adapted from other open-source projects, under the MIT License or
 the Apache License 2.0. Both ask that the source's notice travel with the adapted work, so each
 source is listed here with its license.
@@ -124,9 +124,9 @@ each crate's sources.
 
 | Crate | License | Used by |
 |---|---|---|
-| serde_json | MIT OR Apache-2.0 | multiagent-ctl, multiagent-mcp, multiagent-tail (direct dependency) |
-| jiff | Unlicense OR MIT | multiagent-tail (direct dependency: local times) |
-| anstyle-query | MIT OR Apache-2.0 | multiagent-tail (direct dependency, Windows: console colours) |
+| serde_json | MIT OR Apache-2.0 | craftorio-ctl, craftorio-mcp, craftorio-tail (direct dependency) |
+| jiff | Unlicense OR MIT | craftorio-tail (direct dependency: local times) |
+| anstyle-query | MIT OR Apache-2.0 | craftorio-tail (direct dependency, Windows: console colours) |
 | equivalent | Apache-2.0 OR MIT | indexmap |
 | foldhash | Zlib | serde_json (preserve_order) |
 | hashbrown | MIT OR Apache-2.0 | indexmap |

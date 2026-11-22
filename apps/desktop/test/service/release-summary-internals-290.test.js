@@ -9,8 +9,8 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const { execFileSync } = require('child_process');
-const { render } = require('@multiagent/engine/engine/workflow');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const { render } = require('@craftorio/engine/engine/workflow');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
 const tmp = (t, prefix) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

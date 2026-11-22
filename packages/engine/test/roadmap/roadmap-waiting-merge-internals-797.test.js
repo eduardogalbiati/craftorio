@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const { prEnded, prOnProject } = require('../../domains/run/run-pr');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const { stagesShape } = require('../../domains/backlog/backlog');
-const RoadmapModel = require('@multiagent/shared/roadmap-model');
-const RoadmapSummary = require('@multiagent/shared/roadmap-summary');
+const RoadmapModel = require('@craftorio/shared/roadmap-model');
+const RoadmapSummary = require('@craftorio/shared/roadmap-summary');
 
 const PR = { number: 7, url: null };
 const item = (id, status, extra = {}) => ({ id, workflow: 'w.yaml', number: 1, status, runId: `run-${id}`, runs: [], error: null, ...extra });

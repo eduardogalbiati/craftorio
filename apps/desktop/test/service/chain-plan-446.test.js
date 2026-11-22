@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ISSUE_WORKFLOW, makeService, roadmapIssue, untilTrue } = require('@multiagent/engine/test/service/helpers');
+const { ISSUE_WORKFLOW, makeService, roadmapIssue, untilTrue } = require('@craftorio/engine/test/service/helpers');
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 

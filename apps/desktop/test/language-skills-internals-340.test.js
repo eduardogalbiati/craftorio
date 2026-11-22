@@ -9,9 +9,9 @@ const {
   isLanguageFile,
   languagesFor,
   splitValues,
-} = require('@multiagent/engine/engine/language-skills');
-const { render } = require('@multiagent/engine/engine/run/templates');
-const wi = require('@multiagent/ui-kit/workflow-inputs');
+} = require('@craftorio/engine/engine/language-skills');
+const { render } = require('@craftorio/engine/engine/run/templates');
+const wi = require('@craftorio/ui-kit/workflow-inputs');
 
 test('splitValues: trims, drops empty and repeated items, keeps the order', () => {
   assert.deepEqual(splitValues('rust, js,,rust'), ['rust', 'js']);

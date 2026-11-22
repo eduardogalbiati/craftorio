@@ -8,8 +8,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { loadWorkflow } = require('@multiagent/engine/engine/workflow');
-const { root } = require('@multiagent/engine/test/engine-helpers');
+const { loadWorkflow } = require('@craftorio/engine/engine/workflow');
+const { root } = require('@craftorio/engine/test/engine-helpers');
 
 const load = () => loadWorkflow(path.join(root, 'workflows', 'write-doc.yaml'));
 const skill = (id) => fs.readFileSync(path.join(root, 'skills', id, 'SKILL.md'), 'utf8').replace(/\r\n/g, '\n');

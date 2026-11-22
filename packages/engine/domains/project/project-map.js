@@ -33,7 +33,7 @@ const {
   planDiff,
   planVerdict,
   refreshPlan,
-} = require('@multiagent/shared/city-model');
+} = require('@craftorio/shared/city-model');
 
 const ROOT_FOLDER = '(root)';
 const MANIFESTS = ['build.gradle', 'build.gradle.kts', 'Cargo.toml', 'go.mod', 'package.json', 'pom.xml', 'pyproject.toml'];

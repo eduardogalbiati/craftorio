@@ -36,10 +36,10 @@ const { checkCommand } = require('../../engine/check-step');
 const { detectLanguage } = require('../../domains/project/project-inputs');
 const { detectE2eCommand, projectFacts } = require('../../domains/project/project-run-defaults');
 const { detectTestCommand } = require('../../engine/suite-step');
-const { firstBuild } = require('@multiagent/shared/default-workflow');
+const { firstBuild } = require('@craftorio/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
 const { MANIFEST_FILE, readManifest } = require('../../domains/project/project-manifest');
-const { TESTS_PATHS, globMatcher } = require('@multiagent/shared/globs');
+const { TESTS_PATHS, globMatcher } = require('@craftorio/shared/globs');
 const { clientError } = require('../common');
 
 const SEED_ID = 'ways-of-working';

@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for your interest in Multiagent Orchestrator. Issues and pull requests are welcome. New here?
-Issues labelled [`good first issue`](https://github.com/eduardogalbiati/multiagent-orchestrator/labels/good%20first%20issue)
-are small and self-contained; [`help wanted`](https://github.com/eduardogalbiati/multiagent-orchestrator/labels/help%20wanted)
+Thanks for your interest in Craftorio. Issues and pull requests are welcome. New here?
+Issues labelled [`good first issue`](https://github.com/eduardogalbiati/craftorio/labels/good%20first%20issue)
+are small and self-contained; [`help wanted`](https://github.com/eduardogalbiati/craftorio/labels/help%20wanted)
 marks the ones the maintainer would welcome a hand with. How the code fits together:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -12,7 +12,7 @@ marks the ones the maintainer would welcome a hand with. How the code fits toget
 2. `npm install`
 3. `npm start` opens the app.
 4. Optional: the Rust toolchain (`rustup`, stable; on Windows with the MSVC build tools). `cargo`
-   builds the native sidecars in `native/` (the supervisor's MCP server, `multiagent-mcp`). It is
+   builds the native sidecars in `native/` (the supervisor's MCP server, `craftorio-mcp`). It is
    optional for JS-only changes: without cargo the app uses the JS fallback
    (`packages/engine/domains/supervisor/supervisor-mcp.js`) and `npm test` skips the binary's cases. A change under `native/`, and
    `npm run package`, need it.
@@ -134,7 +134,7 @@ GitHub Actions run only for a release (2026-10-31, `docs/agents/decisions.md`, #
    the app reports the version it ships as.
 
 The changes of each version are in [CHANGELOG.md](CHANGELOG.md) and in its notes on
-[GitHub Releases](https://github.com/eduardogalbiati/multiagent-orchestrator/releases).
+[GitHub Releases](https://github.com/eduardogalbiati/craftorio/releases).
 
 ## Built by its own workflows
 

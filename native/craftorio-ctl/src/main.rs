@@ -1,7 +1,7 @@
-// multiagent-ctl (#342): the control channel's client (packages/engine/control/index.js), the Rust twin of
+// craftorio-ctl (#342): the control channel's client (packages/engine/control/index.js), the Rust twin of
 // scripts/ctl.js, shipped next to the app so an outside session needs neither Node nor a checkout.
-//   multiagent-ctl <channel> [json-argument] [--workspace <dir>]   calls the channel, prints its result
-//   multiagent-ctl --list [--workspace <dir>]                       the allowed channels, argument schemas
+//   craftorio-ctl <channel> [json-argument] [--workspace <dir>]   calls the channel, prints its result
+//   craftorio-ctl --list [--workspace <dir>]                       the allowed channels, argument schemas
 // The workspace is --workspace, else MULTIAGENT_WORKSPACE; the endpoint and its token come from
 // <workspace>/control/endpoint.json (written while Settings › Execution › "Allow outside sessions to
 // control this app" is on). It first checks the app's contract version (GET /api/version).
@@ -18,7 +18,7 @@ use std::process::ExitCode;
 /// The contract this client speaks: CONTROL_VERSION in packages/engine/control/index.js.
 const CONTROL_VERSION: &str = "1";
 
-const USAGE: &str = "Usage: multiagent-ctl <channel> [json-argument] [--workspace <dir>]\n       multiagent-ctl --list [--workspace <dir>]";
+const USAGE: &str = "Usage: craftorio-ctl <channel> [json-argument] [--workspace <dir>]\n       craftorio-ctl --list [--workspace <dir>]";
 
 struct Failure {
     code: u8,
@@ -141,7 +141,7 @@ impl Endpoint {
             fail(
                 3,
                 format!(
-                    "The app's control channel speaks version {found}, this multiagent-ctl version {CONTROL_VERSION}: use the multiagent-ctl shipped with the app (Settings › Execution shows its path)."
+                    "The app's control channel speaks version {found}, this craftorio-ctl version {CONTROL_VERSION}: use the craftorio-ctl shipped with the app (Settings › Execution shows its path)."
                 ),
             )
         };

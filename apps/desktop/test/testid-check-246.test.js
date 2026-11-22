@@ -20,14 +20,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { WorkflowRun, loadWorkflow } = require('@multiagent/engine/engine/workflow');
+const { WorkflowRun, loadWorkflow } = require('@craftorio/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 // the module the change creates: loaded inside each test
-const load = () => require('@multiagent/engine/engine/test-ids');
+const load = () => require('@craftorio/engine/engine/test-ids');
 
 const write = (dir, rel, text) => {
   fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });

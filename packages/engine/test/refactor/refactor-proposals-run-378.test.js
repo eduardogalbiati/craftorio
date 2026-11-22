@@ -142,7 +142,7 @@ test('#378 rank: the run keeps its own new proposals in rank order, the first `l
 
 test('#378 file (simulation): previews numbered `refactor` issues naming the Refactor workflow, skips a dismissed proposal, runs nothing', async (t) => {
   const { proposeFindings, fileProposals } = load();
-  const chain = require('@multiagent/shared/chain-model');
+  const chain = require('@craftorio/shared/chain-model');
   const { ws, stores } = workspace(t);
   const out = proposeFindings({ wsRoot: ws, projectId: PROJECT, report: report([finding('Keep me', ['src/k.js']), finding('Drop me', ['src/d.js'])]), simulated: true });
   const drop = out.added.find((x) => x.title === 'Drop me');

@@ -21,8 +21,8 @@ const { PROBES } = require('../probes');
 const { validateWorkflowStep } = require('../workflow-step');
 const testPaths = require('../test-paths');
 const { bundledDir } = require('../../domains/workspace/app-root');
-const architectureReport = require('@multiagent/shared/architecture-report');
-const chain = require('@multiagent/shared/chain-model');
+const architectureReport = require('@craftorio/shared/architecture-report');
+const chain = require('@craftorio/shared/chain-model');
 const {
   render,
   SHELL_SAFE_FILTERS,

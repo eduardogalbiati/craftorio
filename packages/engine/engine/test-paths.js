@@ -24,7 +24,7 @@ const worktree = require('./worktree');
 const git = (args, cwd, opts) => worktree.git(args, cwd, opts).catch(() => worktree.git(args, cwd, opts));
 
 // the default patterns and the glob rule are shared with the Architecture tab (#356)
-const { globToRegExp, TESTS_PATHS } = require('@multiagent/shared/globs');
+const { globToRegExp, TESTS_PATHS } = require('@craftorio/shared/globs');
 
 // patterns → (file) => true when it is a test file
 function testMatcher(patterns = TESTS_PATHS) {

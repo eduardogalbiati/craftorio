@@ -292,7 +292,7 @@ test('#356 the core is pure: no fs, child_process, net or http, no clock, no ran
 
 test('#356 scripts/code-health.js requires the core instead of keeping its own copy', () => {
   const text = fs.readFileSync(path.join(root, 'scripts', 'code-health.js'), 'utf8');
-  assert.equal(/require\(\s*['"]@multiagent\/shared\/architecture-model(\.js)?['"]\s*\)/.test(text), true, 'requires @multiagent/shared/architecture-model');
+  assert.equal(/require\(\s*['"]@craftorio\/shared\/architecture-model(\.js)?['"]\s*\)/.test(text), true, 'requires @craftorio/shared/architecture-model');
   for (const name of ['parseLog', 'median', 'placeQuadrants', 'sortKeys']) {
     assert.equal(text.includes(`function ${name}(`), false, `code-health.js still defines ${name}`);
   }

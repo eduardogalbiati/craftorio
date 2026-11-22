@@ -4,7 +4,7 @@
 // settings.js itself (its render functions call t: give the vm sandboxes `t` below).
 const fs = require('fs');
 const path = require('path');
-const { t } = require('@multiagent/shared/i18n');
+const { t } = require('@craftorio/shared/i18n');
 
 const DIR = path.join(__dirname, '..', 'views', 'settings');
 const read = (f) => fs.readFileSync(path.join(DIR, f), 'utf8');

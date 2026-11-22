@@ -13,8 +13,8 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
-const chain = require('@multiagent/shared/chain-model');
-const { platformOrDefault } = require('@multiagent/shared/platforms');
+const chain = require('@craftorio/shared/chain-model');
+const { platformOrDefault } = require('@craftorio/shared/platforms');
 const agents = require('../../domains/agents/agents');
 const backlog = require('../../domains/backlog/backlog');
 const live = require('../../domains/roadmap/live-roadmap');

@@ -7,8 +7,8 @@
 // MULTIAGENT_SIMULATION_ONLY answer from the simulated Oracle: no model call, no cost. Every oracle
 // channel with input takes one object (`params: 'opts'`), the way the renderer calls them (#187).
 
-const simulation = require('@multiagent/engine/engine/simulation');
-const { requireObject } = require('@multiagent/engine/service/common');
+const simulation = require('@craftorio/engine/engine/simulation');
+const { requireObject } = require('@craftorio/engine/service/common');
 const {
   ANY,
   args,
@@ -27,7 +27,7 @@ const {
   shape,
   STRING,
   TOOL_LIST,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 // an action card's id; what the chat answers after a change (its messages and the Oracle's state)
 const ACTION_ID = { type: ['string', 'integer'], description: 'An action card\'s id.' };

@@ -23,7 +23,7 @@ const tick = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise((r
 // Loads term-dock.js (and app.js's esc / errMsg) into a fresh sandbox. Returns what a test drives and reads.
 function loadDock({ platform = 'win32', clipboardRead } = {}) {
   const { createDom } = require('./mini-dom.js');
-  const { withI18n } = require('@multiagent/shared/test/i18n-sandbox.js');
+  const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
   const appSrc = fs.readFileSync(path.join(UI_KIT, 'app.js'), 'utf8');
   const dockSrc = fs.readFileSync(path.join(UI_KIT, 'term-dock.js'), 'utf8');
   const pick = (re, what) => { const m = re.exec(appSrc); assert.ok(m, `${what} not found in app.js: the source moved`); return m[0]; };
@@ -177,7 +177,7 @@ test('#746: a refused clipboard read never shows the raw DOMException message', 
 });
 
 test('#746: in Portuguese a refused clipboard read shows "Use Ctrl+V para colar"', async () => {
-  const I18n = require('@multiagent/shared/i18n.js');
+  const I18n = require('@craftorio/shared/i18n.js');
   I18n.setLanguage('pt-BR');
   try {
     const dock = loadDock({ clipboardRead: async () => { throw notAllowed(); } });

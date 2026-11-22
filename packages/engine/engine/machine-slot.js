@@ -41,7 +41,7 @@ const defaultsOf = (name) => SLOT_DEFAULTS[name] || SLOT_DEFAULTS[SCREENSHOT_SLO
 
 // The machine-wide folder, whatever MULTIAGENT_LOCKS_DIR says (a suite step sets its own): the E2E
 // suite's Electron launches take the slot here, so they wait for every other run's captures
-const machineSlotDir = () => path.join(os.tmpdir(), 'multiagent-orchestrator', 'locks');
+const machineSlotDir = () => path.join(os.tmpdir(), 'craftorio', 'locks');
 const slotDir = () => process.env.MULTIAGENT_LOCKS_DIR || machineSlotDir();
 const slotFile = (name, dir = slotDir()) => path.join(dir, `${name}.slot`);
 

@@ -60,7 +60,7 @@ function demoPoConversation(ws, projectId, po = null) {
     'Related: #12',
   ].join('\n');
   const big = DEMO_ISSUES.find((x) => x.number === 15);
-  const poSplit = require('@multiagent/engine/domains/po/po-split');
+  const poSplit = require('@craftorio/engine/domains/po/po-split');
   const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
   // #242: a long title and a long task line with inline Markdown, so the card must fit the drawer
   split.title = `${split.title || big.title}: keep every run's worktree, branch and logs safe when the app closes, crashes or the workspace moves to another disk`;

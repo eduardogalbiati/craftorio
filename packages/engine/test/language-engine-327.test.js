@@ -15,7 +15,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
 
-const load = () => require('@multiagent/shared/language');
+const load = () => require('@craftorio/shared/language');
 const PT = { agents: 'pt-BR', issues: 'en' };
 
 // cld answers twice in one persistent session (a then d); cdx and grk once; b has an output schema

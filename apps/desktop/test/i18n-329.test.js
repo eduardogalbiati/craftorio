@@ -32,7 +32,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const CATALOGS = path.join(ROOT, 'packages', 'shared', 'i18n');
-const load = () => require('@multiagent/shared/i18n.js');
+const load = () => require('@craftorio/shared/i18n.js');
 const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(CATALOGS, `${lang}.json`), 'utf8'));
 const spaces = (s) => String(s).replace(/ | /g, ' ');
 
@@ -169,7 +169,7 @@ test('#329 setLanguage / getLanguage: the current language is t\'s and the forma
 });
 
 test('#329 the AI agents\' "Same as the interface" follows settings.language.interface', () => {
-  const { agentsLanguage } = require('@multiagent/shared/language');
+  const { agentsLanguage } = require('@craftorio/shared/language');
   assert.equal(agentsLanguage({ language: { agents: 'interface', interface: 'pt-BR' } }), 'pt-BR');
   assert.equal(agentsLanguage({ language: { agents: 'es', interface: 'pt-BR' } }), 'es');
 });

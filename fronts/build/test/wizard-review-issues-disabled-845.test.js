@@ -5,7 +5,7 @@
 // On the real page (project-wizard-helpers, as project-wizard-backlog-failed-781.test.js). Primitives only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
+const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
 const { PID, REPO, byTestId, emit, press, wizardMarkup } = W;

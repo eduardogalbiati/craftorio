@@ -11,9 +11,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { makeService } = require('@multiagent/engine/test/service/helpers');
+const { makeService } = require('@craftorio/engine/test/service/helpers');
 
-const discovery = () => require('@multiagent/engine/domains/discovery/discovery');
+const discovery = () => require('@craftorio/engine/domains/discovery/discovery');
 
 async function project(t, api) {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-automations-'));

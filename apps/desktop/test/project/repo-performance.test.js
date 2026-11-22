@@ -9,7 +9,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const {
   CONFLICT_STEPS, conflictsOf, fileCounts, filesEditedByRuns, recommendationOf, repositoryPerformance, runFacts, SHARED_LIMIT, sharedFiles,
-} = require('@multiagent/engine/domains/project/repo-performance');
+} = require('@craftorio/engine/domains/project/repo-performance');
 
 // Isolated identity on every call: nothing depends on the machine's git config (as in worktree.test.js).
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();

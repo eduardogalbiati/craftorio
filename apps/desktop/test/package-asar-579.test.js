@@ -1,5 +1,5 @@
 // #579 (phase 3 review): what the packaged app leaves out of the asar. The workspaces (the kit, the
-// fronts, the apps) and their dereferenced copies under node_modules/@multiagent/ hold folders that are
+// fronts, the apps) and their dereferenced copies under node_modules/@craftorio/ hold folders that are
 // not the app: tests, scripts, Playwright features, the analyser's city layout POC with its
 // screenshots (2.9 MB), the 3D views' JSX sources (bundled into generated/), and the browser app
 // (the engine serves it). Each is run through packagerOptions().ignore, the way @electron/packager
@@ -24,11 +24,11 @@ test('the asar leaves out the fronts\' POCs, features, tests and 3D sources, in 
     '/packages/ui-kit/run3d/scene.jsx',
     '/packages/ui-kit/test/renderer-app-harness.js',
     '/packages/ui-kit/features/app.feature',
-    '/node_modules/@multiagent/front-analyser/poc/city-modes-screenshots/x.jpg',
-    '/node_modules/@multiagent/front-analyser/city3d/main.jsx',
-    '/node_modules/@multiagent/front-build/features/backlog.feature',
-    '/node_modules/@multiagent/ui-kit/run3d/main.jsx',
-    '/node_modules/@multiagent/ui-kit/test/x.test.js',
+    '/node_modules/@craftorio/front-analyser/poc/city-modes-screenshots/x.jpg',
+    '/node_modules/@craftorio/front-analyser/city3d/main.jsx',
+    '/node_modules/@craftorio/front-build/features/backlog.feature',
+    '/node_modules/@craftorio/ui-kit/run3d/main.jsx',
+    '/node_modules/@craftorio/ui-kit/test/x.test.js',
     '/apps/desktop/test/x.test.js',
     '/apps/desktop/scripts/package.js',
     '/apps/desktop/renderer/city3d/main.jsx',
@@ -37,7 +37,7 @@ test('the asar leaves out the fronts\' POCs, features, tests and 3D sources, in 
 });
 
 test('the asar leaves out the browser app and its copy, and the engine package itself (the host requires its copy)', () => {
-  for (const p of ['/apps/web', '/apps/web/renderer/index.html', '/apps/web/renderer/api-http.js', '/node_modules/@multiagent/web/renderer/api-http.js', '/packages/engine/engine/workflow.js']) {
+  for (const p of ['/apps/web', '/apps/web/renderer/index.html', '/apps/web/renderer/api-http.js', '/node_modules/@craftorio/web/renderer/api-http.js', '/packages/engine/engine/workflow.js']) {
     assert.equal(ignored(p), true, `${p} is left out`);
   }
 });
@@ -55,8 +55,8 @@ test('the asar keeps the page, the kit, the fronts\' screens and Home cards, the
     '/fronts/build/views/backlog/backlog.js',
     '/fronts/build/build-home.js',
     '/packages/shared/i18n.js',
-    '/node_modules/@multiagent/engine/engine/workflow.js',
-    '/node_modules/@multiagent/shared/i18n.js',
+    '/node_modules/@craftorio/engine/engine/workflow.js',
+    '/node_modules/@craftorio/shared/i18n.js',
     '/generated/project-city.js',
     '/workflows/software-development.yaml',
   ]) assert.equal(ignored(p), false, `${p} is shipped`);

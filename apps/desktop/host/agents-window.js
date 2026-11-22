@@ -48,7 +48,7 @@ function createAgentsWindow({ BrowserWindow, statePath, dirname, page = null, de
       return live;
     }
     const bounds = onScreenBounds(state, MIN, screen);
-    win = new BrowserWindow(sideWindowOptions({ dirname, devTools, min: MIN, defaults: DEFAULTS, bounds, title: 'Agents · Multiagent Orchestrator' }));
+    win = new BrowserWindow(sideWindowOptions({ dirname, devTools, min: MIN, defaults: DEFAULTS, bounds, title: 'Agents · Craftorio' }));
     const opened = win;
     // the window never navigates (#466): external links go to the browser, as in the main window
     guardWindow(opened.webContents, { openExternal: (url) => require('electron').shell.openExternal(url) });

@@ -22,7 +22,7 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const H = require('./roadmap-status-helpers');
-const runProgress = require('@multiagent/shared/run-progress-model');
+const runProgress = require('@craftorio/shared/run-progress-model');
 
 const view = { showAll: true, since: 'total' };
 const it = (id, status, n) => H.item(id, status, n, `Issue ${n}`, { origin: H.iso(H.NOW - H.HOUR), runId: null, runs: [], error: null });

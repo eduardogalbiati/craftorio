@@ -353,7 +353,7 @@ label:has(> input[type=checkbox]:disabled, > input[type=radio]:disabled) { curso
 .keep-awake-status { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .keep-awake .error:empty, .keep-awake-line .error:empty { display: none; }
 .keep-awake-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
-/* #342: the multiagent-ctl path, cut with an ellipsis (the whole path on hover) */
+/* #342: the craftorio-ctl path, cut with an ellipsis (the whole path on hover) */
 #set-control-ctl code { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-keep-awake { color: var(--accent); font-size: 12px; }
 .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); }

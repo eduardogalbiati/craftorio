@@ -1,10 +1,10 @@
-# Multiagent Orchestrator: agent instructions
+# Craftorio: agent instructions
 
 Electron desktop app (Windows first) that runs multi-agent workflows defined in YAML. Each agent
 turn is a headless CLI process: Claude Code (`claude -p`), Codex CLI (`codex exec`) or Grok Build
 (`grok --prompt-file`). A deterministic engine walks the workflow graph; an AI supervisor is called
 only when a step fails, or on demand. Everything is recorded in a local workspace folder. Owner:
-Eduardo Galbiati (`eduardogalbiati/multiagent-orchestrator`, branch `main`).
+Eduardo Galbiati (`eduardogalbiati/craftorio`, branch `main`).
 
 ## Hard rules
 

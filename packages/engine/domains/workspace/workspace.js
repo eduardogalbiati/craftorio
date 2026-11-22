@@ -7,7 +7,7 @@
 //   *. simulation only (MULTIAGENT_SIMULATION_ONLY=1) without it: a scratch workspace in the OS temp
 //      folder (simulationWorkspace), never the registered one, so an agent's check that missed its
 //      run's scratch workspace can't write to the owner's (#120); not persisted
-//   2. registered path (Windows: HKCU\Software\MultiagentOrchestrator\WorkspacePath;
+//   2. registered path (Windows: HKCU\Software\Craftorio\WorkspacePath;
 //      other OSes: ~/.multiagent-orchestrator.json)
 //   3. default folder ~/multiagent-workspace, if it already exists
 // If none of these exist, it is up to the UI to ask the user (create the default or pick another).
@@ -27,7 +27,7 @@ const {
 } = require('./settings');
 
 const DEFAULT_NAME = 'multiagent-workspace';
-const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
+const REG_KEY = 'HKCU\\Software\\Craftorio';
 const REG_VALUE = 'WorkspacePath';
 const ENV_VAR = 'MULTIAGENT_WORKSPACE';
 
@@ -165,7 +165,7 @@ function layout(root) {
 const isGitUrl = (s) => /^(https?|ssh|git):\/\/\S+$/i.test(s || '') || /^[\w.-]+@[\w.-]+:\S+$/.test(s || '');
 
 // the clone's folder name (owner-repo): the onboarding model's rule, shared with the wizard's step 2 (#669)
-const { repoNameFromUrl } = require('@multiagent/shared/onboarding-model');
+const { repoNameFromUrl } = require('@craftorio/shared/onboarding-model');
 
 /**
  * Ensures a local copy of `url` in <workspace>/repos. If already cloned, only fetches.

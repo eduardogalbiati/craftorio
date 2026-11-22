@@ -6,9 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const { textOf } = require('@multiagent/ui-kit/test/mini-dom');
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
-const productOwner = require('@multiagent/engine/domains/po/product-owner');
+const { textOf } = require('@craftorio/ui-kit/test/mini-dom');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
+const productOwner = require('@craftorio/engine/domains/po/product-owner');
 
 const feature = yaml.load(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'), 'utf8'));
 const FEATURE = { file: 'feature.yaml', name: feature.metadata.name, description: feature.metadata.description, inputs: feature.inputs };

@@ -5,7 +5,7 @@
 // with margins well away from each threshold.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const I18n = require('@multiagent/shared/i18n.js');
+const I18n = require('@craftorio/shared/i18n.js');
 const { loadApp } = require('./renderer-app-harness');
 
 const ago = (seconds) => new Date(Date.now() - seconds * 1000).toISOString();

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun, loadWorkflow, evalExpr } = require('@multiagent/engine/engine/workflow');
+const { WorkflowRun, loadWorkflow, evalExpr } = require('@craftorio/engine/engine/workflow');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
@@ -147,7 +147,7 @@ test('ai-development-local-hero (#588): with no input set, a project with the ol
 });
 
 test('ai-development-local-hero (#588): without screenshots, the UI reviewer reads the diff of the project\'s UI folders', () => {
-  const { render } = require('@multiagent/engine/engine/run/templates');
+  const { render } = require('@craftorio/engine/engine/run/templates');
   const wf = loadWorkflow(WORKFLOW);
   const prompt = (inputs) => render(step(wf, 'code_review').prompt, { ...uiScope(wf, { files: ['packages/ui-kit/style.css'], inputs }), agent: 'ui_reviewer' });
   const diffLine = (text) => text.split('\n').find((l) => /git diff/.test(l)) || '';

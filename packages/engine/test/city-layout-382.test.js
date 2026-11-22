@@ -7,9 +7,9 @@
 // this repository with the POC's plan.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildModel } = require('@multiagent/shared/architecture-model');
-const { buildCity } = require('@multiagent/shared/city-model');
-const L = require('@multiagent/shared/city-layout');
+const { buildModel } = require('@craftorio/shared/architecture-model');
+const { buildCity } = require('@craftorio/shared/city-model');
+const L = require('@craftorio/shared/city-layout');
 
 const EPS = 1e-6;
 const hash = '11'.repeat(20);

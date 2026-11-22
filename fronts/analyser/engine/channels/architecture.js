@@ -36,27 +36,27 @@
 
 const fs = require('fs');
 const path = require('path');
-const agents = require('@multiagent/engine/domains/agents/agents');
-const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
-const facts = require('@multiagent/engine/domains/project/architecture-facts');
-const projects = require('@multiagent/engine/domains/project/projects');
-const proposals = require('@multiagent/engine/domains/refactor/refactor-proposals');
-const roadmaps = require('@multiagent/engine/domains/roadmap/roadmap');
-const runs = require('@multiagent/engine/domains/run/runs');
-const releaseCity = require('@multiagent/engine/domains/releases/release-city');
-const { isWaitingStage } = require('@multiagent/engine/domains/refactor/refactor-cadence');
-const seedRuns = require('@multiagent/engine/service/seed-runs');
-const simulation = require('@multiagent/engine/engine/simulation');
-const { localChanges } = require('@multiagent/engine/engine/test-paths');
-const { readEvents } = require('@multiagent/engine/domains/supervisor/supervisor');
-const cityAgents = require('@multiagent/shared/city-agents');
-const { recordHitRate } = require('@multiagent/shared/city-impact');
-const { validateSchema } = require('@multiagent/engine/domains/workspace/json-schema');
+const agents = require('@craftorio/engine/domains/agents/agents');
+const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
+const facts = require('@craftorio/engine/domains/project/architecture-facts');
+const projects = require('@craftorio/engine/domains/project/projects');
+const proposals = require('@craftorio/engine/domains/refactor/refactor-proposals');
+const roadmaps = require('@craftorio/engine/domains/roadmap/roadmap');
+const runs = require('@craftorio/engine/domains/run/runs');
+const releaseCity = require('@craftorio/engine/domains/releases/release-city');
+const { isWaitingStage } = require('@craftorio/engine/domains/refactor/refactor-cadence');
+const seedRuns = require('@craftorio/engine/service/seed-runs');
+const simulation = require('@craftorio/engine/engine/simulation');
+const { localChanges } = require('@craftorio/engine/engine/test-paths');
+const { readEvents } = require('@craftorio/engine/domains/supervisor/supervisor');
+const cityAgents = require('@craftorio/shared/city-agents');
+const { recordHitRate } = require('@craftorio/shared/city-impact');
+const { validateSchema } = require('@craftorio/engine/domains/workspace/json-schema');
 const {
   CITY_PLAN_SCHEMA,
   refreshSignal,
-} = require('@multiagent/shared/city-model');
-const { clientError, requireId } = require('@multiagent/engine/service/common');
+} = require('@craftorio/shared/city-model');
+const { clientError, requireId } = require('@craftorio/engine/service/common');
 const {
   ANY,
   args,
@@ -69,7 +69,7 @@ const {
   RUN_ID,
   shape,
   STRING,
-} = require('@multiagent/engine/service/schemas');
+} = require('@craftorio/engine/service/schemas');
 
 const DATE = nullable({ type: 'string', maxLength: 40, description: 'An ISO date, or null for no bound.' });
 const PATTERN = { type: 'string', maxLength: 200, description: 'A gitignore-style path pattern.' };

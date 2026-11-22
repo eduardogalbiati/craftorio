@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const manifest = () => require('@multiagent/engine/domains/project/project-manifest').readManifest(ROOT);
+const manifest = () => require('@craftorio/engine/domains/project/project-manifest').readManifest(ROOT);
 const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
 // where the migration may read the old value

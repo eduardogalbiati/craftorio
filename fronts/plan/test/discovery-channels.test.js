@@ -20,8 +20,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { setupWorkspace } = require('@multiagent/engine/domains/workspace/workspace');
-const { createService } = require('@multiagent/engine/service');
+const { setupWorkspace } = require('@craftorio/engine/domains/workspace/workspace');
+const { createService } = require('@craftorio/engine/service');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'discovery-channels-'));

@@ -17,9 +17,9 @@
 // Browser: window.Run3DModel; Node: module.exports.
 (function (root) {
   // names as people read them (display-name.js, #245): the YAML's display names when the workflow has them, else the slug made readable
-  const displayName = typeof module === 'object' && module.exports ? require('@multiagent/shared/display-name.js').displayName : root.displayName;
+  const displayName = typeof module === 'object' && module.exports ? require('@craftorio/shared/display-name.js').displayName : root.displayName;
   // #735: the steps and agents the run's (resolved) inputs rule out, dimmed on the floor like on the run screen
-  const RunPlan = typeof module === 'object' && module.exports ? require('@multiagent/shared/run-plan.js') : root.RunPlan;
+  const RunPlan = typeof module === 'object' && module.exports ? require('@craftorio/shared/run-plan.js') : root.RunPlan;
   function notApplyingOf(steps, inputs) {
     if (!RunPlan || !inputs) return {};
     const declared = Object.fromEntries(Object.keys(inputs).map((k) => [k, {}]));

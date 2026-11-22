@@ -102,7 +102,7 @@ test('#458 findSource skips the plain folders and still finds the clone listed a
     return { id: `plain-${i}`, name: `Plain ${i}`, dir };
   });
   const { appUpdate, cwds } = loadCounting(t);
-  const s = appUpdate.findSource({ appDir: r.appDir, isPackaged: false, projects: [...plain, { id: 'p1', name: 'multiagent-orchestrator', dir: r.cloneDir }] });
+  const s = appUpdate.findSource({ appDir: r.appDir, isPackaged: false, projects: [...plain, { id: 'p1', name: 'craftorio', dir: r.cloneDir }] });
   assert.equal(s.ok, true);
   assert.equal(s.project.id, 'p1');
   assert.equal(s.behind, 1);

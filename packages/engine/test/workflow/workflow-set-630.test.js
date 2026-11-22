@@ -23,7 +23,7 @@ const FRAGMENTS = path.join(root, 'fragments');
 
 const engine = () => require('../../engine/run/load');
 const workflows = () => require('../../domains/workflow/workflows');
-const defaultWorkflow = () => require('@multiagent/shared/default-workflow');
+const defaultWorkflow = () => require('@craftorio/shared/default-workflow');
 
 const loadBundled = (name) => engine().loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`));
 

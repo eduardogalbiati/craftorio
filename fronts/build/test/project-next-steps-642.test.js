@@ -16,9 +16,9 @@
 //   answering null for it) shows no card.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const H = require('@multiagent/ui-kit/test/page-pieces');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
-const { clickRendered, existing, pageMarkup } = require('@multiagent/front-analyser/test/project-page-helpers');
+const H = require('@craftorio/ui-kit/test/page-pieces');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
+const { clickRendered, existing, pageMarkup } = require('@craftorio/front-analyser/test/project-page-helpers');
 
 const PID = 'p-new';
 const OLD = 'p-old';

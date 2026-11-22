@@ -10,9 +10,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const productOwner = require('@multiagent/engine/domains/po/product-owner');
-const runs = require('@multiagent/engine/domains/run/runs');
-const usage = require('@multiagent/engine/domains/usage/usage');
+const productOwner = require('@craftorio/engine/domains/po/product-owner');
+const runs = require('@craftorio/engine/domains/run/runs');
+const usage = require('@craftorio/engine/domains/usage/usage');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-'));
@@ -570,7 +570,7 @@ test('callAgent includes SELECTION_RULES in the prompt only when a selection is 
 });
 
 test('callAgent (plan mode) states the calibration and its parameters in the prompt; issue mode has no Calibration section (runTurn stubbed: no real CLI is started)', async (t) => {
-  const providers = require('@multiagent/engine/engine/providers');
+  const providers = require('@craftorio/engine/engine/providers');
   const original = providers.runTurn;
   t.after(() => { providers.runTurn = original; });
   const prompts = [];
@@ -595,7 +595,7 @@ test('callAgent (plan mode) states the calibration and its parameters in the pro
 });
 
 test('#273 the Product Owner\'s turn has a "The owner\'s time" section with the zone only when a zone is given (runTurn stubbed: no real CLI is started)', async (t) => {
-  const providers = require('@multiagent/engine/engine/providers');
+  const providers = require('@craftorio/engine/engine/providers');
   const original = providers.runTurn;
   t.after(() => { providers.runTurn = original; });
   const prompts = [];

@@ -30,7 +30,7 @@ for Coding Agents") adds: build the rules gradually and expect some to become un
    two items above can show a gain. `scripts/docs-usage.js`, no model call:
 
    ```
-   npm run docs:usage -- --project multiagent-orchestrator --since 2026-09-26 [--json]
+   npm run docs:usage -- --project craftorio --since 2026-09-26 [--json]
    ```
 
    It counts, per run and session, the docs read through the Read tool (every `.md` under

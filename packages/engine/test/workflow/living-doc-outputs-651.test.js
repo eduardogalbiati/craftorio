@@ -6,7 +6,7 @@ const path = require('path');
 
 const { loadWorkflow } = require('../../engine/run/load');
 const { render } = require('../../engine/run/templates');
-const { convertValue } = require('@multiagent/shared/chain-model');
+const { convertValue } = require('@craftorio/shared/chain-model');
 
 const WORKFLOWS = path.join(__dirname, '..', '..', '..', '..', 'workflows');
 const value = (name, out, scope) => JSON.parse(render(loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`)).outputs[out].value, scope).trim());
@@ -112,7 +112,7 @@ test('#651 write-doc: Back to the edit and Stop never file issues for a plan', (
 // ---- the chain to sdlc-record: when a Code & Build run goes on --------------------------------------------
 
 test('#651 a successful local feature/fix run (a merged commit) goes on to its chain; a failed one does not', () => {
-  const { blockedReason } = require('@multiagent/shared/chain-model');
+  const { blockedReason } = require('@craftorio/shared/chain-model');
   for (const name of ['feature', 'fix']) {
     const outputDefs = loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`)).outputs;
     assert.equal(blockedReason({ status: 'success', outputs: { merged_commit: 'abc', pr_url: '' }, outputDefs, mock: false }), '', name);
@@ -121,7 +121,7 @@ test('#651 a successful local feature/fix run (a merged commit) goes on to its c
 });
 
 test('#651 a remote feature/fix run (a PR, no merged commit) pauses its chain: sdlc-record is started by hand', () => {
-  const { blockedReason } = require('@multiagent/shared/chain-model');
+  const { blockedReason } = require('@craftorio/shared/chain-model');
   for (const name of ['feature', 'fix']) {
     const outputDefs = loadWorkflow(path.join(WORKFLOWS, `${name}.yaml`)).outputs;
     const reason = blockedReason({ status: 'success', outputs: { merged_commit: '', pr_url: 'https://example.test/pr/7' }, outputDefs, mock: false });

@@ -1,5 +1,5 @@
 [package]
-name = "multiagent-ctl"
+name = "craftorio-ctl"
 version = "1.0.0"
 description = "The control channel's client: calls one allowed channel of the running app and prints its JSON result"
 edition.workspace = true

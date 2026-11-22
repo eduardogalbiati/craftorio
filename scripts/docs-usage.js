@@ -11,7 +11,7 @@
 // Read-only, no model call: a Markdown report, or the JSON model with --json.
 //
 //   node scripts/docs-usage.js [--workspace <dir>] [--root <repo>] [--project <id>] [--since YYYY-MM-DD] [--json]
-//   npm run docs:usage -- --project multiagent-orchestrator --since 2026-09-26
+//   npm run docs:usage -- --project craftorio --since 2026-09-26
 //
 // Defaults: $MULTIAGENT_WORKSPACE (else ~/multiagent-workspace), this repository, its project id
 // and the last 30 days.
@@ -19,8 +19,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { readRunRecord } = require('@multiagent/engine/domains/run/run-record');
-const { relativePath, touchOf } = require('@multiagent/shared/city-agents');
+const { readRunRecord } = require('@craftorio/engine/domains/run/run-record');
+const { relativePath, touchOf } = require('@craftorio/shared/city-agents');
 
 // the folders a topic line of AGENTS.md or a nested AGENTS.md (#572) names, with its doc ("Read
 // before changing ..."); the first match wins, so packages/engine/test/ counts as testing
@@ -138,7 +138,7 @@ function sessionsOfRun(summary, events) {
 function docsUsage({
   workspace = process.env.MULTIAGENT_WORKSPACE || path.join(os.homedir(), 'multiagent-workspace'),
   root = path.join(__dirname, '..'),
-  project = 'multiagent-orchestrator',
+  project = 'craftorio',
   since = new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10),
 } = {}) {
   const docs = readableDocs(root);

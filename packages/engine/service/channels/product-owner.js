@@ -29,8 +29,8 @@
 const path = require('path');
 const agents = require('../../domains/agents/agents');
 const backlog = require('../../domains/backlog/backlog');
-const DefaultWorkflow = require('@multiagent/shared/default-workflow');
-const Language = require('@multiagent/shared/language');
+const DefaultWorkflow = require('@craftorio/shared/default-workflow');
+const Language = require('@craftorio/shared/language');
 const notifier = require('../../domains/workspace/notifications');
 const productOwner = require('../../domains/po/product-owner');
 const projects = require('../../domains/project/projects');
@@ -40,8 +40,8 @@ const simulation = require('../../engine/simulation');
 const usage = require('../../domains/usage/usage');
 const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
-const { isArchived } = require('@multiagent/shared/backlog-archive');
-const { isRelease, stageCount } = require('@multiagent/shared/roadmap-model');
+const { isArchived } = require('@craftorio/shared/backlog-archive');
+const { isRelease, stageCount } = require('@craftorio/shared/roadmap-model');
 const { requireObject } = require('../common');
 const {
   productOwnerWorkflows,

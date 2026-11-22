@@ -13,9 +13,9 @@ const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
 const vm = require('vm');
-const { withI18n } = require('@multiagent/shared/test/i18n-sandbox');
+const { withI18n } = require('@craftorio/shared/test/i18n-sandbox');
 const { execFileSync } = require('child_process');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
 const { analyzeSource } = require('../../../scripts/code-health');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -74,13 +74,13 @@ function makeRepo() {
 
 // packages/engine/domains/project/architecture-facts.js loaded afresh with lizard not installed; restored afterwards
 function factsWithoutLizard(t) {
-  const providers = require('@multiagent/engine/engine/providers');
+  const providers = require('@craftorio/engine/engine/providers');
   const { resolveCommand, resolveCommandAsync } = providers;
   providers.resolveCommand = (cmd, ...rest) => (/^lizard/i.test(String(cmd)) ? null : resolveCommand(cmd, ...rest));
   providers.resolveCommandAsync = async (cmd, ...rest) => (/^lizard/i.test(String(cmd)) ? null : resolveCommandAsync(cmd, ...rest));
-  const id = require.resolve('@multiagent/engine/domains/project/architecture-facts');
+  const id = require.resolve('@craftorio/engine/domains/project/architecture-facts');
   delete require.cache[id];
-  const facts = require('@multiagent/engine/domains/project/architecture-facts');
+  const facts = require('@craftorio/engine/domains/project/architecture-facts');
   t.after(() => {
     providers.resolveCommand = resolveCommand;
     providers.resolveCommandAsync = resolveCommandAsync;
@@ -148,7 +148,7 @@ test('#385 a language without a tool is not measured (null, never 0) and named i
 });
 
 test('#385 one measuring core: packages/shared/code-complexity.js measureSource gives code-health.js\'s numbers', () => {
-  const { measureSource } = require('@multiagent/shared/code-complexity');
+  const { measureSource } = require('@craftorio/shared/code-complexity');
   assert.equal(typeof measureSource, 'function');
   const pick = (fns) => fns.map((f) => ({ name: f.name, line: f.line, complexity: f.complexity }));
   const measured = measureSource(A_JS, { file: 'src/a.js' });
@@ -236,7 +236,7 @@ test('#385 the note names lizard when no tool is listed and lizard gives no inst
 // lizard "installed": resolveCommand finds it, and the external process (child_process.execFile, the
 // system boundary) answers with `csv`; packages/engine/domains/project/architecture-facts.js loaded afresh, restored afterwards
 function factsWithFakeLizard(t, csv) {
-  const providers = require('@multiagent/engine/engine/providers');
+  const providers = require('@craftorio/engine/engine/providers');
   const cp = require('child_process');
   const { resolveCommand } = providers;
   const { execFile } = cp;
@@ -247,9 +247,9 @@ function factsWithFakeLizard(t, csv) {
     setImmediate(() => cb(null, csv, ''));
     return null;
   };
-  const id = require.resolve('@multiagent/engine/domains/project/architecture-facts');
+  const id = require.resolve('@craftorio/engine/domains/project/architecture-facts');
   delete require.cache[id];
-  const facts = require('@multiagent/engine/domains/project/architecture-facts');
+  const facts = require('@craftorio/engine/domains/project/architecture-facts');
   t.after(() => {
     providers.resolveCommand = resolveCommand;
     cp.execFile = execFile;

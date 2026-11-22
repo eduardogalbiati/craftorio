@@ -40,7 +40,7 @@ for (const front of installedFronts().filter((f) => f.engine)) {
         const spec = m[1];
         const where = path.relative(front.engine, file);
         if (spec.startsWith('.')) assert.ok(path.resolve(path.dirname(file), spec).startsWith(front.engine), `${where} requires ${spec}: a relative require stays inside engine/`);
-        else if (spec.startsWith('@multiagent/')) assert.match(spec, /^@multiagent\/(engine|shared)\//, `${where} requires ${spec}`);
+        else if (spec.startsWith('@craftorio/')) assert.match(spec, /^@craftorio\/(engine|shared)\//, `${where} requires ${spec}`);
       }
     }
   });

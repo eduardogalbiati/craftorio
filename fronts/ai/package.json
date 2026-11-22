@@ -1,11 +1,11 @@
 {
-  "name": "@multiagent/front-ai",
+  "name": "@craftorio/front-ai",
   "version": "1.3.0",
   "private": true,
   "description": "The AI front: the Oracle, Night watch, the agents, the skills and the usage; its screens, their CSS, its features and its tests.",
   "license": "MIT",
   "author": "Eduardo Galbiati",
-  "multiagent": {
+  "craftorio": {
     "front": "ai"
   },
   "scripts": {
@@ -13,7 +13,7 @@
     "test:e2e": "node ../../scripts/e2e.js --front ai"
   },
   "dependencies": {
-    "@multiagent/engine": "*",
-    "@multiagent/shared": "*"
+    "@craftorio/engine": "*",
+    "@craftorio/shared": "*"
   }
 }

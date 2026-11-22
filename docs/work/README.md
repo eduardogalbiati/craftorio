@@ -1,8 +1,8 @@
 ---
-title: Multiagent Orchestrator
+title: Craftorio
 kicker: "Building in the open"
 tagline: "Multi-agent workflows in YAML, run by headless coding agents, with humans at every gate."
-repo: eduardogalbiati/multiagent-orchestrator
+repo: eduardogalbiati/craftorio
 theme: auto              # auto | light | dark
 accent: "#3b55d4"        # links, the current stage, the active index entry
 background: "#ffffff"    # the page (light theme)

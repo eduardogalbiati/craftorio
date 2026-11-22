@@ -149,7 +149,7 @@ function filesUnder(dir) {
 }
 
 test('#312 the account switch and the wait for credits are declared run events', () => {
-  const { RUN_EVENT_TYPES } = require('@multiagent/shared/types');
+  const { RUN_EVENT_TYPES } = require('@craftorio/shared/types');
   assert.equal(RUN_EVENT_TYPES.includes('agent.account_switch'), true);
   assert.equal(RUN_EVENT_TYPES.includes('run.waiting_credits'), true);
 });

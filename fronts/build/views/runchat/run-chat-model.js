@@ -4,11 +4,11 @@
 // (`agents: [...]`) grouped. No DOM here: runchat.js renders it, a test feeds it engine events.
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@multiagent/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a
   // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
   // packages/shared/providers/, resolves both).
-  const registry = typeof module === 'object' && module.exports ? require('@multiagent/shared/providers') : root.Providers;
+  const registry = typeof module === 'object' && module.exports ? require('@craftorio/shared/providers') : root.Providers;
   // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
   const cliNamed = (key) => {
     const a = registry.resolve(key);
@@ -49,8 +49,8 @@
     return { prose: prose.trim(), json, decisions };
   }
 
-  const PrCard = typeof module === 'object' && module.exports ? require('@multiagent/shared/pr-card.js') : root.PrCard;
-  const displayName = typeof module === 'object' && module.exports ? require('@multiagent/shared/display-name.js').displayName : root.displayName;
+  const PrCard = typeof module === 'object' && module.exports ? require('@craftorio/shared/pr-card.js') : root.PrCard;
+  const displayName = typeof module === 'object' && module.exports ? require('@craftorio/shared/display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
   // simulates (#262): a simulated session's workflow provider (provider is `mock`)
@@ -83,7 +83,7 @@
   const SUITE_LINE = /^suite: (.+) \(round (\d+), timeout (\d+) min, log (\S+)\)$/;
   const MAX_FAILURES = 5;
   const MAX_NOTES = 5;
-  const logRel = typeof module === 'object' && module.exports ? require('@multiagent/shared/run-log-path.js').runLogPath : root.runLogPath;
+  const logRel = typeof module === 'object' && module.exports ? require('@craftorio/shared/run-log-path.js').runLogPath : root.runLogPath;
   // the first line of an engine text, after its "<step>: " prefix
   const firstLine = (s, step) => clip(String(s || '').split('\n')[0].replace(new RegExp(`^${String(step).replace(/\W/g, '\\$&')}: `), ''), 400);
   // #795: what a finished machine step's output says, onto its orchestrator message

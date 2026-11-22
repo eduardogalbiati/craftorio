@@ -7,7 +7,7 @@
 // started itself) with their durations. Pure: the caller reads summary.json and events.jsonl; a
 // record of an older shape is upgraded first (#350, packages/shared/run-record.js).
 
-const { upgradeRunRecord } = require('@multiagent/shared/run-record');
+const { upgradeRunRecord } = require('@craftorio/shared/run-record');
 
 const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
 const TEST_WRITER = /test_?writer/i;

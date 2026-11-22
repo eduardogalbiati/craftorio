@@ -12,7 +12,7 @@ const PAGE_ROOT = path.join(__dirname, '..', '..', '..');
 // a page file by its page-relative name, wherever its layer is (phase 3 of the reorganisation study)
 const page = (rel) => pageFile(PAGE_ROOT, rel);
 void pageDirs; void pageFiles; void page;
-const { createService } = require('@multiagent/engine/service');
+const { createService } = require('@craftorio/engine/service');
 
 
 function jsFiles(dir) {

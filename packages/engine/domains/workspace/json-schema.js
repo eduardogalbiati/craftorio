@@ -3,4 +3,4 @@
 
 'use strict';
 
-module.exports = require('@multiagent/shared/json-schema');
+module.exports = require('@craftorio/shared/json-schema');

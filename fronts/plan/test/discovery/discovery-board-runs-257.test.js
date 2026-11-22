@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const discovery = require('@multiagent/engine/domains/discovery/discovery');
-const { layout } = require('@multiagent/engine/domains/workspace/workspace');
+const discovery = require('@craftorio/engine/domains/discovery/discovery');
+const { layout } = require('@craftorio/engine/domains/workspace/workspace');
 const { card, openBoard, settle, P } = require('../discovery-board-harness');
 
 const finished = (page, ev) => { for (const fn of page.handlers.onEvent || []) fn({ type: 'workflow.finished', ...ev }); };

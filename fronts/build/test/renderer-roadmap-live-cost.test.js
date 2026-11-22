@@ -66,7 +66,7 @@ function light() {
 const meterText = (html, id) => H.visibleText(H.findEl(H.itemEl(html, id).outer, (e) => e.attrs['data-testid'] === 'roadmap-meter-cost').inner);
 
 test('#615 the light backlog:state carries a running item\'s cost so far (actualUsd)', () => {
-  const { backlogState } = require('@multiagent/engine/domains/backlog/backlog');
+  const { backlogState } = require('@craftorio/engine/domains/backlog/backlog');
   const data = shown();
   const state = backlogState({ projectId: 'p1', ...data, roadmap: { ...data.roadmap, stages: [{ ...data.roadmap.stages[0], items: [{ ...data.roadmap.stages[0].items[0], actualUsd: 2.5 }] }] } });
   assert.equal(state.roadmap.stages[0].items[0].actualUsd, 2.5);

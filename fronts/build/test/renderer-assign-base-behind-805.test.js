@@ -3,7 +3,7 @@
 // on the Roadmap and its choice starts that stage alone. The real page in the renderer harness, with a fake window.api.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp } = require('@multiagent/ui-kit/test/renderer-app-harness');
+const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 
 const FILE = 'fixture.yaml';
 const WORKFLOW = { file: FILE, name: 'Fixture', steps: [], inputs: { task: { type: 'string', required: true } } };

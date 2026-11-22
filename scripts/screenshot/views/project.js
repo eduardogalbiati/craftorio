@@ -259,7 +259,7 @@ function demoReleaseCity(folder) {
   git(['tag', '1.1.2']);
 }
 
-const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'multiagent-orchestrator.city-plan.json');
+const LARGE_PLAN = path.join('poc', 'project-map', 'plans', 'craftorio.city-plan.json');
 
 // #387: --mode large, the Architecture tab at a real scale: the latest report holds the 60 findings of
 // the shared large-project fixture (scripts/screenshot/helpers.js), over its seven areas
@@ -321,7 +321,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (args.mode === 'city-large') { // #382: this repository, with the POC's plan
     projects.updateProject(ws.projects, project.id, { folder: appDir });
     const plan = JSON.parse(fs.readFileSync(path.join(appDir, LARGE_PLAN), 'utf8'));
-    require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
+    require('@craftorio/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, plan, '2026-10-01T09:00:00.000Z');
     return;
   }
   // #730: the City tab with no --mode draws the demo city
@@ -333,7 +333,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
   if (head && args.mode !== 'never') demoArchitectureReports(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (head && args.mode === 'large') demoLargeReport(ws, project.id, { commit: head, date: '2026-09-15T10:00:00Z' });
   if (args.mode === 'map-refresh') demoCityPlan(ws, project.id);
-  if (city) require('@multiagent/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, unmeasured ? UNMEASURED_PLAN : CITY_PLAN, '2026-10-01T09:00:00.000Z');
+  if (city) require('@craftorio/engine/domains/oracle/oracle-architecture').writePlan(path.join(ws.root, 'architecture'), project.id, unmeasured ? UNMEASURED_PLAN : CITY_PLAN, '2026-10-01T09:00:00.000Z');
   if (head && args.mode?.startsWith('seeds')) {
     const first = execFileSync('git', ['-C', project.folder, 'rev-list', '--max-parents=0', 'HEAD'], { encoding: 'utf8' }).trim().split('\n')[0];
     demoSeeds(ws, project, first);
@@ -344,7 +344,7 @@ function seedArchitecture(args, ws, project, { appDir, projects }) {
 // #730: the Health tab's latest report with its "billing.js grows" finding filed as the roadmap's #10
 // (its link and stage instead of the buttons) and the duplicated rule's proposal from before #730
 function demoHealth(ws, projectId) {
-  const arch = require('@multiagent/engine/domains/oracle/oracle-architecture');
+  const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
   const grows = finding('oversized-unit', 'billing.js grows', [{ path: 'src/billing.js', lines: '1-124' }]);
   arch.recordFiled(path.join(ws.root, 'architecture'), projectId, arch.findingKey(grows), { issue: 10, issueUrl: 'https://github.com/demo/demo-app/issues/10', reportId: '2026-10-01T09-00-00-000Z', at: '2026-10-02T09:00:00.000Z' });
   demoRefactor(ws, projectId);
@@ -353,9 +353,9 @@ function demoHealth(ws, projectId) {
 // #357: the proposals made before #730 on the Architecture demo (keyed as the findings they came from,
 // so the Health tab lists them under those findings) and the cadence on with 6 of its runs counted
 function demoRefactor(ws, projectId) {
-  const { findingKey } = require('@multiagent/engine/domains/oracle/oracle-architecture');
-  const runs = require('@multiagent/engine/domains/run/runs');
-  const cadence = require('@multiagent/engine/domains/refactor/refactor-cadence');
+  const { findingKey } = require('@craftorio/engine/domains/oracle/oracle-architecture');
+  const runs = require('@craftorio/engine/domains/run/runs');
+  const cadence = require('@craftorio/engine/domains/refactor/refactor-cadence');
   const dir = path.join(ws.root, 'refactor', projectId);
   const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
   const arch = (id, f, extra) => ({ id, source: 'architecture', key: findingKey(f), reportId: 'demo-report-2', kind: f.kind, title: f.title, files: f.files, evidence: f.evidence, severity: f.severity, refactor: f.refactor, createdAt: at(20), status: 'proposed', ...extra });

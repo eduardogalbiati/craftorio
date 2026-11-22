@@ -35,26 +35,26 @@ Feature: Control channel
     And the workspace has no control endpoint file
     And the control channel status shows no port
 
-  # Assumes the switch's row shows, while the channel is on, the path of the multiagent-ctl binary
+  # Assumes the switch's row shows, while the channel is on, the path of the craftorio-ctl binary
   # (data-testid="control-ctl-path": resources/bin in the packaged app, native/target/... in a dev
   # checkout) and a "Copy" button for it (data-testid="control-ctl-copy") that puts that path on the
   # clipboard; both are gone while the channel is off (#342)
   @issue-342
-  Scenario: With the control channel on, Settings shows the multiagent-ctl path to copy
+  Scenario: With the control channel on, Settings shows the craftorio-ctl path to copy
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
     And I turn on the "Allow outside sessions to control this app" switch
-    Then the control channel shows the path of "multiagent-ctl"
-    When I copy the control channel's "multiagent-ctl" path
-    Then the clipboard holds the "multiagent-ctl" path shown
+    Then the control channel shows the path of "craftorio-ctl"
+    When I copy the control channel's "craftorio-ctl" path
+    Then the clipboard holds the "craftorio-ctl" path shown
 
   @issue-342
-  Scenario: With the control channel off, Settings offers no multiagent-ctl path
+  Scenario: With the control channel off, Settings offers no craftorio-ctl path
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
     And I turn on the "Allow outside sessions to control this app" switch
-    Then the control channel shows the path of "multiagent-ctl"
+    Then the control channel shows the path of "craftorio-ctl"
     When I turn off the "Allow outside sessions to control this app" switch
-    Then the control channel offers no "multiagent-ctl" path to copy
+    Then the control channel offers no "craftorio-ctl" path to copy

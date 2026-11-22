@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 // a page file by its page-relative name, in whichever layer holds it (the UI kit, a front, the page folder)
 const pageFileOf = (rel) => require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), rel);
-const { loadPage, settle } = require('@multiagent/ui-kit/test/agent-chat-page-harness');
+const { loadPage, settle } = require('@craftorio/ui-kit/test/agent-chat-page-harness');
 
 const VIEW = 'views/discovery/discovery.js';
 const P = 'p1';
@@ -101,7 +101,7 @@ async function openBoard(opts = {}) {
   const page = await loadPage({ api: methods });
   if (!page.sandbox.CurrentProject) page.sandbox.CurrentProject = {};
   page.sandbox.CurrentProject.get = () => P;
-  const listed = require('@multiagent/ui-kit/test/renderer-app-harness').pageScripts().includes(VIEW);
+  const listed = require('@craftorio/ui-kit/test/renderer-app-harness').pageScripts().includes(VIEW);
   if (!listed) {
     const file = pageFileOf(VIEW);
     if (!fs.existsSync(file)) throw new Error(`${VIEW} does not exist yet`);

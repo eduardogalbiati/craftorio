@@ -61,7 +61,7 @@ function axeTag() {
   axeScript = '';
   try {
     const source = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-    const { AXE_RULES } = require('@multiagent/engine/domains/evidence/ui-review-checks');
+    const { AXE_RULES } = require('@craftorio/engine/domains/evidence/ui-review-checks');
     const run = `window.addEventListener('load', async () => {
       if (!window.axe || window.parent === window) return;
       try {
@@ -92,7 +92,7 @@ function createMockupsWindow({ BrowserWindow, statePath, dirname, page = null, d
       return live;
     }
     const bounds = onScreenBounds(readState(), MIN, screen);
-    win = new BrowserWindow(sideWindowOptions({ dirname, devTools, min: MIN, defaults: DEFAULTS, bounds, title: 'Mockup · Multiagent Orchestrator' }));
+    win = new BrowserWindow(sideWindowOptions({ dirname, devTools, min: MIN, defaults: DEFAULTS, bounds, title: 'Mockup · Craftorio' }));
     const opened = win;
     guardWindow(opened.webContents, { openExternal: (url) => require('electron').shell.openExternal(url) });
     opened.on('close', () => { try { writeState({ bounds: opened.getBounds() }); } catch { /* the window is gone */ } });

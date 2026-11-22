@@ -14,7 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
-const registry = require('@multiagent/shared/providers');
+const registry = require('@craftorio/shared/providers');
 const { sessionCost } = require('../domains/usage/usage');
 
 const near = (actual, expected, msg) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) <= 1e-6, `${msg}: expected ${expected}, got ${actual}`);

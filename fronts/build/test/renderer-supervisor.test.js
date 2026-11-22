@@ -77,7 +77,7 @@ test('analyticsContext: the quick range (days) and a custom from/to both show, w
 });
 
 test('#383 Analytics reads a saved date-range preset, and the older saved days as their preset', () => {
-  const DateRange = require('@multiagent/ui-kit/date-range.js');
+  const DateRange = require('@craftorio/ui-kit/date-range.js');
   const presetOf = (saved) => loadAnalyticsContext(saved, { DateRange }).ax.preset;
   for (const id of ['24h', '7d', '30d', 'all']) assert.equal(presetOf({ preset: id }), id);
   assert.equal(presetOf({ days: 7 }), '7d');
@@ -89,7 +89,7 @@ test('#383 Analytics reads a saved date-range preset, and the older saved days a
 });
 
 test('#383 Analytics with a preset gives the supervisor that preset\'s range', () => {
-  const DateRange = require('@multiagent/ui-kit/date-range.js');
+  const DateRange = require('@craftorio/ui-kit/date-range.js');
   const sandbox = loadAnalyticsContext({ preset: '7d' }, { DateRange });
   const [, from, to] = /^range (\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2}), /.exec(sandbox.analyticsContext()) || [];
   assert.ok(from && to, sandbox.analyticsContext());

@@ -6,8 +6,8 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createDom } = require('@multiagent/ui-kit/test/mini-dom');
-const I18n = require('@multiagent/shared/i18n');
+const { createDom } = require('@craftorio/ui-kit/test/mini-dom');
+const I18n = require('@craftorio/shared/i18n');
 const { gatesPage, gatePage } = require('../../domains/workspace/mobile-gates-page');
 const { createMobileGatesServer } = require('../../domains/workspace/mobile-gates');
 

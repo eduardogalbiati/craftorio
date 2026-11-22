@@ -24,16 +24,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { runFigures } = require('@multiagent/engine/domains/run/run-analysis');
-const { analyzeRun } = require('@multiagent/engine/domains/oracle/oracle-run-analysis');
-const runs = require('@multiagent/engine/domains/run/runs');
-const { actualCost, actualTime, stepMinutes } = require('@multiagent/engine/domains/usage/cost-estimate');
-const { computeAnalytics } = require('@multiagent/engine/domains/analytics/analytics');
+const { runFigures } = require('@craftorio/engine/domains/run/run-analysis');
+const { analyzeRun } = require('@craftorio/engine/domains/oracle/oracle-run-analysis');
+const runs = require('@craftorio/engine/domains/run/runs');
+const { actualCost, actualTime, stepMinutes } = require('@craftorio/engine/domains/usage/cost-estimate');
+const { computeAnalytics } = require('@craftorio/engine/domains/analytics/analytics');
 const fx = require('../run-record-fixtures-350');
-const GOLDEN = require('@multiagent/engine/test/fixtures/run-record-golden-350.json');
+const GOLDEN = require('@craftorio/engine/test/fixtures/run-record-golden-350.json');
 
-const loadReader = () => require('@multiagent/engine/domains/run/run-record');
-const loadUpgrade = () => require('@multiagent/shared/run-record');
+const loadReader = () => require('@craftorio/engine/domains/run/run-record');
+const loadUpgrade = () => require('@craftorio/shared/run-record');
 
 const near = (actual, expected, msg) => assert.ok(typeof actual === 'number' && Math.abs(actual - expected) < 1e-6, `${msg}: expected ${expected}, got ${actual}`);
 const received = (events, sessionId, turn) => events.find((e) => e.type === 'session.message_received' && e.session_id === sessionId && e.turn === turn);
