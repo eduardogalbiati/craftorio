@@ -20,6 +20,7 @@
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
 // - #850 profileSourceKey(): step 3's profile line key, "from your answers" (a new project) or "from the git history".
+// - #21 sourceKey(key): step 3's text key for the source, `<key>_new` for a new project (heading, subtitle, suggestions).
 // - #851 recommended(): the wizard-recommended label, on Analyze the repository here and on Light (work model).
 // - #790 loadManifest(): reads cur.manifest for the Default row; pickedDefault(workflows): Finish's default.
 // - #726 textOf(x): the model's i18n keys (a key, { key, params }, an array) in the interface's language: the
@@ -54,8 +55,10 @@
     // #850: where step 3's profile line says the profile comes from: a new project's (#632) is its step 2 answers,
     // an import's the git history
     const profileSourceKey = () => (cur().model.source === 'new' ? 'onboarding.profile_found_answers' : 'onboarding.profile_found');
+    // #21: a step 3 text key for the wizard's source: a new project's own `<key>_new`, an import's `<key>`
+    const sourceKey = (key) => (cur().model.source === 'new' ? `${key}_new` : key);
     // #21: the line above the suggested workflows: a new project's come from its step 2 answers, an import's from how it is worked on
-    const suggestionsKey = () => (cur().model.source === 'new' ? 'onboarding.workflows_line_new' : 'onboarding.workflows_line');
+    const suggestionsKey = () => sourceKey('onboarding.workflows_line');
 
     // #851: the "Recommended" label of the choice most owners should pick (Light, Analyze the repository)
     const recommended = () => `<span class="badge wizard-recommended" data-testid="wizard-recommended">${esc(t('onboarding.recommended'))}</span>`;
@@ -251,6 +254,7 @@
       profileOf,
       profileSourceKey,
       recommended,
+      sourceKey,
       textOf,
       workflowChoices,
       workflowsColumn,

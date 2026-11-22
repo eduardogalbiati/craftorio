@@ -37,10 +37,9 @@
 //   finding with wizard-review-create-issue / -prioritize, then its link wizard-review-finding-issue, and the idea field
 //   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
 //   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next (step 3:
-//   "Continue", enabled whatever the analysis does; before any analysis it skips it) or, on the review,
+//   "Continue", enabled whatever the analysis does; #20: an import's analysis not started yet starts, never skipped) or, on the review,
 //   wizard-finish (never disabled, never waits): it closes the wizard on the project's page with its Next steps
-//   card (openProject with nextSteps, project.js; #846: never the Start drawer), then sends the idea to the Inbox (no finding is filed
-//   without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
+//   card (openProject with nextSteps, project.js; #846: never the Start drawer), then sends the idea to the Inbox (no finding is filed without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
 //   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), the folder line
@@ -56,13 +55,11 @@
 // - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
 //   amounts go through I18n.formatCost (the interface's language). Tab stays in the dialog; close() gives the focus back to what opened it.
 // - #onboarding-tray (project-wizard-tray.js) follows onboarding:changed (api.onOnboardingChanged, subscribed when the script loads); #724: hidden while the wizard is open, the wizard shows the progress itself.
-// - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status
-//   change such as the clone done), so the screens reading the cached list see the project and its folder.
+// - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
 // architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
 // architecture:createIssue (never runNow), the backlog and api.createDiscoveryCard (an Inbox idea).
-// window.ProjectWizard = { analyzing(projectId), close, open }: #846 analyzing is true while that project's onboarding
-// clones or analyses it (ACTIVE, from onboarding:changed); the Start drawer then refuses analyze-project.
+// window.ProjectWizard = { analyzing(projectId), close, open }: #846 analyzing is true while that project's onboarding clones or analyses it (ACTIVE, from onboarding:changed); the Start drawer then refuses analyze-project.
 // Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.ProjectWizardCli.
 
 (function () {
@@ -426,8 +423,8 @@
     const said = started ? `<p class="muted small">${esc(t(o.status === 'analyzed' ? 'onboarding.analysis_done' : 'onboarding.analysis_running'))}</p>` : '';
     return `<div class="wizard-columns">
         <div class="wizard-column">
-          <h2 id="project-wizard-title">${esc(t(cur.model.source === 'new' ? 'onboarding.analyze_title_new' : 'onboarding.analyze_title', { name: cur.model.name }))}</h2>
-          <p class="muted">${esc(t(cur.model.source === 'new' ? 'onboarding.read_only_new' : 'onboarding.read_only'))}</p>
+          <h2 id="project-wizard-title">${esc(t(column.sourceKey('onboarding.analyze_title'), { name: cur.model.name }))}</h2>
+          <p class="muted">${esc(t(column.sourceKey('onboarding.read_only')))}</p>
           ${costBlock(started)}
           ${said}
           ${o.status === 'failed' ? errorBlock(o) : ''}
@@ -727,8 +724,10 @@
     render();
     try {
       remember(await fn());
+      return true;
     } catch (e) {
       showToast(t('onboarding.action_failed'), errMsg(e));
+      return false;
     } finally {
       if (cur) { cur.busy = false; render(); }
     }
@@ -766,8 +765,9 @@
       return;
     }
     if (cur.model.step === 'repository') toAnalysis();
-    else if (cur.model.step === 'analysis' && cur.model.source !== 'new') { // #725, #20: Continue is never Skip: an import's analysis not started yet starts
-      if (cur.onboarding?.status === 'ready') await call(() => api.analyzeOnboarding(cur.projectId));
+    else if (cur.model.step === 'analysis' && cur.model.source !== 'new') { // #725, #20: Continue starts an import's analysis (after the clone, engine), a refused start stays
+      const started = ['analyzing', 'analyzed'].includes(cur.onboarding?.status) || await call(() => api.analyzeOnboarding(cur.projectId));
+      if (!cur || !started) return;
       cur.model = M.next({ ...cur.model, analyzeLater: false });
     } else cur.model = M.next(cur.model);
     if (cur.model.step === 'review') loadReview();

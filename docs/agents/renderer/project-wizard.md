@@ -146,8 +146,10 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    (`wizard-work-locally`, `api.workLocallyOnboarding`); the answer moves on to analysis.
    The footer shows the clone's progress (`wizard-clone-progress`, `data-status` the clone job's, with
    `wizard-spinner` while it runs) on the left, Back and Continue (`wizard-next`) on the right: always enabled,
-   the analysis goes on in the background and the review shows what is pending. Nothing paid starts
-   without Analyze; Continue before it skips the analysis.
+   the analysis goes on in the background and the review shows what is pending. #20: on an import,
+   Continue starts the ticked analysis when it has not started (Define manually included; during the clone the
+   engine starts it when the clone ends) and stays on step 3 when the start fails; only Skip, analyze later
+   skips it.
 4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on: #781 the Health tab's
    language bar in `wizard-review-languages`, the project type opening on the kind the analysis found, marked
    `wizard-kind-detected`, "Detect from the files" only while no kind is known; its workflows),
