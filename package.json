@@ -63,7 +63,7 @@
     "@craftorio/engine": "*",
     "@craftorio/shared": "*",
     "acorn": "8.19.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^5.5.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
