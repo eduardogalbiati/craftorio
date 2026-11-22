@@ -14,7 +14,7 @@
     // #634: production errors and the Night watch
     { id: 'monitor', title: 'Monitor', order: 100 },
   ];
-  const COLLAPSED_KEY = 'multiagent.navCollapsed';
+  const COLLAPSED_KEY = 'craftorio.navCollapsed';
   const byOrder = (a, b) => a.order - b.order;
 
   /** The menu, top to bottom: a block per group that has entries (`{ group, title, order, items }`) and per entry without a group (`{ group: null, order, items: [entry] }`). */

@@ -778,7 +778,7 @@ const THEMES = {
     },
   },
 };
-const THEME_KEY = 'multiagent.city.theme';
+const THEME_KEY = 'craftorio.city.theme';
 let T = THEMES.dark;
 try { if (THEMES[localStorage.getItem(THEME_KEY)]) T = THEMES[localStorage.getItem(THEME_KEY)]; } catch { /* no storage */ }
 const kindOf = (kind) => T.kinds[kind] || T.kinds.outskirts;

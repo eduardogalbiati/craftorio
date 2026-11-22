@@ -136,7 +136,7 @@
   // form whose save was refused ({ id, inputs, mock }); a refused edit whose item is gone ({ item, reason }), its values shown apart
   let [editing, adding, noteEditing, kept, lost] = [null, false, null, null, null];
   // #138: the items grouped by their issues' epics instead of by stage (remembered)
-  const BY_EPIC_KEY = 'multiagent.roadmapByEpic';
+  const BY_EPIC_KEY = 'craftorio.roadmapByEpic';
   let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
 
   /** The badges of an issue card: its place in the roadmap ("Roadmap: stage 2") and the release that shipped it (#260, "Released v1.4"). */

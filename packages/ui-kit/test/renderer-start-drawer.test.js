@@ -218,7 +218,7 @@ test('style.css: the now-unused .env .ok rule is gone, and an empty #env-status 
 test('selectWorkflow: the main field ignores a previous save (even one from before this change); other fields still use it', () => {
   const workflows = [{ file: 'wf.yaml', inputs: { task: { required: true }, mode: { enum: ['auto', 'validated'], default: 'auto' } }, agents: {} }];
   const { sandbox, helpers, getEl } = loadStartDrawer({ workflows });
-  sandbox.localStorage.setItem('multiagent.inputs.wf.yaml', JSON.stringify({ task: 'OLD TASK TEXT', mode: 'validated' }));
+  sandbox.localStorage.setItem('craftorio.inputs.wf.yaml', JSON.stringify({ task: 'OLD TASK TEXT', mode: 'validated' }));
 
   helpers.selectWorkflow('wf.yaml');
 
@@ -368,7 +368,7 @@ test('startRun: a successful default start saves non-main inputs, resets the mai
 
   await helpers.startRun({});
 
-  assert.deepEqual(JSON.parse(storage.get('multiagent.inputs.wf.yaml')), { mode: 'validated' }, 'the main field (task) is never saved');
+  assert.deepEqual(JSON.parse(storage.get('craftorio.inputs.wf.yaml')), { mode: 'validated' }, 'the main field (task) is never saved');
   assert.equal(getEl('drawer').classList.contains('open'), false, 'the default Start workflow button closes the drawer');
   assert.equal(calls.selectRun.length, 1);
   assert.equal(calls.selectRun[0][0], 'r-new');
@@ -396,7 +396,7 @@ test('startRun({ keepOpen: true }): stays open, clears and focuses the main fiel
   assert.equal(mainEl.value, '', 'the main field is cleared');
   assert.equal(mainEl.focused, true, 'the main field is refocused');
   assert.match(getEl('start-info').innerHTML, /Started wf\.yaml/);
-  assert.deepEqual(JSON.parse(storage.get('multiagent.inputs.wf.yaml')), {});
+  assert.deepEqual(JSON.parse(storage.get('craftorio.inputs.wf.yaml')), {});
 });
 
 test('startRun({ keepOpen: true }): with concurrent runs off, the confirmation adds the "turn it on" hint', async () => {

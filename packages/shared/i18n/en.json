@@ -2735,7 +2735,7 @@
   "gate_panel.install_will_run": "install will run",
   "gate_panel.it_runs_this_repository_s_command": "It runs this repository's command on your machine, in simulation only, on a scratch copy of your workspace.",
   "gate_panel.loading": "Loading…",
-  "gate_panel.multiagent_local_preview_yaml": ".craftorio/local-preview.yaml",
+  "gate_panel.craftorio_local_preview_yaml": ".craftorio/local-preview.yaml",
   "gate_panel.next_time_run_app_starts_command": "Next time Run App starts {command} directly.",
   "gate_panel.no_local_preview": "No local preview",
   "gate_panel.no_scenario_for_this_change": "No scenario for this change.",

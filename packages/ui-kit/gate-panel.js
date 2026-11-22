@@ -387,7 +387,7 @@ function runAppSetupHtml(info, cfg = {}) {
     ${input('command', t('gate_panel.command_label'), 'npm start')}
     ${input('url', t('gate_panel.url_label'), 'http://localhost:3000')}
     ${input('cwd', t('gate_panel.folder_label'), 'apps/web')}
-    ${info.project ? `<label class="small gate-app-check"><input type="checkbox" data-setup-repo> ${t('gate_panel.also_write_it_to')} <code>${t('gate_panel.multiagent_local_preview_yaml')}</code> ${t('gate_panel.a_change_you_commit')}</label>` : ''}
+    ${info.project ? `<label class="small gate-app-check"><input type="checkbox" data-setup-repo> ${t('gate_panel.also_write_it_to')} <code>${t('gate_panel.craftorio_local_preview_yaml')}</code> ${t('gate_panel.a_change_you_commit')}</label>` : ''}
     <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? t('gate_panel.save_as_this_project_s_run') : t('gate_panel.run')}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">${t('common.cancel')}</button></div>`;
 }
 

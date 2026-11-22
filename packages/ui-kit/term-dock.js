@@ -38,7 +38,7 @@ async function termAction(btn, { sessionId, runId, label }) {
 }
 
 // Terminal dock (xterm tabs; the process lives in the main process)
-const TERM_HEIGHT_KEY = 'multiagent.termHeight';
+const TERM_HEIGHT_KEY = 'craftorio.termHeight';
 const IS_MAC = (api.platform || navigator.platform || '').toLowerCase().startsWith('mac') || api.platform === 'darwin';
 const isOrchSession = (s) => s.id === 'orchestrator' || s.agent === 'orchestrator';
 const dock = {

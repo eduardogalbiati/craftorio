@@ -67,7 +67,7 @@ const ROADMAP = {
 
 function page({ performance = async () => perf(), conflictMap = CONFLICT_MAP, backlog = null, storage = {} } = {}) {
   return loadApp({
-    storage: { 'multiagent.currentProject': 'p1', ...storage },
+    storage: { 'craftorio.currentProject': 'p1', ...storage },
     api: {
       listProjects: async () => PROJECTS,
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -274,7 +274,7 @@ test('#354 the Roadmap no longer draws the Conflict map panel: a one-line link "
 });
 
 function analytics() {
-  return page({ storage: { 'multiagent.analytics': JSON.stringify({ tab: 'performance' }) } });
+  return page({ storage: { 'craftorio.analytics': JSON.stringify({ tab: 'performance' }) } });
 }
 
 test('#354 Analytics › Performance no longer has "Files most runs edit": the link takes its place, the rest stays', async () => {

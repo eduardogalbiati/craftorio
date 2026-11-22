@@ -29,7 +29,7 @@ const BASE_API = {
 
 // Home (the view `dashboard`) shown for the header's project p1
 async function home(api = {}, storage = {}) {
-  const app = loadApp({ storage: { 'multiagent.currentProject': 'p1', ...storage }, api: { ...BASE_API, ...api } });
+  const app = loadApp({ storage: { 'craftorio.currentProject': 'p1', ...storage }, api: { ...BASE_API, ...api } });
   await app.boot();
   app.run("showView('dashboard')");
   await app.settle(30);
@@ -147,13 +147,13 @@ test('the To do and Merged locally counts open the board\'s columns for that vis
   for (const stage of ['todo', 'merged']) {
     // (the Backlog syncs a project with a repository after its read: the same data)
     const backlog = async () => ({ issues: [issue(11, 'todo'), issue(17, 'local')], epics: [], roadmap: { stages: [] } });
-    const app = await home({ getBacklog: backlog, syncBacklog: backlog }, { 'multiagent.backlogMode': 'list', 'multiagent.backlogBoard': 'list' });
+    const app = await home({ getBacklog: backlog, syncBacklog: backlog }, { 'craftorio.backlogMode': 'list', 'craftorio.backlogBoard': 'list' });
     await clickHome(app, '[data-testid="home-flow-count"]', { testid: 'home-flow-count', stage });
     await app.settle(20);
     assert.equal(app.state().view, 'backlog');
     assert.match(String(app.el('#bl-list').innerHTML), /data-testid="backlog-board"/, `${stage}: the board's columns`);
-    assert.equal(app.sandbox.localStorage.getItem('multiagent.backlogMode'), 'list', `${stage}: the remembered mode is not changed`);
-    assert.equal(app.sandbox.localStorage.getItem('multiagent.backlogBoard'), 'list');
+    assert.equal(app.sandbox.localStorage.getItem('craftorio.backlogMode'), 'list', `${stage}: the remembered mode is not changed`);
+    assert.equal(app.sandbox.localStorage.getItem('craftorio.backlogBoard'), 'list');
     app.run("showView('dashboard')");
     await app.settle(10);
     app.run("showView('backlog')");
@@ -172,7 +172,7 @@ test('the strip follows the last project asked: a slower answer for the previous
   let releaseP1;
   const slow = new Promise((r) => { releaseP1 = r; });
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       ...BASE_API,
       listProjects: async () => [...PROJECTS, { id: 'p2', name: 'Project Two', repo: 'https://github.com/o/two', folder: 'C:/work/two' }],

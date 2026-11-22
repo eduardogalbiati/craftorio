@@ -37,7 +37,7 @@ const TAB_LABELS = ['Overview', 'City', 'Health', 'Conflict map']; // #730
 
 function page({ projects = PROJECTS, storage = {}, api = {} } = {}) {
   return loadApp({
-    storage: { 'multiagent.currentProject': 'p1', ...storage },
+    storage: { 'craftorio.currentProject': 'p1', ...storage },
     api: {
       listProjects: async () => projects,
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -113,7 +113,7 @@ test('#354 the project page\'s back link opens the Projects screen', async () =>
 // #644: Home's "Create a project" opens the onboarding wizard (project-wizard.js); #741: the old New project
 // dialog is gone, so the Start drawer's + and the header's "New project…" open the wizard too
 test('#354 the New project entry points (Start drawer +, header "New project…", Home\'s "Create a project") open the wizard, never Settings', async () => {
-  const app = page({ projects: [], storage: { 'multiagent.currentProject': '' } });
+  const app = page({ projects: [], storage: { 'craftorio.currentProject': '' } });
   await app.boot();
   const opened = [];
   const wizardOpen = () => { const w = app.created.find((e) => e.id === 'project-wizard'); return !!w && w.hidden !== true; };
@@ -138,7 +138,7 @@ test('#354 the New project entry points (Start drawer +, header "New project…"
 });
 
 test('#354 no screen points to "Settings › Projects" any more (the Backlog without a project)', async () => {
-  const app = page({ projects: [], storage: { 'multiagent.currentProject': '' } });
+  const app = page({ projects: [], storage: { 'craftorio.currentProject': '' } });
   await app.boot();
   app.run("showView('backlog')");
   await app.settle(10);
@@ -159,7 +159,7 @@ test('#354 the Projects screen has Open folder and New project in its header', a
 
 // #643: the empty state's New project opens the onboarding wizard (project-wizard.js), no longer the dialog
 test('#354 with no project, the Projects screen shows the empty state, whose New project opens the wizard', async () => {
-  const app = page({ projects: [], storage: { 'multiagent.currentProject': '' } });
+  const app = page({ projects: [], storage: { 'craftorio.currentProject': '' } });
   await app.boot();
   app.run("showView('projects')");
   await app.settle(10);

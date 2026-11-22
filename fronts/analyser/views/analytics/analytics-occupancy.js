@@ -10,7 +10,7 @@
 // (packages/engine/domains/run/occupancy.js via packages/engine/service/areas/insights.js). A tab of views/analytics/analytics.js
 // (window.AnalyticsTabs). Uses app.js globals: api, esc, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, showView.
 (() => {
-  const LS = 'multiagent.analytics.occupancy';
+  const LS = 'craftorio.analytics.occupancy';
   // [cause, its label's catalog key, colour]
   const CAUSES = [
     ['noWork', 'analytics_occupancy.cause_no_work', 'var(--muted)'],

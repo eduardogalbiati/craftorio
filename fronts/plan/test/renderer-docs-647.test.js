@@ -21,7 +21,7 @@ const ITEMS = [
 
 async function documents() {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r' }],
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -72,7 +72,7 @@ const SPEC_DOC = { item: 'write-doc', doc: 'spec', status: 'draft', source: { fi
 // The Documents screen with a project that has a folder; `api` overrides the defaults.
 async function editorApp(api = {}) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),

@@ -29,7 +29,7 @@
   };
   const PHASES = [['compete', 'Compete'], ['critique', 'Critique'], ['synthesize', 'Synthesize'], ['verify', 'Verify'], ['review', 'You']];
   const ICON_DOC = '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /></svg>';
-  const LS = 'multiagent.arena';
+  const LS = 'craftorio.arena';
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
   const setup = {
     contenders: (Array.isArray(saved.contenders) && saved.contenders.length >= MIN ? saved.contenders.slice(0, MAX) : DEFAULTS)

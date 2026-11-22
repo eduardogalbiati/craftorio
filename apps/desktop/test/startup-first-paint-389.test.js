@@ -33,7 +33,7 @@ function deferred() {
 }
 
 async function home(api = {}) {
-  const app = loadApp({ storage: { 'multiagent.currentProject': 'p1' }, api: { ...BASE_API, ...api } });
+  const app = loadApp({ storage: { 'craftorio.currentProject': 'p1' }, api: { ...BASE_API, ...api } });
   await app.boot();
   app.run("showView('dashboard')");
   await app.settle(30);

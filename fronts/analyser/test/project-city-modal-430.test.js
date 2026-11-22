@@ -32,7 +32,7 @@ const H = require('./city-modes-harness');
 const { ISSUE, STAGE, REPLAY, settle, q, text, mode, title } = H;
 const ROOT = path.join(__dirname, '..', '..', '..');
 const MODAL_FILE = pageFileOf('views/project/project-city-modal.js');
-const VIEW_KEY = 'multiagent.architecture.view';
+const VIEW_KEY = 'craftorio.architecture.view';
 
 // the window with the modal's module (the harness loads every *city* script, this one included)
 function loadModal(opts) {

@@ -39,8 +39,8 @@ function fmtRelative(iso) {
   if (s < 86400) return t('common.ago_hours', { n: Math.floor(s / 3600) });
   return new Date(iso).toLocaleDateString(uiLocale(), { timeZone: TimeZone.current() });
 }
-const USAGE_SCOPE_KEY = 'multiagent.usageScope';
-const RUN_VIEW_KEY = 'multiagent.runView';
+const USAGE_SCOPE_KEY = 'craftorio.usageScope';
+const RUN_VIEW_KEY = 'craftorio.runView';
 // A channel or method the running main process (or server) doesn't have: the code on disk is newer
 // than the process (#83). The error says so and the restart banner shows.
 const NEEDS_RESTART = 'This feature needs an app restart (the app was updated while running).';

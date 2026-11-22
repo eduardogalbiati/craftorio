@@ -29,7 +29,7 @@ const argsOf = (args, names) => (args[0] && typeof args[0] === 'object' ? args[0
 
 async function inbox(api = {}) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r' }],
       getSettings: async () => ({ lastProject: 'p1' }),

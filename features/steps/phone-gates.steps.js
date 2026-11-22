@@ -53,7 +53,7 @@ Then('the paired devices list says no phone is paired yet', async ({ e2e }) => {
 // field, the links and the pairing form by role and accessible name.
 
 const PHONE_TIMEOUT = 30000;
-const TOKEN_KEY = 'multiagent-phone-token'; // the phone page's localStorage key for its device token
+const TOKEN_KEY = 'craftorio-phone-token'; // the phone page's localStorage key for its device token
 const ORDINALS = { first: 0, second: 1, third: 2 };
 
 const phonePage = (e2e) => e2e.window.getByRole('main');

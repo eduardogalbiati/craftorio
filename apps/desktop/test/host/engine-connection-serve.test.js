@@ -31,7 +31,7 @@ test('the connection test and the remote window\'s first load against npm run se
   assert.equal(first.status, 302);
   assert.equal(first.headers.get('location'), '/');
   const cookie = String(first.headers.get('set-cookie') || '').split(';')[0];
-  assert.match(cookie, /^multiagent_token=/);
+  assert.match(cookie, /^craftorio_token=/);
 
   const root = await fetch(`${engine.url}/`, { headers: { cookie }, redirect: 'manual' });
   assert.equal(root.status, 302);

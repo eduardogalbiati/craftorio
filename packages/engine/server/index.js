@@ -77,7 +77,9 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2',
 };
-const COOKIE = 'multiagent_token';
+const COOKIE = 'craftorio_token';
+// T2c: the cookie a browser got before the rename to Craftorio, still accepted
+const LEGACY_COOKIE = 'multiagent_token';
 // the cookie lasts a week: then the browser asks for the token again (#479)
 const COOKIE_MAX_AGE_S = 7 * 24 * 60 * 60;
 // the sign-in form's body: a token, nothing more
@@ -199,8 +201,13 @@ function createServer({ service, auth = null, token, root = appRoot(), ui = uiDi
   if (!token || String(token).length < 16) throw new Error('The server needs a token of at least 16 characters.');
   const isToken = tokenCheck(token);
   const cookieToken = (req) => {
-    const c = (req.headers.cookie || '').split(/;\s*/).find((x) => x.startsWith(`${COOKIE}=`));
-    try { return c ? decodeURIComponent(c.slice(COOKIE.length + 1)) : null; } catch { return null; }
+    const parts = (req.headers.cookie || '').split(/;\s*/);
+    for (const name of [COOKIE, LEGACY_COOKIE]) {
+      const c = parts.find((x) => x.startsWith(`${name}=`));
+      if (!c) continue;
+      try { return decodeURIComponent(c.slice(name.length + 1)); } catch { return null; }
+    }
+    return null;
   };
   const authorized = (req) => isToken(bearer(req)) || isToken(cookieToken(req));
   // signed in by the cookie: its Max-Age starts again, so a window left open keeps working

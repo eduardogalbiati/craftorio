@@ -16,7 +16,7 @@ const project = (runDefaults) => ({ id: 'p1', name: 'Shop', description: '', rep
 async function onSettings(runDefaults = {}) {
   const updates = [];
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       getSettings: async () => ({ setupDone: true }),
       listProjects: async () => [project(runDefaults)],

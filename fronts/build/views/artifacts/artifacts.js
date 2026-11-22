@@ -251,7 +251,7 @@ function toggleAllArtGroups() {
 
 // Open/closed state of the run groups, remembered across restarts. Groups the user never
 // toggled use the default: only the first one open.
-const ART_GROUPS_KEY = 'multiagent.artifactGroups';
+const ART_GROUPS_KEY = 'craftorio.artifactGroups';
 let artGroups = null;
 function artGroupsState() {
   if (!artGroups) {

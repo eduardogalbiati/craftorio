@@ -12,7 +12,7 @@ const PROJECTS = [
 
 async function overviewOf(id, { current }) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': current },
+    storage: { 'craftorio.currentProject': current },
     api: {
       listProjects: async () => PROJECTS,
       getSettings: async () => ({ lastProject: current }),

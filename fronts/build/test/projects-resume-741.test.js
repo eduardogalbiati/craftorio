@@ -41,7 +41,7 @@ const atStep = (projectId, step, picks) => ({ ...W.clone(W.READY), projectId, wi
 function page({ projects = [], start = null, status = null } = {}) {
   let saved = null;
   return loadApp({
-    storage: { 'multiagent.currentProject': projects[0]?.id || '' },
+    storage: { 'craftorio.currentProject': projects[0]?.id || '' },
     api: {
       getSettings: async () => ({ setupDone: true }),
       listProjects: async () => W.clone(projects),

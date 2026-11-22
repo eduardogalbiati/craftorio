@@ -7,7 +7,7 @@
 // Browser: window.CurrentProject; Node: module.exports (pickDefault, for a test).
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
-  const KEY = 'multiagent.currentProject';
+  const KEY = 'craftorio.currentProject';
   const NEW = '__new__';
 
   /** The project to show: `lastId` when it still exists, else the first with a repository, else the first; null with no project. */

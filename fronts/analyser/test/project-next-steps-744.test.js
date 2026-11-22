@@ -33,7 +33,7 @@ async function projectPage({ proposals = PROPOSALS, storage = {} } = {}) {
       getBacklog: async () => ({ issues: [] }),
       refactorCadence: async () => ({ on: false, every: 10, since: null }),
     },
-    storage: { 'multiagent.nextSteps': JSON.stringify({ [PID]: 'open' }), ...storage },
+    storage: { 'craftorio.nextSteps': JSON.stringify({ [PID]: 'open' }), ...storage },
   });
   await app.boot();
   app.run(`openProjectView(${JSON.stringify(PID)})`);
@@ -65,7 +65,7 @@ test('#744 "Open the PO" opens the PO chat in issue mode on this project (Action
 });
 
 test('#744 once an issue was filed through it, the PO entry shows the issue\'s link instead of "Open the PO"', { timeout: 30000 }, async () => {
-  const app = await projectPage({ storage: { 'multiagent.nextStepsPoIssue': JSON.stringify({ [PID]: { issue: 812, url: ISSUE_URL } }) } });
+  const app = await projectPage({ storage: { 'craftorio.nextStepsPoIssue': JSON.stringify({ [PID]: { issue: 812, url: ISSUE_URL } }) } });
   const entry = byTestId(card(app)?.outer || '', 'next-step-po-issue');
   assert.equal(entry === null, false, 'data-testid="next-step-po-issue" in the card');
   const link = byTestId(entry.outer, 'next-step-po-issue-link');

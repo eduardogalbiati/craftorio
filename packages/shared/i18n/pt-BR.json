@@ -2735,7 +2735,7 @@
   "gate_panel.install_will_run": "a instalação vai rodar",
   "gate_panel.it_runs_this_repository_s_command": "Executa o comando deste repositório na sua máquina, só em simulação, em uma cópia temporária do seu workspace.",
   "gate_panel.loading": "Carregando…",
-  "gate_panel.multiagent_local_preview_yaml": ".craftorio/local-preview.yaml",
+  "gate_panel.craftorio_local_preview_yaml": ".craftorio/local-preview.yaml",
   "gate_panel.next_time_run_app_starts_command": "Da próxima vez, o Rodar app inicia {command} diretamente.",
   "gate_panel.no_local_preview": "Sem prévia local",
   "gate_panel.no_scenario_for_this_change": "Nenhum cenário para esta alteração.",

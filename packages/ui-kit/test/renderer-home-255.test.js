@@ -113,7 +113,7 @@ const EXAMPLE_API = {
 const homeEntry = (app) => navEntries(app.defs).find((e) => text(e.label) === 'Home');
 
 // Home shown for the header's project p1 (or with `api` / `storage` overrides)
-async function home({ api = {}, storage = { 'multiagent.currentProject': 'p1' } } = {}) {
+async function home({ api = {}, storage = { 'craftorio.currentProject': 'p1' } } = {}) {
   const app = loadApp({ storage, api: { ...EXAMPLE_API, ...api } });
   await app.boot();
   const entry = homeEntry(app);

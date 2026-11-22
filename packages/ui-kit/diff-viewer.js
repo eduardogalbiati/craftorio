@@ -17,9 +17,9 @@
 // diff-viewer-model.js. DiffViewer.open({ runId, approvalId?, file?, title? }).
 (() => {
   const M = window.DiffViewerModel;
-  const MODE_KEY = 'multiagent.diffMode';
-  const WRAP_KEY = 'multiagent.diffWrap';
-  const viewedKey = (runId) => `multiagent.diffViewed.${runId}`;
+  const MODE_KEY = 'craftorio.diffMode';
+  const WRAP_KEY = 'craftorio.diffWrap';
+  const viewedKey = (runId) => `craftorio.diffViewed.${runId}`;
   const stored = (k, fallback) => { try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; } };
   const store = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
   const readViewed = (runId) => { try { return new Set(JSON.parse(localStorage.getItem(viewedKey(runId)) || '[]')); } catch { return new Set(); } };

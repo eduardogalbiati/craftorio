@@ -30,7 +30,7 @@
 
 // [id, i18n key of its label]
 const PV_TABS = [['overview', 'project.overview'], ['city', 'project.city'], ['health', 'project.health'], ['conflicts', 'project.conflict_map']];
-const PV_TABS_KEY = 'multiagent.projectTabs';
+const PV_TABS_KEY = 'craftorio.projectTabs';
 
 // a map per project kept in localStorage under `key`: { <projectId>: <value> }
 function pvStored(key) {
@@ -45,7 +45,7 @@ function projectTabs() { return pvStored(PV_TABS_KEY); }
 function rememberProjectTab(id, tab) { pvRemember(PV_TABS_KEY, id, tab); }
 
 // #642: the Next steps card of the projects the wizard finished: { <projectId>: 'open' | 'dismissed' }
-const PV_NEXT_STEPS_KEY = 'multiagent.nextSteps';
+const PV_NEXT_STEPS_KEY = 'craftorio.nextSteps';
 // [id, i18n key of its title, of its line (none: the proposals), of its button, later: the i18n key of the
 // reason it is shown disabled, or null]: mock-7, spec R11 (release CI and screenshots come in later phases);
 // #744: the PO's issue first
@@ -59,7 +59,7 @@ const PV_NEXT_STEPS = [
 ];
 // #744: the issue the PO filed from the card's "Open the PO", per project: { <projectId>: { issue, url } }
 // (written by fronts/build/views/backlog/backlog-po.js)
-const PV_NEXT_STEPS_PO_ISSUE_KEY = 'multiagent.nextStepsPoIssue';
+const PV_NEXT_STEPS_PO_ISSUE_KEY = 'craftorio.nextStepsPoIssue';
 // the refactor proposals the card lists (the first ones, ranked)
 const PV_NEXT_STEP_PROPOSALS = 5;
 function nextSteps() { return pvStored(PV_NEXT_STEPS_KEY); }

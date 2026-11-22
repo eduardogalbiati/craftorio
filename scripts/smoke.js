@@ -154,7 +154,7 @@ async function startupBudget(win, createdAt) {
   console.log(`startup budget: first paint (Home) ${firstPaint} ms after the window was created`);
   timeline(createdAt, firstPaint);
   // the owner's case: the usage widget in machine scope, its transcripts never scanned yet
-  await js(`localStorage.setItem('multiagent.usageScope', 'machine')`);
+  await js(`localStorage.setItem('craftorio.usageScope', 'machine')`);
   const reloadAt = Date.now();
   win.webContents.reload();
   await new Promise((r) => win.webContents.once('did-finish-load', r));

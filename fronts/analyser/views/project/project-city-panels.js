@@ -14,7 +14,7 @@
 // puts a card at its top (the impact card), the notes of each draw go under it. Markup from fronts/analyser/poc/city-modes.html (panel(), the legend's head and its button).
 // Uses app.js globals at call time: esc. Browser: window.ProjectCityPanels.
 (() => {
-  const STORE = 'multiagent.city.panels';
+  const STORE = 'craftorio.city.panels';
   const ICON = {
     chev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>',
     close: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>',

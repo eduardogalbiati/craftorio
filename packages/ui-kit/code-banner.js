@@ -7,7 +7,7 @@
 // The code changed on disk while the app runs (#83): a pull or a merge updated src/ and a reload
 // (Ctrl+R) runs the new UI against the old main process (or server), where new channels are
 // missing. Checked when the window loads and gets the focus; a banner offers a safe restart.
-const RESTART_KEY = 'multiagent.restartInterrupted';
+const RESTART_KEY = 'craftorio.restartInterrupted';
 const codeState = { running: null, changed: false, reload: false };
 
 async function checkCodeVersion() {

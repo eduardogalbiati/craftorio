@@ -17,7 +17,7 @@ const reply = (data, status = 200) => new Response(JSON.stringify(data), { statu
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
 
 async function browser(html, fetch, { token = 'device-token', search = '', configure = () => {} } = {}) {
-  const stored = new Map(token ? [['multiagent-phone-token', token]] : []);
+  const stored = new Map(token ? [['craftorio-phone-token', token]] : []);
   const sandbox = {
     fetch, AbortController, setTimeout, clearTimeout, URLSearchParams, setInterval: () => 0, clearInterval() {},
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
@@ -59,7 +59,7 @@ test('a list read failure keeps the token and offers a successful explicit retry
   });
   assert.match(b.message(), /Could not read/);
   assert.equal(b.get('retry').hidden, false);
-  assert.equal(b.stored.get('multiagent-phone-token'), 'device-token');
+  assert.equal(b.stored.get('craftorio-phone-token'), 'device-token');
   await b.get('retry').onclick();
   assert.match(b.message(), /No gate/);
   assert.equal(calls, 2);
@@ -99,7 +99,7 @@ test('manual pairing stores the token and reads the gates, with markup treated a
   b.get('pc').value = 'CODE';
   b.get('pf').onsubmit({ preventDefault() {} });
   await settle();
-  assert.equal(b.stored.get('multiagent-phone-token'), 'new-token');
+  assert.equal(b.stored.get('craftorio-phone-token'), 'new-token');
   assert.equal(b.get('pairing').hidden, true);
   assert.equal(b.get('gates').querySelector('img'), null);
   assert.equal(b.get('gates').querySelector('h2').textContent, '<img src=x>');

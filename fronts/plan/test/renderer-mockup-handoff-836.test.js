@@ -50,7 +50,7 @@ const textAfter = (html, testid) => {
 
 async function editor({ api = {} } = {}) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -156,7 +156,7 @@ test('#836 Start a development run only opens the run start: it never starts a r
 
 async function mainWindow({ api = {} } = {}) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -268,7 +268,7 @@ test('#836 Prepare issues only prepares them: it files nothing', async () => {
 
 test('#836 the Mockups screen offers "Recreate from the running app"', async () => {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),

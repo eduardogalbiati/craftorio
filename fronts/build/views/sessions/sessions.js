@@ -9,7 +9,7 @@
 (() => {
   const $s = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const LS = 'multiagent.sessions';
+  const LS = 'craftorio.sessions';
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
   const persist = () => { try { localStorage.setItem(LS, JSON.stringify(prefs)); } catch { /* ignore */ } };
   const PROVIDER_STYLE = {

@@ -807,7 +807,7 @@
     }
   }
   // #744: an issue filed after the Next steps card's "Open the PO" marks its step done (project.js reads multiagent.nextStepsPoIssue)
-  function markNextStepIssue(out) { const filed = !out.preview && out.filed?.number; if (filed && po.issueFor === po.projectId) { try { localStorage.setItem('multiagent.nextStepsPoIssue', JSON.stringify({ ...JSON.parse(localStorage.getItem('multiagent.nextStepsPoIssue') || '{}'), [po.projectId]: { issue: filed, url: out.filed.url || null } })); } catch { /* storage unavailable */ } } }
+  function markNextStepIssue(out) { const filed = !out.preview && out.filed?.number; if (filed && po.issueFor === po.projectId) { try { localStorage.setItem('craftorio.nextStepsPoIssue', JSON.stringify({ ...JSON.parse(localStorage.getItem('craftorio.nextStepsPoIssue') || '{}'), [po.projectId]: { issue: filed, url: out.filed.url || null } })); } catch { /* storage unavailable */ } } }
 
   // ---- the chat (#274) ------------------------------------------------------------------------------
   function emptyHtml() {

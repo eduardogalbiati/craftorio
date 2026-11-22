@@ -1,7 +1,7 @@
 // #731: the review's "Open the city" (data-testid="wizard-open-city", fronts/build/views/projects/project-wizard.js)
 // finishes the wizard and lands on the project's City: the project page (state.view 'project', state.pv.id the
 // project) on its Architecture tab (state.pv.tab 'architecture'), whose view is the City (ProjectArchitecture.openCity,
-// remembered in sessionStorage 'multiagent.architecture.view' = 'city'). Acceptance test, written before the
+// remembered in sessionStorage 'craftorio.architecture.view' = 'city'). Acceptance test, written before the
 // code, on the real page (packages/ui-kit/test/renderer-app-harness.js), driven as project-wizard-review-642.test.js
 // drives the review. The city the review reads (api.architectureCity) has the plan the onboarding drew.
 const test = require('node:test');

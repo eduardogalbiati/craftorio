@@ -92,7 +92,7 @@ function cityScripts() {
 
 function loadWindow({ agents = () => ({ projectId: 'p1', runs: [], collisions: [] }) } = {}) {
   const calls = { agents: [], release: [], impact: [], overlay: [], openCity: [] };
-  const store = new Map([['multiagent.architecture.view', 'city']]); // the tab opens on its City view
+  const store = new Map([['craftorio.architecture.view', 'city']]); // the tab opens on its City view
   const storage = () => ({
     getItem: (k) => (store.has(k) ? store.get(k) : null),
     setItem: (k, v) => store.set(k, String(v)),

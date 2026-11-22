@@ -80,7 +80,7 @@ function entryHtml(html, number) {
 const buttons = (html) => (html.match(/data-testid="(pr-merge|pr-merge-admin|pr-close|pr-ask-fix)"/g) || []).map((s) => s.slice(13, -1));
 
 async function openPulls(answer = ANSWER, { timers } = {}) {
-  const app = loadApp({ api: { listProjects: async () => PROJECTS, listPullRequests: async () => answer }, storage: { 'multiagent.currentProject': 'shop' } });
+  const app = loadApp({ api: { listProjects: async () => PROJECTS, listPullRequests: async () => answer }, storage: { 'craftorio.currentProject': 'shop' } });
   await app.boot();
   assert.ok(app.defs.has('pulls'), 'a view registered under the id "pulls" (views/pulls/pulls.js, loaded by index.html)');
   if (timers) {

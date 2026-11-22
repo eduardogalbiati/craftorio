@@ -16,7 +16,7 @@
 // Uses app.js globals at call time: api, esc, errMsg, fmtNum, fmtUsd, markdownHtml, state, openDrawer.
 // Browser: window.ProjectConflictMap.
 (() => {
-  const LS = 'multiagent.projectConflictMap';
+  const LS = 'craftorio.projectConflictMap';
   const DAY = 864e5;
   const HOT_WINDOW = 20;
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();

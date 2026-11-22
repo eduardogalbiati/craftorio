@@ -2,7 +2,7 @@
 // - DNS rebinding: a server bound to loopback answers only requests whose Host is localhost,
 //   127.0.0.1 or [::1] (with its port); another Host is refused with 403 (as packages/engine/control/index.js does),
 //   on HTTP and on the WebSocket upgrade.
-// - The token cookie (multiagent_token) has a Max-Age, and `Secure` when the request came over HTTPS
+// - The token cookie (craftorio_token) has a Max-Age, and `Secure` when the request came over HTTPS
 //   (x-forwarded-proto: https, a TLS reverse proxy), never on plain http.
 // - POST /session (form body token=<token>, application/x-www-form-urlencoded): the one-shot sign-in
 //   that keeps the token out of the address bar and the history; the right token sets the cookie and
@@ -89,7 +89,7 @@ test('#481 POST /session with the right token (form body) sets the cookie and an
   const res = await request(port, { method: 'POST', path: '/session', headers: { ...form(), Host: `127.0.0.1:${port}` }, body: `token=${encodeURIComponent(TOKEN)}` });
   assert.equal(res.status, 303);
   assert.equal(res.headers.location, '/');
-  assert.match(cookieOf(res), /^multiagent_token=/);
+  assert.match(cookieOf(res), /^craftorio_token=/);
   assert.match(cookieOf(res), /HttpOnly/);
 });
 
@@ -104,7 +104,7 @@ test('#481 POST /session with a wrong token is refused (401) and sets no cookie'
 test('#481 the cookie gets Secure when the request came over HTTPS (x-forwarded-proto: https)', async (t) => {
   const { port } = await start(t);
   const res = await request(port, { method: 'POST', path: '/session', headers: { ...form(), Host: `127.0.0.1:${port}`, 'X-Forwarded-Proto': 'https' }, body: `token=${encodeURIComponent(TOKEN)}` });
-  assert.match(cookieOf(res), /^multiagent_token=/);
+  assert.match(cookieOf(res), /^craftorio_token=/);
   assert.match(cookieOf(res), /;\s*Secure/i);
 });
 
@@ -134,18 +134,25 @@ test('#479 isLoopbackHost: loopback names, with the port when one is required', 
 
 test('#479 sliding cookie: a request authorised by the cookie gets it again with Max-Age; one with the bearer token gets none', async (t) => {
   const { port } = await start(t);
-  const byCookie = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: `multiagent_token=${encodeURIComponent(TOKEN)}` } });
+  const byCookie = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: `craftorio_token=${encodeURIComponent(TOKEN)}` } });
   assert.equal(byCookie.status, 200);
-  assert.match(cookieOf(byCookie), /^multiagent_token=/);
+  assert.match(cookieOf(byCookie), /^craftorio_token=/);
   assert.match(cookieOf(byCookie), /;\s*Max-Age=\d+/);
   const byBearer = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Authorization: `Bearer ${TOKEN}` } });
   assert.equal(byBearer.status, 200);
   assert.equal(cookieOf(byBearer), '');
 });
 
+test('T2c a browser signed in before the rename (cookie multiagent_token) is still authorised, and gets craftorio_token back', async (t) => {
+  const { port } = await start(t);
+  const res = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: `multiagent_token=${encodeURIComponent(TOKEN)}` } });
+  assert.equal(res.status, 200);
+  assert.match(cookieOf(res), /^craftorio_token=/);
+});
+
 test('#479 a wrong cookie is refused (401) and gets no cookie back', async (t) => {
   const { port } = await start(t);
-  const res = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: 'multiagent_token=wrong-token-0123456789abcdef' } });
+  const res = await request(port, { path: '/api/version', headers: { Host: `127.0.0.1:${port}`, Cookie: 'craftorio_token=wrong-token-0123456789abcdef' } });
   assert.equal(res.status, 401);
   assert.equal(cookieOf(res), '');
 });
@@ -206,7 +213,7 @@ test('#541 an allowed name keeps the token check: no token is 401, a wrong cooki
   const { port } = await start(t, { allowedHosts: [TS_NAME] });
   const none = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443` } });
   assert.equal(none.status, 401);
-  const wrong = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Cookie: 'multiagent_token=wrong-token-0123456789abcdef' } });
+  const wrong = await request(port, { path: '/api/version', headers: { Host: `${TS_NAME}:8443`, Cookie: 'craftorio_token=wrong-token-0123456789abcdef' } });
   assert.equal(wrong.status, 401);
 });
 
@@ -226,7 +233,7 @@ test('#541 the sign-in form works through the allowed name over HTTPS (Secure co
     body: `token=${encodeURIComponent(TOKEN)}`,
   });
   assert.equal(res.status, 303);
-  assert.match(cookieOf(res), /^multiagent_token=/);
+  assert.match(cookieOf(res), /^craftorio_token=/);
   assert.match(cookieOf(res), /;\s*Secure/i);
 });
 

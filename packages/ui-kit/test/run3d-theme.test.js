@@ -31,7 +31,7 @@ test('the choice is remembered in localStorage and read back', () => {
   assert.equal(T.load(store), 'dark', 'nothing stored yet');
   assert.equal(T.save('light', store), true);
   assert.deepEqual(store.data, { [T.KEY]: 'light' });
-  assert.equal(T.KEY, 'multiagent.run3d.theme');
+  assert.equal(T.KEY, 'craftorio.run3d.theme');
   assert.equal(T.load(store), 'light', 'a later opening, or the app restarted');
   assert.equal(T.save('dark', store), true);
   assert.equal(T.load(store), 'dark');

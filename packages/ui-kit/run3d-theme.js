@@ -16,7 +16,7 @@
 //   colour reads on the cards and on the floor).
 // Browser: window.Run3DTheme; Node: module.exports.
 (function (root) {
-  const KEY = 'multiagent.run3d.theme';
+  const KEY = 'craftorio.run3d.theme';
   const DEFAULT = 'dark';
 
   const THEMES = {

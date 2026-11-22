@@ -271,7 +271,7 @@ test('#330 (e) the Inbox in Portuguese: the capture form and a card\'s actions h
   const iso = (minsAgo) => new Date(Date.now() - minsAgo * 60000).toISOString();
   const cards = [{ id: '20261004-aaaa', title: 'Older idea', type: 'idea', column: 'inbox', author: 'alice', created: iso(300), updated: iso(300), attachments: [] }];
   await checkPortuguese('inbox', ['Capture', 'A title for the idea', 'Quick capture', 'Accept', 'Move to Discovery › Triage'], {
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: { listProjects: async () => PROJECTS, listDiscoveryCards: async () => cards },
   });
 });
@@ -284,7 +284,7 @@ test('#330 (e) the Backlog kanban in Portuguese: its columns have no English lab
   });
   const data = { platform: 'github', syncedAt: '2026-10-01T00:00:00Z', issues: [issue(1, 'todo'), issue(2, 'in_progress'), issue(3, 'local')], epics: [] };
   await checkPortuguese('backlog', ['To do', 'In progress', 'Merged locally'], {
-    storage: { 'multiagent.backlogProject': 'p1', 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.backlogProject': 'p1', 'craftorio.currentProject': 'p1' },
     api: { listProjects: async () => PROJECTS, getBacklog: async () => data, syncBacklog: async () => data },
     after: (app) => app.click('#bl-mode', { dataset: { mode: 'kanban' } }),
   });

@@ -2,7 +2,9 @@
 // no app API or external scripts. Reads can be retried, but a lost answer is never replayed.
 function phoneGatesClient(text, state, progress) {
   const gateProgress = progress(text, state);
-  const key = 'multiagent-phone-token';
+  const key = 'craftorio-phone-token';
+  // T2c: a phone paired before the rename to Craftorio keeps its token under this key
+  const legacyKey = 'multiagent-phone-token';
   const byId = (id) => document.getElementById(id);
   const msg = byId('msg');
   const retry = byId('retry');
@@ -20,7 +22,7 @@ function phoneGatesClient(text, state, progress) {
   }
 
   function token() {
-    try { return localStorage.getItem(key); }
+    try { return localStorage.getItem(key) ?? localStorage.getItem(legacyKey); }
     catch { const error = new Error('Storage unavailable'); error.storage = true; throw error; }
   }
 
@@ -88,6 +90,7 @@ function phoneGatesClient(text, state, progress) {
       const r = await request('/gates.json', { headers: { Authorization: 'Bearer ' + tk } });
       if (r.status === 401) {
         localStorage.removeItem(key);
+        localStorage.removeItem(legacyKey);
         // Kept so an automatic refresh (visibilitychange, timer) still explains why the phone is unpaired.
         pairError = 'pair_invalid';
         showPair(pairError);
@@ -143,7 +146,7 @@ function phoneGatesClient(text, state, progress) {
 
   function answerRefused(code) {
     if (code === 401) {
-      try { localStorage.removeItem(key); } catch { /* the server already refused this device */ }
+      try { localStorage.removeItem(key); localStorage.removeItem(legacyKey); } catch { /* the server already refused this device */ }
       return 'pair_invalid';
     }
     return ({ 400: 'answer_invalid', 403: 'link_invalid', 409: 'ended' })[code] || 'answer_unknown';

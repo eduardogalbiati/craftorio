@@ -61,7 +61,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 async function overviewOf(project, { manifest = null, lang = 'en' } = {}) {
   let record = { ...BASE, ...clone(project) };
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [clone(record)],
       listWorkflows: async () => clone(INSTALLED),

@@ -28,7 +28,7 @@
     gaps: { label: 'Supervisor finds gaps in the approved draft', seq: { ready: [false, true], ok: [false, true] } },
     format: { label: 'Reviewer answers in the wrong format (supervisor steps in)', seq: { invalid_answers: { review: 3 } } },
   };
-  const LS = 'multiagent.duo';
+  const LS = 'craftorio.duo';
   const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
   // Setup of the two user-chosen roles; the supervisor is internal (fixed in the workflow, never shown).
   const config = {

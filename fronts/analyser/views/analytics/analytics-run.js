@@ -9,7 +9,7 @@
 // views/analytics/analytics.js (window.AnalyticsTabs).
 // Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, window.showRun.
 (() => {
-  const SS = 'multiagent.analytics.run';
+  const SS = 'craftorio.analytics.run';
   // a step or agent id as people read it (#245, display-name.js); the id stays in the tooltip
   // (`names`: the run's own id → name map, from its workflow's display names)
   const readable = (id, names) => (typeof displayName === 'function' ? displayName(id, names) : String(id || ''));

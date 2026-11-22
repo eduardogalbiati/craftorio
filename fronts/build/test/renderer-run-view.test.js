@@ -78,7 +78,7 @@ test('setRunView: remembers the choice on state and in localStorage; an invalid 
   const { helpers, state, storage } = loadHelpers();
   helpers.setRunView('chat');
   assert.equal(state.runView, 'chat');
-  assert.equal(storage.get('multiagent.runView'), 'chat');
+  assert.equal(storage.get('craftorio.runView'), 'chat');
   helpers.setRunView('nonsense');
   assert.equal(state.runView, 'details');
 });

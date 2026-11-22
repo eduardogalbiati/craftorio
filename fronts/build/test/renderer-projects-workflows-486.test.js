@@ -24,7 +24,7 @@ const PROJECTS = [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/o
 // manifest: the answer of api.projectManifest, or a function of its target
 function page({ manifest = null, projects = PROJECTS } = {}) {
   return loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => projects,
       listWorkflows: async () => WORKFLOWS,
@@ -77,7 +77,7 @@ const BACKLOG = {
 // The Backlog of the header project p1, issue #1 selected, the Assign dialog opened
 async function assignDialog(project) {
   const app = loadApp({
-    storage: { 'multiagent.backlogProject': 'p1', 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.backlogProject': 'p1', 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', ...project }],
       listWorkflows: async () => TASK_WORKFLOWS,

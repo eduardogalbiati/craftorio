@@ -19,7 +19,7 @@ const PROJECT = {
 function page() {
   const updates = [];
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       getSettings: async () => ({ setupDone: true }),
       listProjects: async () => [JSON.parse(JSON.stringify(PROJECT))],

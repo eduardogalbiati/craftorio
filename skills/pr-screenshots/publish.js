@@ -22,7 +22,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
-const MARKER = '<!-- multiagent:screenshots -->';
+const MARKER = '<!-- craftorio:screenshots -->';
 
 /** { host, project, number } from a GitHub PR or GitLab MR URL, or throws. */
 function parsePrUrl(platform, url) {

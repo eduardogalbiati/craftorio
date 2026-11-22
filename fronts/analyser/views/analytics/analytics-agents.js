@@ -8,7 +8,7 @@
 // views/analytics/analytics.js (window.AnalyticsTabs), which gives load() its date range (usesRange).
 // Uses app.js globals: api, esc, fmtUsd, fmtTok, fmtNum, dateOf, errMsg; window.Robots (robots.js).
 (() => {
-  const LS = 'multiagent.analytics.agents';
+  const LS = 'craftorio.analytics.agents';
   const PAGE = 50;
   const DAY = 864e5;
   const AGENTS = [

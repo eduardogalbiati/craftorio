@@ -199,7 +199,7 @@ async function projectPage(workflows, lang = 'en') {
       getBacklog: async () => ({ issues: [] }),
       refactorCadence: async () => ({ on: false, every: 10, since: null }),
     },
-    storage: { 'multiagent.nextSteps': JSON.stringify({ [PID]: 'open' }) },
+    storage: { 'craftorio.nextSteps': JSON.stringify({ [PID]: 'open' }) },
   });
   await app.boot();
   if (lang !== 'en') app.sandbox.I18n.setLanguage(lang);

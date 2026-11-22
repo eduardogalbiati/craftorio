@@ -40,7 +40,7 @@ test('#744 openPoIssue opens the drawer in issue mode (Register an issue)', { ti
 
 // ---- the step marked done: an issue filed after "Open the PO" is saved for the Next steps card ----------
 // project.js reads localStorage multiagent.nextStepsPoIssue = { <projectId>: { issue, url } }.
-const MARK_KEY = 'multiagent.nextStepsPoIssue';
+const MARK_KEY = 'craftorio.nextStepsPoIssue';
 const DRAFT = [{ role: 'po', mode: 'issue', ts: 1, text: 'Here is the draft.', issue: { draft: { title: 'Export the city', body: 'As an owner…', labels: [], related: [] } } }];
 const FILED = { number: 42, url: 'https://github.com/o/demo/issues/42' };
 

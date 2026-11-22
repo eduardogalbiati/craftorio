@@ -13,7 +13,7 @@ const MOCK = '<button id="pay" onclick="this.textContent=\'Paid\'">Pay now</butt
 
 async function app() {
   const a = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),

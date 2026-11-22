@@ -18,17 +18,17 @@ test('#671 resolve lists the projects and picks the first with a repository when
 });
 
 test('#671 resolve keeps the remembered project while it still exists', async () => {
-  const app = loadApp({ storage: { 'multiagent.currentProject': 'p2' }, api: { listProjects: async () => PROJECTS } });
+  const app = loadApp({ storage: { 'craftorio.currentProject': 'p2' }, api: { listProjects: async () => PROJECTS } });
   assert.equal(await app.run('CurrentProject.resolve()'), 'p2');
 });
 
 test('#671 resolve drops a remembered project that no longer exists', async () => {
-  const app = loadApp({ storage: { 'multiagent.currentProject': 'gone' }, api: { listProjects: async () => PROJECTS } });
+  const app = loadApp({ storage: { 'craftorio.currentProject': 'gone' }, api: { listProjects: async () => PROJECTS } });
   assert.equal(await app.run('CurrentProject.resolve()'), 'p1');
 });
 
 test('#671 resolve answers the remembered project when the projects cannot be listed', async () => {
-  const app = loadApp({ storage: { 'multiagent.currentProject': 'p1' }, api: { listProjects: async () => { throw new Error('offline'); } } });
+  const app = loadApp({ storage: { 'craftorio.currentProject': 'p1' }, api: { listProjects: async () => { throw new Error('offline'); } } });
   assert.equal(await app.run('CurrentProject.resolve()'), 'p1');
 });
 

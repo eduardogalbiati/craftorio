@@ -22,7 +22,7 @@ const PROJECTS = [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/o
 
 function page({ storage = {} } = {}) {
   return loadApp({
-    storage: { 'multiagent.currentProject': 'p1', ...storage },
+    storage: { 'craftorio.currentProject': 'p1', ...storage },
     api: {
       listProjects: async () => PROJECTS,
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -94,7 +94,7 @@ test('#730 the Health tab reads the facts and the Oracle\'s report, with no Fact
 });
 
 test('#730 a project last shown on the old Refactor tab opens on the Overview', async (t) => {
-  const app = await openProject(t, { storage: { 'multiagent.projectTabs': JSON.stringify({ p1: 'refactor' }) } });
+  const app = await openProject(t, { storage: { 'craftorio.projectTabs': JSON.stringify({ p1: 'refactor' }) } });
   assert.deepEqual(selected(app), ['Overview']);
 });
 

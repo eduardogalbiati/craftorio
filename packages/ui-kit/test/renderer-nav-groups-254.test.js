@@ -188,7 +188,7 @@ test('a click on a group\'s title folds it (aria-expanded false, its items hidde
   assert.equal(code.title.getAttribute('aria-expanded'), 'false');
   assert.equal(code.items.classList.contains('hidden'), true);
   assert.equal(code.el.classList.contains('collapsed'), true);
-  assert.deepEqual(JSON.parse(app.sandbox.localStorage.getItem('multiagent.navCollapsed')), ['build']);
+  assert.deepEqual(JSON.parse(app.sandbox.localStorage.getItem('craftorio.navCollapsed')), ['build']);
   // the other groups stay open
   assert.equal(navGroup(app, 'plan').items.classList.contains('hidden'), false);
   code.title.onclick();
@@ -197,7 +197,7 @@ test('a click on a group\'s title folds it (aria-expanded false, its items hidde
 });
 
 test('a group folded in a previous window is drawn folded', () => {
-  const app = loadApp({ storage: { 'multiagent.navCollapsed': JSON.stringify(['ai']) } });
+  const app = loadApp({ storage: { 'craftorio.navCollapsed': JSON.stringify(['ai']) } });
   const ai = navGroup(app, 'ai');
   assert.equal(ai.title.getAttribute('aria-expanded'), 'false');
   assert.equal(ai.items.classList.contains('hidden'), true);

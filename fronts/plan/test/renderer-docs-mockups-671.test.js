@@ -59,7 +59,7 @@ const APPROVAL_GATE = { type: 'approval.requested', approval_id: 'a7', step_id: 
 // The Documents screen of a project with a folder; `api` overrides the defaults.
 async function editorApp(api = {}) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r', folder: 'C:/repo' }],
       getSettings: async () => ({ lastProject: 'p1' }),

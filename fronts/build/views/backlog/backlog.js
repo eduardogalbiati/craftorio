@@ -55,20 +55,20 @@
   const { DEFAULT_PLATFORM, platformOrDefault: platformOf, requestRef } = window.Platforms;
   const PLATFORMS = { ...Object.fromEntries(window.Platforms.PLATFORMS.map((p) => [p.id, { label: p.label }])), bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;
-  const MODE_KEY = 'multiagent.backlogMode';
+  const MODE_KEY = 'craftorio.backlogMode';
   // #217: the Board tab's last view (list or kanban) and the Roadmap's Show all (#268: its Planned |
   // All switch, All when set) with its date range
-  const BOARD_KEY = 'multiagent.backlogBoard';
-  const SHOW_ALL_KEY = 'multiagent.roadmapShowAll';
-  const SINCE_KEY = 'multiagent.roadmapSince';
-  const RELEASE_KEY = 'multiagent.roadmapRelease'; // #291: the Releases filter ('' all, 'next', a version)
-  const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
-  const INPUTS_KEY = 'multiagent.backlogInputs.'; // + project id + workflow file: the Assign dialog's last values (#446)
-  const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
-  const SORT_KEY = 'multiagent.backlogSort';
+  const BOARD_KEY = 'craftorio.backlogBoard';
+  const SHOW_ALL_KEY = 'craftorio.roadmapShowAll';
+  const SINCE_KEY = 'craftorio.roadmapSince';
+  const RELEASE_KEY = 'craftorio.roadmapRelease'; // #291: the Releases filter ('' all, 'next', a version)
+  const WORKFLOW_KEY = 'craftorio.backlogWorkflow';
+  const INPUTS_KEY = 'craftorio.backlogInputs.'; // + project id + workflow file: the Assign dialog's last values (#446)
+  const LABELS_KEY = 'craftorio.backlogLabels.'; // + project id
+  const SORT_KEY = 'craftorio.backlogSort';
   const SORTS = ['complexity', 'impact', 'updated'];
   // #238: the one-time banner of the issues still labelled with the retired `deprioritized` (per project)
-  const DEPRIORITIZED_KEY = 'multiagent.backlogDeprioritized';
+  const DEPRIORITIZED_KEY = 'craftorio.backlogDeprioritized';
   const ISSUE_TRACKER = 'issue.yaml'; // #648: issue-tracker.yaml became issue.yaml
   const REFRESH = 'backlog-refresh.yaml';
   // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)

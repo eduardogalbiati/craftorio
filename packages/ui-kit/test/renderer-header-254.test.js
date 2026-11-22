@@ -35,8 +35,8 @@ const EMPTY_BACKLOG = { platform: 'github', syncedAt: '2026-10-01T00:00:00Z', is
 // the page with two projects; every place that remembered a project before #254 says p1
 function page(extra = {}) {
   return loadApp({
-    storage: { 'multiagent.backlogProject': 'p1', 'multiagent.analytics': JSON.stringify({ tab: 'performance', project: 'p1' }), ...(extra.storage || {}) },
-    session: { 'multiagent.analytics.project': 'p1' },
+    storage: { 'craftorio.backlogProject': 'p1', 'craftorio.analytics': JSON.stringify({ tab: 'performance', project: 'p1' }), ...(extra.storage || {}) },
+    session: { 'craftorio.analytics.project': 'p1' },
     api: {
       listProjects: async () => PROJECTS,
       getSettings: async () => ({ lastProject: 'p1' }),
@@ -88,7 +88,7 @@ test('the Oracle button is no longer added to the sidebar: it sits in the header
 });
 
 test('the header selector lists the projects and selects the default one (the last used)', async () => {
-  const app = page({ storage: { 'multiagent.currentProject': 'p2' } });
+  const app = page({ storage: { 'craftorio.currentProject': 'p2' } });
   await app.boot();
   const sel = app.el('#header-project');
   assert.match(text(sel.innerHTML), /Project One/);
@@ -159,7 +159,7 @@ test('Analytics (Repository performance) analyses the header\'s project', async 
 // whose Finish opens the new project; the tests of a project created by the dialog went with it.
 
 test('a notification\'s project (focusProject) becomes the app\'s, and the Product Owner opens on it', async () => {
-  const app = page({ storage: { 'multiagent.currentProject': 'p1' } });
+  const app = page({ storage: { 'craftorio.currentProject': 'p1' } });
   await app.boot();
   app.run("window.BacklogActions.focusProject('p2')");
   app.run("showView('backlog')");

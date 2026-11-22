@@ -19,6 +19,8 @@ const CALLBACK_PATH = '/auth/callback';
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 // the last signed-in user, kept so that an offline start stays signed in
 const ACCOUNT_KEY = 'craftorio-account';
+// T2c: the key before the rename to Craftorio, read when the new one is unset and removed with it
+const LEGACY_ACCOUNT_KEY = 'multiagent-account';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const PROVIDERS = [
@@ -101,7 +103,15 @@ function createAuth({
   }
   const notify = () => { const s = state(); for (const cb of listeners) cb(s); };
 
-  const stored = () => { try { return JSON.parse(storage.getItem(ACCOUNT_KEY))?.user || null; } catch { return null; } };
+  const stored = () => {
+    for (const key of [ACCOUNT_KEY, LEGACY_ACCOUNT_KEY]) {
+      try {
+        const user = JSON.parse(storage.getItem(key))?.user;
+        if (user) return user;
+      } catch { /* the old key, then none */ }
+    }
+    return null;
+  };
 
   // Best effort: records "last seen", the app version and the OS of the signed-in user, once per
   // start and then at most once a day. Never awaited; a failure is only logged. `at` is when the
@@ -134,7 +144,7 @@ function createAuth({
     } else if (reached) {
       // no session (signed out, or it expired): an offline start must not bring the user back
       user = null;
-      storage.removeItem(ACCOUNT_KEY);
+      storage.removeItem(ACCOUNT_KEY); storage.removeItem(LEGACY_ACCOUNT_KEY);
     } else {
       // the account server can't be reached: a user who signed in once stays signed in
       user = stored();
@@ -202,7 +212,7 @@ function createAuth({
     if (configured) {
       try { await client.auth.signOut({ scope: 'local' }); } catch { /* the local session is dropped anyway */ }
     }
-    storage.removeItem(ACCOUNT_KEY);
+    storage.removeItem(ACCOUNT_KEY); storage.removeItem(LEGACY_ACCOUNT_KEY);
     user = null;
     touchedAt = null;
     notify();
@@ -211,7 +221,7 @@ function createAuth({
 
   if (client) {
     client.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT' && user) { user = null; storage.removeItem(ACCOUNT_KEY); notify(); }
+      if (event === 'SIGNED_OUT' && user) { user = null; storage.removeItem(ACCOUNT_KEY); storage.removeItem(LEGACY_ACCOUNT_KEY); notify(); }
     });
   }
 

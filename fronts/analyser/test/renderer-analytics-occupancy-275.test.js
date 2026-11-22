@@ -24,7 +24,7 @@ const vm = require('vm');
 const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 const FILE = pageFileOf('views/analytics/analytics-occupancy.js');
-const LS = 'multiagent.analytics.occupancy';
+const LS = 'craftorio.analytics.occupancy';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // ---- fixture: two local days, oldest first as packages/engine/domains/run/occupancy.js builds them -------------------------

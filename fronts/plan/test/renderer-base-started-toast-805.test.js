@@ -10,7 +10,7 @@ const PROJECT = { id: 'p1', name: 'Project One', repo: 'https://github.com/o/r',
 
 async function appAnswering(answer) {
   const app = loadApp({
-    storage: { 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [PROJECT],
       getSettings: async () => ({ lastProject: 'p1' }),

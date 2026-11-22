@@ -16,7 +16,7 @@
 // Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun.
 (() => {
   const $a = (sel) => document.querySelector(sel);
-  const LS = 'multiagent.analytics';
+  const LS = 'craftorio.analytics';
   const extraTabs = () => Object.values(window.AnalyticsTabs || {}).sort((a, b) => (a.order || 0) - (b.order || 0));
   const extraTab = (id) => (window.AnalyticsTabs || {})[id] || null;
   const TAB_IDS = () => ['usage', 'performance', ...extraTabs().map((t) => t.id)];

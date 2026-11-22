@@ -16,7 +16,7 @@ const ROADMAP = { state: 'planned', stages: [{ id: 'st9', name: 'Assigned', note
 
 async function assigned(answer) {
   const app = loadApp({
-    storage: { 'multiagent.backlogProject': 'p1', 'multiagent.currentProject': 'p1' },
+    storage: { 'craftorio.backlogProject': 'p1', 'craftorio.currentProject': 'p1' },
     api: {
       listProjects: async () => [{ id: 'p1', name: 'Project One', repo: 'https://github.com/o/r' }],
       getSettings: async () => ({ lastProject: 'p1' }),

@@ -14,7 +14,7 @@
 // estimate from api.architectureEstimate (#wf-estimate) before the start; #846: its Start is refused
 // (#start-error) while the project's onboarding still runs (window.ProjectWizard.analyzing, the build front).
 
-const LS_KEY = 'multiagent.inputs';
+const LS_KEY = 'craftorio.inputs';
 const PIPE = 'pipe:';
 // Inputs filled with the chosen project's folder.
 const isPathInput = (key) => /path|dir/i.test(key);

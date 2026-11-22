@@ -45,7 +45,7 @@ function apiWith(screens) {
 }
 
 async function mockups(screens = []) {
-  const app = loadApp({ storage: { 'multiagent.currentProject': 'p1' }, api: apiWith(screens) });
+  const app = loadApp({ storage: { 'craftorio.currentProject': 'p1' }, api: apiWith(screens) });
   await app.boot();
   app.run("showView('mockups')");
   await app.settle(10);
