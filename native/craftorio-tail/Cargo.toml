@@ -8,7 +8,7 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-jiff = "0.2"
+jiff = "1.0"
 serde_json = { workspace = true, features = ["preserve_order"] }
 
 # turns on the console's ANSI colours on conhost (Windows Terminal has them on already)
