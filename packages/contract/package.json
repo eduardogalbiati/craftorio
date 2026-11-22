@@ -1,0 +1,12 @@
+{
+  "name": "@craftorio/contract",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The channels the app and the engine speak (names, params, schemas and their hash), generated from the engine by npm run contract.",
+  "license": "MIT",
+  "author": "Eduardo Galbiati",
+  "main": "index.js",
+  "scripts": {
+    "test": "node ../../scripts/test.js --workspace ."
+  }
+}
