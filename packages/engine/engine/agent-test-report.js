@@ -143,18 +143,35 @@ async function* reporter(source) {
   yield `${JSON.stringify(c.done())}\n`;
 }
 
-// The agent report in a suite's output (its last JSON line with this reporter), or null.
+// A task runner's line prefix (Turborepo's "@scope/pkg:test: ", "//:test:root: "), before a report
+const TASK_PREFIX = /^[@\w./-]+(?::[\w:-]+)+: (?=\{)/;
+
+// The agent report in a suite's output, or null. One report: that one (the last JSON line with this
+// reporter). Several (T6: a monorepo runner such as Turborepo prints one per workspace, each line
+// behind the task's prefix): one report adding their counts and their failures, the longest duration.
 function parseAgentReport(text) {
-  const lines = String(text || '').split(/\r?\n/);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i].trim();
+  const reports = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const l = line.trim().replace(TASK_PREFIX, '');
     if (!l.startsWith('{') || !l.includes(`"reporter":"${REPORTER}"`)) continue;
     try {
       const r = JSON.parse(l);
-      if (r && r.reporter === REPORTER && Array.isArray(r.failures)) return r;
+      if (r && r.reporter === REPORTER && Array.isArray(r.failures)) reports.push(r);
     } catch { /* not the report */ }
   }
-  return null;
+  if (reports.length <= 1) return reports[0] || null;
+  const sum = (k) => reports.reduce((n, r) => n + (Number(r[k]) || 0), 0);
+  return {
+    ...reports.at(-1),
+    passed: sum('passed'),
+    failed: sum('failed'),
+    skipped: sum('skipped'),
+    todo: sum('todo'),
+    cancelled: sum('cancelled'),
+    duration_ms: Math.max(...reports.map((r) => Number(r.duration_ms) || 0)),
+    failures: reports.flatMap((r) => r.failures),
+    reports: reports.length,
+  };
 }
 
 module.exports = {

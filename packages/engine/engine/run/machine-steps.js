@@ -440,11 +440,27 @@ const methods = {
     if (output.scope === 'files' && output.status === 'pass' && !this.fullSuitePassed && !whole) {
       const affected = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files: selection.files };
       if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
-      output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
+      const wholeCmd = this.wholeCommand(step);
+      output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge${wholeCmd ? ` (\`${wholeCmd.command}\`: the workspaces the change reaches, from the cache where nothing they read changed)` : ''}` }, logName: `suite-${st.visits}-full`, ...(wholeCmd || {}) });
       output.affected = affected;
     }
     if (lastWholeRound([output]) && tested.commit) this.wholeSuiteRun = { round: st.visits, commit: tested.commit, tests: (output.passed || 0) + (output.failed || 0) };
     return output;
+  },
+
+  // T6: the command of a `scope: affected` step's whole round, when the step names one (`whole_command`,
+  // e.g. a monorepo's `npm run test:affected`, which runs every test of the workspaces the change reaches
+  // through Turborepo): { command, env } with the run's base (TURBO_SCM_BASE, what the change is measured
+  // from) and the workspace's shared cache (TURBO_CACHE_DIR, so one run reuses another's results), both
+  // added to the suite's passthrough; null: the step's own command runs whole
+  wholeCommand(step) {
+    const command = step.whole_command ? render(String(step.whole_command), this.ctx).trim() : '';
+    if (!command) return null;
+    const root = path.dirname(path.dirname(this.runDir));
+    const turbo = /** @type {Record<string, string>} */ ({ TURBO_CACHE_DIR: path.join(root, 'cache', 'turbo') });
+    if (this.worktree?.base) turbo.TURBO_SCM_BASE = this.worktree.base;
+    // the suite's environment is an allowlist (#470, child-env.js): these two pass through it
+    return { command, env: { ...process.env, ...capabilities.agentEnv(), ...turbo }, passthrough: [...this.envPassthrough(), ...Object.keys(turbo)] };
   },
 
   // A suite step with `files:` runs only the files it lists; `expect: red|green` (#355) checks them.

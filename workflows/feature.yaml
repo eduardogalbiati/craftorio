@@ -361,6 +361,13 @@ inputs:
     label: Test command
     group: Tests
     description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+  # T6: the command of the suite step's whole round (once per run, after the affected test files pass)
+  whole_test_command:
+    type: string
+    default: ""
+    label: Whole-round test command
+    group: Tests
+    description: "What the suite step runs for its whole round, once per run after the affected test files pass (e.g. npm run test:affected in a Turborepo monorepo: every test of the workspaces the change reaches, from the cache where nothing changed). Empty: the test command runs whole."
   # #404: the project's fast rule checks, run after each develop commit (rule_check)
   check_command:
     type: string
@@ -2020,6 +2027,8 @@ steps:
     type: suite
     command: "{{ inputs.test_command }}"
     scope: affected
+    # T6: its whole round (empty: `command` runs whole)
+    whole_command: "{{ inputs.whole_test_command }}"
     # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
     coverage: true
     transitions:

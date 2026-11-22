@@ -135,3 +135,15 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
     result) is `blocked`, not `fail`: the test writer is not sent to fix it, the gate says the suite
     could not run. Filter `suite_scope` (`{{ o | suite_scope('scenario') }}`): a round as "focused on
     2 files: …, 1.5 min; then whole: …" or "whole: …", for the release summary.
+
+## The whole round's own command (`whole_command`, T6)
+
+A `scope: affected` step may name the command of its whole round (the one run per run, after the
+affected test files pass): `whole_command: "{{ inputs.whole_test_command }}"`. Empty, the step's
+`command` runs whole, as before. This repository's hero workflows set it to `npm run test:affected`
+(`scripts/turbo-affected.js`): every test of the workspaces the change reaches, through Turborepo,
+from the cache where nothing they read changed. The round gets `TURBO_SCM_BASE` (the run's base)
+and `TURBO_CACHE_DIR` (`<workspace>/cache/turbo`, shared by the runs), both added to the suite's
+passthrough (#470). Such a runner prints one agent report per workspace, each behind the task's
+prefix; `parseAgentReport` (`packages/engine/engine/agent-test-report.js`) reads them as one report,
+adding the counts and the failures. The base check of each roadmap stage still runs the whole suite.
