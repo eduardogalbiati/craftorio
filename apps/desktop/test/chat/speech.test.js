@@ -41,7 +41,7 @@ function readySettings(dir, extra = {}) {
   return { voiceCommand: FAKE_CLI, voiceModel: model, voiceLanguage: 'pt', ...extra };
 }
 
-const tempVoiceDirs = () => fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('multiagent-voice-'));
+const tempVoiceDirs = () => fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('craftorio-voice-'));
 
 test('transcribe(): returns the CLI\'s text, joining its lines and dropping [BLANK_AUDIO] markers', async (t) => {
   const dir = tmp(t);

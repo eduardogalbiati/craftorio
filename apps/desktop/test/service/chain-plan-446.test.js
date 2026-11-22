@@ -15,7 +15,7 @@ const { ISSUE_WORKFLOW, makeService, roadmapIssue, untilTrue } = require('@craft
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 
-const SOURCE_WORKFLOW = `apiVersion: multiagent/v1
+const SOURCE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-chain-source

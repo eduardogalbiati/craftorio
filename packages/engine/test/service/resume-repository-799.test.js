@@ -50,7 +50,7 @@ const flowSteps = `steps:
 `;
 
 // plan → develop → finish, the developer's model and effort chosen by inputs
-const FLOW = `apiVersion: multiagent/v1
+const FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-799
@@ -62,7 +62,7 @@ agents:
 ${flowSteps}`;
 
 // the same steps, with only the developer's model as an input
-const MODEL_ONLY_FLOW = `apiVersion: multiagent/v1
+const MODEL_ONLY_FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-799-model
@@ -73,7 +73,7 @@ ${MODEL_INPUT}agents:
 ${flowSteps}`;
 
 // plan → approve (a human gate) → work: `work` stops past a decided gate
-const GATE_FLOW = `apiVersion: multiagent/v1
+const GATE_FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-799-gate
@@ -93,7 +93,7 @@ steps:
 `;
 
 // a workflow only the repository declares; `extra`: more steps
-const repoFlow = (extra = '') => `apiVersion: multiagent/v1
+const repoFlow = (extra = '') => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: repo-flow

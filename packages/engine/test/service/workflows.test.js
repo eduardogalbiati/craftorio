@@ -36,7 +36,7 @@ test('builder: bundled workflows open read-only and clone into an editable copy'
 
 test('listWorkflows: declared outputs are the engine\'s own map (name -> { type, description, value }); none declared is {}', (t) => {
   const { api, service } = makeService(t);
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: out-map
@@ -61,7 +61,7 @@ outputs:
 
 test('listWorkflows (#224): an agent\'s `color` from the YAML reaches the renderer; an agent without one has none', (t) => {
   const { api, service } = makeService(t);
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: colored
@@ -85,7 +85,7 @@ steps:
 test('workflows:pipelines (#135): a valid pipeline returns its stages, each with its target, condition, inputs and map', (t) => {
   const { api, service } = makeService(t);
   const ws = service.workspace();
-  fs.writeFileSync(path.join(ws.workflows, 'fixture-pipe-a.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-pipe-a.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pipe-a
@@ -100,7 +100,7 @@ outputs:
     type: array
     value: "{{ steps.work.output.issues }}"
 `);
-  fs.writeFileSync(path.join(ws.workflows, 'fixture-pipe-b.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-pipe-b.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pipe-b
@@ -153,7 +153,7 @@ test('listPipelines: a pipeline without stages, or a stage missing its workflow,
 
 test('listWorkflows: merge is "local" for a workflow whose worktree never pushes (orchestrator.worktree.remote: false)', (t) => {
   const { api, service } = makeService(t);
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-merge-local.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-merge-local.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-merge-local
@@ -171,7 +171,7 @@ steps:
 
 test('listWorkflows: merge is "remote" for an ordinary worktree workflow (a branch and a PR/MR)', (t) => {
   const { api, service } = makeService(t);
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-merge-remote.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-merge-remote.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-merge-remote
@@ -190,7 +190,7 @@ steps:
 test('listWorkflows: merge is "none" for a workflow with no worktree at all, and for one whose metadata says it never merges', (t) => {
   const { api, service } = makeService(t);
   const ws = service.workspace();
-  fs.writeFileSync(path.join(ws.workflows, 'fixture-merge-none.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-merge-none.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-merge-none
@@ -201,7 +201,7 @@ steps:
     agent: a
     prompt: "do it"
 `);
-  fs.writeFileSync(path.join(ws.workflows, 'fixture-merge-never.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-merge-never.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-merge-never
@@ -230,7 +230,7 @@ test('workflows:pipelines (#135): a fresh workspace already lists the bundled de
 test('listWorkflows (#286): an agent effort on a provider without effort_args comes back as a warning; with effort_args, and in the bundled ai-development-local-hero, none', (t) => {
   const { api, service } = makeService(t);
   const yamlOf = (name, effortArgs) => [
-    'apiVersion: multiagent/v1', 'kind: Workflow', 'metadata:', `  name: ${name}`,
+    'apiVersion: craftorio/v1', 'kind: Workflow', 'metadata:', `  name: ${name}`,
     'providers:', '  claude:', '    type: claude-code', '    command: claude', '    args: ["-p", "--model", "{{ model }}"]',
     ...(effortArgs ? ['    effort_args: ["--effort", "{{ effort }}"]'] : []),
     'agents:', '  reviewer: { provider: claude, model: m, session: ephemeral, effort: high }',

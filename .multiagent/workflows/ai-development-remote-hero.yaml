@@ -146,7 +146,7 @@
 #     (installed once per lockfile) and prepares the test step's base checkout (base_worktree).
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

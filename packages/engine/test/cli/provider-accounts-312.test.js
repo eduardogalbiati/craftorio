@@ -44,7 +44,7 @@ const PROVIDERS = `providers:
     stdin_arg: "-"
 `;
 
-const ONE_STEP = `apiVersion: multiagent/v1
+const ONE_STEP = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-accounts-312 }
 ${PROVIDERS}
@@ -56,7 +56,7 @@ steps:
     prompt: "Write the document."
 `;
 
-const GATED = `apiVersion: multiagent/v1
+const GATED = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-accounts-gate-312 }
 ${PROVIDERS}
@@ -74,7 +74,7 @@ steps:
     prompt: "Revise the draft."
 `;
 
-const CHAIN = `apiVersion: multiagent/v1
+const CHAIN = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-accounts-chain-312 }
 ${PROVIDERS}

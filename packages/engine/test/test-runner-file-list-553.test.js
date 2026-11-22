@@ -12,7 +12,7 @@ const { spawnSync } = require('child_process');
 const { SUITE_SLOT_ENV } = require('../engine/machine-slot');
 
 const root = path.join(__dirname, '..', '..', '..');
-const REPORTER = 'multiagent-agent';
+const REPORTER = 'craftorio-agent';
 
 function tmpDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-file-list-553-'));
@@ -165,6 +165,6 @@ test('#597 outside agent mode the spec report reaches stdout and a failure fails
   assert.equal(r.error?.code, undefined, 'the run ends on its own');
   assert.match(r.stdout, /spec one passes/);
   assert.match(r.stdout, /spec two fails/);
-  assert.doesNotMatch(r.stdout, /"reporter":"multiagent-agent"/, 'no agent JSON line outside agent mode');
+  assert.doesNotMatch(r.stdout, /"reporter":"craftorio-agent"/, 'no agent JSON line outside agent mode');
   assert.equal(r.status, 1);
 });

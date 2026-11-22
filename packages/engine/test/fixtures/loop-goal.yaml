@@ -1,6 +1,6 @@
 # Test fixture: /goal + /loop with delegation and a human gate with choices.
 # The mock returns ci_status in the sequence pending → failed → pending → success.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-loop-goal

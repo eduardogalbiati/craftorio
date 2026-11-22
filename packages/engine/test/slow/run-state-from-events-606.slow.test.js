@@ -12,7 +12,7 @@ const os = require('os');
 const path = require('path');
 const { root, readLog, liveState, replayState, recordedRun } = require('../run-state-606');
 
-const FIXTURE = `apiVersion: multiagent/v1
+const FIXTURE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-run-state-606

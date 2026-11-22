@@ -12,7 +12,7 @@ const { ISSUE_WORKFLOW, makeService, until, untilTrue } = require('./helpers');
 // Three small fixture workflows chained like a pipeline: stage 1 has a review gate (accept/fail,
 // like the issue tracker's), stage 2 and 3 take the previous stage's declared output and add to it,
 // so a mapped value can be told apart from the workflow's own default.
-const PL_ONE = `apiVersion: multiagent/v1
+const PL_ONE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: pl-one
@@ -42,7 +42,7 @@ outputs:
     value: "{{ inputs.task }} done"
 `;
 
-const PL_TWO = `apiVersion: multiagent/v1
+const PL_TWO = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: pl-two
@@ -61,7 +61,7 @@ outputs:
     value: "{{ inputs.summary }} -> stage2"
 `;
 
-const PL_THREE = `apiVersion: multiagent/v1
+const PL_THREE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: pl-three

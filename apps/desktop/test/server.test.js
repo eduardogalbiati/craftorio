@@ -12,7 +12,7 @@ const { createService } = require('@craftorio/engine/service');
 const { createServer } = require('@craftorio/engine/server');
 
 const TOKEN = 'test-token-0123456789abcdef';
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-server

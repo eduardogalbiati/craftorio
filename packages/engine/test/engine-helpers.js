@@ -163,7 +163,7 @@ async function until(fn, timeoutMs = 20000) {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
-const CHILD_ECHO_YAML = `apiVersion: multiagent/v1
+const CHILD_ECHO_YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: child-echo }
 inputs:
@@ -181,7 +181,7 @@ outputs:
 `;
 // A single step with no on_error: the missing skill fails the step, and nothing catches it, so
 // the whole child run ends failed (same mechanism as the fanout/on-error fixtures).
-const CHILD_FAIL_YAML = `apiVersion: multiagent/v1
+const CHILD_FAIL_YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: child-fail }
 agents:
@@ -192,7 +192,7 @@ steps:
     skills: [does-not-exist]
     prompt: "do it"
 `;
-const CHILD_GATE_YAML = `apiVersion: multiagent/v1
+const CHILD_GATE_YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: child-gate }
 agents:

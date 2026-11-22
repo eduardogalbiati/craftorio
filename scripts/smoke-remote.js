@@ -22,7 +22,7 @@ const { FILE } = require('@craftorio/desktop/host/engine-connection');
 
 process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 const out = path.resolve(process.argv.slice(2).find((a) => !a.startsWith('-') && !a.endsWith('.js')) || 'smoke-remote');
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-remote-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-smoke-remote-'));
 const appWorkspace = path.join(scratch, 'app-workspace');
 const userData = path.join(scratch, 'user-data');
 for (const d of [appWorkspace, userData, path.join(scratch, 'engine-workspace'), path.join(scratch, 'home')]) fs.mkdirSync(d, { recursive: true });

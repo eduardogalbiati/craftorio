@@ -28,7 +28,7 @@ const { makeService, untilTrue } = require('./helpers');
 const arch = require('../../domains/oracle/oracle-architecture');
 
 // a workflow linked to a project through its repo_path, waiting at a gate (a run that keeps running)
-const HOLD_WORKFLOW = `apiVersion: multiagent/v1
+const HOLD_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: remove-hold

@@ -1,6 +1,6 @@
 # Test fixture (#276, test/memory-guard-suite-276.test.js): an agent step, then a suite step run by
 # the orchestrator. A failing suite goes back to the agent (at most twice), then to a gate.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-memory-guard-suite

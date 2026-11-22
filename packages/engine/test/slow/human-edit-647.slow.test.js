@@ -14,7 +14,7 @@ const { WorkflowRun } = require('../../engine/workflow');
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { tempWorkflow, until } = require('../engine-helpers');
 
-const YAML = `apiVersion: multiagent/v1
+const YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: human-edit-run-647 }
 agents:

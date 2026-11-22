@@ -145,7 +145,7 @@ if (inspector) say('warning: an inspector is enabled (NODE_OPTIONS or execArgv):
 if (process.env.NODE_TEST_CONTEXT) say(`warning: NODE_TEST_CONTEXT=${process.env.NODE_TEST_CONTEXT} is set: node --test acts as a test file, not a runner`);
 // Per-file wall times (scripts/test-reporter-slowest.js, #305), written to a temp file and printed
 // after the report: the five slowest files, the suite's critical path.
-const timesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-test-times-'));
+const timesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-test-times-'));
 const coverage = process.argv.includes('--experimental-test-coverage');
 // One group per budget (#402), the shortest first; the override gives every file the same budget
 const budgetOf = new Map(files.map((f) => [f, testTimeoutMs(f)]));
@@ -300,7 +300,7 @@ async function main() {
   say('\n== Full flow in mock mode ==');
   // Fresh temporary workspace: the tests do not write to the user's workspace or the registry, and the
   // bundled skills and workflows are seeded from scratch. Kept on failure for inspection.
-  const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-test-ws-'));
+  const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-test-ws-'));
   // the developer asks the owner once (#567): --auto-approve answers with its default
   const status = run(['scripts/run.js', '--mock', '--auto-approve', '--mock-ask', 'develop', '--task', 'Engine test'], {
     CRAFTORIO_MOCK_DELAY_SCALE: '0.2',

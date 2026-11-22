@@ -19,7 +19,7 @@ Feature: Asking for a fix from a pull request's PR monitor, and returning to the
   #      from the file's `e2ePermissions` ({ <login>: 'write' | 'read' }, 'read' when absent), as
   #      { permission }; each comment also carries gh's authorAssociation (COLLABORATOR / NONE);
   #   3. record a reply on a thread (whichever host call the engine uses for it) in
-  #      global.multiagentE2E.prActions as { action: 'reply', number, thread: <the thread's id> }, and
+  #      global.craftorioE2E.prActions as { action: 'reply', number, thread: <the thread's id> }, and
   #      rewrite the file with that reply added to the thread, the thread left unresolved (resolving it
   #      is the reviewer's).
   # - The simulated developer's fix turn spends tokens (a number above zero), as any simulated turn.

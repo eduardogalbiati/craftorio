@@ -45,7 +45,7 @@ function startToGate(service, api, file = 'fixture-resume.yaml') {
 }
 
 // A gate with choices: it takes one of its choice ids, never true/false.
-const CHOICE_WORKFLOW = `apiVersion: multiagent/v1
+const CHOICE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-choice-333

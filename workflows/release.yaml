@@ -55,7 +55,7 @@
 # release there and marks its issues Released.
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

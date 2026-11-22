@@ -1,6 +1,6 @@
 # Test fixture: /loop steps with `wait:`. Between the agent's turns the engine runs the probe
 # (injected by the test) and calls the agent only on news; CI all green finishes `ci` directly.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-wait

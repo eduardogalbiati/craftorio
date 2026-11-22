@@ -15,7 +15,7 @@
 // Close's confirmation: a role="dialog" with the button "Close pull request".
 //
 // The platform's side (the feature's comment): the E2E launch records each merge or close the app asks
-// for in global.multiagentE2E.prActions, and a merge fails with the PR file's `merge_fail`.
+// for in global.craftorioE2E.prActions, and a merge fails with the PR file's `merge_fail`.
 
 const fs = require('fs');
 const path = require('path');
@@ -29,7 +29,7 @@ const READ_TIMEOUT = 60000;
 const card = (page) => page.getByTestId('pr-monitor-card').filter({ visible: true }).first();
 const closeDialog = (page) => page.getByRole('dialog').filter({ visible: true }).filter({ has: page.getByRole('button', { name: 'Close pull request', exact: true }) });
 
-const prActions = (e2e) => e2e.app.evaluate(() => global.multiagentE2E?.prActions || []);
+const prActions = (e2e) => e2e.app.evaluate(() => global.craftorioE2E?.prActions || []);
 
 // ---- what the platform says ---------------------------------------------------------------------
 

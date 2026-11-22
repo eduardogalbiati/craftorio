@@ -13,7 +13,7 @@ const { ISSUE_WORKFLOW, makeService, roadmapIssue, until, untilTrue } = require(
 // created issues (number, url, title), a human gate that decides success or failure, and a `task`
 // input a chain can fill from the previous run's result (the real pair is end-to-end, but far
 // slower and less deterministic to run in full for this wiring test).
-const SOURCE_WORKFLOW = `apiVersion: multiagent/v1
+const SOURCE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-chain-source
@@ -58,7 +58,7 @@ outputs:
     value: "{{ steps.work.output.filed | to_json }}"
 `;
 
-const TARGET_WORKFLOW = `apiVersion: multiagent/v1
+const TARGET_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-chain-target

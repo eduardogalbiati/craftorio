@@ -10,7 +10,7 @@ process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { tempWorkflow, runWith, until, CHILD_ECHO_YAML, CHILD_FAIL_YAML, CHILD_GATE_YAML } = require('../engine-helpers');
 
 test('type: workflow step: without foreach, the output is { status, run_id, outputs } from the child\'s declared outputs', async (t) => {
-  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-once }
 agents:
@@ -36,7 +36,7 @@ steps:
   assert.deepEqual(step.output.outputs, { n: 7 });
 });
 test('type: workflow step: foreach runs one child per item, at most max_parallel at a time; outputs come back as an ordered list', async (t) => {
-  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-foreach }
 agents:
@@ -77,7 +77,7 @@ steps:
   assert.deepEqual(finished.summary.child_runs.map((c) => c.step_id), ['children', 'children', 'children']);
 });
 test('type: workflow step (#175): each child\'s cost is recorded on workflow.child_finished, summed in run.childRuns and the run\'s summary.children_cost_usd', async (t) => {
-  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-cost }
 agents:
@@ -108,7 +108,7 @@ steps:
   assert.equal(finished.summary.children_cost_usd, +total.toFixed(6));
 });
 test('checkLimits (#175): max_total_cost_usd counts child runs\' cost too, and the message says how much they added', (t) => {
-  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: cost-limit }
 orchestrator:
@@ -132,7 +132,7 @@ steps:
   assert.throws(() => run.checkLimits(), /Maximum cost exceeded \(US\$ 1, of which US\$ 1\.10 by its child runs\)\./);
 });
 test('on_error: a failing child workflow routes the step to its on_error step, with output.status failed', async (t) => {
-  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-onerror }
 agents:
@@ -157,7 +157,7 @@ steps:
   assert.match(sent.prompt, /child failed: Skill not found: "does-not-exist"/);
 });
 test('without on_error, a step\'s transitions can read output.status; without either, a failed child fails the run', async (t) => {
-  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-transitions }
 agents:
@@ -183,7 +183,7 @@ steps:
   assert.match(sent.prompt, /handling: Skill not found: "does-not-exist"/);
 
   // neither on_error nor transitions: the run itself fails with the reason named
-  fs.writeFileSync(file, `apiVersion: multiagent/v1
+  fs.writeFileSync(file, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-no-handler }
 agents:
@@ -198,7 +198,7 @@ steps:
   assert.match(noHandler.finished.error, /the child workflow child-fail\.yaml ended failed/);
 });
 test('a child\'s human gate keeps the parent waiting; the parent never answers it, and never finishes the step', async (t) => {
-  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-gate }
 agents:
@@ -235,7 +235,7 @@ steps:
 
 test('type: workflow step: a child run gets the parent run\'s test workers in its agents\' environment (#367)', async (t) => {
   const promptOf = async (testWorkers) => {
-    const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+    const { dir, file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: parent-workers }
 agents:
@@ -245,7 +245,7 @@ steps:
     type: workflow
     workflow: child-workers.yaml
 `);
-    fs.writeFileSync(path.join(dir, 'child-workers.yaml'), `apiVersion: multiagent/v1
+    fs.writeFileSync(path.join(dir, 'child-workers.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: child-workers }
 agents:

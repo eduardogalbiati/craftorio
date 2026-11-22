@@ -1,6 +1,6 @@
 # Test fixture: a step that delegates a fix to another agent, inside a run worktree, once
 # (max_visits: 1 exhausts on the second visit, skipping the delegate).
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-worktree-delegate

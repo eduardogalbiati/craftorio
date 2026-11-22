@@ -1,6 +1,6 @@
 # Test fixture (#101): an agent that gets 2 attempts per turn, for mockSequences.timeouts (the 1st
 # attempt is killed at its timeout; the 2nd starts with attemptSummary of the 1st).
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-attempt-timeout

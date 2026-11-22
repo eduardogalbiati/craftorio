@@ -26,7 +26,7 @@ const { tempDir } = require('./repo-workflow-fixtures-485');
 const load = () => require('../engine/run/load');
 const POLICY = { tools: ['read', 'edit', 'write', 'bash:git', 'bash:npm'] };
 
-const HEAD = (name) => `apiVersion: multiagent/v1
+const HEAD = (name) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: ${name}

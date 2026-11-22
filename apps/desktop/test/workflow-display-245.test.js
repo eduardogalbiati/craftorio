@@ -42,7 +42,7 @@ function tmpDir(t, prefix = 'wf-display-') {
 // (undefined: no display line at all).
 function workflowYaml({ agentDisplay, stepDisplay } = {}) {
   return [
-    'apiVersion: multiagent/v1',
+    'apiVersion: craftorio/v1',
     'kind: Workflow',
     'metadata:',
     '  name: fixture-display-245',

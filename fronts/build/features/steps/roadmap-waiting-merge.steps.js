@@ -117,7 +117,7 @@ When('reading the pull request #{int} fails with {string}', async ({ e2e }, numb
 
 // ---- what I do (the labels in English or in the language scenario 1 chooses) --------------------
 
-const finishedSyncs = (e2e) => e2e.app.evaluate(() => global.multiagentE2E.backlogSyncs);
+const finishedSyncs = (e2e) => e2e.app.evaluate(() => global.craftorioE2E.backlogSyncs);
 
 // waits for the sync's answer (electron-main.js counts them): the screen's label comes back too fast to
 // tell, and what follows may read that nothing changed

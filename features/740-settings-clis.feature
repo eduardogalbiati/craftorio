@@ -27,7 +27,7 @@ Feature: Settings › Agents & CLIs manages the CLIs, outside the first-run Setu
     Given the app is open on a machine without the "GitLab CLI"
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I enter the repository "https://gitlab.com/multiagent-e2e/does-not-exist-740" and the project name "missing-740"
+    And I enter the repository "https://gitlab.com/craftorio-e2e/does-not-exist-740" and the project name "missing-740"
     And I go to the next step of the wizard
     Then the wizard warns that "glab" is not installed
     When I open the Setup from the wizard's CLI warning

@@ -34,7 +34,7 @@ const {
   ISSUE_WORKFLOW, makeService, roadmapProject, until,
 } = require('../service/helpers');
 
-const PARALLEL_WORKFLOW = `apiVersion: multiagent/v1
+const PARALLEL_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pause-parallel
@@ -50,7 +50,7 @@ steps:
     prompt: "go on"
 `;
 
-const TWO_STEPS_WORKFLOW = `apiVersion: multiagent/v1
+const TWO_STEPS_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pause-two-steps
@@ -65,7 +65,7 @@ steps:
     prompt: "do the work"
 `;
 
-const SUITE_WORKFLOW = `apiVersion: multiagent/v1
+const SUITE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pause-suite

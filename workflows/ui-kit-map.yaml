@@ -18,7 +18,7 @@
 # keeps the machine step only and does not start this workflow.
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

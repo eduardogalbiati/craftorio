@@ -29,7 +29,7 @@
 # back to it (Save to issue: the app does it on the owner's confirmation, never an agent).
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

@@ -1,6 +1,6 @@
 # A workflow shared by a colleague (E2E fixture of #488's import): one agent with a read tool,
 # one step, and a transition that runs a command on this machine (`action:`).
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

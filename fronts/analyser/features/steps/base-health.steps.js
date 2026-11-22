@@ -125,7 +125,7 @@ const OTHER_RUN = '20261023-120000-cccc3333';
 // The app's temp folder (machineSlotDir) and CRAFTORIO_LOCKS_DIR in a folder of this scenario, its
 // suite slot held by "another run": this test process, alive on this host (machine-slot.js's holder)
 Given("the app is open while another run holds the machine's suite slot", async ({ e2e }) => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-e2e-slots-'));
   const locks = path.join(tmp, 'craftorio', 'locks');
   fs.mkdirSync(locks, { recursive: true });
   const slot = path.join(locks, 'suite.slot');
@@ -157,7 +157,7 @@ Given('the demo project is a git repository on the base {string}', async ({ e2e 
 // the check waits for the slot in the background
 When('a merge into the base {string} starts the base check', async ({ e2e }, base) => {
   const res = await e2e.app.evaluate((_electron, a) => {
-    const area = global.multiagentE2E?.baseHealth;
+    const area = global.craftorioE2E?.baseHealth;
     if (!area) return { missing: true };
     try {
       const check = area.afterBaseMerge({ projectId: a.projectId, runId: a.runId, mock: false }, { base: a.base, tested: 'green' });
@@ -181,7 +181,7 @@ Then("the roadmap's base check reads {string}", async ({ e2e }, text) => {
 // (fronts/build/features/roadmap.feature). The app gets a suite slot of the scenario's own (its temp
 // folder and CRAFTORIO_LOCKS_DIR, as #527), free, so no other suite on the machine makes the check wait.
 Given("the app is open with the machine's suite slot free", async ({ e2e }) => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-slots-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-e2e-slots-'));
   const locks = path.join(tmp, 'craftorio', 'locks');
   fs.mkdirSync(locks, { recursive: true });
   await e2e.open({ env: { TMP: tmp, TEMP: tmp, TMPDIR: tmp, CRAFTORIO_LOCKS_DIR: locks } });

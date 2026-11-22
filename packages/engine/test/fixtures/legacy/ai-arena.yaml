@@ -28,7 +28,7 @@
 # (Anthropic, OpenAI, xAI). The AI Arena screen shows this run as a chat.
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

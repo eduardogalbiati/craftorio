@@ -14,7 +14,7 @@
 # "Export to the repository" opens the Start panel with `slugs` (and `screens`, the same list).
 # Docs: docs/agents/storage/mockups.md.
 # =============================================================================
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

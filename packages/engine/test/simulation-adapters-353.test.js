@@ -224,7 +224,7 @@ test('#353 with simulation only, a real run is still refused before any CLI star
   const dir = tempDir(t, 'sim-353-wf-');
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, [
-    'apiVersion: multiagent/v1', 'kind: Workflow', 'metadata: { name: real-353 }',
+    'apiVersion: craftorio/v1', 'kind: Workflow', 'metadata: { name: real-353 }',
     // a command that does not exist: even a broken guard could not reach a real model
     'providers:', '  claude: { type: claude-code, command: claude-not-installed-353, args: ["-p"] }',
     'agents:', '  a: { provider: claude, model: m, session: ephemeral }',

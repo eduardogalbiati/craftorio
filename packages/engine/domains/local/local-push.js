@@ -152,7 +152,7 @@ async function updateAndPush({ repo, base = null }) {
   let dir = checkout?.dir;
   let temp = null;
   if (!dir) {
-    temp = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-push-'));
+    temp = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-push-'));
     await git(['worktree', 'add', temp, base], root);
     dir = temp;
   }

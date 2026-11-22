@@ -14,7 +14,7 @@ const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
 const runs = require('../domains/run/runs');
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-result-summary

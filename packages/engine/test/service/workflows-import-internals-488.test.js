@@ -10,7 +10,7 @@ const { makeService } = require('./helpers');
 const { requiresProblem, parseManifest } = require('../../domains/project/project-manifest');
 const { summarize } = require('@craftorio/shared/workflow-compose');
 
-const FLOW = `apiVersion: multiagent/v1
+const FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: plain-flow

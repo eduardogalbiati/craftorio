@@ -30,7 +30,7 @@ const started = (events, stepId) => events.some((e) => e.type === 'step.started'
 
 // ---- A turn cut by its request budget (max_requests) in a parallel step ------------------------
 
-const PARALLEL_BUDGET_WORKFLOW = `apiVersion: multiagent/v1
+const PARALLEL_BUDGET_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pause-budget
@@ -101,7 +101,7 @@ test('pause during the wrap-up of a turn cut by max_requests in a parallel step:
 
 // ---- A schema retry ----------------------------------------------------------------------------
 
-const SCHEMA_WORKFLOW = `apiVersion: multiagent/v1
+const SCHEMA_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-pause-schema }
 agents:
@@ -137,7 +137,7 @@ test('pause before a schema retry: no retry turn, the run ends paused at the ste
 
 // ---- The supervisor-on-call stall gate, after the step finished ---------------------------------
 
-const STALL_WORKFLOW = `apiVersion: multiagent/v1
+const STALL_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-pause-stall }
 orchestrator:
@@ -175,7 +175,7 @@ test('pause while the stall gate of the supervisor on call waits after a finishe
 
 // ---- A child run that paused, after Cancel pause ------------------------------------------------
 
-const PARENT_WORKFLOW = `apiVersion: multiagent/v1
+const PARENT_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-pause-parent }
 agents:
@@ -216,7 +216,7 @@ test('a child run that ended paused ends its parent paused, even when Cancel pau
 
 // ---- The step command a pause waits for: the screenshots, a transition action --------------------
 
-const SHOTS_WORKFLOW = `apiVersion: multiagent/v1
+const SHOTS_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-pause-shots }
 agents:
@@ -262,7 +262,7 @@ test('pause during a screenshots step: runs:active names the screenshots, the ca
   assert.equal(run.pauseState()?.command, undefined, 'no command left to wait for once the capture ended');
 });
 
-const ACTION_WORKFLOW = `apiVersion: multiagent/v1
+const ACTION_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-pause-action }
 agents:

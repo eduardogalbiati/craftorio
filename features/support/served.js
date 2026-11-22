@@ -66,7 +66,7 @@ function startServer(scratch, env) {
  */
 async function launchServedUi({ size = '1400x900', slot: takeSlot = true } = {}) {
   const slot = await screenshotSlot(takeSlot);
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-served-'));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-e2e-served-'));
   let app = null;
   let server = null;
   const close = async () => {

@@ -74,7 +74,7 @@ test('backlog: a group over the Backlog\'s max size is refused; exactly the max 
 // A workflow shaped like issue-tracker's filing path (its metadata.name is what the issue tracker's
 // chain to the roadmap keys on, #446), trimmed to the fields it reads: analyze (grouping,
 // nearby), a decision gate with a create_assign choice, and file (filed).
-const TRACKER_WORKFLOW = `apiVersion: multiagent/v1
+const TRACKER_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: issue-tracker
@@ -311,7 +311,7 @@ test('backlog: the async merge count pushes backlog:changed for the banner, and 
 test('backlog: afterBacklogRefresh syncs the project only for a real (non-mock) finished run of backlog-refresh.yaml with a projectId', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();
-  fs.writeFileSync(path.join(ws.workflows, 'backlog-refresh.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(ws.workflows, 'backlog-refresh.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-backlog-refresh

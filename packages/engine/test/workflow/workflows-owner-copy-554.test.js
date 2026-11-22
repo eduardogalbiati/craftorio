@@ -36,7 +36,7 @@ const REPO_MODEL = 'repo-model-554';
 const BUNDLED_MODEL = 'bundled-model-554';
 
 // One agent turn, read-only tools (within the repository caps of #485).
-const flow = (name, { provider = 'claude', model, effort = null }) => `apiVersion: multiagent/v1
+const flow = (name, { provider = 'claude', model, effort = null }) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: ${name}

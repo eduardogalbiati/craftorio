@@ -36,7 +36,7 @@ function fakeSection(html) {
   return { rows, querySelectorAll: () => rows };
 }
 
-const FIXTURE = `apiVersion: multiagent/v1
+const FIXTURE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-renderer-ao-262 }
 inputs:

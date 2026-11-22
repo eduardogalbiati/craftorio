@@ -14,7 +14,7 @@ Feature: A PRs screen lists every open pull request of the project by what it ne
   #   headRefName, baseRefName ] }.
   # - For the developer: the E2E launch's fake platform (features/support/electron-main.js) is extended
   #   for a file with `pulls`: `gh pr list` answers the pulls whose state is OPEN, `gh pr view <n>`
-  #   answers the pull `n`, and a merge or close of `n` is recorded in global.multiagentE2E.prActions as
+  #   answers the pull `n`, and a merge or close of `n` is recorded in global.craftorioE2E.prActions as
   #   today and rewrites that pull's state (MERGED / CLOSED).
   # - A pull request a run opened: the steps write a finished run of Feature in Remote mode whose
   #   pr_open step gave that pull request's number and URL (the shape of #797's finished run,

@@ -1,7 +1,7 @@
 # Test fixture (#320): the agents' prompt-cache state at a gate. The developer runs in handoff
 # sessions; the reviewer is persistent and rotates into a fresh session after 30 minutes idle; the
 # run then waits at a human gate.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-cache-state

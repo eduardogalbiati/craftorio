@@ -9,7 +9,7 @@ const roadmapModel = require('../../domains/roadmap/roadmap');
 const { makeService, roadmapIssue, untilTrue } = require('./helpers');
 const { repoWithManifest } = require('../repo-workflow-fixtures-485');
 
-const WITH_TASK = `apiVersion: multiagent/v1
+const WITH_TASK = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: repo-flow

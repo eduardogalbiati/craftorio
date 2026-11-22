@@ -19,7 +19,7 @@
 // - data-testid="pr-fix-tokens"         NEW: inside a finished fix round: the tokens it spent ("12.4k tokens")
 //
 // The platform's side (the feature's comment): the PR file carries gh's review, its review threads and
-// each author's access; the E2E launch records each reply on a thread in global.multiagentE2E.prActions
+// each author's access; the E2E launch records each reply on a thread in global.craftorioE2E.prActions
 // ({ action: 'reply', number, thread }) and adds the reply to that thread in the file, leaving it
 // unresolved (resolving it is the reviewer's).
 
@@ -38,7 +38,7 @@ const card = (page) => page.getByTestId('pr-monitor-card').filter({ visible: tru
 const requestOf = (page, author) => card(page).getByTestId('pr-request-item').filter({ hasText: author }).first();
 const fixRounds = (page) => card(page).getByTestId('pr-fix-round');
 
-const prActions = (e2e) => e2e.app.evaluate(() => global.multiagentE2E?.prActions || []);
+const prActions = (e2e) => e2e.app.evaluate(() => global.craftorioE2E?.prActions || []);
 const repliesTo = async (e2e, thread) => (await prActions(e2e)).filter((a) => a.action === 'reply' && a.thread === thread);
 
 // ---- what the platform says ---------------------------------------------------------------------

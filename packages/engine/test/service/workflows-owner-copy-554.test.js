@@ -14,7 +14,7 @@ const OWNER_MODEL = 'owner-model-554';
 const REPO_MODEL = 'repo-model-554';
 
 // agents: { <name>: '<inline yaml map body>' }
-const flow = (name, agents, extra = '') => `apiVersion: multiagent/v1
+const flow = (name, agents, extra = '') => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: ${name}
@@ -79,7 +79,7 @@ test('#554 the repository copy that runs takes the owner\'s literal values only:
 });
 
 test('#554 with "prefer the repository\'s workflows", a broken owner copy does not stop the repository copy: it runs with its own models', async (t) => {
-  const { service, api, project } = await preferRepositorySetup(t, 'apiVersion: multiagent/v1\nkind: Workflow\nagents: [ not a map\n');
+  const { service, api, project } = await preferRepositorySetup(t, 'apiVersion: craftorio/v1\nkind: Workflow\nagents: [ not a map\n');
   const { end, started } = await startAndFinish(service, api, { file: 'writer-reviewer.yaml', projectId: project.id, inputs: {}, mock: true });
   assert.equal(end.status, 'success', end.error);
   assert.equal(started?.agents?.a?.provider, 'claude');

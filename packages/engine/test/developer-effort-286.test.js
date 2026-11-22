@@ -111,7 +111,7 @@ function writeFixture(t, withEffortArgs) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'effort-check.yaml');
   const wf = {
-    apiVersion: 'multiagent/v1',
+    apiVersion: 'craftorio/v1',
     kind: 'Workflow',
     metadata: { name: 'fixture-effort-check' },
     providers: {

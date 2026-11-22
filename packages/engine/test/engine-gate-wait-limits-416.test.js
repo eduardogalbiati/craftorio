@@ -16,7 +16,7 @@ const { WorkflowRun } = require('../engine/workflow');
 
 const H = 3600e3;
 const M = 60e3;
-const FIXTURE = `apiVersion: multiagent/v1
+const FIXTURE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-gate-wait-limits-416 }
 providers:

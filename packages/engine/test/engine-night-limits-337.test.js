@@ -20,7 +20,7 @@ const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
 
 const H = 3600e3;
-const FIXTURE = ({ cost = 120 } = {}) => `apiVersion: multiagent/v1
+const FIXTURE = ({ cost = 120 } = {}) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-night-limits-337 }
 inputs:

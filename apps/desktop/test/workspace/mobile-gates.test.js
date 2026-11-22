@@ -42,7 +42,7 @@ const load = () => require('@craftorio/engine/domains/workspace/mobile-gates');
 const SECRET = 'mobile-gates-test-secret-0123456789';
 const MIN = 60e3;
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-mobile
@@ -234,7 +234,7 @@ test('#226 a confirmed answer from a paired device resolves the gate, recorded a
   assert.equal((await answer(base, g, { t: tk, device: token })).status, 409);
 });
 
-const YES_NO_WORKFLOW = `apiVersion: multiagent/v1
+const YES_NO_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-mobile

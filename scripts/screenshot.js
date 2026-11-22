@@ -393,7 +393,7 @@ function main() {
     return;
   }
   process.on('exit', () => slot.release());
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-shot-'));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-shot-'));
   const cleanup = () => { removeScratch(scratch); slot.release(); };
   const fail = (e) => {
     console.error(`screenshot: ${e?.message || e}`);
@@ -650,8 +650,8 @@ function main() {
 }
 
 // Electron's main process runs the capture; plain Node (the tests) and the E2E suite's Electron main
-// (features/support/electron-main.js, which sets global.multiagentScreenshotHelpers) only import the helpers.
-if (process.type === 'browser' && !global.multiagentScreenshotHelpers) {
+// (features/support/electron-main.js, which sets global.craftorioScreenshotHelpers) only import the helpers.
+if (process.type === 'browser' && !global.craftorioScreenshotHelpers) {
   // Its user data folder is always throwaway: on macOS, Chromium's mock keychain keeps safeStorage away
   // from the machine's keychain; appended while the module loads, before app is ready (#623)
   if (process.platform === 'darwin') require('electron').app.commandLine.appendSwitch('use-mock-keychain');

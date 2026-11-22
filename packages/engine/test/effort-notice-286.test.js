@@ -14,7 +14,7 @@ function fixture(t, agent) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, yaml.dump({
-    apiVersion: 'multiagent/v1',
+    apiVersion: 'craftorio/v1',
     kind: 'Workflow',
     metadata: { name: 'effort-notice' },
     inputs: { cli: { type: 'string', enum: ['plain', 'effort'], default: 'plain' } },

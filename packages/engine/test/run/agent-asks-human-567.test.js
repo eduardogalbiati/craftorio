@@ -69,7 +69,7 @@ const QUESTION = {
 
 function askWF({ session = 'ephemeral', askHuman = 'ask_human: true', supervisor = '', prompt = 'write the cache' } = {}) {
   return `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-ask-human }
 ${supervisor ? `orchestrator:\n  supervisor: { ${supervisor} }\n` : ''}agents:

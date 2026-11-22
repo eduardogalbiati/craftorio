@@ -202,7 +202,7 @@ const agent = ({ model = STRONG_MODEL, effort, session = 'persistent', tools, sk
 });
 
 const workflowBase = ({ name, description, category, tags, inputs, worktree, budget }) => ({
-  apiVersion: 'multiagent/v1',
+  apiVersion: 'craftorio/v1',
   kind: 'Workflow',
   metadata: { name, version: '0.1.0', description, tags, category },
   inputs,

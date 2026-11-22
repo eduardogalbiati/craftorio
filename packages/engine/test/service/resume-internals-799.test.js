@@ -11,7 +11,7 @@ const { isAnyQuotaError, isQuotaError } = require('../../engine/providers');
 const { inputsRead } = require('../../engine/run/templates');
 const { makeResumeService } = require('./helpers');
 
-const FLOW = `apiVersion: multiagent/v1
+const FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: internals-799

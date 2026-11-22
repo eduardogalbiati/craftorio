@@ -215,7 +215,7 @@ test('a closed terminal raises nothing', (t) => {
 });
 
 // ---- through the service ------------------------------------------------------------------
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-notify

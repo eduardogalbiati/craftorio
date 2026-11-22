@@ -9,7 +9,7 @@ const { WORKFLOW, makeService, untilTrue } = require('./helpers');
 
 // A mock run that opens a PR (output_schema with pr_url/pr_number), then waits at a gate so it is
 // still active once the PR is known: #84.
-const PR_WORKFLOW = `apiVersion: multiagent/v1
+const PR_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-pr

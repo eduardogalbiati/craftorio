@@ -13,7 +13,7 @@
 # base (never pushed).
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

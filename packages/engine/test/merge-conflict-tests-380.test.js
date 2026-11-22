@@ -176,7 +176,7 @@ test('ai-development: the developer still never writes tests in resolve_merge (p
 // ---- packages/engine/engine/run/supervision.js: the supervisor's gate is not a dead end ------------------------------
 
 const SUP_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-supervisor-380 }
 orchestrator:

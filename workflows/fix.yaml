@@ -17,7 +17,7 @@
 #     verify_change ─► validate (your approval) ─► the Local or Remote lane; a rejection goes back to
 #     develop with your note.
 # =============================================================================
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

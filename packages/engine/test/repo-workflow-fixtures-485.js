@@ -8,7 +8,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 // A repository workflow the engine accepts as is: one agent turn, read-only tools.
-const repoFlow = (stepId = 'committed', name = 'repo-flow') => `apiVersion: multiagent/v1
+const repoFlow = (stepId = 'committed', name = 'repo-flow') => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: ${name}

@@ -146,7 +146,7 @@ test('parseAgentReport: finds the JSON line among the npm noise of a suite outpu
 test('parseAgentReport: returns null when there is no agent report in the output', () => {
   assert.equal(parseAgentReport('ℹ tests 3\nℹ pass 3\n'), null);
   assert.equal(parseAgentReport('{"reporter":"other","failures":[]}'), null);
-  assert.equal(parseAgentReport('{"reporter":"multiagent-agent","failures":'), null, 'a truncated line is not a report');
+  assert.equal(parseAgentReport('{"reporter":"craftorio-agent","failures":'), null, 'a truncated line is not a report');
   assert.equal(parseAgentReport(''), null);
   assert.equal(parseAgentReport(undefined), null);
 });

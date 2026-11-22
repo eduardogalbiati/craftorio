@@ -22,7 +22,7 @@
 # Outputs: `html` (the screen) and `reply` (what the designer says in the chat).
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

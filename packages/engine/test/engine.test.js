@@ -234,7 +234,7 @@ test('the bundled workflows group every step', () => {
 });
 test('loadWorkflow validates a `type: workflow` step: agent present, missing workflow, and a workflow naming itself', () => {
   const tmp = path.join(os.tmpdir(), `wf-workflow-step-${process.pid}.yaml`);
-  const onStep = (extra) => `apiVersion: multiagent/v1
+  const onStep = (extra) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: wf-workflow-step-${process.pid} }
 agents: { a: { provider: claude, model: m } }
@@ -258,7 +258,7 @@ steps:
 
 test('loadWorkflow validates a `type: suite` step: no agent, command must be a string, timeout a duration', () => {
   const tmp = path.join(os.tmpdir(), `wf-suite-step-${process.pid}.yaml`);
-  const onStep = (extra) => `apiVersion: multiagent/v1
+  const onStep = (extra) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: wf-suite-step-${process.pid} }
 agents: { a: { provider: claude, model: m } }
@@ -282,7 +282,7 @@ steps:
 });
 test('loadWorkflow validates `full_suite`: only "warn", and only on an agent step', () => {
   const tmp = path.join(os.tmpdir(), `wf-full-suite-${process.pid}.yaml`);
-  const onStep = (type, full_suite) => `apiVersion: multiagent/v1
+  const onStep = (type, full_suite) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: wf-full-suite-${process.pid} }
 agents: { a: { provider: claude, model: m } }
@@ -305,7 +305,7 @@ steps:
 
 test('loadWorkflow validates a suite step\'s scope: affected (#212), failed (#324) or full, nothing else', () => {
   const tmp = path.join(os.tmpdir(), `wf-suite-scope-${process.pid}.yaml`);
-  const suite = (scope) => `apiVersion: multiagent/v1
+  const suite = (scope) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: wf-suite-scope-${process.pid} }
 agents: { a: { provider: claude, model: m } }

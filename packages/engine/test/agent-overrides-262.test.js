@@ -38,7 +38,7 @@ const PROVIDERS = `providers:
     stdin_arg: "-"
 `;
 
-const TWO_AGENTS = `apiVersion: multiagent/v1
+const TWO_AGENTS = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-overrides-262 }
 ${PROVIDERS}

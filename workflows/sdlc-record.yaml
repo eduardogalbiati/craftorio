@@ -19,7 +19,7 @@
 # sdlc-test closes the Test stage at the code owner's gate, sdlc-release writes deploy.md.
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

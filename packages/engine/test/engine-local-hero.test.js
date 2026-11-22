@@ -26,7 +26,7 @@ test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge
   assert.equal(wf.steps.find((s) => s.id === 'resolve_merge').agent, 'developer');
 
   const tmp = path.join(os.tmpdir(), `merge-local-${process.pid}.yaml`);
-  const write = (merge, { worktree = true, limit = '' } = {}) => fs.writeFileSync(tmp, `apiVersion: multiagent/v1
+  const write = (merge, { worktree = true, limit = '' } = {}) => fs.writeFileSync(tmp, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: m }
 ${worktree ? 'orchestrator:\n  worktree: { repo: ".", base: main, remote: false }\n' : ''}${limit ? `  limits: { max_total_context: ${limit} }\n` : ''}agents:
@@ -62,7 +62,7 @@ steps:
 
 test('loadWorkflow validates base_worktree: boolean, on an agent step only, needs orchestrator.worktree', () => {
   const tmp = path.join(os.tmpdir(), `wf-base-worktree-${process.pid}.yaml`);
-  const write = (extra, { worktree = true } = {}) => fs.writeFileSync(tmp, `apiVersion: multiagent/v1
+  const write = (extra, { worktree = true } = {}) => fs.writeFileSync(tmp, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: m }
 ${worktree ? 'orchestrator:\n  worktree: { repo: ".", base: main }\n' : ''}agents:
@@ -88,7 +88,7 @@ steps:
 });
 test('loadWorkflow rejects base_worktree on a human_approval (gate) step', () => {
   const tmp = path.join(os.tmpdir(), `wf-base-worktree-gate-${process.pid}.yaml`);
-  fs.writeFileSync(tmp, `apiVersion: multiagent/v1
+  fs.writeFileSync(tmp, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: m }
 orchestrator:

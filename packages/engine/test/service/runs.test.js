@@ -143,7 +143,7 @@ test('concurrent runs: simulations do not count unless the setting says so', asy
 test('concurrent runs: a `type: workflow` step\'s child run takes a slot its idle parent lends it, even with the default limit of one', async (t) => {
   const { service, api } = makeService(t);
   const { gates, finished } = watchRuns(service);
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-parent
@@ -176,7 +176,7 @@ test('concurrent runs: a limit of 1 runs a foreach step\'s children one at a tim
   const { service, api } = makeService(t);
   const { gates, finished } = watchRuns(service);
   api['settings:set']({ concurrentRuns: { enabled: true, max: 1, perProject: null, countSimulations: true } });
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-foreach.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-foreach.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-parent-foreach
@@ -215,7 +215,7 @@ test('concurrent runs: stopping the parent while a child waits for a slot cancel
   const { service, api } = makeService(t);
   const { gates, finished } = watchRuns(service);
   api['settings:set']({ concurrentRuns: { enabled: true, max: 1, perProject: null, countSimulations: true } });
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-foreach2.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-foreach2.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-parent-foreach2
@@ -252,7 +252,7 @@ test('concurrent runs: a project\'s limit serializes its parent\'s children; an 
   const { service, api } = makeService(t);
   const { gates, finished } = watchRuns(service);
   api['settings:set']({ concurrentRuns: { enabled: true, max: 5, perProject: 1, countSimulations: true } });
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-proj.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-proj.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-parent-proj
@@ -306,7 +306,7 @@ test('concurrent runs: a child whose project is only known after it starts waits
 
   // the parent itself has no project; its child's repo_path points at the project's folder, so the
   // project is only discovered once the child's own inputs are read
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-late-project.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-late-project.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-parent-late-project

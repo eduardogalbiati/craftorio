@@ -214,7 +214,7 @@ test('advance: a cut line after the last stage keeps the roadmap open; a stage r
 
 // ---- the engine's `ship:` transition ------------------------------------------------------------------
 
-const SHIP_WORKFLOW = (gate) => `apiVersion: multiagent/v1
+const SHIP_WORKFLOW = (gate) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-ship

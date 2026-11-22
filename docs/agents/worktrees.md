@@ -145,7 +145,7 @@ actions, or any code that deletes or checks out branches.
   still listed. The
   evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
   the variable, `resolveWorkspace` under `CRAFTORIO_SIMULATION_ONLY=1` falls back to
-  `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.
+  `<os tmp>/craftorio-simulation/workspace`, never the registered workspace.
 - **The run's temp folder (#414)**: `runs/<id>/tmp`, one of `RUN_DIRS` (so Claude Code gets it with
   `--add-dir`). `TMP`, `TEMP` and `TMPDIR` point to it for the agents of a non-mock run with a
   worktree (`scratch.tmp` from `WorkflowRun.scratchWorkspace` → `capabilities.agentEnv`) and for

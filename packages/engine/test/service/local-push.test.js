@@ -77,7 +77,7 @@ test('backlog: a push conflict is handed to a run of the local workflow that mer
   change(other, 'theirs\n', 'their a');
   git(other, 'push', '-q', 'origin', 'main');
 
-  fs.writeFileSync(path.join(ws.workflows, 'fixture-local.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-local.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-local

@@ -1,7 +1,7 @@
 # Test fixture (#403): a run's suite and E2E rounds test its change on top of the current local
 # base. work → gate → suite (unit) → e2e (a second suite step) → developer (the next agent turn,
 # told when the branch moved). The gate lets a test stop the run and resume it from `suite`.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-suite-base-sync

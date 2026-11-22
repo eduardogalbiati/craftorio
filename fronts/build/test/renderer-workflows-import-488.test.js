@@ -50,7 +50,7 @@ function importStub(name) {
 
 async function definitions(extra = {}, location) {
   const page = await loadPage({
-    api: { listWorkflows: async () => WORKFLOWS, listProjects: async () => PROJECTS, listPipelines: async () => [], exportWorkflow: async () => 'apiVersion: multiagent/v1\n', ...extra },
+    api: { listWorkflows: async () => WORKFLOWS, listProjects: async () => PROJECTS, listPipelines: async () => [], exportWorkflow: async () => 'apiVersion: craftorio/v1\n', ...extra },
     location,
   });
   page.run('showWorkflowsTab(\'definitions\'); showView(\'workflows\')');

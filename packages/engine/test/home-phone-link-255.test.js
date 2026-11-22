@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { makeService, untilTrue } = require('./service/helpers');
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-home-phone

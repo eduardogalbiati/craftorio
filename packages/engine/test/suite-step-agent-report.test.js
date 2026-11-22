@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseCounts, parseFailures, redCheck } = require('../engine/suite-step');
 
-const agentLine = (report) => JSON.stringify({ reporter: 'multiagent-agent', passed: 0, failed: 0, skipped: 0, todo: 0, cancelled: 0, duration_ms: 1, failures: [], ...report });
+const agentLine = (report) => JSON.stringify({ reporter: 'craftorio-agent', passed: 0, failed: 0, skipped: 0, todo: 0, cancelled: 0, duration_ms: 1, failures: [], ...report });
 
 test('parseFailures: the agent JSON line gives each failure with its line, kind and expected/actual', () => {
   const text = [

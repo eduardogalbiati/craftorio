@@ -17,7 +17,7 @@ const { tempWorkflow, runWith } = require('../engine-helpers');
 // checkEntry's error ends up in the step's `errors`); without a `screenshots` property at all,
 // develop's output simply has none (a change without UI).
 test('a screenshots step: an invalid entry (bad name) from the previous step still reaches the gate, with the error in the output', async (t) => {
-  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: shots-bad-entry }
 inputs:
@@ -63,7 +63,7 @@ steps:
   assert.match(gate.message, /No screenshots: no valid entry in the developer's list; 1 error: .*name must be a plain file name/);
 });
 test('a screenshots step: an empty (no UI) list from the previous step skips the capture and still reaches the gate', async (t) => {
-  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: shots-empty }
 inputs:
@@ -101,7 +101,7 @@ steps:
   assert.match(gate.message, /No screenshots: the developer listed no screens \(a change without UI\)/);
 });
 test('transition on_error: a failed action goes to the named step with action_error; without it the run fails', { timeout: 60000 }, async (t) => {
-  const yaml = (onError) => `apiVersion: multiagent/v1
+  const yaml = (onError) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: onerr }
 inputs:
@@ -144,7 +144,7 @@ ${onError ? '        on_error: fixup\n' : ''}      - when: "rejected"
   assert.match(failed.finished.error, /Action failed \(exit 3\)/);
 });
 test('max_total_context: the run pauses before the next agent turn; Continue grants another block, Stop cancels', { timeout: 60000 }, async (t) => {
-  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+  const { file } = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: ctx }
 inputs:

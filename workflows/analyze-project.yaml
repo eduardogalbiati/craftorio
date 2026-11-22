@@ -43,7 +43,7 @@
 # Outputs: `issues` (the filed issues, for a pipeline's product_owner or queue target) and `report`.
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

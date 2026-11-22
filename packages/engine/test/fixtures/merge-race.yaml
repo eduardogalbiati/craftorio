@@ -1,7 +1,7 @@
 # Test fixture: a `check:`/`precheck:` gate with a recovery step, the shape `approve_merge` /
 # `resolve_conflict` / `merge_failed` share in workflows/software-development.yaml, stripped down
 # to exercise the engine's merge-queue and gate-withdrawal mechanics on their own (#69).
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-merge-race

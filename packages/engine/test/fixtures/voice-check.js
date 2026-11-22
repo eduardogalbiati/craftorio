@@ -26,11 +26,11 @@ const path = require('path');
 const { app } = require('electron');
 process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 process.env.FAKE_WHISPER_TEXT = 'dictated text';
-const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-voice-check-ws-'));
+const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-voice-check-ws-'));
 process.env.CRAFTORIO_WORKSPACE = wsDir;
 
 // A scratch user data folder with the "model" already "downloaded", so Settings needs no network.
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-voice-check-data-'));
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-voice-check-data-'));
 app.setPath('userData', userDataDir);
 fs.mkdirSync(path.join(userDataDir, 'speech-models'), { recursive: true });
 fs.writeFileSync(path.join(userDataDir, 'speech-models', 'ggml-small.bin'), 'fake model');

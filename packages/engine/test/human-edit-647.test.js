@@ -10,7 +10,7 @@ const FieldRules = require('../engine/run/field-rules');
 const { loadWorkflow } = require('../engine/workflow');
 const { tempWorkflow } = require('./engine-helpers');
 
-const AGENTS = `apiVersion: multiagent/v1
+const AGENTS = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: human-edit-647 }
 agents:

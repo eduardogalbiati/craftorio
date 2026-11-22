@@ -212,7 +212,7 @@
 
     const b = base && typeof base === 'object' ? base : {};
     return {
-      apiVersion: 'multiagent/v1',
+      apiVersion: 'craftorio/v1',
       kind: 'Workflow',
       metadata: {
         name: str(spec.name),

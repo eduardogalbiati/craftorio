@@ -43,7 +43,7 @@
 # worktree: the service writes in the project's folder.
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

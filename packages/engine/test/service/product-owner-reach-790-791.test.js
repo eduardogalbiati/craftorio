@@ -23,7 +23,7 @@ kinds:
 `;
 
 // a run that produces one issue, chained like apps/desktop/test/service/chain.test.js
-const SOURCE_WORKFLOW = `apiVersion: multiagent/v1
+const SOURCE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-chain-source

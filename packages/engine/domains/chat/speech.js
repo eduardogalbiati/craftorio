@@ -116,7 +116,7 @@ async function transcribe({ audio, language }, settings, dataDir) {
   }
   const lang = String(language || settings.voiceLanguage || 'auto').trim().toLowerCase();
   if (!/^[a-z]{2,3}$|^auto$/.test(lang)) throw new Error(`Unknown language "${lang}".`);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-voice-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-voice-'));
   try {
     const input = path.join(dir, 'audio.wav');
     const base = path.join(dir, 'transcript');

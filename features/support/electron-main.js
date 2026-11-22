@@ -12,13 +12,13 @@
 //   render at a fixed instant (#362, features/support/fixed-clock.js);
 // - the locale is en-US, so the interface is English until a scenario chooses another (#329);
 // - the service's base-health area (packages/engine/service/areas/base-health.js) is kept in
-//   global.multiagentE2E.baseHealth when the service loads it, so a step can start the base check a
+//   global.craftorioE2E.baseHealth when the service loads it, so a step can start the base check a
 //   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527);
 // - with CRAFTORIO_E2E_PR_FILE (a file name in the launch's scratch folder, which does not exist
 //   before the launch), a run's PR is read from that JSON file on each call, at the service's
 //   host.readPrJson: gh's answer, or { fail: message } for a read that fails. Sync then reaches the
 //   real backlog:sync, with only its read of the platform's issues replaced by the cached ones, and
-//   global.multiagentE2E.backlogSyncs counts the syncs answered (#797). A file of several pull requests
+//   global.craftorioE2E.backlogSyncs counts the syncs answered (#797). A file of several pull requests
 //   ({ pulls: [...] }, #812's PRs screen) answers `gh pr list` with its open ones and `gh pr view <n>` with
 //   that one; a merge or close changes only the pull request it names.
 
@@ -29,7 +29,7 @@ const { shiftClock } = require('./fixed-clock');
 
 if (process.env.CRAFTORIO_E2E_NOW) shiftClock(Number(process.env.CRAFTORIO_E2E_NOW));
 // the helpers only: scripts/screenshot.js runs its own capture in an Electron main process otherwise
-global.multiagentScreenshotHelpers = true;
+global.craftorioScreenshotHelpers = true;
 const { simulateChannels } = require('../../scripts/screenshot');
 
 const theme = process.env.CRAFTORIO_E2E_THEME;
@@ -62,7 +62,7 @@ const baseHealthArea = require.resolve(path.join(__dirname, '..', '..', 'package
 const makeBaseHealth = require(baseHealthArea);
 require.cache[baseHealthArea].exports = (ctx) => {
   const area = makeBaseHealth(ctx);
-  global.multiagentE2E = { ...(global.multiagentE2E || {}), baseHealth: area };
+  global.craftorioE2E = { ...(global.craftorioE2E || {}), baseHealth: area };
   return area;
 };
 
@@ -109,7 +109,7 @@ if (process.env.CRAFTORIO_E2E_PR_FILE) {
     const thread = args.map((a) => /^thread=(.+)$/.exec(a)).find(Boolean)?.[1];
     const body = args.map((a) => /^body=([\s\S]*)$/.exec(a)).find(Boolean)?.[1] || '';
     const answer = readAnswer();
-    global.multiagentE2E.prActions.push({ action: 'reply', number: Number(answer.number) || threadsOf, thread });
+    global.craftorioE2E.prActions.push({ action: 'reply', number: Number(answer.number) || threadsOf, thread });
     const reviewThreads = (answer.reviewThreads || []).map((t) => (t.id !== thread ? t : {
       ...t, comments: { nodes: [...(t.comments?.nodes || []), { id: `${thread}_reply`, author: { login: 'e2e-owner' }, body, createdAt: new Date().toISOString() }] },
     }));
@@ -120,7 +120,7 @@ if (process.env.CRAFTORIO_E2E_PR_FILE) {
     if (args[0] === 'api' && args[1] === 'graphql' && args.some((a) => /^thread=/.test(a))) return replyOnThread(args);
     const action = args[1];
     const number = pullNumber(args[2]);
-    global.multiagentE2E.prActions.push(action === 'merge'
+    global.craftorioE2E.prActions.push(action === 'merge'
       ? { action, number, method: args.includes('--squash') ? 'squash' : args.includes('--rebase') ? 'rebase' : 'merge', admin: args.includes('--admin') }
       : { action, number });
     const answer = readAnswer();
@@ -143,12 +143,12 @@ if (process.env.CRAFTORIO_E2E_PR_FILE) {
   };
   const backlog = require(path.join(engine, 'domains', 'backlog', 'backlog'));
   backlog.syncBacklog = async ({ dir, project }) => backlog.readBacklog(dir, project.id);
-  global.multiagentE2E = { ...(global.multiagentE2E || {}), backlogSyncs: 0, prActions: [] };
+  global.craftorioE2E = { ...(global.craftorioE2E || {}), backlogSyncs: 0, prActions: [] };
   const simulated = ipcMain.handle;
   ipcMain.handle = (channel, fn) => {
     if (channel !== 'backlog:sync') return simulated(channel, fn);
     return handleIpc(channel, async (e, arg) => {
-      try { return await fn(e, arg); } finally { global.multiagentE2E.backlogSyncs += 1; }
+      try { return await fn(e, arg); } finally { global.craftorioE2E.backlogSyncs += 1; }
     });
   };
 }

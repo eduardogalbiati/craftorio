@@ -104,7 +104,7 @@ function removeScratch(dir) {
  */
 async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, mockDelayScale, slot: takeSlot = true, env = {} } = {}) {
   const slot = await screenshotSlot(takeSlot);
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-'));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-e2e-'));
   let app = null;
   const close = async () => {
     if (app) await app.close().catch(() => {});

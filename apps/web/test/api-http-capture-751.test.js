@@ -57,7 +57,7 @@ function loadPage({ bridge = null, remote = !!bridge } = {}) {
   const sandbox = {
     document: makeDocument(),
     location: { protocol: 'http:', host: 'engine.invalid:7300', href: 'http://engine.invalid:7300/apps/web/renderer/index.html', reload() {} },
-    navigator: { userAgent: `Mozilla/5.0 Chrome/140${remote ? ' Electron/44.0.0 MultiagentRemoteClient' : ''}`, clipboard: {}, onLine: true },
+    navigator: { userAgent: `Mozilla/5.0 Chrome/140${remote ? ' Electron/44.0.0 CraftorioRemoteClient' : ''}`, clipboard: {}, onLine: true },
     XMLHttpRequest: FakeXHR,
     WebSocket: FakeWebSocket,
     fetch: async (url, opts = {}) => {

@@ -178,7 +178,7 @@ test('engine (#233): an attempt killed at its timeout adds its estimated cost to
 });
 
 test('engine (#233): max_total_cost_usd counts the estimated cost of a killed attempt', { timeout: 60000 }, async (t) => {
-  const file = tempWorkflow(t, `apiVersion: multiagent/v1
+  const file = tempWorkflow(t, `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: cost-limit-timeout }
 orchestrator:

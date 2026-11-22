@@ -39,7 +39,7 @@ const { makeService, roadmapIssue, until, watchRuns } = require('./helpers');
 const FILE = 'fixture-base-805.yaml';
 const GATED = 'fixture-base-gated-805.yaml';
 
-const WORKFLOW = (name, steps) => `apiVersion: multiagent/v1
+const WORKFLOW = (name, steps) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: ${name}

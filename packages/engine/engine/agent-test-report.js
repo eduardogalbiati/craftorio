@@ -1,7 +1,7 @@
 // AI-friendly test output (#219): agents pay for tests by reading them, and a `node --test` log
 // reaches 250 KB of passing tests and stack traces. In agent mode the suite prints one JSON line
 // instead (failures only, no colours), and the human-readable report goes to a log file next to it.
-//   { "reporter": "multiagent-agent", "passed", "failed", "skipped", "todo", "cancelled", "duration_ms",
+//   { "reporter": "craftorio-agent", "passed", "failed", "skipped", "todo", "cancelled", "duration_ms",
 //     "failures": [{ test, file, line, error, expected?, actual?, kind: test | file }],
 //     "files"?: { <file>: { passed, failed } }   (focused runs only: at most FILE_COUNTS files),
 //     "flow"?: { status, error }, "human_log"? }
@@ -19,7 +19,7 @@
 const path = require('path');
 const util = require('util');
 
-const REPORTER = 'multiagent-agent';
+const REPORTER = 'craftorio-agent';
 const ERROR_LINES = 3;
 const VALUE_CHARS = 200;
 const FILE_COUNTS = 20;

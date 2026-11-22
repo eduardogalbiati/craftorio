@@ -13,7 +13,7 @@ const roadmapModel = require('../../domains/roadmap/roadmap');
 const { makeService, roadmapIssue, untilTrue } = require('./helpers');
 const { makeRepo, repoWithManifest, tempDir } = require('../repo-workflow-fixtures-485');
 
-const REPO_FLOW = `apiVersion: multiagent/v1
+const REPO_FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: repo-flow
@@ -28,7 +28,7 @@ steps:
 `;
 
 // the first run of a chain: a workspace workflow; model `x` lets a test make it fail
-const FIRST_FLOW = `apiVersion: multiagent/v1
+const FIRST_FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-first-799
@@ -182,7 +182,7 @@ test('#799 a push conflict is handed to the repository-only workflow that merged
 
 test('#799 a release takes the inputs of the release workflow the repository declares', async (t) => {
   const { api } = makeService(t);
-  const release = `apiVersion: multiagent/v1
+  const release = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: repo-release

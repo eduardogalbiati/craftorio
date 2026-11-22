@@ -27,7 +27,7 @@
 # applied-scope.json (what was done), bodies/<n>.md (the bodies sent).
 # =============================================================================
 
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 
 metadata:

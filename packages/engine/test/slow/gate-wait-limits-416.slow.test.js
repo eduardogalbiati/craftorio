@@ -19,7 +19,7 @@ const { tempWorkflow } = require('../engine-helpers');
 
 const H = 3600e3;
 const NIGHT = 10 * H + 37 * 60e3;
-const YAML = `apiVersion: multiagent/v1
+const YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: gate-wait-limits-416 }
 orchestrator:

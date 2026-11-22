@@ -66,7 +66,7 @@ test('simulation only (CRAFTORIO_SIMULATION_ONLY=1) without CRAFTORIO_WORKSPACE 
   t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
   const r = resolveWorkspace({ store, env: { CRAFTORIO_SIMULATION_ONLY: '1' }, home, tmp: tmpDir });
   assert.equal(r.source, 'simulation');
-  assert.equal(r.dir, path.join(tmpDir, 'multiagent-simulation', 'workspace'));
+  assert.equal(r.dir, path.join(tmpDir, 'craftorio-simulation', 'workspace'));
   assert.notEqual(r.dir, registered);
   assert.notEqual(r.dir, path.join(home, DEFAULT_NAME));
   assert.equal(r.registered, null);

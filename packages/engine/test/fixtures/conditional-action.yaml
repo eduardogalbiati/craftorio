@@ -1,6 +1,6 @@
 # Test fixture: a gate whose transition action is conditional (renders empty when `cleanup` is
 # false) and runs a bundled skill's script through skill_dir().
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-conditional-action

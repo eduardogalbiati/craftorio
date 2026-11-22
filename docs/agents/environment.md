@@ -186,7 +186,7 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   engine is used only on 127.0.0.1 (a check never drives an engine that can start real runs).
 - The remote window has only the capture preload (`remote-window-preload.js`, #751: `captureWindow`
   uses it; [findings.md](renderer/findings.md)), `sandbox`, its own session (`persist:remote-engine`, user agent
-  marked `MultiagentRemoteClient`, clipboard permissions for the engine's origin only); the page
+  marked `CraftorioRemoteClient`, clipboard permissions for the engine's origin only); the page
   (`api-http.js`) reads the mark for `api.engineConnection` and opens the connection page by opening
   `/__desktop__/engine-connection`, which the window catches.
 - Check it end to end with `npx electron scripts/smoke-remote.js <out-dir>` (a scratch

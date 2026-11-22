@@ -167,7 +167,7 @@ async function run(r) {
 
 function escalationWF({ supervisor: sup = 'enabled: true, on_call: true, max_interventions: 2, max_total: 10' } = {}) {
   return `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-escalation }
 orchestrator:
@@ -295,7 +295,7 @@ test('max_cost_usd: 0 blocks the supervisor from its very first call; the gate o
 // ---- engine: exhausted loops ------------------------------------------------------------------
 
 const EXHAUSTED_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-exhausted }
 orchestrator:
@@ -367,7 +367,7 @@ test('a non-exhausted arrival at a decision gate never calls the supervisor', as
 });
 
 const LOOP_ITER_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-loop-iter }
 orchestrator:
@@ -429,7 +429,7 @@ test('loop.max_iterations exhausted: "retry" sends the run back to the looping s
 // Extends test/fixtures/loop-blocked.yaml (an agent fighting its allowlist stops the /loop after 3
 // blocked iterations) with the supervisor on call.
 const LOOP_BLOCKED_ONCALL_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-loop-blocked }
 orchestrator:
@@ -501,7 +501,7 @@ test('/loop blocked (refused tools) wakes the supervisor on call on each blocked
 // ---- engine: the same answer, or refused tools, in a row -------------------------------------------
 
 const SAME_OUTPUT_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-same-output }
 orchestrator:
@@ -538,7 +538,7 @@ test('the same answer 3 times in a row (not a /loop step) wakes the supervisor o
 });
 
 const POLLING_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-polling }
 orchestrator:
@@ -575,7 +575,7 @@ test('a /loop step repeating the same answer by design never counts as a stall, 
 // ---- engine: a step running far longer than usual (watchSlowStep / superviseSlow) ------------------
 
 const SLOW_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-slow }
 orchestrator:
@@ -850,7 +850,7 @@ test('repeatKey: without a declared commit_sha field, it falls back to the workt
 // ---- #121: engine integration (checkStalls + repeatKey) ----------------------------------------------
 
 const DEVELOP_PROGRESS_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-develop-progress }
 orchestrator:
@@ -909,7 +909,7 @@ test('three develop visits with the same commit_sha, summary and files_changed r
 // A fix round answering new review findings is progress, even when the developer's commit_sha,
 // summary and files_changed happen to repeat; the same findings answered twice in a row do count (#121).
 const DEVELOP_REVIEW_CYCLE_WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-oncall-develop-review-cycle }
 orchestrator:

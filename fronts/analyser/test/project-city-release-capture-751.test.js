@@ -58,7 +58,7 @@ function load({ bridge }) {
     localStorage: { getItem: () => null, setItem: () => {} },
     state: { projects: [{ id: 'p1', name: 'fixture-app' }] },
     location: { protocol: 'http:', host: 'engine.invalid:7300', href: 'http://engine.invalid:7300/apps/web/renderer/index.html', reload() {} },
-    navigator: { userAgent: 'Mozilla/5.0 Chrome/140 Electron/44.0.0 MultiagentRemoteClient', clipboard: {}, onLine: true },
+    navigator: { userAgent: 'Mozilla/5.0 Chrome/140 Electron/44.0.0 CraftorioRemoteClient', clipboard: {}, onLine: true },
     XMLHttpRequest: FakeXHR,
     WebSocket: FakeWebSocket,
     fetch: async () => ({ ok: false, status: 404, headers: { get: () => 'application/json' }, json: async () => ({ error: 'not here' }), text: async () => '{}' }),

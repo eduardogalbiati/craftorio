@@ -24,7 +24,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { makeService } = require('./helpers');
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-kept

@@ -12,7 +12,7 @@ process.env.CRAFTORIO_SIMULATION_ONLY = '1'; // tests never call real models
 const SKILLS_DIR = path.join(__dirname, '..', '..', '..', '..', 'skills'); // the bundled run-supervisor skill
 
 const WF = `
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-supervisor }
 orchestrator:

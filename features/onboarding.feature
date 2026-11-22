@@ -13,7 +13,7 @@ Feature: Bring a project in with a guided wizard
     Given the app is open
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I enter the repository "https://github.com/multiagent-e2e/does-not-exist-641" and the project name "missing-641"
+    And I enter the repository "https://github.com/craftorio-e2e/does-not-exist-641" and the project name "missing-641"
     And I go to the next step of the wizard
     Then the wizard says the repository could not be reached and offers to retry
     # #724: the tray never covers the wizard; the failure shows in the wizard
@@ -157,7 +157,7 @@ Feature: Bring a project in with a guided wizard
     When I skip the Setup and confirm
     And I choose to create a project from Home
     And I choose to import a repository in the wizard
-    And I enter the repository "https://github.com/multiagent-e2e/does-not-exist-644" and the project name "missing-644"
+    And I enter the repository "https://github.com/craftorio-e2e/does-not-exist-644" and the project name "missing-644"
     And I go to the next step of the wizard
     Then the wizard says the repository could not be reached and offers to retry
     And the wizard offers to edit the repository

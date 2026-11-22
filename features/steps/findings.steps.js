@@ -172,7 +172,7 @@ Given('the browser cannot capture the page', async ({ e2e }) => {
 // an engine server (simulation, its own scratch workspace) and the desktop app pointed at it: the
 // app's user data holds engine-connection.json { mode: 'remote', address, token: { plain } }
 Given('the desktop app is open in remote mode on an engine served on this machine', async ({ e2e }) => {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-remote-'));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-e2e-remote-'));
   let server = null;
   const stop = () => {
     if (server) server.child.kill();

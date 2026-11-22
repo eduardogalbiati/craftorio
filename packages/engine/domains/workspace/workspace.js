@@ -34,8 +34,8 @@ const ENV_VAR = 'CRAFTORIO_WORKSPACE';
 const defaultWorkspace = (home = os.homedir()) => path.join(home, DEFAULT_NAME);
 // Where a simulation-only process given no workspace works: { workspace, userData } (#120)
 const simulationWorkspace = (tmp = os.tmpdir()) => ({
-  workspace: path.join(tmp, 'multiagent-simulation', 'workspace'),
-  userData: path.join(tmp, 'multiagent-simulation', 'user-data'),
+  workspace: path.join(tmp, 'craftorio-simulation', 'workspace'),
+  userData: path.join(tmp, 'craftorio-simulation', 'user-data'),
 });
 
 // ---------------------------------------------------------------------------

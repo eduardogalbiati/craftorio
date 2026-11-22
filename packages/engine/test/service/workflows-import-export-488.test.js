@@ -25,7 +25,7 @@ const path = require('path');
 const { makeService } = require('./helpers');
 
 // a workflow that does things worth a warning: an agent with tools and an `action:` (a shell command)
-const SHARED_FLOW = `apiVersion: multiagent/v1
+const SHARED_FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: shared-flow
@@ -50,7 +50,7 @@ steps:
 `;
 
 // a plain one: one agent turn
-const PLAIN_FLOW = `apiVersion: multiagent/v1
+const PLAIN_FLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: plain-flow
@@ -65,7 +65,7 @@ steps:
 // the loader rejects these
 const UNKNOWN_AGENT_FLOW = PLAIN_FLOW.replace('agent: helper', 'agent: ghost');
 const UNSAFE_TEMPLATE_FLOW = PLAIN_FLOW.replace('"tidy up"', '"{{ inputs.constructor.name }}"');
-const MALFORMED_YAML = 'apiVersion: multiagent/v1\nkind: Workflow\nsteps: [unclosed\n';
+const MALFORMED_YAML = 'apiVersion: craftorio/v1\nkind: Workflow\nsteps: [unclosed\n';
 // above this app's version (the test host says 9.9.9)
 const FUTURE_FLOW = PLAIN_FLOW.replace('agents:', 'requires: ">=999.0"\nagents:');
 

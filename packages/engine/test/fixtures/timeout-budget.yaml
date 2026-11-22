@@ -1,7 +1,7 @@
 # Test fixture (#101): defaults.timeout applies to an agent with none of its own; an agent's own
 # plain timeout wins over defaults; an agent that explicitly sets timeout: null falls back to the
 # engine's own default (30m), not the workflow's defaults.timeout.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-timeout-budget

@@ -1,6 +1,6 @@
 # Test fixture: a /goal + /loop step whose agent may have its tools refused by its allowlist
 # (mockSequences.permission_denials). Blocked iterations in a row end the loop at the gate.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-loop-blocked

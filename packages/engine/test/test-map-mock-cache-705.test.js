@@ -21,7 +21,7 @@ const write = (dir, files) => {
 };
 
 const WORKFLOW = [
-  'apiVersion: multiagent/v1',
+  'apiVersion: craftorio/v1',
   'kind: Workflow',
   'metadata:',
   '  name: fixture-test-map-705',

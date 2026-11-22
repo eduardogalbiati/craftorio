@@ -143,7 +143,7 @@ test('runs:resumeOptions lists the workflow steps in order, the gate, what is bl
 
 // Like fixture-resume.yaml, but its gate has choices: only 'approve' (the first one, no feedback
 // required) counts as an approval; 'changes' and 'stop' never do, whatever transitions do with them.
-const RESUME_CHOICE_WORKFLOW = `apiVersion: multiagent/v1
+const RESUME_CHOICE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-resume-choice
@@ -598,7 +598,7 @@ test('runs:resume is never refused for kept work, even for a run of its own issu
 test('a resumed parent reuses the child that succeeded and resumes the one that was cancelled, from where it stopped', async (t) => {
   const { service, api } = makeService(t);
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-resume.yaml'), `apiVersion: multiagent/v1
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-resume.yaml'), `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-parent-resume

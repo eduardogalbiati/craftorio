@@ -14,7 +14,7 @@ const roadmapModel = require('../../domains/roadmap/roadmap');
 const { makeService, roadmapIssue, until } = require('./helpers');
 
 // a workflow with no agent: even a real (not mock) start can never call a model
-const NO_AGENT_WORKFLOW = `apiVersion: multiagent/v1
+const NO_AGENT_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-no-agent

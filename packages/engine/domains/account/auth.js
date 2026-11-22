@@ -18,7 +18,7 @@ const CALLBACK_PORT = 47823; // must match the redirect URL allowed in Supabase 
 const CALLBACK_PATH = '/auth/callback';
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 // the last signed-in user, kept so that an offline start stays signed in
-const ACCOUNT_KEY = 'multiagent-account';
+const ACCOUNT_KEY = 'craftorio-account';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const PROVIDERS = [

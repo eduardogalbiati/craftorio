@@ -49,7 +49,7 @@ const PROVIDERS = `providers:
 `;
 
 // the writer has its own chain; the reviewer runs on another model, with none
-const AGENT_CHAIN = `apiVersion: multiagent/v1
+const AGENT_CHAIN = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-fallbacks-262 }
 ${PROVIDERS}
@@ -71,7 +71,7 @@ steps:
 `;
 
 // the chain comes from `defaults`; the writer works before and after a human gate
-const GATED = `apiVersion: multiagent/v1
+const GATED = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-fallbacks-gate-262 }
 ${PROVIDERS}
@@ -92,7 +92,7 @@ steps:
 `;
 
 // no chain in the workflow: only Settings' (the `fallbacks` option) can give one
-const NO_CHAIN = `apiVersion: multiagent/v1
+const NO_CHAIN = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-no-chain-262 }
 ${PROVIDERS}

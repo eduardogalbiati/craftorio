@@ -11,7 +11,7 @@ Feature: Merging or closing a run's pull request from its PR monitor card
   #   and the steps rewrite it to say what the platform says.
   # - For the developer: the merge and the close go through the service's host as the reads do
   #   (host.readPrJson), and the E2E launch fakes them in features/support/electron-main.js: each call is
-  #   recorded in global.multiagentE2E.prActions ({ action: 'merge' | 'close', number, method, admin });
+  #   recorded in global.craftorioE2E.prActions ({ action: 'merge' | 'close', number, method, admin });
   #   a merge rewrites the PR file to state MERGED unless the file has `merge_fail` (then it throws that
   #   message); a close rewrites it to state CLOSED. The fake reports no bypass permission unless the
   #   file says `viewerCanBypass: true`.

@@ -1,7 +1,7 @@
 # Test fixture: session modes. The developer runs in handoff sessions (a fresh session per turn,
 # started from its latest handoff note); the reviewer is persistent with a max_context that the
 # mock's growing context crosses on its 2nd turn (20k + 30k per turn, peak +20k).
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-handoff

@@ -10,7 +10,7 @@ const { setupWorkspace } = require('../../domains/workspace/workspace');
 const { createService } = require('../../service');
 
 // A mock run with one agent turn and a human gate, written into the workspace's workflows.
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-service
@@ -26,7 +26,7 @@ steps:
 `;
 
 // A workflow that takes an issue: one agent turn, then a human gate.
-const ISSUE_WORKFLOW = `apiVersion: multiagent/v1
+const ISSUE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-issue
@@ -48,7 +48,7 @@ steps:
 `;
 
 // ---- Resume from step… (#100) fixture, shared with the Sessions screen's token tests -----------
-const RESUME_WORKFLOW = `apiVersion: multiagent/v1
+const RESUME_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-resume
@@ -68,7 +68,7 @@ steps:
 
 // A human_approval gate with local_preview and diff_base, its work_dir taken straight from
 // inputs.repo_path (no orchestrator.worktree needed for these tests).
-const GATE_WORKFLOW = `apiVersion: multiagent/v1
+const GATE_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: gate-fixture
@@ -92,7 +92,7 @@ steps:
 
 // local_preview: true on the gate, but no orchestrator.local_preview default: Run App is offered
 // (run_app) with nothing to run until a project (or a one-off config) supplies a command.
-const GATE_RUN_APP_WORKFLOW = `apiVersion: multiagent/v1
+const GATE_RUN_APP_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: gate-run-app

@@ -11,7 +11,7 @@ const { createService, BUNDLED_WORKFLOWS_DIR } = require('../../service');
 const { setupWorkspace } = require('../../domains/workspace/workspace');
 const { callTool, describeTools, supervisorTools, MAX_CHARS } = require('../../domains/supervisor/supervisor-tools');
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-supervisor-tools

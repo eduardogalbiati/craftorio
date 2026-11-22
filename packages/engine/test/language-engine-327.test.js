@@ -20,7 +20,7 @@ const PT = { agents: 'pt-BR', issues: 'en' };
 
 // cld answers twice in one persistent session (a then d); cdx and grk once; b has an output schema
 const WORKFLOW = [
-  'apiVersion: multiagent/v1',
+  'apiVersion: craftorio/v1',
   'kind: Workflow',
   'metadata: { name: fixture-language-327 }',
   'providers:',

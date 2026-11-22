@@ -9,7 +9,7 @@ const { localStatus } = require('../../domains/local/local-push');
 const { commit, fixture, git, logger } = require('../worktree-helpers');
 const { makeService, roadmapIssue, until } = require('./helpers');
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-target-805

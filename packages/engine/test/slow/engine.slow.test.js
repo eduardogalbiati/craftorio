@@ -235,7 +235,7 @@ test('schema retries resend the schema, and the task plus previous answer for ep
   assert.match(q, /"verdict"/);
 });
 test('a human_approval gate with save_to_issue carries { choice, issue } only for a run about an issue', { timeout: 30000 }, async (t) => {
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: gate-save-issue }
 agents:
@@ -268,7 +268,7 @@ steps:
   assert.equal('save_to_issue' in gate2, false, 'no issue on the run: nothing to save to');
 });
 test('resolveApproval: intent save_to_issue is recorded only when the answer is the gate\'s own save_to_issue choice', { timeout: 30000 }, async (t) => {
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: gate-save-issue-intent }
 agents:
@@ -305,7 +305,7 @@ steps:
   assert.equal('intent' in resolved2, false);
 });
 test('a human_approval gate carries diff_base and work_dir only when the run has a work dir', { timeout: 30000 }, async (t) => {
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: gate-diff }
 agents:
@@ -331,7 +331,7 @@ steps:
   assert.equal('work_dir' in gate, false);
 });
 test('a human_approval gate with local_preview: true sets run_app even without a local_preview config; local_preview only with one', { timeout: 30000 }, async (t) => {
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: gate-run-app }
 inputs:
@@ -367,7 +367,7 @@ steps:
   assert.deepEqual(gate2.local_preview, { command: 'npm start' });
 });
 test('a run records the time spent waiting at a human gate separately from agent time (summary.timing.gate_wait_ms)', { timeout: 30000 }, async (t) => {
-  const yaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: gate-timing }
 agents:

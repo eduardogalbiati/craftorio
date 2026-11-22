@@ -30,7 +30,7 @@ const path = require('path');
 const { app, ipcMain } = require('electron');
 process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.2';
-const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-ws-'));
+const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-smoke-ws-'));
 process.env.CRAFTORIO_WORKSPACE = wsDir; // scratch workspace, no workspace dialog
 // a scratch user data folder too (never the dev app's: its account session and engine connection stay untouched)
 process.env.CRAFTORIO_USER_DATA = path.join(wsDir, 'user-data');
@@ -106,7 +106,7 @@ function seedStartupWorkspace() {
       run_id: id, workflow: 'writer-reviewer', status, started_at: started, finished_at: finished, duration_ms: 30000, inputs: { task: `Seeded task ${i}` }, sessions: [], mock: true,
     }));
   }
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-home-'));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-smoke-home-'));
   const projects = path.join(home, 'projects', 'C--seed');
   fs.mkdirSync(projects, { recursive: true });
   for (let f = 0; f < STARTUP_SESSIONS; f++) {

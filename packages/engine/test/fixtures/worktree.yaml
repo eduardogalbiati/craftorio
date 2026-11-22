@@ -1,5 +1,5 @@
 # Test fixture: one git worktree per run (orchestrator.worktree). `skill` = a missing skill makes the run fail.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-worktree

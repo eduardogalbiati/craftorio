@@ -2,7 +2,7 @@
 # max_requests; mockSequences.request_budget: { develop: n } makes the first n turns of the develop
 # step (wrap-up requests not counted) end on that budget, as `claude -p --max-turns` does
 # (a `result` of subtype error_max_turns).
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-context-budget

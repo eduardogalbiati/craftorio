@@ -145,7 +145,7 @@ test('cliInvocation: without attachments, the args and prompt are exactly the pr
 
   const grok = cliInvocation({ ...base, provider: GROK_PROVIDER });
   assert.equal(grok.args[grok.args.length - 2], '--prompt-file');
-  assert.match(grok.args[grok.args.length - 1], /multiagent-prompt-.*\.md$/);
+  assert.match(grok.args[grok.args.length - 1], /craftorio-prompt-.*\.md$/);
   assert.equal(grok.prompt, 'Do the thing.', 'no attachments: the prompt text itself is unchanged');
   assert.ok(grok.promptFile);
 });
@@ -254,7 +254,7 @@ test('attachments_unsupported: a provider that cannot read images gets one warni
   const png = writePng(path.join(dir, 'bug.png'));
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, [
-    'apiVersion: multiagent/v1',
+    'apiVersion: craftorio/v1',
     'kind: Workflow',
     'metadata: { name: fixture-image-unsupported }',
     'inputs:',

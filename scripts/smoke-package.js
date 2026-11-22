@@ -15,7 +15,7 @@ const root = path.join(__dirname, '..');
 const DEADLINE_MS = 120000;
 
 const exe = path.resolve(process.argv[2] || executablePath(path.join(root, 'dist', `Craftorio-${process.platform}-${process.arch}`), process.platform));
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-smoke-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-smoke-'));
 const report = path.join(scratch, 'loaded.txt');
 const workspace = path.join(scratch, 'workspace');
 fs.mkdirSync(workspace);

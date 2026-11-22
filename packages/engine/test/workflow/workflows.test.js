@@ -19,7 +19,7 @@ function tmp(t) {
   return dir;
 }
 const yamlOf = (name, version, step = 'work') =>
-  `apiVersion: multiagent/v1\nkind: Workflow\nmetadata:\n  name: ${name}\n  version: ${version}\nagents:\n  a: { provider: claude, model: m, session: ephemeral }\nsteps:\n  - id: ${step}\n    agent: a\n    prompt: "do it"\n`;
+  `apiVersion: craftorio/v1\nkind: Workflow\nmetadata:\n  name: ${name}\n  version: ${version}\nagents:\n  a: { provider: claude, model: m, session: ephemeral }\nsteps:\n  - id: ${step}\n    agent: a\n    prompt: "do it"\n`;
 const write = (dir, file, text) => fs.writeFileSync(path.join(dir, file), text);
 const read = (dir, file) => fs.readFileSync(path.join(dir, file), 'utf8');
 
@@ -103,7 +103,7 @@ test('an edited copy that matches the new default becomes untouched again', (t) 
 
 // ---- #203: a workflow copy changed only in an input's `default:` is not "frozen" -----------------
 
-const yamlWithInput = (name, version, def, { label = '' } = {}) => `apiVersion: multiagent/v1
+const yamlWithInput = (name, version, def, { label = '' } = {}) => `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: ${name}

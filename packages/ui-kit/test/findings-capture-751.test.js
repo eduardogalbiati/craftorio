@@ -106,7 +106,7 @@ function loadOverlay({ lang = 'en', api = null, bridge = null } = {}) {
       'findings:file': { ok: true, status: 'filed', issueUrl: 'https://github.com/o/r/issues/9' },
     };
     sandbox.location = { protocol: 'http:', host: 'engine.invalid:7300', href: 'http://engine.invalid:7300/apps/web/renderer/index.html', reload() {} };
-    sandbox.navigator = { userAgent: 'Mozilla/5.0 Chrome/140 Electron/44.0.0 MultiagentRemoteClient', clipboard: {}, onLine: true };
+    sandbox.navigator = { userAgent: 'Mozilla/5.0 Chrome/140 Electron/44.0.0 CraftorioRemoteClient', clipboard: {}, onLine: true };
     sandbox.XMLHttpRequest = FakeXHR;
     sandbox.WebSocket = FakeWebSocket;
     sandbox.fetch = async (url, opts = {}) => {

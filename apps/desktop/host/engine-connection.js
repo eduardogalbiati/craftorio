@@ -36,7 +36,7 @@ const FILE = 'engine-connection.json';
 // (apps/web/renderer/api-http.js openEngineConnection): the remote window runs without a preload
 const CONNECTION_PATH = '/__desktop__/engine-connection';
 // added to the remote window's user agent, so the engine's page knows it is inside the desktop app
-const CLIENT_MARK = 'MultiagentRemoteClient';
+const CLIENT_MARK = 'CraftorioRemoteClient';
 const PARTITION = 'persist:remote-engine';
 const TEST_TIMEOUT_MS = 5000;
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);

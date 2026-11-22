@@ -71,7 +71,7 @@ test('a copy is removed when its test ends', async (t) => {
 });
 
 // A small mock workflow: one agent step, then a human gate nobody answers in the stall test.
-const GATE_YAML = `apiVersion: multiagent/v1
+const GATE_YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: stall-737 }
 agents:

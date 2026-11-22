@@ -396,7 +396,7 @@ function withReadTool(args) {
  */
 function cliInvocation({ provider, model, effort, providerSessionId, prompt, extraArgs, render, attachments = [] }) {
   // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
-  const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `multiagent-prompt-${crypto.randomUUID()}.md`) : null;
+  const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `craftorio-prompt-${crypto.randomUUID()}.md`) : null;
   const vars = { model, effort, session_id: providerSessionId, prompt_file: promptFile };
   const input = attachments.length ? imageInput(provider.type) : null;
   const imageArgs = input === 'read' ? [...new Set(attachments.map((f) => path.dirname(f.path)))].flatMap((d) => ['--add-dir', d])

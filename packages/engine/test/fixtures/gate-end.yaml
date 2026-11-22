@@ -1,6 +1,6 @@
 # Test fixture: a failure gate. Approving ends the run as a success; rejecting ends it as failed
 # (`goto: end` + `status: failed`), which must keep the run's worktree.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-gate-end

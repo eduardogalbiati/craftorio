@@ -10,7 +10,7 @@ const path = require('path');
 
 // A real-capable fixture (no agent steps, so `mock: false` never calls a model): used to prove the
 // roadmap reads the platform right before a real start (#168) without any cost or CLI dependency.
-const REAL_ROADMAP_WORKFLOW = `apiVersion: multiagent/v1
+const REAL_ROADMAP_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-real-roadmap
@@ -442,7 +442,7 @@ test('roadmap: #168 a simulated roadmap (or a project with no repository) skips 
 
 // No agent steps, so `mock: false` never calls a model (same trick as REAL_ROADMAP_WORKFLOW); the
 // run succeeds on its own gate without ever merging anything.
-const NEVER_MERGES_WORKFLOW = `apiVersion: multiagent/v1
+const NEVER_MERGES_WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-never-merges

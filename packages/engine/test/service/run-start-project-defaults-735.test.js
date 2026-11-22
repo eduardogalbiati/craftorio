@@ -15,7 +15,7 @@ process.env.GIT_CONFIG_GLOBAL = emptyConfig;
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
 
-const FIXTURE = `apiVersion: multiagent/v1
+const FIXTURE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-run-start-735 }
 inputs:

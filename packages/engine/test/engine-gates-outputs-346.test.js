@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
 
-const FIXTURE = `apiVersion: multiagent/v1
+const FIXTURE = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: fixture-gates-outputs-346 }
 providers:

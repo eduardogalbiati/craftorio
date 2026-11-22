@@ -30,7 +30,7 @@ const TURNS = [
   },
 ];
 
-const YAML = `apiVersion: multiagent/v1
+const YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: subagent-tokens-308 }
 agents:

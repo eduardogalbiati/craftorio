@@ -15,7 +15,7 @@ const { setupWorkspace } = require('../../domains/workspace/workspace');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const { callTool, oracleTools, refusedGitCommand, READ_GIT_COMMANDS } = require('../../domains/oracle/oracle-tools');
 
-const WORKFLOW = `apiVersion: multiagent/v1
+const WORKFLOW = `apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-oracle-tools

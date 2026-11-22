@@ -1,5 +1,5 @@
 # Test fixture: a failing step (missing skill) goes to its on_error step instead of failing the run.
-apiVersion: multiagent/v1
+apiVersion: craftorio/v1
 kind: Workflow
 metadata:
   name: fixture-on-error

@@ -21,7 +21,7 @@ const { RunChatModel } = require('@craftorio/front-build/views/runchat/run-chat-
 const WORKFLOW = require.resolve('@craftorio/engine/engine/workflow');
 const THRESHOLD_MS = 400;
 
-const YAML = `apiVersion: multiagent/v1
+const YAML = `apiVersion: craftorio/v1
 kind: Workflow
 metadata: { name: server-in-foreground-853 }
 agents:
