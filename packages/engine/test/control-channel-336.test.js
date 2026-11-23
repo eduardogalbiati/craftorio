@@ -80,16 +80,7 @@ test('allowlist: never contains a channel that answers, skips or bypasses a huma
   assert.equal(list.includes('settings:set'), false);
 });
 
-test('switch: off by default, update() opens nothing and writes no endpoint file', async (t) => {
-  const { service, api } = makeService(t);
-  assert.equal(api['settings:get']().controlChannel, false);
-  const { createControlChannel } = loadControl();
-  const control = createControlChannel({ service });
-  t.after(() => control.stop());
-  const status = await control.update();
-  assert.equal(status.enabled, false);
-  assert.equal(fs.existsSync(path.join(service.workspace().root, 'control', 'endpoint.json')), false);
-});
+// #32: the default is now on; the default and a saved false are checked in control-channel-default-32.test.js
 
 test('switch on: endpoint.json gives a 127.0.0.1 url and a random token, and the status names the port and the file', async (t) => {
   const { service } = makeService(t);

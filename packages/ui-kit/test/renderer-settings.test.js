@@ -113,6 +113,26 @@ test('renderControlChannel: the port could not open, the error is shown and the 
   assert.equal($('#set-control-error').textContent, 'The control channel could not open: EACCES');
 });
 
+// #32: the control channel is on by default. The settings a new workspace reads (no settings.json),
+// applied to Settings' switches the way settings.js does it (each [data-setting] box checked from
+// state.settings), leave "Allow outside sessions to control this app" ticked.
+test('Settings › Execution: on a new workspace the control channel switch shows ticked', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { readSettings } = require('@craftorio/engine/domains/workspace/settings');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-32-'));
+  let settings;
+  try { settings = readSettings({ settings: path.join(dir, 'settings.json') }); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  const apply = /document\.querySelectorAll\('\[data-setting\]'\)\.forEach\(\(el\) => \(el\.checked = [^\n]*/.exec(settingsSrc);
+  assert.ok(apply, 'the [data-setting] switches\' fill not found in settings.js: the source moved');
+  const box = { dataset: { setting: 'controlChannel' }, checked: false };
+  const sandbox = { state: { settings }, document: { querySelectorAll: (sel) => (sel === '[data-setting]' ? [box] : []) } };
+  vm.createContext(sandbox);
+  vm.runInContext(apply[0], sandbox);
+  assert.equal(box.checked, true);
+});
+
 test('renderControlChannel: the browser client has no endpoint, the switch is disabled and says why', async () => {
   const { refresh, $, box } = loadControlChannel({ platform: 'browser' });
   await refresh();

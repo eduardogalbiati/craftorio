@@ -99,10 +99,11 @@ function removeScratch(dir) {
  * mockDelayScale: CRAFTORIO_MOCK_DELAY_SCALE for the app (default 0.02).
  * slot: hold the machine's screenshot slot while the app is open (#365: the visual lane).
  * env: more environment variables for the app (appEnv's extra, #476).
+ * settings: preferences merged into the workspace's settings.json before the app starts (#32).
  * No recordVideo: with Electron 44 it stalls the window before its page loads (the trace's
  * screencast is the scenario's video, features/steps/fixtures.js).
  */
-async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, mockDelayScale, slot: takeSlot = true, env = {} } = {}) {
+async function launchApp({ theme = 'light', size = '1400x900', empty = false, now = null, mockDelayScale, slot: takeSlot = true, env = {}, settings = null } = {}) {
   const slot = await screenshotSlot(takeSlot);
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-e2e-'));
   let app = null;
@@ -116,6 +117,13 @@ async function launchApp({ theme = 'light', size = '1400x900', empty = false, no
     if (!empty) {
       const restore = now != null ? shiftClock(now) : () => {};
       try { ({ project } = await seedWorkspace(path.join(scratch, 'workspace'))); } finally { restore(); }
+    }
+    if (settings) {
+      // #32: preferences already saved before this start (e.g. a switch the owner turned off)
+      const file = path.join(scratch, 'workspace', 'settings.json');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const saved = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+      fs.writeFileSync(file, JSON.stringify({ ...saved, ...settings }, null, 2));
     }
     app = await electron.launch({
       executablePath: require('electron'),

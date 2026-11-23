@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
-const { When, Then } = require('./fixtures');
+const { Given, When, Then } = require('./fixtures');
 
 const LOAD_TIMEOUT = 30000;
 const switchNamed = (page, name) => page.getByRole('checkbox', { name, exact: true });
@@ -20,6 +20,11 @@ const readEndpoint = (e2e) => {
   try { return JSON.parse(fs.readFileSync(endpointFile(e2e), 'utf8')); } catch { return null; }
 };
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// #32: a workspace whose saved settings already hold controlChannel: false (the owner unticked it)
+Given('the app is open on a workspace where the control channel was turned off', async ({ e2e }) => {
+  await e2e.open({ settings: { controlChannel: false } });
+});
 
 When('I turn {word} the {string} switch', async ({ e2e }, state, name) => {
   const box = switchNamed(e2e.window, name);
