@@ -171,6 +171,14 @@
   const quadrantRank = (q) => (q ? QUADRANTS.indexOf(q) : QUADRANTS.length);
   // the badge class of a quadrant (the Facts view, the onboarding's review): the Danger Zone warns
   const quadrantBadge = (q) => (q === QUADRANTS[0] ? 'badge warn' : 'badge');
+  // #23: a quadrant's name in the interface's language (the Health table, the City legend); the raw name stays the value
+  const t = (...a) => (typeof module === 'object' && module.exports ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
+  const quadrantLabel = (q) => ({
+    'Cowboy Code': t('project_architecture.quadrant_cowboy_code'),
+    'Danger Zone': t('project_architecture.quadrant_danger_zone'),
+    'Fertile Ground': t('project_architecture.quadrant_fertile_ground'),
+    'Healthy Closure': t('project_architecture.quadrant_healthy_closure'),
+  })[q] ?? q;
   const byScore = (a, b) => (b.score ?? -1) - (a.score ?? -1) || b.complexity - a.complexity;
   const byHotness = (a, b) => quadrantRank(a.quadrant) - quadrantRank(b.quadrant) || byScore(a, b) || a.file.localeCompare(b.file);
 
@@ -436,6 +444,7 @@
     parseLog,
     placeQuadrants,
     quadrantBadge,
+    quadrantLabel,
     QUADRANTS,
     scoreRows,
     sortKeys,

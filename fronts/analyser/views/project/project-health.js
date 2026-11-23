@@ -101,7 +101,7 @@
           <button type="button" class="link-btn" data-testid="architecture-finding-more" data-arch-more="${esc(key)}" aria-expanded="${open}">${open ? t('project_architecture.read_less') : t('project_architecture.read_more')}</button>${gone ? '' : issueHtml(f)}</div>
         ${proposalHtml(f.proposal)}
         <div class="arch-finding-details small${open ? '' : ' hidden'}" data-testid="architecture-finding-details">
-          <div class="row"><span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity)}</span><span class="badge mono">${esc(f.kind)}</span>${files}</div>
+          <div class="row"><span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(ArchitectureFactsView.severityLabel(f.severity))}</span><span class="badge mono">${esc(f.kind)}</span>${files}</div>
           <p class="muted">${esc(f.evidence)}</p>
           <p><b>${t('project_architecture.refactor')}</b> ${esc(f.refactor)}</p>
         </div>
@@ -109,12 +109,15 @@
     </li>`;
   }
 
+  // #23: a filter's word in the interface's language (data-arch-filter keeps the raw key)
+  const filterLabel = (key) => ({ high: t('project_architecture.filter_high'), kept: t('project_architecture.filter_kept'), low: t('project_architecture.filter_low'), medium: t('project_architecture.filter_medium'), new: t('project_architecture.filter_new') })[key] ?? esc(key);
+
   // the filters by severity and by new / kept, with their counts, and "Create issues" for the ones shown
   function findingsToolbarHtml(all) {
     const counts = ArchitectureFactsView.findingCounts(all);
     const b = (dim, key, n) => {
       const on = key === 'all' ? !cur.filter.severity && !cur.filter.status : cur.filter[dim] === key;
-      return `<button type="button" class="${on ? 'active' : ''}" data-arch-filter="${dim}:${key}" data-testid="architecture-filter-${key}" aria-pressed="${on}">${key === 'all' ? t('project_architecture.all') : key.charAt(0).toUpperCase() + key.slice(1)} <span class="muted">${n}</span></button>`;
+      return `<button type="button" class="${on ? 'active' : ''}" data-arch-filter="${dim}:${key}" data-testid="architecture-filter-${key}" aria-pressed="${on}">${key === 'all' ? t('project_architecture.all') : filterLabel(key)} <span class="muted">${n}</span></button>`;
     };
     const left = shownFindings().filter((f) => !f.filed).length;
     const title = left ? t('project_architecture.create_issues_title', { count: left }) : t('project_architecture.create_issues_none_left');
@@ -174,10 +177,12 @@
   function languagesHtml(languages) {
     const shares = ArchitectureFactsView.languageShares(languages);
     if (!shares.length) return `<p class="small muted">${t('project_architecture.no_code_counted')}</p>`;
-    const tip = (s) => `${fmtNum(s.lines)} lines${s.others?.length ? ` (${s.others.join(', ')})` : ''}`;
-    const segments = shares.map((s) => `<span class="arch-lang-seg" data-testid="architecture-language-segment" style="width:${s.percent}%;background-color:${s.color}" title="${esc(`${s.language} ${s.percent}%`)}"></span>`).join('');
-    const legend = shares.map((s) => `<li data-testid="architecture-language-entry" title="${esc(tip(s))}"><span class="arch-lang-dot" style="background-color:${s.color}"></span><span>${esc(s.language)}</span> <span class="muted">${s.percent}%</span></li>`).join('');
-    return `<div class="arch-lang-bar" data-testid="architecture-languages-bar" role="img" aria-label="${esc(`Languages: ${shares.map((s) => `${s.language} ${s.percent}%`).join(', ')}`)}">${segments}</div>
+    // #23: the "Other" share, the lines and the bar's label in the interface's language
+    const name = (s) => (s.others ? t('project_architecture.language_other') : s.language);
+    const tip = (s) => `${t('project_architecture.language_lines', { lines: fmtNum(s.lines) })}${s.others?.length ? ` (${s.others.join(', ')})` : ''}`;
+    const segments = shares.map((s) => `<span class="arch-lang-seg" data-testid="architecture-language-segment" style="width:${s.percent}%;background-color:${s.color}" title="${esc(`${name(s)} ${s.percent}%`)}"></span>`).join('');
+    const legend = shares.map((s) => `<li data-testid="architecture-language-entry" title="${esc(tip(s))}"><span class="arch-lang-dot" style="background-color:${s.color}"></span><span>${esc(name(s))}</span> <span class="muted">${s.percent}%</span></li>`).join('');
+    return `<div class="arch-lang-bar" data-testid="architecture-languages-bar" role="img" aria-label="${esc(t('project_architecture.languages_label', { list: shares.map((s) => `${name(s)} ${s.percent}%`).join(', ') }))}">${segments}</div>
       <ul class="arch-lang-legend small" data-testid="architecture-language-legend">${legend}</ul>`;
   }
 
@@ -219,7 +224,7 @@
 
   function complexityCells(r, measured) {
     if (!measured) return '';
-    return `<td class="num">${r.complexity ?? '—'}</td><td class="num">${r.worst ?? '—'}</td><td>${r.quadrant ? `<span class="${window.ArchitectureModel.quadrantBadge(r.quadrant)}">${esc(r.quadrant)}</span>` : '—'}</td>`;
+    return `<td class="num">${r.complexity ?? '—'}</td><td class="num">${r.worst ?? '—'}</td><td>${r.quadrant ? `<span class="${window.ArchitectureModel.quadrantBadge(r.quadrant)}">${esc(window.ArchitectureModel.quadrantLabel(r.quadrant))}</span>` : '—'}</td>`;
   }
 
   function hotspotsHtml(model) {
@@ -243,7 +248,7 @@
     const maxV = Math.max(0, ...rows.map((r) => Math.log1p(r.commits)));
     const x = (r) => 20 + 360 * (maxV ? Math.log1p(r.commits) / maxV : 0);
     const y = (r) => 200 - 180 * (maxU ? Math.log1p(r.complexity) / maxU : 0);
-    const dots = rows.map((r) => `<circle cx="${x(r).toFixed(1)}" cy="${y(r).toFixed(1)}" r="4" class="${r.quadrant === 'Danger Zone' ? 'arch-dot-danger' : 'arch-dot'}"><title>${esc(t('project_architecture.file_complexity_complexity_commits_commits_quadr', { file: r.file, complexity: r.complexity, commits: r.commits, quadrant: r.quadrant }))}</title></circle>`).join('');
+    const dots = rows.map((r) => `<circle cx="${x(r).toFixed(1)}" cy="${y(r).toFixed(1)}" r="4" class="${r.quadrant === 'Danger Zone' ? 'arch-dot-danger' : 'arch-dot'}"><title>${esc(t('project_architecture.file_complexity_complexity_commits_commits_quadr', { file: r.file, complexity: r.complexity, commits: r.commits, quadrant: window.ArchitectureModel.quadrantLabel(r.quadrant) }))}</title></circle>`).join('');
     const frames = (model.frames || []).filter((f) => f.entered.length || f.left.length).map((f) => `<li><b>${esc(f.month)}</b> ${f.entered.length ? `entered: ${f.entered.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}${f.left.length ? ` left: ${f.left.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}` : ''}</li>`).join('');
     return `<h3 class="arch-sub" title="${esc(t('project_architecture.metric_complexity_from_tool', { metric: model.complexity.metric, tool: model.complexity.tool }))}">${t('project_architecture.quadrants')}</h3>
       <svg class="arch-scatter" viewBox="0 0 400 220" role="img" aria-label="${t('project_architecture.commits_against_complexity_log1p_axes')}"><line x1="20" y1="200" x2="390" y2="200" class="arch-axis"/><line x1="20" y1="10" x2="20" y2="200" class="arch-axis"/>${dots}<text x="390" y="214" text-anchor="end" class="arch-label">${t('project_architecture.commits_2')}</text><text x="24" y="16" class="arch-label">${t('project_architecture.complexity_2')}</text></svg>

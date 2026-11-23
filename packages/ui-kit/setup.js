@@ -192,12 +192,27 @@
           <label class="switch"><input type="checkbox" data-setup-sim data-testid="setup-simulation" aria-label="${t('setup.try.show')}" ${setup.simulation ? 'checked' : ''} /><span></span></label>
         </div>
         <div class="s-row">
-          <div class="s-label"><b>${t('setup.try.runs')}</b><span data-testid="machine-profile-line">${esc(setup.machine?.line || t('setup.try.reading'))}</span><span>${t('setup.try.runs_help')}</span></div>
+          <div class="s-label"><b>${t('setup.try.runs')}</b><span data-testid="machine-profile-line">${esc(machineText())}</span><span>${t('setup.try.runs_help')}</span></div>
         </div>
       </div>`;
   }
 
-  // the machine profile (#367): the line the Try it safely step shows
+  // the machine profile (#367): the line the Try it safely step shows. #23: built in the interface's language from the
+  // numbers (the engine's `line` is English); without the machine or its proposal, the engine's line in English, else unread
+  function machineText() {
+    const m = setup.machine;
+    if (!m) return t('setup.try.reading');
+    const p = m.proposal;
+    const hw = m.machine;
+    if (!p || !hw) return window.I18n.getLanguage() === 'en' && m.line ? m.line : t('settings.machine.unread');
+    return t('setup.try.machine_line', {
+      threads: hw.threads,
+      gb: Math.round(hw.totalBytes / 1024 ** 3),
+      runs: t('settings.machine.runs_at_once', { count: p.concurrentRuns }),
+      workers: t('settings.machine.workers', { count: p.testWorkers }),
+    });
+  }
+
   async function loadMachineProfile() {
     try { setup.machine = await api.machineProfile(); } catch { setup.machine = { line: t('settings.machine.unread') }; }
     if (setup.open && STEPS[setup.step].id === 'try-it-safely') render();

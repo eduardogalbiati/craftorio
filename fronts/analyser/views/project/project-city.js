@@ -25,7 +25,8 @@
 (() => {
   const BUNDLE = '../../../generated/project-city.js';
   const MISSING = 'The City view is not built: run `npm run build:3d` (or `npm install`) and reload. The Facts view has the same numbers, as tables.';
-  const COLOUR_LABEL = { quadrant: 'Quadrant', zone: 'Zone', churn: 'Churn' };
+  // #23: Colour by's modes in the interface's language, read at render time
+  const colourLabel = (k) => ({ churn: t('project_city.colour_churn'), quadrant: t('project_city.colour_quadrant'), zone: t('project_city.colour_zone') })[k] ?? '';
   const ICON_CITY = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="7" width="4" height="8" rx="1"/><rect x="6" y="2" width="4" height="13" rx="1"/><rect x="11" y="5" width="4" height="10" rx="1"/></svg>';
   const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>', ICON_CLOSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13"/></svg>'; // i18n-ignore
   // #450's switches (fronts/analyser/poc/city-modes.html's icons: a tree and a lamp, a sun's rays): the flag, its test id and label key, its icon
@@ -185,7 +186,7 @@
         danger == null ? t('project_city.danger_zone_not_measured') : t('project_city.in_the_danger_zone_count', { count: danger }), plan, model.commit ? String(model.commit).slice(0, 10) : '',
       ].filter(Boolean).join(' · ');
       const title = model.project || c.name || projectId;
-      const options = window.CityLayout.COLOUR_BY.map((k) => `<option value="${k}" ${k === c.colour ? 'selected' : ''}>${COLOUR_LABEL[k]}</option>`).join('');
+      const options = window.CityLayout.COLOUR_BY.map((k) => `<option value="${k}" ${k === c.colour ? 'selected' : ''}>${esc(colourLabel(k))}</option>`).join('');
       const targets = [...c.layout.zones.map((z) => z.name), ...c.layout.districts.map((d) => d.name), ...c.layout.buildings.filter((b) => !b.aggregate).map((b) => b.path)];
       const light = c.theme === 'light';
       return `<div class="r3d-top r3d-card" data-testid="project-city-header">
@@ -210,7 +211,7 @@
     function renderLegend() {
       const box = hud.querySelector('[data-testid="project-city-legend"]');
       if (!box) return;
-      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(COLOUR_LABEL[c.colour] || '')}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>${window.ProjectCityNotes?.unmeasuredHtml({ model: c.answer?.model, colour: c.colour, auto: c.colourAuto }) || ''}`}`;
+      box.innerHTML = `${window.ProjectCityPanels?.legendClose() || ''}${[...c.rows.values()].join('') || `<b>${esc(colourLabel(c.colour))}</b><ul>${c.legend.map((l) => `<li><i class="r3d-dot" style="--c:${esc(l.colour)}"></i>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</li>`).join('')}</ul>${window.ProjectCityNotes?.unmeasuredHtml({ model: c.answer?.model, colour: c.colour, auto: c.colourAuto }) || ''}`}`;
     }
 
     const stateMessage = (testid, title, text) => stageMessage(`<p><b>${esc(title)}</b></p><p>${esc(text)}</p>`, { testid });

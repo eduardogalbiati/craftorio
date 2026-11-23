@@ -84,6 +84,8 @@
   // packages/shared/globs.js loads after this file)
   const node = typeof module === 'object' && module.exports;
   const architectureModel = () => (node ? require('./architecture-model') : root.ArchitectureModel);
+  // #23: the legend's words in the interface's language (packages/shared/i18n.js, window.I18n in the browser)
+  const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
   const quadrantNames = () => {
     const m = architectureModel();
     return (m && m.QUADRANTS) || [];
@@ -503,17 +505,19 @@
     }
     if (mode === 'churn') {
       const max = Math.max(1, ...buildings.map((b) => b.churn));
-      const t = (c) => Math.log1p(c) / Math.log1p(max);
+      const share = (c) => Math.log1p(c) / Math.log1p(max);
+      const mid = Math.round(Math.sqrt(max));
       return {
-        colours: buildings.map((b) => ramp(pal.churn, t(b.churn))),
-        legend: [{ colour: ramp(pal.churn, 0), label: 'No commit' }, { colour: ramp(pal.churn, t(Math.round(Math.sqrt(max)))), label: `${Math.round(Math.sqrt(max))} commits` }, { colour: ramp(pal.churn, 1), label: `${max} commits` }],
+        colours: buildings.map((b) => ramp(pal.churn, share(b.churn))),
+        legend: [{ colour: ramp(pal.churn, 0), label: t('project_city.legend_no_commit') }, { colour: ramp(pal.churn, share(mid)), label: t('project_city.legend_commits', { count: mid }) }, { colour: ramp(pal.churn, 1), label: t('project_city.legend_commits', { count: max }) }],
       };
     }
     const names = quadrantNames();
     const of = Object.fromEntries(names.map((q, i) => [q, pal.quadrant[i % pal.quadrant.length]]));
+    const label = (q) => architectureModel()?.quadrantLabel?.(q) ?? q;
     return {
       colours: buildings.map((b) => of[b.quadrant] || (b.test ? pal.campus : pal.none)),
-      legend: [...names.map((q) => ({ colour: of[q], label: q })), { colour: pal.none, label: 'Not measured' }, { colour: pal.campus, label: 'Tests', sub: 'no complexity, shown lower' }],
+      legend: [...names.map((q) => ({ colour: of[q], label: label(q) })), { colour: pal.none, label: t('project_city.legend_not_measured') }, { colour: pal.campus, label: t('project_city.legend_tests'), sub: t('project_city.legend_tests_sub') }],
     };
   }
 

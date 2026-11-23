@@ -11,7 +11,7 @@
   },
   "homepage": "https://github.com/eduardogalbiati/craftorio#readme",
   "bugs": {
-    "url": "https://github.com/eduardogalbiati/multiagent-orchestrator/issues"
+    "url": "https://github.com/eduardogalbiati/craftorio/issues"
   },
   "main": "apps/desktop/host/main.js",
   "workspaces": [

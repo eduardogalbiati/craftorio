@@ -478,7 +478,7 @@
     const top = Math.max(1, ...sizes);
     const bars = sizes.slice(0, 12).map((s, i) => `<span class="wizard-city-bar" style="height: ${Math.max(8, Math.round((s / top) * 100))}%" title="${esc(districts[i].name || districts[i].id || '')}"></span>`).join('');
     return `<div class="wizard-city-bars" aria-hidden="true">${bars}</div>
-      <p class="muted small">${esc(t('onboarding.review_city', { districts: districts.length, files }))}</p>`;
+      <p class="muted small">${esc(t('onboarding.review_city', { count: districts.length, districts: districts.length, files }))}</p>`;
   }
 
   // #730: each finding of the Oracle's report, its severity, then Create issue / Create issue and prioritize,
@@ -494,7 +494,7 @@
         : `<button type="button" class="btn sm" data-act="create-issue" data-testid="wizard-review-create-issue" data-finding="${i}"${busy}>${esc(t('project_architecture.create_issue'))}</button>
           <button type="button" class="btn sm" data-act="create-issue" data-testid="wizard-review-create-issue-prioritize" data-finding="${i}" data-prioritize${busy}>${esc(t('project_architecture.create_issue_prioritize'))}</button>`;
       return `<li class="wizard-review-finding fit-box" data-testid="wizard-review-finding" data-finding="${i}">
-          <span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(f.severity || '')}</span>
+          <span class="badge${f.severity === 'high' ? ' warn' : ''}">${esc(window.ArchitectureFactsView?.severityLabel(f.severity) ?? f.severity ?? '')}</span>
           <span class="text-cut" title="${esc(`${f.title} · ${target}`)}">${esc(f.title)}</span>
           <span class="wizard-review-badges">${action}</span>
         </li>`;

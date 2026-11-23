@@ -48,11 +48,12 @@
   const shownIn = (w) => (w === 'drawer' ? or.drawer : w === WINDOW ? or.window : onDashboard());
   // the surface the owner talks in: the Agents window's pane when it shows the Oracle, else the drawer or Home's dock
   const activeSurface = () => (or.window && chats[WINDOW] ? WINDOW : or.drawer || !onDashboard() ? 'drawer' : 'dock');
-  const SUGGESTIONS = [
-    'What happened overnight?',
-    'Which runs failed this week, and why?',
-    'Where do my tokens go?',
-    'What should I work on next?',
+  // #23: the starter questions in the interface's language, read at render time
+  const suggestions = () => [
+    t('oracle.suggest_overnight'),
+    t('oracle.suggest_failed_runs'),
+    t('oracle.suggest_tokens'),
+    t('oracle.suggest_next'),
   ];
   const attachmentCache = new Map(); // a stored image's name → data: URL (or a pending promise)
   const avatar = (cls = '') => `<span class="oracle-avatar ${cls}" aria-hidden="true">${Robots.svg('oracle', 'idle', { bubble: false, plaque: '' })}</span>`;
@@ -508,10 +509,11 @@
         ? `<span class="badge" data-testid="oracle-session-mode" title="${t('oracle.the_last_turn_went_on_with')}">${t('oracle.resumed_session')}</span>` : '';
     return `<span class="badge" data-testid="oracle-model" title="${esc(s.model)}${s.effort ? t('oracle.effort_effort', { effort: esc(s.effort) }) : ''}">${esc(Robots.plaqueFor(s.model))}</span> ${mode}`;
   }
+  // #23: the budget line in the interface's language
   function footHtml(v) {
-    const t = v.today;
-    const budget = !t ? '' : t.limitUsd ? `Today ${money(t.spentUsd)} of ${money(t.limitUsd)} daily budget.` : `Today ${money(t.spentUsd)} (no daily cap).`;
-    return `${budget} ${devMode() ? 'Simulated (developer mode): no model is called and nothing is spent.' : 'Each message is one call to the model.'}`;
+    const today = v.today;
+    const budget = !today ? '' : today.limitUsd ? t('oracle.foot_budget', { spentUsd: money(today.spentUsd), limitUsd: money(today.limitUsd) }) : t('oracle.foot_no_cap', { spentUsd: money(today.spentUsd) });
+    return `${budget} ${devMode() ? t('oracle.foot_simulated') : t('oracle.foot_each_message')}`;
   }
 
   // #274: the turn a surface shows without having sent it: the other surface's question in flight, or
@@ -562,7 +564,7 @@
       $(`#oracle-starters-${w}`).innerHTML = starters
         ? starters.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${startersOn ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-chips-${w}`).innerHTML = !starters && (v.state === 'empty' || (v.state === 'answering' && !or.messages.length))
-        ? SUGGESTIONS.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
+        ? suggestions().map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || t('oracle.pasted_image'))}"><img src="${esc(i.dataUrl)}" alt="${t('oracle.pasted_image')}" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="${t('oracle.remove_this_image')}" aria-label="${t('oracle.remove_this_image')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
       chat.form.classList.toggle('hidden', v.state === 'unavailable');
       // Send and the text box follow the state (paused, unavailable, answering); the chips just redrawn get the busy lock
