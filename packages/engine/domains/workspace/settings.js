@@ -55,8 +55,9 @@ const DEFAULT_SETTINGS = {
   baseCheck: { onRed: 'fix' },
   // Keep awake (#162, apps/desktop/host/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
-  // Control channel (#336, packages/engine/control): outside sessions drive this app through a loopback endpoint
-  controlChannel: false,
+  // Control channel (#336, #32, packages/engine/control): outside sessions drive this app through a loopback
+  // endpoint; on by default, Settings › Execution unticks it (a saved false stays off)
+  controlChannel: true,
   // Findings button (#361, packages/ui-kit/findings.js): shown in a packaged app (and in screenshot
   // captures) only when on; the app run from source always shows it
   findingsButton: false,

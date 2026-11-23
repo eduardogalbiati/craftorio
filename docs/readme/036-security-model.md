@@ -23,6 +23,8 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
 - **The control endpoint file is readable by agents.** `<workspace>/control/endpoint.json` holds the
   token of the loopback control channel; the agents run as you and can read it. Its allowlist
   (`packages/engine/control/allowlist.js`) never resolves a human gate and never changes settings.
+  The control channel is on by default (#32); turn it off in Settings › Execution › *Allow outside
+  sessions to control this app*.
 
 Recommendation: run untrusted repositories only in a VM, a container or with Codex's sandbox
 (`workspace-write`), and assume every secret in the agents' environment is readable by them (see

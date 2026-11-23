@@ -41,6 +41,12 @@ What the app protects, and what it does not (the security review of 2026-10-22,
   (`<userData>/account.bin`) are stored as plain text. Settings › Engine connection says so for the
   token, and the app logs a warning for the account session at start. Install a keyring
   (gnome-keyring, KWallet) to have them encrypted.
+- **The control channel is on by default** (#32): outside sessions on this computer (a terminal,
+  another Claude session through the app's MCP or `craftorio-ctl`) drive the app through the
+  channel's allowlist only, on `127.0.0.1`, with a new token on every start; it never resolves a
+  human gate, never changes settings and logs every call to `control/calls.jsonl`. Turn it off in
+  Settings › Execution › *Allow outside sessions to control this app*: the port closes and the
+  endpoint file is deleted.
 - **The control channel's endpoint file** (`<workspace>/control/endpoint.json`) holds the token of
   the loopback control channel. It is written readable by your user only where the OS honours the
   mode, but the workflow's agents run as you and can read it. What that token allows is limited by

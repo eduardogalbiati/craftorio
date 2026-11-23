@@ -300,7 +300,7 @@ Language, #327, #328; English by default; skill `oracle`).
 A session outside the app (a Claude Code session working as Oracle or Product Owner on the
 workspace, a terminal) acts on the running app through the control endpoint, never by editing
 workspace files such as `backlog/<project>.roadmap.json`: an edited file races the screens (#287)
-and starts nothing. With Settings › Execution › "Allow outside sessions to control this app" on, the
+and starts nothing. With Settings › Execution › "Allow outside sessions to control this app" on (the default since #32), the
 app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `node scripts/ctl.js
 <channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `packages/engine/control/allowlist.js`,
 and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,

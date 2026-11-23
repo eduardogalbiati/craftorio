@@ -283,7 +283,9 @@ test('error state: when the endpoint cannot open, the status says why and nothin
 });
 
 test('switch off at start: a stale endpoint.json left by an abrupt exit is removed', async (t) => {
-  const { service } = makeService(t);
+  const { service, api } = makeService(t);
+  // on by default since #32: the owner turned it off
+  await api['settings:set']({ controlChannel: false });
   const dir = path.join(service.workspace().root, 'control');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'endpoint.json');

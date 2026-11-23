@@ -1,6 +1,6 @@
 // The control channel (#336): outside sessions (a terminal, another agent) drive the running app through
-// its own channels instead of editing workspace files. Off by default (setting controlChannel,
-// Settings › Execution). When on, the app listens on 127.0.0.1 only, on a free port, and writes
+// its own channels instead of editing workspace files. On by default (#32; setting controlChannel,
+// Settings › Execution unticks it, and a saved false stays off). When on, the app listens on 127.0.0.1 only, on a free port, and writes
 // <workspace>/control/endpoint.json { url, token } (a new random token on every start); off, or the
 // app quitting, closes the port and deletes the file.
 //   POST /api/<channel>   Authorization: Bearer <token>, body { "arg": ... }  ->  as packages/engine/server/index.js

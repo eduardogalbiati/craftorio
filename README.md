@@ -398,6 +398,8 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
 - **The control endpoint file is readable by agents.** `<workspace>/control/endpoint.json` holds the
   token of the loopback control channel; the agents run as you and can read it. Its allowlist
   (`packages/engine/control/allowlist.js`) never resolves a human gate and never changes settings.
+  The control channel is on by default (#32); turn it off in Settings › Execution › *Allow outside
+  sessions to control this app*.
 
 Recommendation: run untrusted repositories only in a VM, a container or with Codex's sandbox
 (`workspace-write`), and assume every secret in the agents' environment is readable by them (see
@@ -573,15 +575,17 @@ least 2 min); a file that passes alone, or hangs or fails on the base too, is re
 change instead of failing "the whole suite".
 
 **Control channel for outside sessions** (#336, Settings › Execution › *Allow outside sessions to
-control this app*, off by default). A terminal or another agent on this computer (a Claude Code
+control this app*, on by default since #32; untick it there to turn it off, and a workspace whose
+settings already hold it off stays off). A terminal or another agent on this computer (a Claude Code
 session working as Oracle or Product Owner on the workspace) drives the running app through the
 same channels its screens use, instead of editing workspace files: an action takes effect at once
 (a `roadmap:start` dispatches like the Roadmap screen's button; with a local base behind origin it
 answers `{ confirm, baseCheck }` until `baseChoice` says `update` or `continue`, #805) and an edit
 merges with an open form on the screen (#287). When the switch is on, the app listens on `127.0.0.1` only, on a free
 port, and writes `<workspace>/control/endpoint.json` (`{ "url", "token" }`, a new token on every
-start); off, or the app quitting, closes the port and deletes the file. The setting shows the port
-and the file's path.
+start); off, or the app quitting, closes the port and deletes the file. Only the allowlist below
+answers, never across a human gate, and every call is logged to `control/calls.jsonl`. The setting
+shows the port and the file's path.
 
 - Only an allowlist of channels answers (`packages/engine/control/allowlist.js`): reading runs, events,
   roadmaps, the backlog and settings (`runs:list`, `runs:active`, `runs:events`, `roadmap:get`,
