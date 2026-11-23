@@ -106,12 +106,16 @@ function gateAnswers(g) {
   return g.choices.map((c) => ({ ...c, label: c.label_key ? t(c.label_key) : c.label, key: String(c.id), help: c.help || '' }));
 }
 
-// #30: a check_environment gate's cause (`environment` on the gate: { reason, dir, command }), in the
-// interface language at every draw; '' for any other gate
+// #30: a check_environment gate's cause (`environment` on the gate: { reason, dir, command, manager?,
+// install? }), in the interface language at every draw; '' for any other gate. npm ci for npm, the
+// manager's own install for pnpm and yarn
 function gateEnvironmentText(g) {
   const env = g?.environment;
   if (!env) return '';
-  return env.reason === 'deps_missing' ? t('engine.check_deps_missing', { dir: env.dir }) : t('engine.check_command_missing', { command: env.command || '' });
+  if (env.reason !== 'deps_missing') return t('engine.check_command_missing', { command: env.command || '' });
+  return env.manager && env.manager !== 'npm' && env.install
+    ? t('engine.check_deps_missing_with', { install: env.install, dir: env.dir })
+    : t('engine.check_deps_missing', { dir: env.dir });
 }
 window.gateEnvironmentText = gateEnvironmentText;
 

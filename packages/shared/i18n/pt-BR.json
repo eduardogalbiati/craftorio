@@ -2575,6 +2575,7 @@
 
   "engine.check_command_missing": "o comando do check não foi encontrado: instale o que `{command}` precisa, ou defina a entrada check_command",
   "engine.check_deps_missing": "as dependências do projeto não estão instaladas: rode npm ci em {dir}",
+  "engine.check_deps_missing_with": "as dependências do projeto não estão instaladas: rode {install} em {dir}",
   "engine.check_environment_retry": "Tentar de novo",
   "engine.check_environment_stop": "Parar a run como falha",
   "engine.memory_killed": "A guarda de memória parou `{command}` (pid {pid}) em {used} GB: acima do limite de {limit} GB por processo{again}.",

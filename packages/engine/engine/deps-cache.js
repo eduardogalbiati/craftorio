@@ -168,6 +168,23 @@ function detect(dir) {
   return other ? { notCached: NOT_CACHED[other] || NOT_CACHED['requirements.txt'], lockfile: other } : null;
 }
 
+/**
+ * #30: the folder's dependencies were never installed: { lockfile, manager, install } (install: the
+ * manager's own command, e.g. `npm ci --no-audit --no-fund`) when it has a lockfile of a cached manager
+ * and no node_modules/<sentinel> (the file the manager writes at the end of an install, the one
+ * entryUsable reads: an empty node_modules counts as missing), else null. Yarn 2+ counts as installed
+ * with its own state file or a Plug'n'Play loader.
+ */
+function missingDeps(dir) {
+  if (!dir) return null;
+  const has = (f) => fs.existsSync(path.join(dir, f));
+  const m = MANAGERS.find((x) => has(x.lockfile));
+  if (!m) return null;
+  const marks = m.manager === 'yarn' ? [`node_modules/${m.sentinel}`, 'node_modules/.yarn-state.yml', '.pnp.cjs'] : [`node_modules/${m.sentinel}`];
+  if (marks.some(has)) return null;
+  return { lockfile: m.lockfile, manager: m.manager, install: [m.manager, ...m.args].join(' ') };
+}
+
 // The install's args (`detect`'s): with `--ignore-scripts` under the project's setting (#472)
 const installArgs = (d, ignoreScripts) => (ignoreScripts ? [...d.args, '--ignore-scripts'] : d.args);
 
@@ -708,6 +725,7 @@ module.exports = {
   markUnusable,
   MAX_AGE_DAYS,
   MAX_BYTES,
+  missingDeps,
   NOT_CACHED,
   projectSlug,
   pruneDepsCache,

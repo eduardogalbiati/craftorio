@@ -396,11 +396,12 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     }
   }
 
-  // #30: { status: 'missing', lockfile, command } for a clone with an npm lockfile and no node_modules, else
-  // undefined (no lockfile, another manager, installed); the command follows the project's setting (#472)
+  // #30: { status: 'missing', lockfile, command } for a clone with an npm lockfile and no installed
+  // dependencies (depsCache.missingDeps, the same rule as rule_check's), else undefined (no lockfile,
+  // another manager, installed); the command follows the project's setting (#472)
   function depsOf(p) {
-    const d = p?.folder && fs.existsSync(p.folder) ? depsCache.detect(p.folder) : null;
-    if (d?.manager !== 'npm' || fs.existsSync(path.join(p.folder, 'node_modules'))) return undefined;
+    const d = p?.folder ? depsCache.missingDeps(p.folder) : null;
+    if (d?.manager !== 'npm') return undefined;
     return { status: 'missing', lockfile: d.lockfile, command: p.ignoreInstallScripts ? 'npm ci --ignore-scripts' : 'npm ci' };
   }
 

@@ -2150,8 +2150,13 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: failed
+      # a gate answered by its first choice (--auto-approve, the simulated automations) must not loop
+      # forever on an environment nobody fixes: 3 retries, then the run ends as failed
       - when: "true"
         goto: rule_check
+        max_visits: 3
+        on_exhausted: end
+        status: failed
 
   - id: test_failed
     type: human_approval

@@ -2575,6 +2575,7 @@
 
   "engine.check_command_missing": "the check command was not found: install what `{command}` needs, or set the check_command input",
   "engine.check_deps_missing": "the project's dependencies are not installed: run npm ci in {dir}",
+  "engine.check_deps_missing_with": "the project's dependencies are not installed: run {install} in {dir}",
   "engine.check_environment_retry": "Try again",
   "engine.check_environment_stop": "Stop the run as failed",
   "engine.memory_killed": "The memory guard stopped `{command}` (pid {pid}) at {used} GB: over the limit of {limit} GB per process{again}.",
