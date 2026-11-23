@@ -6,14 +6,17 @@
 //   is saved on the project);
 // - rust-backend: a Rust backend (Cargo.toml, kind backend, remote, unit tests only): the run dialog
 //   shows Mode Remote, E2E Off, `cargo test` "from the project", and no UI default.
+// - no-repo (#35): a project with no remote: no synced cache, the demo issues in its local backlog
+//   (<id>.local-issues.json: open, closed and archived ones, no URL), Nova issue enabled, Sincronizar hidden.
 
 const fs = require('fs');
 const path = require('path');
 
-const DEMO_PROJECTS = ['gitlab', 'rust-backend', 'self-hosted'];
+const DEMO_PROJECTS = ['gitlab', 'no-repo', 'rust-backend', 'self-hosted'];
 
 const PATCHES = {
   gitlab: { repo: 'https://gitlab.com/demo/demo-app', platform: 'gitlab' },
+  'no-repo': { repo: '', platform: null },
   'rust-backend': {
     kind: 'backend',
     runDefaults: { e2e_tests: 'off', mode: 'remote', screenshots: 'off', test_command: 'cargo test' },
@@ -31,10 +34,20 @@ function applyDemoProject({ which, projects, ws, project }) {
     const data = JSON.parse(fs.readFileSync(backlogFile, 'utf8'));
     fs.writeFileSync(backlogFile, JSON.stringify({ ...data, platform: patch.platform || null, repo: patch.repo }, null, 2));
   }
+  if (which === 'no-repo') demoLocalBacklog(backlogFile, ws, project.id);
   if (which === 'rust-backend' && project.folder && fs.existsSync(project.folder)) {
     fs.writeFileSync(path.join(project.folder, 'Cargo.toml'), '[package]\nname = "demo-app"\nversion = "0.1.0"\nedition = "2021"\n');
   }
   return next;
+}
+
+// no-repo (#35): the synced demo issues moved into the local backlog (no URL, no author, no epic link)
+function demoLocalBacklog(backlogFile, ws, projectId) {
+  if (!fs.existsSync(backlogFile)) return;
+  const data = JSON.parse(fs.readFileSync(backlogFile, 'utf8'));
+  const issues = (data.issues || []).map(({ epic, isEpic, ...i }) => ({ ...i, url: null, local: true, author: null }));
+  fs.unlinkSync(backlogFile);
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.local-issues.json`), JSON.stringify({ projectId, issues }, null, 2));
 }
 
 module.exports = {
