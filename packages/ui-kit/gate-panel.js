@@ -102,8 +102,8 @@ function gateAnswers(g) {
     ];
   }
   // #30: a choice whose workflow names a catalog key (`label_key`) reads it in the interface language
-  // (the YAML label is the English fallback the engine renders)
-  return g.choices.map((c) => ({ ...c, label: c.label_key ? t(c.label_key) : c.label, key: String(c.id), help: c.help || '' }));
+  // (the YAML label is the English fallback the engine renders); #36: its help the same way (`help_key`)
+  return g.choices.map((c) => ({ ...c, label: c.label_key ? t(c.label_key) : c.label, key: String(c.id), help: c.help_key ? t(c.help_key) : c.help || '' }));
 }
 
 // #30: a check_environment gate's cause (`environment` on the gate: { reason, dir, command, manager?,

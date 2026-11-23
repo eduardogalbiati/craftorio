@@ -103,6 +103,7 @@ const methods = {
       label: render(c.label, this.ctx),
       // #30: the catalog key the screens translate the label with (the YAML label stays the English fallback)
       ...(c.label_key ? { label_key: String(c.label_key) } : {}),
+      ...(c.help_key ? { help_key: String(c.help_key) } : {}), // #36: the help's key, as label_key
       ...(c.feedback_required ? { feedback_required: true } : {}),
       ...(c.help ? { help: this.gateText(step, c.help) } : {}),
     })) : null;

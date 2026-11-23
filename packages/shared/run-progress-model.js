@@ -261,8 +261,11 @@
     if (ending !== 'pr' && ending !== 'fork') return groups;
     return (groups || []).map((g) => (g.name === MERGE ? { ...g, name: OPEN_PR } : g));
   }
-  /** #792: a group's name on screen (`t`: the screen's translator): OPEN_PR is translated, a workflow's own names are not. */
-  const groupName = (name, t) => (name === OPEN_PR ? t('run_list.open_pr') : name);
+  /** #792: a group's name on screen (`t`: the screen's translator): OPEN_PR is translated. #36: a name the catalog knows
+   * (run_list.group_<name>, the bundled workflows' Tests, Develop, Review, …) follows the interface language, the
+   * workflow's own name in English and for any other name. */
+  const i18n = () => (typeof module === 'object' && module.exports ? require('./i18n') : root.I18n);
+  const groupName = (name, t) => (name === OPEN_PR ? t('run_list.open_pr') : i18n()?.translated?.(`run_list.group_${String(name ?? '').replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`, name) || name);
   function trailStations({ steps = [], groups = [], mode = null, start = null, progress = [], status = 'running', sentBackBy = null } = {}) {
     const stations = workflowStations({ steps, groups, mode, start });
     const idle = (st) => ({ ...st, state: st.gate ? 'gate' : 'todo', round: 0, current: null, agents: [] });

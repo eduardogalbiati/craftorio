@@ -2276,8 +2276,8 @@ steps:
       No developer round was counted. Fix the environment, then try again: the rule checks run again.
     environment: rule_check
     choices:
-      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed." }
-      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it." }
+      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed.", help_key: engine.check_environment_retry_help }
+      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it.", help_key: engine.check_environment_stop_help }
     transitions:
       - when: "choice == 'stop'"
         goto: end

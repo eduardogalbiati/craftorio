@@ -321,22 +321,27 @@
   // drawer: its description (projects.workflows_desc_<name>, the wizard's #23 keys), its stations
   // (workflow_texts.<name>_step_<id>) and its inputs (workflow_texts.<name>_<key>_label|_desc|_opt_<value>), names
   // snake_cased; the file's text in English or where the catalog lacks a key. A modified or custom one stays as it is.
+  // #36: any workflow (a repository's own too) may name catalog keys: an input's `label_key`, `help_key` and
+  // `options_key` (a prefix: <prefix>_<value>), a step's `display_key`; they win over the bundled copy's own keys, and
+  // the file's text stays the English and the fallback. A workflow without bundled origin or keys stays as it is.
   const i18n = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n);
   const snake = (s) => String(s ?? '').replace(/\.ya?ml$/, '').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+  const namesKeys = (wf) => Object.values(wf.inputs || {}).some((d) => d && (d.label_key || d.help_key || d.options_key)) || (wf.steps || []).some((s) => s?.display_key);
   function localized(wf) {
     const I18n = i18n();
-    if (!wf || wf.error || !['bundled', 'default'].includes(wf.origin) || !I18n?.translated) return wf;
+    const bundled = ['bundled', 'default'].includes(wf?.origin);
+    if (!wf || wf.error || !I18n?.translated || !(bundled || namesKeys(wf))) return wf;
     const name = snake(wf.file || wf.name);
-    const tr = (suffix, own) => I18n.translated(`workflow_texts.${name}_${snake(suffix)}`, own);
-    const options = (key, def) => Object.fromEntries((def.enum || Object.keys(def.options || {})).map((v) => [v, tr(`${key}_opt_${v}`, optionLabel(def, v))]));
+    const tr = (own, key, suffix) => (key ? I18n.translated(String(key), own) : bundled ? I18n.translated(`workflow_texts.${name}_${snake(suffix)}`, own) : own);
+    const options = (key, def) => Object.fromEntries((def.enum || Object.keys(def.options || {})).map((v) => [v, tr(optionLabel(def, v), def.options_key && `${def.options_key}_${snake(v)}`, `${key}_opt_${v}`)]));
     return {
       ...wf,
-      description: I18n.translated(`projects.workflows_desc_${name}`, wf.description || ''),
-      steps: (wf.steps || []).map((s) => ({ ...s, display: tr(`step_${s.id}`, s.display || '') || s.display })),
+      description: bundled ? I18n.translated(`projects.workflows_desc_${name}`, wf.description || '') : wf.description,
+      steps: (wf.steps || []).map((s) => ({ ...s, display: tr(s.display || '', s.display_key, `step_${s.id}`) || s.display })),
       inputs: Object.fromEntries(Object.entries(wf.inputs || {}).map(([key, def]) => [key, {
         ...def,
-        label: tr(`${key}_label`, label(key, def)),
-        ...(def.description ? { description: tr(`${key}_desc`, def.description) } : {}),
+        label: tr(label(key, def), def.label_key, `${key}_label`),
+        ...(def.description ? { description: tr(def.description, def.help_key, `${key}_desc`) } : {}),
         ...(def.enum || def.options ? { options: options(key, def) } : {}),
       }])),
     };

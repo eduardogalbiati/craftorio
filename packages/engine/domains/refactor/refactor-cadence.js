@@ -11,6 +11,7 @@
 
 'use strict';
 
+const I18n = require('@craftorio/shared/i18n');
 const RoadmapModel = require('@craftorio/shared/roadmap-model');
 
 const CADENCE_MIN = 3;
@@ -96,14 +97,20 @@ function placeRunNow({ roadmap, files, conflictMap = null }) {
 // (packages/engine/domains/roadmap/roadmap.js drops it once the stage is enabled)
 const WAITING_SUFFIX = '(waiting for your OK)';
 const WAITING_STAGE_NAME = `Refactor ${WAITING_SUFFIX}`;
+// #36: the stage is named in the interface language when it is created (refactor_cadence.waiting_suffix); every
+// language's suffix, and the English one of a stage created before, is recognized and dropped whatever the language now
+const SUFFIX_KEY = 'refactor_cadence.waiting_suffix';
+const waitingStageName = () => `Refactor ${I18n.t(SUFFIX_KEY)}`;
+const waitingSuffixes = () => [...new Set([WAITING_SUFFIX, ...I18n.languages().map((l) => I18n.t(SUFFIX_KEY, {}, l))])].map((s) => s.toLowerCase());
 
 /** Whether stage `s` (or an issueStages entry) is the refactor stage waiting for the owner: disabled, marked or named so. */
-const isWaitingStage = (s) => !!s?.disabled && (!!s.waiting || String(s.name || '').toLowerCase().includes(WAITING_SUFFIX.toLowerCase()));
+const isWaitingStage = (s) => !!s?.disabled && (!!s.waiting || waitingSuffixes().some((x) => String(s.name || '').toLowerCase().includes(x)));
 
-/** Stage name `name` without the waiting stage's suffix (an enabled stage no longer waits). */
+/** Stage name `name` without the waiting stage's suffix (an enabled stage no longer waits), in any language. */
 function dropWaitingSuffix(name) {
   const text = String(name || '');
-  return text.toLowerCase().endsWith(WAITING_SUFFIX.toLowerCase()) ? text.slice(0, -WAITING_SUFFIX.length).trimEnd() : text;
+  const suffix = waitingSuffixes().find((x) => text.toLowerCase().endsWith(x));
+  return suffix ? text.slice(0, -suffix.length).trimEnd() : text;
 }
 
 /**
@@ -157,5 +164,6 @@ module.exports = {
   unfinishedNumbers,
   WAITING_STAGE_NAME,
   WAITING_SUFFIX,
+  waitingStageName,
   withIssueStatus,
 };

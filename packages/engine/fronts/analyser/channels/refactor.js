@@ -183,8 +183,8 @@ module.exports = (ctx) => {
       if (mode === 'waiting') {
         const at = cadenceRules.placeWaiting({ roadmap: enriched, files });
         if (at.stage >= roadmap.stages.length) {
-          // a disabled stage runs nothing: a running roadmap goes on with its other stages
-          roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: cadenceRules.WAITING_STAGE_NAME, disabled: true, waiting: true, items: [item] }] }, { ...write, keepRunning: true });
+          // a disabled stage runs nothing: a running roadmap goes on with its other stages (#36: named in the interface language)
+          roadmaps.propose(ctx.ws.backlog, p.id, { stages: [{ name: cadenceRules.waitingStageName(), disabled: true, waiting: true, items: [item] }] }, { ...write, keepRunning: true });
           return;
         }
         const join = (x) => ({ ...x, issues: [...(x.issues || []), { number }] });

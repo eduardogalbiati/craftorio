@@ -147,6 +147,8 @@ metadata:
 
 # -----------------------------------------------------------------------------
 inputs:
+  # #36: label_key / help_key / options_key (<prefix>_<value>): the catalog keys the screens show these texts with in
+  # the interface language (packages/ui-kit/workflow-inputs.js localized); the file's text is the English
   task:
     label: "Task"
     type: string
@@ -177,6 +179,8 @@ inputs:
   # Picks the unit-test-writer-<language>, e2e-test-writer-<language> and build-audit-<language> skills. The app prefills it
   # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj, Cargo.toml; every one found, main first).
   language:
+    label_key: workflow_texts.feature_language_label
+    help_key: workflow_texts.feature_language_desc
     label: "Language"
     group: Project
     type: string
@@ -186,12 +190,17 @@ inputs:
     options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#", rust: Rust }
     description: The project's languages, main one first, for its tests and build checks. A repository that mixes several (e.g. JavaScript and Rust) takes them all; a run loads the skills of the languages whose files it changed.
   base_branch:
+    label_key: workflow_texts.feature_base_branch_label
+    help_key: workflow_texts.feature_base_branch_desc
     label: "Base branch"
     type: string
     default: main
     description: The local branch the work starts from and is merged into.
   # validated: the run stops at developer_check after the developer.
   mode:
+    label_key: workflow_texts.feature_mode_label
+    help_key: workflow_texts.feature_validation_desc
+    options_key: workflow_texts.feature_validation_opt
     label: "Mode"
     group: How it runs
     main: true
@@ -204,6 +213,8 @@ inputs:
   # one case of the per-run agent choice (#262, the Start drawer's Agents): a Fable turn gets 3x the
   # turn timeout from `models`, whichever way it was chosen
   developer_model:
+    label_key: workflow_texts.feature_developer_model_label
+    help_key: workflow_texts.feature_developer_model_desc
     label: "Developer model"
     group: Developer
     type: string
@@ -231,6 +242,9 @@ inputs:
     description: "Also stop for you after each round of review fixes, not only after the first change and your own change requests."
   # #203: the test step is the largest cost of a run (about half of it): turn its parts on or off.
   unit_tests:
+    label_key: workflow_texts.feature_unit_tests_label
+    help_key: workflow_texts.ai_development_hero_unit_tests_desc
+    options_key: workflow_texts.feature_unit_tests_opt
     type: string
     enum: [write_and_run, run_existing, "off"]
     # tests first: the acceptance tests are always written before the code; this is the EXTRA
@@ -243,6 +257,9 @@ inputs:
     options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
     description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-batch workflow)."
   e2e_tests:
+    label_key: workflow_texts.feature_e2e_tests_label
+    help_key: workflow_texts.feature_e2e_tests_desc
+    options_key: workflow_texts.feature_e2e_tests_opt
     type: string
     enum: ["off", write, write_and_run]
     # owner 2026-10-03: quality first, the scenarios are written and run here by default
@@ -263,6 +280,9 @@ inputs:
   # #205: the evidence screenshots (the Product Owner's Cost step sets it on a roadmap item:
   # Economy off, Balanced changed, Generous all)
   screenshots:
+    label_key: workflow_texts.feature_screenshots_label
+    help_key: workflow_texts.feature_screenshots_desc
+    options_key: workflow_texts.feature_screenshots_opt
     type: string
     enum: ["off", changed, all]
     default: changed
@@ -274,6 +294,8 @@ inputs:
   # #588: where the project's UI and its E2E step definitions live (this repository: the UI kit, the
   # fronts and each app's renderer; the root's and each front's step definitions)
   ui_folders:
+    label_key: workflow_texts.feature_ui_folders_label
+    help_key: workflow_texts.feature_ui_folders_desc
     label: "UI folders"
     group: Tests
     type: array
@@ -286,6 +308,8 @@ inputs:
     default: [features/steps, fronts/ai/features/steps, fronts/analyser/features/steps, fronts/build/features/steps, fronts/plan/features/steps]
     description: "The folders of the project's E2E step definitions, repository-relative (one per line), read by the test id check."
   test_command:
+    label_key: workflow_texts.feature_test_command_label
+    help_key: workflow_texts.ai_development_hero_test_command_desc
     type: string
     default: ""
     label: Test command
@@ -647,6 +671,7 @@ steps:
   # work (TDAD, arXiv 2603.17973: TDD instructions without the affected tests made regressions worse).
   - id: acceptance_tests
     display: Write tests (E2E)
+    display_key: workflow_texts.feature_step_acceptance_tests
     agent: test_writer
     # #223: with E2E on, the issue's BDD scenarios are written here too, first
     skills:
@@ -808,6 +833,7 @@ steps:
   # the test writer once. A red check that cannot run at all (no test command) goes on to develop.
   - id: red_check
     display: Red check (TDD)
+    display_key: workflow_texts.feature_step_red_check
     type: suite
     command: "{{ inputs.test_command }}"
     # #247: after the owner's request changed the criteria, only the test files changed in that visit
@@ -836,6 +862,7 @@ steps:
   # run: a failure or a timeout goes on to develop without a map (no supervisor: on_error).
   - id: warm_up
     display: Warm Up
+    display_key: workflow_texts.feature_step_warm_up
     agent: mapper
     supervise: false
     on_error: develop
@@ -896,6 +923,7 @@ steps:
   - id: develop
     # a step's name says what it does ("Develop"); "Developer" is its agent's (#301's Run screen shows both)
     display: Develop
+    display_key: workflow_texts.feature_step_develop
     agent: developer
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
@@ -1246,6 +1274,7 @@ steps:
   # the rule tests included.
   - id: rule_check
     display: Rule checks
+    display_key: workflow_texts.feature_step_rule_check
     type: check
     command: "{{ inputs.check_command }}"
     transitions:
@@ -1279,6 +1308,7 @@ steps:
   # round (vars.docs_returns; going on resets it); never to the test writer.
   - id: docs_check
     display: Docs check
+    display_key: workflow_texts.feature_step_docs_check
     type: docs_check
     base: "{{ inputs.base_branch }}"
     from: develop
@@ -1303,6 +1333,7 @@ steps:
   # the steps_folders / ui_folders inputs (#588; default features/steps, src/renderer/).
   - id: testid_check
     display: Test id check (scenarios)
+    display_key: workflow_texts.feature_step_testid_check
     type: test_ids
     steps: "{{ (inputs.steps_folders or []) | join('\\n') }}"
     renderer: "{{ (inputs.ui_folders or []) | join('\\n') }}"
@@ -1377,6 +1408,7 @@ steps:
   # or a failed capture is in its output's message, which developer_check and the ui_reviewer read.
   - id: developer_screenshots
     display: Screenshots
+    display_key: workflow_texts.feature_step_developer_screenshots
     type: screenshots
     from: develop
     folder: developer
@@ -1792,6 +1824,7 @@ steps:
   # e2e_tests (#203): it only runs when one of them makes it write something.
   - id: test
     display: Write tests (Unit)
+    display_key: workflow_texts.feature_step_test
     agent: test_writer
     # the run's checkout of the base with its dependencies, for the pre-existing-failure check (#198)
     base_worktree: true
@@ -1952,6 +1985,7 @@ steps:
   # the base, plus the files that failed before); when they pass, the whole suite runs once in the run.
   - id: suite
     display: Run suite (Unit)
+    display_key: workflow_texts.feature_step_suite
     type: suite
     command: "{{ inputs.test_command }}"
     scope: affected
@@ -2010,6 +2044,7 @@ steps:
   # pixel difference with an existing baseline goes to the healer and the test_failed gate.
   - id: e2e
     display: Run suite (E2E)
+    display_key: workflow_texts.feature_step_e2e
     type: suite
     command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke"'
     timeout: 30m
@@ -2029,6 +2064,7 @@ steps:
   # run again. A product bug: to the developer with the evidence, then the scenarios run again.
   - id: heal
     display: E2E Heal
+    display_key: workflow_texts.feature_step_heal
     agent: healer
     prompt: |
       Task: {{ inputs.task }}
@@ -2141,8 +2177,8 @@ steps:
       No developer round was counted. Fix the environment, then try again: the rule checks run again.
     environment: rule_check
     choices:
-      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed." }
-      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it." }
+      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed.", help_key: engine.check_environment_retry_help }
+      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it.", help_key: engine.check_environment_stop_help }
     transitions:
       - when: "choice == 'stop'"
         goto: end
@@ -2201,6 +2237,7 @@ steps:
   # Builder: application build + dependency vulnerabilities.
   - id: build
     display: Builder
+    display_key: workflow_texts.feature_step_build
     agent: builder
     prompt: |
       On branch `{{ steps.develop.output.branch }}`:
@@ -2367,6 +2404,7 @@ steps:
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
   - id: verify_change
     display: Final verification
+    display_key: workflow_texts.feature_step_verify_change
     agent: verifier
     prompt: |
       Task: {{ inputs.task }}
@@ -2485,6 +2523,7 @@ steps:
   # resolution changed is reviewed, tested and verified (the build runs) before the next attempt.
   - id: resolve_merge
     display: Resolve conflicts
+    display_key: workflow_texts.feature_step_resolve_merge
     agent: developer
     # a rebase replays the test writer's commits: resolving their conflicts is part of the job
     edits_tests: true

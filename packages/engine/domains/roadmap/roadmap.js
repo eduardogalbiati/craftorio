@@ -379,7 +379,7 @@ function cleanStages(stages, { issues = [], previous = null, alive = null } = {}
     // the screen's Disable is off while an item of the stage runs; any other writer gets the same answer
     if (disabled && !prevDisabled.has(s?.id) && prevBusy.has(s?.id)) throw new Error(DISABLE_BUSY);
     // #435: the refactor stage waiting for the owner's OK stays one while disabled; enabled, it is a
-    // plain stage that drops the "(waiting for your OK)" of its name
+    // plain stage that drops the "(waiting for your OK)" of its name (#36: or "(aguardando seu OK)", any language's)
     const waiting = (s?.waiting === undefined ? prevWaiting.has(s?.id) : !!s.waiting);
     const name = String(s?.name || '').trim();
     return {
