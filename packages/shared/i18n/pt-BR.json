@@ -2573,6 +2573,10 @@
 
   "duo_issue.no_description": "(sem descrição)",
 
+  "engine.check_command_missing": "o comando do check não foi encontrado: instale o que `{command}` precisa, ou defina a entrada check_command",
+  "engine.check_deps_missing": "as dependências do projeto não estão instaladas: rode npm ci em {dir}",
+  "engine.check_environment_retry": "Tentar de novo",
+  "engine.check_environment_stop": "Parar a run como falha",
   "engine.memory_killed": "A guarda de memória parou `{command}` (pid {pid}) em {used} GB: acima do limite de {limit} GB por processo{again}.",
   "engine.memory_killed_again": " (parado {count} vezes em {step})",
   "errors.errors": "Erros",
@@ -3420,6 +3424,11 @@
   "onboarding.cost_not_known": "Ainda não estimado",
   "onboarding.cost_partial": "O ranking de refatoração ainda não tem estimativa: o total o deixa de fora.",
   "onboarding.cost_real_models": "Modelos reais · total estimado",
+  "onboarding.deps_failed": "A instalação falhou: {reason}",
+  "onboarding.deps_install": "Instalar as dependências",
+  "onboarding.deps_installing": "Instalando as dependências…",
+  "onboarding.deps_missing": "As dependências do projeto não estão instaladas: os checks de máquina precisam delas (npm ci).",
+  "onboarding.deps_title": "Instalar as dependências",
   "onboarding.dismiss": "Ocultar {name} da bandeja",
   "onboarding.edit_repo": "Editar a URL",
   "onboarding.estimating": "Estimando…",

@@ -40,6 +40,8 @@
 #     rule checks (`check_command`, or the `check` script of its package.json; none: skipped). A
 #     failure goes back to develop with the findings, at most twice per review round, then to the
 #     owner at check_failed; never to the test writer. The suite still runs every test after it.
+#     An environment failure (#30: no dependencies installed, a command not found) never goes back
+#     to develop nor counts as a round: the run stops once at check_environment (Try again reruns it).
 #   - docs_check (no agent, #757): right after rule_check (or in its place without a check command),
 #     when the issues list docs under `## Expected files`: none of them touched by the run's diff
 #     (and not in left_out with a reason) goes back to develop once per review round.
@@ -1258,6 +1260,9 @@ steps:
     type: check
     command: "{{ inputs.check_command }}"
     transitions:
+      # #30: the environment, not the code (no dependencies installed): the owner fixes it, no round counted
+      - when: "output.status == 'fail' and output.failure_kind == 'environment'"
+        goto: check_environment
       - when: "output.status == 'fail' and (vars.check_returns or 0) | int < 2"
         goto: develop
         set: { check_returns: "{{ (vars.check_returns or 0) | int + 1 }}" }
@@ -2103,10 +2108,9 @@ steps:
     type: human_approval
     summary: |
       The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s) (`{{ steps.rule_check.output.command }}`).
-      {% for l in steps.rule_check.output.findings %}{% if loop.index <= 4 %}- ✖ {{ l | one_line(120) }}
-      {% endif %}{% endfor %}
+      - ✖ {{ (steps.rule_check.output.cause or steps.rule_check.output.findings | last) | one_line(240) }}
     message: |
-      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s):
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s): {{ steps.rule_check.output.cause }}
       {{ steps.rule_check.output.message }}
       The change is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
     choices:
@@ -2126,6 +2130,28 @@ steps:
       - when: "true"
         goto: code_review
         set: *checks_passed
+
+  # #30: the rule checks cannot run here (the project's dependencies are not installed, a command is
+  # missing): no developer can fix it, so it never counts as a round. The owner fixes the environment
+  # (npm ci in the folder the cause names) and tries again, which reruns rule_check. A decision, like
+  # check_failed: neither the supervisor nor a retry answers it.
+  - id: check_environment
+    type: human_approval
+    summary: |
+      The project's rule checks cannot run: {{ steps.rule_check.output.cause }}
+    message: |
+      {{ steps.rule_check.output.cause }}
+      No developer round was counted. Fix the environment, then try again: the rule checks run again.
+    environment: rule_check
+    choices:
+      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed." }
+      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it." }
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      - when: "true"
+        goto: rule_check
 
   - id: test_failed
     type: human_approval

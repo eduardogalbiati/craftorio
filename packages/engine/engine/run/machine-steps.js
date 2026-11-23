@@ -718,14 +718,15 @@ const methods = {
   // `type: check` (#404): the project's rule checks in the run's checkout (packages/engine/engine/check-step.js),
   // `command` rendered (empty: the project's `check` script), `timeout` optional, the log under
   // logs/check-<visit>.log. Output: { kind: 'check', status: pass | fail | skipped, command,
-  // findings, message, round }.
+  // findings, message, round } (+ failure_kind, cause and environment on a failure, #30: the
+  // workflow sends an environment failure to its check_environment gate, never back to develop).
   async runCheckStep(step, st) {
     const command = step.command ? render(String(step.command), this.ctx).trim() : '';
     const timeoutMs = step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), undefined) : undefined;
     const logFile = path.join(this.runDir, 'logs', `check-${st.visits}.log`);
     const onLog = ({ command: cmd }) => this.emitEvent('step.log', { step_id: step.id, path: `logs/check-${st.visits}.log`, command: cmd });
     const output = { ...(await checkStep.runCheck({ dir: this.ctx.worktree_dir, command, logFile, env: { ...childEnv(process.env, { passthrough: this.envPassthrough() }), ...capabilities.AGENT_ENV }, timeoutMs, signal: this.abort.signal, sweep: !!this.worktree?.dir, onLog })), round: st.visits };
-    this.emitEvent('log', { level: output.status === 'fail' ? 'warn' : 'info', kind: 'check', step_id: step.id, status: output.status, message: `${step.id}: ${output.message.split('\n')[0]}` });
+    this.emitEvent('log', { level: output.status === 'fail' ? 'warn' : 'info', kind: 'check', step_id: step.id, status: output.status, message: `${step.id}: ${('cause' in output && output.cause) || output.message.split('\n')[0]}` });
     return output;
   },
 

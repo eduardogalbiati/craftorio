@@ -101,6 +101,8 @@ const methods = {
     const choices = step.choices ? step.choices.map((c) => ({
       id: c.id,
       label: render(c.label, this.ctx),
+      // #30: the catalog key the screens translate the label with (the YAML label stays the English fallback)
+      ...(c.label_key ? { label_key: String(c.label_key) } : {}),
       ...(c.feedback_required ? { feedback_required: true } : {}),
       ...(c.help ? { help: this.gateText(step, c.help) } : {}),
     })) : null;
@@ -123,7 +125,11 @@ const methods = {
     const timeout = parseDuration(step.timeout, null);
     // the folder the run's work is in (its worktree; a simulation works in the repository folder)
     const workDir = this.ctx.worktree_dir || this.inputs.repo_path || null;
+    // #30: `environment: <step>`: that check step's environment failure ({ reason, dir }), for the
+    // screens to say it in the interface language
+    const environment = step.environment ? this.ctx.steps?.[step.environment]?.output?.environment : null;
     const extra = {
+      ...(environment ? { environment } : {}),
       brief,
       ...yesNo,
       ...(report ? { report } : {}),

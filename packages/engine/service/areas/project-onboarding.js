@@ -29,6 +29,10 @@
 // (saveWizard on every change of the wizard, finish on Finish; status() answers it as `wizard`), so it outlives
 // the process; start() with the repository of an existing project resumes its unfinished onboarding (no second
 // project) or answers { exists, finished, projectId } for a finished one.
+// #30: a clone with an npm lockfile and no node_modules gets `deps: { status: missing | installing | installed |
+// failed, lockfile, command, reason? }` (depsOf, in the change that makes it ready, and on restore): the machine
+// checks (rule_check) need them. installDeps runs `npm ci` (with --ignore-scripts under the project's setting,
+// #472) in the clone through `install` (default: deps-cache.js runCommand).
 
 const fs = require('fs');
 const path = require('path');
@@ -37,6 +41,8 @@ const Platforms = require('@craftorio/shared/platforms');
 // #848: the platform the gh E2E hook stands for, the GitHub adapter's own id (#351: no platform literal here)
 const { id: E2E_REPOS_PLATFORM } = require('@craftorio/shared/platforms/github');
 const agents = require('../../domains/agents/agents');
+const depsCache = require('../../engine/deps-cache');
+const { oneLine } = require('../../engine/gate-summary');
 const issues = require('../../domains/backlog/issues');
 const { identityArgs } = require('../../engine/worktree');
 const projectMap = require('../../domains/project/project-map');
@@ -266,9 +272,10 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  * jobs: { facts, profile, projectMap }, each async ({ projectId, folder, facts }) => result;
  * slotsDir: the machine slots' folder (default: the machine's); pollMs: the slot's poll (default:
  * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
- * a new project's private repository (default: gh / glab, machineRemote).
+ * a new project's private repository (default: gh / glab, machineRemote); #30: install(cmd, args, { cwd }) →
+ * { code, output } runs the dependency install (default: deps-cache.js runCommand).
  */
-function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli }) {
+function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts) }) {
   const states = new Map();
   // per project: { wanted (analyze was asked), facts (the facts job's promise), free, paid (the running parts), cli }
   const work = new Map();
@@ -381,12 +388,36 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
         change(id, { status: 'failed', code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }, { clone: { status: 'failed', error: p.cloneError || null } });
         return;
       }
-      change(id, { status: 'ready', code: undefined, reason: undefined }, { clone: { status: 'done' } });
+      change(id, { status: 'ready', code: undefined, reason: undefined, deps: depsOf(p) }, { clone: { status: 'done' } });
       startFree(id);
       if (workOf(id).wanted) startPaid(id);
     } catch (e) {
       stopped(id, e);
     }
+  }
+
+  // #30: { status: 'missing', lockfile, command } for a clone with an npm lockfile and no node_modules, else
+  // undefined (no lockfile, another manager, installed); the command follows the project's setting (#472)
+  function depsOf(p) {
+    const d = p?.folder && fs.existsSync(p.folder) ? depsCache.detect(p.folder) : null;
+    if (d?.manager !== 'npm' || fs.existsSync(path.join(p.folder, 'node_modules'))) return undefined;
+    return { status: 'missing', lockfile: d.lockfile, command: p.ignoreInstallScripts ? 'npm ci --ignore-scripts' : 'npm ci' };
+  }
+
+  // #30: runs the offered install in the clone → the state; never rejects (a failed install is deps.status failed)
+  async function installDeps(projectId) {
+    // throws for a project without an onboarding; restores the state of an earlier process
+    status(projectId);
+    const p = projectOf(projectId);
+    const deps = states.get(projectId)?.deps;
+    if (!p || !deps || deps.status === 'installing' || deps.status === 'installed') return status(projectId);
+    const [cmd, ...args] = deps.command.split(' ');
+    change(projectId, { deps: { ...deps, status: 'installing', reason: undefined } });
+    let r;
+    try { r = await install(cmd, args, { cwd: p.folder }); } catch (e) { r = { code: null, output: String(e?.message || e) }; }
+    const last = String(r?.output || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || `${deps.command} exited with code ${r?.code}`;
+    change(projectId, { deps: { ...deps, ...(r?.code === 0 ? { status: 'installed', reason: undefined } : { status: 'failed', reason: oneLine(last, 160) }) } });
+    return status(projectId);
   }
 
   function cloning(id) {
@@ -532,7 +563,9 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   function restore(p) {
     const waiting = Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }]));
     const ready = p.status === 'ready';
-    states.set(p.id, { projectId: p.id, name: p.name, status: ready ? 'ready' : 'failed', jobs: { ...waiting, clone: { status: ready ? 'done' : 'failed' } }, cli: null, ...(ready ? {} : { code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }) });
+    // #30: the dependencies still missing after a restart (the project page's Next steps reads them)
+    const deps = ready ? depsOf(p) : undefined;
+    states.set(p.id, { projectId: p.id, name: p.name, status: ready ? 'ready' : 'failed', jobs: { ...waiting, clone: { status: ready ? 'done' : 'failed' } }, cli: null, ...(deps ? { deps } : {}), ...(ready ? {} : { code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }) });
     if (ready && !p.onboarding.finished) startFree(p.id);
   }
 
@@ -665,7 +698,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(p.id);
   }
 
-  return { analyze, create, finish, fork, retry, saveWizard, start, status, workLocally };
+  return { analyze, create, finish, fork, installDeps, retry, saveWizard, start, status, workLocally };
 }
 
 module.exports = (ctx) => {
@@ -710,6 +743,7 @@ module.exports = (ctx) => {
     onboardingCreate: (data) => onboarding().create(data),
     onboardingFinish: ({ projectId }) => onboarding().finish(projectId),
     onboardingFork: ({ projectId }) => onboarding().fork(projectId),
+    onboardingInstallDeps: ({ projectId }) => onboarding().installDeps(projectId),
     onboardingRepos: ({ provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
     onboardingSaveWizard: ({ projectId, step, picks } = {}) => onboarding().saveWizard(projectId, { step, picks }),

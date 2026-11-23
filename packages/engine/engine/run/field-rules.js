@@ -198,6 +198,8 @@
     entry('steps[].local_preview', GATE, 'boolean', 'local_preview must be true or false, on a human_approval step.'),
     entry('steps[].diff_base', GATE, 'non-blank text', 'diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.', { template: true }),
     entry('steps[].save_to_issue', GATE, 'any', 'save_to_issue must be the id of one of the step\'s choices (e.g. accept), on a human_approval step.'),
+    // #30: the check step whose environment failure ({ reason, dir }) the gate passes to the screens
+    entry('steps[].environment', GATE, 'text', 'environment must be the id of a check step (e.g. rule_check), on a human_approval step.'),
     // a gate's summary for a person (#213), what its buttons say and do
     gateText('summary'),
     gateText('recommend'),

@@ -7,7 +7,8 @@
 // side panel of a gate that tries the change (gateSideHtml, mountGateSides) and the gate's tools
 // (gateToolsHtml, onGateTool): Run App with its one-click confirmation and its fields, the
 // terminal toggle, Show the diff (the diff viewer, diff-viewer.js, #118) and the worktree's folder
-// and shell; paintGateApps keeps Run App's state on every gate shown. Uses app.js globals ($, esc,
+// and shell; paintGateApps keeps Run App's state on every gate shown. #30: a choice's `label_key` and a
+// check_environment gate's cause (gateEnvironmentText) read the interface language. Uses app.js globals ($, esc,
 // state, api, errMsg, showToast), openTerminal (term-dock.js) and DiffViewer.
 
 // The gates that try the change (`local_preview: true` on the step) get Run App and the side panel.
@@ -100,8 +101,19 @@ function gateAnswers(g) {
       { id: false, key: 'reject', label: g.reject?.label || t('gate_panel.reject'), help: g.reject?.help || '' },
     ];
   }
-  return g.choices.map((c) => ({ ...c, key: String(c.id), help: c.help || '' }));
+  // #30: a choice whose workflow names a catalog key (`label_key`) reads it in the interface language
+  // (the YAML label is the English fallback the engine renders)
+  return g.choices.map((c) => ({ ...c, label: c.label_key ? t(c.label_key) : c.label, key: String(c.id), help: c.help || '' }));
 }
+
+// #30: a check_environment gate's cause (`environment` on the gate: { reason, dir, command }), in the
+// interface language at every draw; '' for any other gate
+function gateEnvironmentText(g) {
+  const env = g?.environment;
+  if (!env) return '';
+  return env.reason === 'deps_missing' ? t('engine.check_deps_missing', { dir: env.dir }) : t('engine.check_command_missing', { command: env.command || '' });
+}
+window.gateEnvironmentText = gateEnvironmentText;
 
 // The summary every human gate shows first (#213), in the run chat and on the Run screen: what
 // happened, the status per issue (Markdown), the recommendation (the supervisor's or the
@@ -271,7 +283,8 @@ window.mountGateScenarios = mountGateScenarios;
 // about an issue (#125) also offers "Accept and save to issue #n", right after the choice it
 // answers: the same choice with intent save_to_issue (the Save to issue preview opens when the run ends).
 function gateChoices(gate) {
-  const choices = gate.choices || [{ id: true, label: gate.approve?.label || t('common.approve') }, { id: false, label: gate.reject?.label || t('gate_panel.reject') }];
+  // #30: label_key read in the interface language, as gateAnswers does
+  const choices = gate.choices?.map((c) => (c.label_key ? { ...c, label: t(c.label_key) } : c)) || [{ id: true, label: gate.approve?.label || t('common.approve') }, { id: false, label: gate.reject?.label || t('gate_panel.reject') }];
   const save = gate.save_to_issue;
   const at = save?.issue ? choices.findIndex((c) => String(c.id) === String(save.choice)) : -1;
   if (at < 0) return choices;

@@ -4,6 +4,7 @@
 // import, the wizard's repository step (#669, mock-2) reads gh / glab's sign-in and the account's repositories.
 // #632: onboarding:create makes a new project instead of importing one (mock-3).
 // #741: onboarding:save-wizard / onboarding:finish keep the wizard's step and picks with the project.
+// #30: onboarding:install-deps installs a clone's missing dependencies (the project page's Next steps).
 
 const {
   args,
@@ -38,6 +39,8 @@ module.exports = (ctx) => [
   // the original; Fork + PR) or "Work locally" (the Local way of working, no pull request)
   { channel: 'onboarding:fork', method: 'forkOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingFork(opts) },
   { channel: 'onboarding:work-locally', method: 'workLocallyOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingWorkLocally(opts) },
+  // #30: the clone's dependencies (state.deps missing): runs npm ci there, --ignore-scripts under the project's setting
+  { channel: 'onboarding:install-deps', method: 'installOnboardingDeps', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingInstallDeps(opts) },
   // #741: the wizard's step and the owner's picks, saved with the project on every change (an onboarding left
   // before Finish resumes there); Finish marks it finished
   { channel: 'onboarding:save-wizard', method: 'saveOnboardingWizard', params: 'data', schema: { params: args({ projectId: PROJECT_ID, step: text(20, 'The wizard step: start, repository, analysis or review.'), picks: described(OBJECT, 'The owner\'s picks, kept as given.') }, ['projectId', 'step']), result: OBJECT }, fn: (data) => ctx.onboardingSaveWizard(data) },

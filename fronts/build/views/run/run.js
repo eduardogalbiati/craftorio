@@ -24,7 +24,8 @@ function renderRunGates() {
   // the gates answered from this window, until approval.resolved confirms them (#603)
   const answered = [...(v.answered?.values() || [])];
   box.classList.toggle('hidden', !gates.length && !answered.length);
-  const key = `${gates.map((g) => `${g.run_id}:${g.approval_id}`).join('|')}:${answered.map((a) => `${a.gate.approval_id}:${a.note}`).join('|')}:${runLabel(v.run)}`;
+  // the interface language too (#30: translated choices and causes redraw on a language change)
+  const key = `${gates.map((g) => `${g.run_id}:${g.approval_id}`).join('|')}:${answered.map((a) => `${a.gate.approval_id}:${a.note}`).join('|')}:${runLabel(v.run)}:${window.I18n?.getLanguage?.() || ''}`;
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
@@ -38,8 +39,11 @@ function renderRunGates() {
     // a report (#290: the release summary) leads, as Markdown, above the rest of the message
     const parts = typeof gateReportParts === 'function' ? gateReportParts(g) : { reportHtml: '', message: g.message || '' };
     const message = `${parts.reportHtml}<pre class="run-gate-message" data-testid="run-gate-message">${esc(parts.message)}</pre>`;
+    // #30: a check_environment gate says its cause in one line, in the interface language, instead of its card
+    const envText = typeof gateEnvironmentText === 'function' ? gateEnvironmentText(g) : '';
+    const card = envText ? `<p class="gate-card-what" data-testid="check-environment-message">${esc(envText)}</p>` : gateCardHtml(g.run_id, g, message) || message;
     const main = `<div class="run-gate-head"><b>${t('run.approval_required')}</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
-      ${gateCardHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
+      ${card}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
     const side = gateSideHtml(g);
     const rec = g.brief?.recommendation?.answer;
     return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-testid="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"${rec ? ` data-recommend="${esc(rec)}"` : ''}>${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;

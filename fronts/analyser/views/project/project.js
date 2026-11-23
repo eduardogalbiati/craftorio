@@ -23,7 +23,9 @@
 // next-step-release-ci / next-step-screenshots shown disabled (later phases), their reason in the button's
 // tooltip and a line (#744); #22: the idea step shows next-step-idea-done instead of its button once the
 // project's Inbox has a card (api.listDiscoveryCards, read once per page), and the screenshots step is
-// left out for a project of kind 'backend' (no user interface);
+// left out for a project of kind 'backend' (no user interface); #30: next-step-install-deps, shown while the
+// clone has a lockfile and no node_modules (api.onboardingStatus's deps), names the command and runs it
+// (api.installOnboardingDeps: npm ci, --ignore-scripts per the project's setting);
 // next-steps-dismiss), remembered per project in localStorage craftorio.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -53,6 +55,8 @@ const PV_NEXT_STEPS_KEY = 'craftorio.nextSteps';
 // #744: the PO's issue first
 const PV_NEXT_STEPS = [
   ['po-issue', 'onboarding.next_steps_po_issue', 'onboarding.next_steps_po_issue_text', 'onboarding.open_po', null],
+  // #30: shown only while the imported clone has a lockfile and no installed dependencies
+  ['install-deps', 'onboarding.deps_title', 'onboarding.deps_missing', 'onboarding.deps_install', null],
   ['refactors', 'onboarding.next_steps_refactors', null, 'onboarding.next_steps_file_add', null],
   ['idea', 'onboarding.next_steps_idea', 'onboarding.next_steps_idea_text', 'onboarding.open_inbox', null],
   ['cadence', 'onboarding.next_steps_cadence', 'onboarding.next_steps_cadence_text', 'onboarding.turn_on', null],
@@ -92,6 +96,28 @@ function loadNextStepIdeas(pv) {
   });
 }
 
+// #30: the clone's dependencies as the onboarding saw them ({ status: missing | installing | installed | failed,
+// command, reason }), read once per page; the install-deps entry shows while they are not installed
+function loadNextStepDeps(pv) {
+  if (nextSteps()[pv.id] !== 'open' || pv.nextStepDeps !== undefined) return;
+  pv.nextStepDeps = null;
+  new Promise((resolve) => resolve(api.onboardingStatus?.(pv.id))).then((s) => s?.deps || null, () => null).then((deps) => {
+    pv.nextStepDeps = deps;
+    if (state.pv === pv && state.view === 'project') renderProjectView();
+  });
+}
+
+// #30: npm ci in the clone (the service honours the project's "ignore install scripts"), then the entry again
+function installNextStepDeps(pv) {
+  if (!pv?.nextStepDeps || pv.nextStepDeps.status === 'installing') return;
+  pv.nextStepDeps = { ...pv.nextStepDeps, status: 'installing' };
+  renderProjectView();
+  Promise.resolve(api.installOnboardingDeps(pv.id)).then((s) => s?.deps || null, (e) => ({ ...pv.nextStepDeps, status: 'failed', reason: errMsg(e) })).then((deps) => {
+    pv.nextStepDeps = deps;
+    if (state.pv === pv && state.view === 'project') renderProjectView();
+  });
+}
+
 const fileAndAddLabel = (pv) => t('onboarding.next_steps_file_add', { count: pv.nextStepPicked.size });
 
 function nextStepsMarkup(pv) {
@@ -114,6 +140,10 @@ function nextStepsMarkup(pv) {
     if (step === 'idea' && pv.nextStepIdeas?.length) {
       return `<span class="small" data-testid="next-step-idea-done">${esc(t('onboarding.next_steps_idea_done'))}</span>`;
     }
+    // #30: the install runs in the service; its button waits, disabled, until it ends
+    if (step === 'install-deps' && pv.nextStepDeps?.status === 'installing') {
+      return `<button type="button" class="btn sm" disabled aria-disabled="true">${esc(t('onboarding.deps_installing'))}</button>`;
+    }
     const testid = step === 'po-issue' ? ' data-testid="next-step-po-issue-open"' : '';
     // #744: a disabled step says why, in its tooltip and in a line of its entry
     const reason = later ? esc(t(later)) : '';
@@ -123,15 +153,23 @@ function nextStepsMarkup(pv) {
   // #850: the release CI step of a project that has a release workflow does not say it needs one (still a later version)
   const hasRelease = (pv.project?.workflows || []).some((w) => w?.name === 'release');
   const reasonOf = (step, later) => (step === 'release-ci' && hasRelease ? 'onboarding.next_steps_release_ci_reason_ready' : later);
+  // #30: the install entry names the exact command (npm ci, --ignore-scripts per the project) and why a try failed
+  const depsLine = () => {
+    const deps = pv.nextStepDeps || {};
+    const failed = deps.status === 'failed' ? `<span class="warn-text small text-cut" title="${esc(deps.reason || '')}">${esc(t('onboarding.deps_failed', { reason: deps.reason || '' }))}</span>` : '';
+    return `<span class="muted small">${esc(t('onboarding.deps_missing'))}</span>
+      <code class="small">${esc(deps.command || 'npm ci')}</code>${failed}`;
+  };
   const entry = ([step, title, line, action, later]) => `<li class="pr-next-step" data-testid="next-step-${step}">
       <strong>${esc(t(title))}</strong>
-      ${line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
+      ${step === 'install-deps' ? depsLine() : line ? `<span class="muted small">${esc(t(line, { name: pv.project?.name || '' }))}</span>` : proposals()}
       ${button(step, action, reasonOf(step, later))}
     </li>`;
   // #744: no refactors step once the proposals are read and there are none (never "File and add 0")
   // #22: no screenshots spike for a project without a user interface (the wizard's kind 'backend')
   const shown = PV_NEXT_STEPS.filter(([step]) => (step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length)
-    && (step !== 'screenshots' || pv.project?.kind !== 'backend'));
+    && (step !== 'screenshots' || pv.project?.kind !== 'backend')
+    && (step !== 'install-deps' || ['missing', 'installing', 'failed'].includes(pv.nextStepDeps?.status)));
   // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
   // ranking made proposals
   const ready = [t('onboarding.next_steps_ready', { name: pv.project?.name || '' })];
@@ -161,6 +199,7 @@ function onNextStepClick(step) {
   }
   // #744: the Product Owner's chat in issue mode on this project (the Build front's backlog-po.js)
   else if (step === 'po-issue' && state.pv) window.Actions?.call('openPoIssue', state.pv.id);
+  else if (step === 'install-deps') installNextStepDeps(state.pv);
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {
     state.pv.tab = 'health';
@@ -173,7 +212,7 @@ function newProjectPage(id) {
   const tab = projectTabs()[id];
   return {
     id, project: state.projects.find((p) => p.id === id) || null, runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map(),
-    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepPicked: new Set(),
+    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepDeps: undefined, nextStepPicked: new Set(),
     tab: PV_TABS.some(([t]) => t === tab) ? tab : 'overview',
   };
 }
@@ -260,6 +299,7 @@ function renderProjectView() {
   if (pv.tab !== 'overview') return;
   loadNextStepProposals(pv);
   loadNextStepIdeas(pv);
+  loadNextStepDeps(pv);
   $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv);
   $('#project-info').innerHTML = `
     <dl class="kv">

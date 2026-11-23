@@ -1,5 +1,5 @@
 {
- "hash": "3e115ae8a23a",
+ "hash": "190ea2e7170a",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -8974,6 +8974,34 @@
   {
    "channel": "onboarding:fork",
    "method": "forkOnboarding",
+   "params": [
+    "projectId"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      }
+     },
+     "required": [
+      "projectId"
+     ]
+    },
+    "result": {
+     "type": "object"
+    }
+   }
+  },
+  {
+   "channel": "onboarding:install-deps",
+   "method": "installOnboardingDeps",
    "params": [
     "projectId"
    ],
