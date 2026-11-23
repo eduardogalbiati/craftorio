@@ -2,7 +2,7 @@
 // The Start drawer (right side): a category, a workflow and a project, the workflow's inputs
 // (remembered per workflow, the project's folder filling the path inputs) and Start / Start
 // another (startRun). openDrawer opens it, prefilled or not: the top bar, Projects, Project,
-// Backlog and Workflows. initStartDrawer() wires it from app.js's init(). Uses app.js globals ($,
+// Backlog and Workflows; with a project and no workflow it opens on the project's default (#27). initStartDrawer() wires it from app.js's init(). Uses app.js globals ($,
 // esc, state, api, errMsg, CATEGORIES, liveRuns, renderHeader, selectRun, wantsSimulation…). The
 // inputs other than the main one are drawn by WorkflowInputs (workflow-inputs.js, #116): human
 // labels, pills / switches, show_if, and the chosen project's detected language and branches.
@@ -36,7 +36,10 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   applyDeveloperMode();
   $('#start-error').textContent = '';
   renderDrawerCategories();
-  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || state.settings.lastWorkflow);
+  // #27: with a project (given or the header's) and no workflow, the project's default before lastWorkflow
+  const rec = state.projects.find((p) => p.id === (project || window.CurrentProject.get()));
+  const projectDefault = rec && window.DefaultWorkflow?.projectDefault?.(rec, rec.manifest?.default);
+  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || (projectDefault ? `${projectDefault}.yaml` : state.settings.lastWorkflow));
   if (inputs && (!workflow || state.wf?.file === workflow)) {
     for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
