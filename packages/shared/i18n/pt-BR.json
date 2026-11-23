@@ -4253,7 +4253,7 @@
   "project_city.glow_title": "Brilho: um bloom sobre as luzes e uma vinheta; desligue numa máquina mais lenta",
   "project_city.in_the_danger_zone_count": "{count} na Zona de perigo",
   "project_city.install_hint": "Ferramentas de complexidade para isso: {tools}. O app lê o lizard; para instalar, rode:",
-  "project_city.legend_commits": "{count} commits",
+  "project_city.legend_commits": { "one": "{count} commit", "other": "{count} commits" },
   "project_city.legend_no_commit": "Nenhum commit",
   "project_city.legend_not_measured": "Não medido",
   "project_city.legend_tests": "Testes",

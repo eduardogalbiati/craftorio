@@ -92,7 +92,7 @@ async function open(facts, { projectId = 'p1', store = new Map(), calls = [] } =
 
 const legend = (city) => q(city.el, 'project-city-legend');
 const line = (city) => q(legend(city), 'project-city-unmeasured');
-const inChurn = (city) => /\d+ commits/.test(text(legend(city)));
+const inChurn = (city) => /\d+ commits?/.test(text(legend(city)));
 const inQuadrant = (city) => /Danger Zone/.test(text(legend(city)));
 
 function pick(w, city, value) {
