@@ -445,7 +445,8 @@
   const assignPipeline = () => (bl.pipelines || []).find((p) => PIPE + p.file === $b('#assign-workflow').value) || null;
   function renderAssignInputs() {
     const pipe = assignPipeline();
-    const wf = bl.workflows.find((w) => w.file === (pipe ? pipe.stages[0].workflow : $b('#assign-workflow').value));
+    // #36: labels, options and help in the interface language (the workflow's keys, a bundled copy's catalog texts)
+    const wf = WorkflowInputs.localized(bl.workflows.find((w) => w.file === (pipe ? pipe.stages[0].workflow : $b('#assign-workflow').value)));
     // #29: the project's variant runs another test order than the file's default (code first): its description
     const order = DefaultWorkflow.variantTestOrder(project()?.workflows?.find((w) => w.name === wf?.name)?.variant);
     const orderKey = !pipe && order !== wf?.inputs?.test_order?.default ? DefaultWorkflow.orderDescriptionKey(wf?.name, order) : null;

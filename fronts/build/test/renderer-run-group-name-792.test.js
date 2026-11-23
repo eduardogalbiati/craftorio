@@ -26,8 +26,9 @@ async function sections(t, language, lastGroup) {
   return [...String(app.el('#steps').innerHTML).matchAll(/data-group="([^"]*)"[\s\S]*?<b>([^<]*)<\/b>/g)].map((m) => [m[1], m[2]]);
 }
 
+// (#36: the bundled workflows' group names come from the catalog too: Develop reads "Desenvolver" in Portuguese)
 test('#792 the Run screen shows the section of a run that opens a pull request as Abrir PR, in Portuguese', async (t) => {
-  assert.deepEqual(await sections(t, 'pt-BR', 'Open PR'), [['Develop', 'Develop'], ['Open PR', 'Abrir PR']]);
+  assert.deepEqual(await sections(t, 'pt-BR', 'Open PR'), [['Develop', 'Desenvolver'], ['Open PR', 'Abrir PR']]);
 });
 
 test('#792 the Run screen shows it as Open PR, in English', async (t) => {
@@ -35,5 +36,5 @@ test('#792 the Run screen shows it as Open PR, in English', async (t) => {
 });
 
 test('#792 the Run screen keeps Merge for a local merge, in Portuguese too', async (t) => {
-  assert.deepEqual(await sections(t, 'pt-BR', 'Merge'), [['Develop', 'Develop'], ['Merge', 'Merge']]);
+  assert.deepEqual(await sections(t, 'pt-BR', 'Merge'), [['Develop', 'Desenvolver'], ['Merge', 'Merge']]);
 });

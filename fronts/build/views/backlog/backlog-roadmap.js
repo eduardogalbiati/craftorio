@@ -108,7 +108,7 @@
   }
   // #630: an item saved under an old workflow name (software-development.yaml, ...) means its alias
   const fileOf = (x) => (!x.workflow || workflows?.has(x.workflow) ? x.workflow : window.DefaultWorkflow?.aliasOf(x.workflow)?.file || x.workflow);
-  const wfOf = (x) => workflows?.get(fileOf(x));
+  const wfOf = (x) => WorkflowInputs.localized(workflows?.get(fileOf(x))); // #36: inputs and stations in the interface language, when drawn
   const inputDefs = (x) => wfOf(x)?.inputs || {};
 
   // #792: how the item's run ends (pr, local, fork, null: it does neither), by the run's own rule; the default's the same way, the project's run defaults over its Feature entry
@@ -179,9 +179,9 @@
     const help = def?.description ? `. ${def.description}` : '';
     const fixed = locked || values.length < 2;
     const running = x.status === 'running' || !!x.waiting;
-    const title = fixed ? `Mode: ${text(value)}${running ? ' (locked while the item runs)' : ''}${help}` : `Mode (saved at once)${help}`;
-    // the mode's sentence in the input's description ("Automatic: … . Validated: … .")
-    const note = running ? 'locked while it runs' : WorkflowInputs.optionHint(def, value);
+    const title = fixed ? `${running ? t('backlog_roadmap.mode_locked_while_the_item_runs') : t('backlog_roadmap.mode')} ${text(value)}${help}` : `${t('backlog_roadmap.mode_saved_at_once')}${help}`;
+    // the mode's sentence in the input's description ("Automatic: … . Validated: … ."; #36: localized, wfOf)
+    const note = running ? t('backlog_roadmap.locked_while_it_runs') : WorkflowInputs.optionHint(def, value);
     return `<div class="rm-wf-row"><span class="seg sm rm-mode-seg${fixed ? ' locked' : ''}" role="group" aria-label="${running ? t('backlog_roadmap.mode_locked_while_the_item_runs') : t('backlog_roadmap.mode_2')}" data-testid="roadmap-mode" title="${esc(title)}">${values.map((v) =>
       `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-mode="${esc(v)}"${fixed ? '' : ` data-rm-mode="${esc(v)}"`} aria-pressed="${v === value}"${fixed ? ' disabled' : ''}>${ICON[v] || ''}${esc(text(v))}</button>`).join('')}</span>${note ? `<span class="rm-mode-note muted">${esc(note)}</span>` : ''}</div>`;
   }
@@ -212,7 +212,7 @@
   // estimate yet" without one. data-verdict: none | estimate | ok | warn | over.
   const VERDICT = { good: 'ok', warn: 'warn', bad: 'over' };
   const LEVEL = { ok: 'good', warn: 'warn', over: 'bad' };
-  const METER = { cost: ['Cost', 'data-testid="roadmap-meter-cost"'], time: ['Time', 'data-testid="roadmap-meter-time"'] };
+  const METER = { cost: ['backlog_roadmap.meter_cost', 'data-testid="roadmap-meter-cost"'], time: ['backlog_roadmap.meter_time', 'data-testid="roadmap-meter-time"'] }; // #36: keys, read when drawn
   const pctText = (p) => `${p > 0 ? '+' : p < 0 ? '−' : '±'}${Math.abs(p)}%`;
   const barInner = (ratio) => `<i style="width:${Math.min(100, Math.max(0, ratio) * 100).toFixed(1)}%"></i>${ratio > 1 ? `<u style="left:${(100 / ratio).toFixed(1)}%"></u>` : ''}`;
   const verdictInner = (sign, text) => `${sign ? `<span class="rm-sign" aria-hidden="true">${sign}</span> ` : ''}${esc(text)}`;
@@ -220,7 +220,7 @@
   function meterHtml(kind, m) {
     const [label, id] = METER[kind];
     const right = m.text ? `<span class="rm-meter-verdict rm-verdict rm-verdict-${m.level}">${verdictInner(m.sign, m.text)}</span>` : m.note ? `<span class="rm-meter-note muted">${esc(m.note)}</span>` : '';
-    return `<div class="rm-meter" ${id} data-verdict="${m.verdict}"${m.title ? ` title="${esc(m.title)}"` : ''}><div class="rm-meter-row"><span class="rm-meter-label">${label}</span><span class="rm-meter-value">${m.value}</span>${m.of ? `<span class="rm-meter-of muted">${esc(m.of)}</span>` : ''}<span class="spacer"></span>${right}</div>${m.ratio != null ? `<div class="rm-meter-bar" aria-hidden="true">${barInner(m.ratio)}</div>` : ''}</div>`;
+    return `<div class="rm-meter" ${id} data-verdict="${m.verdict}"${m.title ? ` title="${esc(m.title)}"` : ''}><div class="rm-meter-row"><span class="rm-meter-label">${t(label)}</span><span class="rm-meter-value">${m.value}</span>${m.of ? `<span class="rm-meter-of muted">${esc(m.of)}</span>` : ''}<span class="spacer"></span>${right}</div>${m.ratio != null ? `<div class="rm-meter-bar" aria-hidden="true">${barInner(m.ratio)}</div>` : ''}</div>`;
   }
   // a real value against its estimate; `running`: within the estimate reads "on track"
   function againstHtml(kind, actual, estimate, { fmt, more, running = false, extra = [] }) {
@@ -228,19 +228,19 @@
     if (!v) return meterHtml(kind, { verdict: 'none', value: esc(fmt(actual)) });
     const onTrack = running && v.level === 'good';
     const tip = [`${pctText(v.percent)}, ${more(v.diff)} than the estimate (${fmt(estimate)})${running ? ', so far' : ''}`, ...extra].filter(Boolean).join('\n');
-    return meterHtml(kind, { verdict: VERDICT[v.level], level: v.level, value: esc(fmt(actual)), of: `of ≈ ${fmt(estimate)}`, sign: onTrack ? '' : v.sign, text: onTrack ? 'on track' : pctText(v.percent), ratio: actual / estimate, title: tip });
+    return meterHtml(kind, { verdict: VERDICT[v.level], level: v.level, value: esc(fmt(actual)), of: t('backlog_roadmap.meter_of', { value: fmt(estimate) }), sign: onTrack ? '' : v.sign, text: onTrack ? t('backlog_roadmap.on_track') : pctText(v.percent), ratio: actual / estimate, title: tip });
   }
   // the time line of a run at work, from its working time against the estimate (timerTone's levels)
   function liveTime(ms, minutes) {
     const tone = timerTone(ms, minutes);
     if (tone === 'neutral') return { verdict: 'none' };
     const ratio = ms / (minutes * 60000);
-    return { verdict: tone, level: LEVEL[tone], sign: tone === 'ok' ? '' : '▲', text: tone === 'ok' ? 'on track' : pctText(Math.round((ratio - 1) * 100)), ratio };
+    return { verdict: tone, level: LEVEL[tone], sign: tone === 'ok' ? '' : '▲', text: tone === 'ok' ? t('backlog_roadmap.on_track') : pctText(Math.round((ratio - 1) * 100)), ratio };
   }
   function costMeter(x, running) {
     const sim = RoadmapModel.isSimulated(x), e = !sim && x.estimate; // #31: a simulated run spends nothing, whatever its events recorded
-    if (!e) return meterHtml('cost', { verdict: 'none', value: sim ? money(0) : x.actualUsd != null ? `${money(x.actualUsd)}${running ? ' so far' : ''}` : '—', note: sim ? t('backlog_roadmap.simulated') : 'no estimate yet', title: sim ? '' : t('backlog_roadmap.no_successful_real_run_of_this') });
-    if (x.actualUsd == null) return meterHtml('cost', { verdict: 'estimate', value: `≈ ${money(e.usd)}${e.estimated ? ' (est.)' : ''}`, note: 'estimate', title: e.basis });
+    if (!e) return meterHtml('cost', { verdict: 'none', value: sim ? money(0) : x.actualUsd != null ? (running ? t('backlog_roadmap.meter_so_far', { value: money(x.actualUsd) }) : money(x.actualUsd)) : '—', note: sim ? t('backlog_roadmap.simulated') : t('backlog_roadmap.no_estimate_yet'), title: sim ? '' : t('backlog_roadmap.no_successful_real_run_of_this') });
+    if (x.actualUsd == null) return meterHtml('cost', { verdict: 'estimate', value: `≈ ${money(e.usd)}${e.estimated ? t('backlog_roadmap.meter_est') : ''}`, note: t('backlog_roadmap.meter_estimate'), title: e.basis });
     return againstHtml('cost', x.actualUsd, e.usd, { fmt: money, more: moneyMore, running, extra: [e.basis] });
   }
   // `clock`: the run's working time (runClock); while it works, the value is the live timer (#272)
@@ -250,16 +250,16 @@
     if (clock && (running || x.actualMinutes == null)) {
       const live = liveTime(clock.ms, est);
       return meterHtml('time', {
-        ...live, value: timerHtml(clock, e), of: est ? `of ≈ ${mins(est)}` : '', note: est ? '' : 'no estimate yet',
-        title: ['Working time, gate waits left out', e?.timeBasis].filter(Boolean).join('\n'),
+        ...live, value: timerHtml(clock, e), of: est ? t('backlog_roadmap.meter_of', { value: mins(est) }) : '', note: est ? '' : t('backlog_roadmap.no_estimate_yet'),
+        title: [t('backlog_roadmap.meter_working_time'), e?.timeBasis].filter(Boolean).join('\n'),
       });
     }
     if (x.actualMinutes != null) {
       if (est) return againstHtml('time', x.actualMinutes, est, { fmt: mins, more: timeMore, extra: [topStep(x), e.timeBasis] });
-      return meterHtml('time', { verdict: 'none', value: esc(mins(x.actualMinutes)), note: 'no estimate yet', title: topStep(x) });
+      return meterHtml('time', { verdict: 'none', value: esc(mins(x.actualMinutes)), note: t('backlog_roadmap.no_estimate_yet'), title: topStep(x) });
     }
-    if (est) return meterHtml('time', { verdict: 'estimate', value: `≈ ${mins(est)}`, note: 'estimate', title: e.timeBasis || t('backlog_roadmap.from_runs_past_runs', { runs: e.runs }) });
-    return meterHtml('time', { verdict: 'none', value: '—', note: 'no estimate yet' });
+    if (est) return meterHtml('time', { verdict: 'estimate', value: `≈ ${mins(est)}`, note: t('backlog_roadmap.meter_estimate'), title: e.timeBasis || t('backlog_roadmap.from_runs_past_runs', { runs: e.runs }) });
+    return meterHtml('time', { verdict: 'none', value: '—', note: t('backlog_roadmap.no_estimate_yet') });
   }
   const metersHtml = (x, running, clock) => `<div class="rm-meters">${costMeter(x, running)}${timeMeter(x, running, clock)}</div>`;
   // #205: the Product Owner's Cost step and what it chose for this item (a badge of the Workflow band)
@@ -411,15 +411,15 @@
     const run = x.run;
     const last = (run.progress || []).at(-1);
     const groupOf = new Map((run.groups || []).flatMap((g) => (g.steps || []).map((id) => [id, RunProgress.groupName(g.name, t)])));
-    const where = est.step ? groupOf.get(est.step) || readable(est.step, run.stepNames) : 'starting';
+    const where = est.step ? groupOf.get(est.step) || readable(est.step, run.stepNames) : t('backlog_roadmap.run_starting');
     const whereId = est.step && !groupOf.has(est.step) ? ` (${est.step})` : '';
-    const label = { waiting: 'Waiting for you', failed: `Failed at ${where}`, stopped: `Stopped at ${where}`, done: 'Done' }[est.state] || where;
+    const label = { waiting: t('status_pill.status_waiting'), failed: t('backlog_roadmap.failed_at', { where }), stopped: t('backlog_roadmap.stopped_at', { where }), done: t('backlog_roadmap.done_2') }[est.state] || where; // #36
     const round = est.round > 1 && est.state !== 'done' ? est.round : 0;
     const sender = round && est.sentBackBy ? groupOf.get(est.sentBackBy) || readable(est.sentBackBy, run.stepNames) : '';
     // who works there: the human at a gate, else the step's first agent (the engine when none yet)
     const first = last?.agents?.[0];
     const human = last?.type === 'human_approval' || est.state === 'waiting';
-    const who = human ? 'You (human gate)' : first ? agentLabel(first.agent, run.agentNames) : 'the orchestrator';
+    const who = human ? t('backlog_roadmap.you_human_gate') : first ? agentLabel(first.agent, run.agentNames) : 'the orchestrator';
     return { est, run, where, whereId, label, round, sender, clock: runClock(run), human, worker: human || !first ? '' : agentLabel(first.agent, run.agentNames), who };
   }
 
@@ -446,7 +446,7 @@
     const pct = est.state === 'done' ? 100 : est.percent;
     // (the ring's accessible name keeps "Show the run's steps": the E2E steps find the ring by it)
     // next to the pill: the step (the pill already says Running, Waiting for you, Failed, Done)
-    const step = est.state === 'done' ? '' : est.state === 'failed' || est.state === 'stopped' ? `at ${where}` : where;
+    const step = est.state === 'done' ? '' : est.state === 'failed' || est.state === 'stopped' ? t('backlog_roadmap.run_at', { where }) : where;
     const gate = x.waiting && run.gate ? run.gate : '';
     return `
       <div class="rm-progress st-${est.state}${run.mock ? ' sim' : ''}${ringOpen === x.runId ? ' open' : ''}" data-rm-progress="${esc(x.runId)}" data-workflow="${esc(run.workflow || x.workflowName || '')}">
@@ -983,7 +983,7 @@
   function liveBox(r) {
     const [text, tone] = refillText(r);
     const since = r.live && r.liveSince ? ` · on since ${clock(r.liveSince)}${r.liveBy ? ` by ${esc(r.liveBy)}` : ''}` : '';
-    const hint = r.live ? `${esc(text)}${since}` : r.state === 'running' ? 'Off: the roadmap ends with its last stage.' : 'Off. Turning it on starts the roadmap first.';
+    const hint = r.live ? `${esc(text)}${since}` : t(r.state === 'running' ? 'backlog_roadmap.live_off_running' : 'backlog_roadmap.live_off_idle');
     return `
       <div class="rm-live${r.live ? ' on' : ''}" role="group" aria-label="${t('backlog_roadmap.live_roadmap')}">
         <label class="switch" title="${r.live ? t('backlog_roadmap.turn_off_the_current_stages_finish') : t('backlog_roadmap.turn_on_the_roadmap_refills_itself')}"><input type="checkbox" role="switch" data-rm-live aria-label="${t('backlog_roadmap.live_roadmap')}"${r.live ? ' checked' : ''} /><span></span></label>

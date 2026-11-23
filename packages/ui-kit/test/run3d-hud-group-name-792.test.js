@@ -73,7 +73,7 @@ async function stationNames(t, language, lastGroup) {
 
 test('#792 the 3D Pipeline shows a run that opens a pull request as Abrir PR, in Portuguese', async (t) => {
   const names = await stationNames(t, 'pt-BR', 'Open PR');
-  if (names) assert.deepEqual(names, ['Develop', 'Abrir PR']);
+  if (names) assert.deepEqual(names, ['Desenvolver', 'Abrir PR']); // #36: Develop from the catalog too
 });
 
 test('#792 the 3D Pipeline shows it as Open PR, in English', async (t) => {
@@ -83,5 +83,5 @@ test('#792 the 3D Pipeline shows it as Open PR, in English', async (t) => {
 
 test('#792 the 3D Pipeline keeps Merge for a local merge, in Portuguese too', async (t) => {
   const names = await stationNames(t, 'pt-BR', 'Merge');
-  if (names) assert.deepEqual(names, ['Develop', 'Merge']);
+  if (names) assert.deepEqual(names, ['Desenvolver', 'Merge']);
 });

@@ -96,15 +96,15 @@
   // #148: the simulated answers the picker forces (ids of MOCK_SCENARIOS, packages/engine/domains/po/product-owner.js); `mode`:
   // the drawer switches to the mode it answers in
   const SCENARIOS = [
-    { id: '', label: 'Default (built from the backlog)' },
-    { id: 'question', label: 'A pending question', mode: 'issue' },
-    { id: 'draft', label: 'A draft ready to file', mode: 'issue' },
-    { id: 'duplicate', label: 'A duplicate found', mode: 'issue' },
-    { id: 'large-draft', label: 'A large draft', mode: 'issue' },
-    { id: 'attachments', label: 'A long attachments list', mode: 'issue' },
-    { id: 'groups', label: 'Several groups (applied, partly applied)', mode: 'plan' },
-    { id: 'large-answer', label: 'A large answer', mode: 'plan' },
-    { id: 'error', label: 'An error answer' },
+    { id: '', labelKey: 'backlog_po.scenario_default' }, // #36: catalog keys, read when drawn
+    { id: 'question', labelKey: 'backlog_po.scenario_question', mode: 'issue' },
+    { id: 'draft', labelKey: 'backlog_po.scenario_draft', mode: 'issue' },
+    { id: 'duplicate', labelKey: 'backlog_po.scenario_duplicate', mode: 'issue' },
+    { id: 'large-draft', labelKey: 'backlog_po.scenario_large_draft', mode: 'issue' },
+    { id: 'attachments', labelKey: 'backlog_po.scenario_attachments', mode: 'issue' },
+    { id: 'groups', labelKey: 'backlog_po.scenario_groups', mode: 'plan' },
+    { id: 'large-answer', labelKey: 'backlog_po.scenario_large_answer', mode: 'plan' },
+    { id: 'error', labelKey: 'backlog_po.scenario_error' },
   ];
   const SIM_FILES = 8;
   // the owner reads the drawer: an answer arriving now is seen (#149)
@@ -653,7 +653,7 @@
     chat.update({ messages: po.messages, live: po.live, error: chatError(po.error), busy: po.busy, turn: turnFor(chat) });
     // #148: the simulation-only scenario picker (never in the production UI)
     $p('#po-sim').classList.toggle('hidden', !simulated);
-    $p('#po-scenario').innerHTML = simulated ? SCENARIOS.map((s) => `<button type="button" class="po-sim-opt${s.id === po.scenario ? ' active' : ''}" data-po-scenario="${esc(s.id)}" aria-pressed="${s.id === po.scenario}"${po.busy ? ' disabled' : ''}>${esc(s.label)}</button>`).join('') : '';
+    $p('#po-scenario').innerHTML = simulated ? SCENARIOS.map((s) => `<button type="button" class="po-sim-opt${s.id === po.scenario ? ' active' : ''}" data-po-scenario="${esc(s.id)}" aria-pressed="${s.id === po.scenario}"${po.busy ? ' disabled' : ''}>${esc(t(s.labelKey))}</button>`).join('') : '';
     $p('#btn-po-plan').classList.toggle('hidden', !issueMode);
     $p('#btn-po-plan').disabled = po.busy;
     showNotice(po.notice);
