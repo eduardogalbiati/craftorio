@@ -417,6 +417,51 @@ Then('the Product Owner answers', async ({ e2e }) => {
   await expect(poAsk(page)).toBeEnabled({ timeout: 30000 });
 });
 
+// ---- #26: the question box belongs to one project's conversation ---------------------------------------
+// The box (#po-question, data-testid="agent-chat-input") is typed into the way a person types: the
+// caret goes to the end and the keys are pressed, so text the box already holds stays in front of it
+// (`fill` would replace it and hide the bug: project A's text glued to project B's question). The
+// "You" bubble (data-testid="po-message-you") holds the meta line, then a div with the question's text.
+const poQuestionBox = (page) => poDrawer(page).getByTestId('agent-chat-input');
+const youText = (bubble) => bubble.locator(':scope > div').nth(1);
+
+When("I type {string} in the Product Owner's question box", async ({ e2e }, text) => {
+  const box = poQuestionBox(e2e.window);
+  await box.click();
+  await box.press('ControlOrMeta+End');
+  await box.pressSequentially(text);
+});
+
+When('I send my question to the Product Owner', async ({ e2e }) => {
+  await poAsk(e2e.window).click();
+});
+
+Then("the Product Owner's question box is empty", async ({ e2e }) => {
+  const box = poQuestionBox(e2e.window);
+  await expect(box).toBeVisible();
+  await expect(box).toHaveValue('');
+});
+
+Then("the Product Owner's question box holds {string}", async ({ e2e }, text) => {
+  await expect(poQuestionBox(e2e.window)).toHaveValue(text);
+});
+
+Then('my last question to the Product Owner reads exactly {string}', async ({ e2e }, text) => {
+  const last = poDrawer(e2e.window).getByTestId('po-message-you').last();
+  await expect(last).toBeVisible({ timeout: 30000 });
+  await expect(youText(last)).toHaveText(text);
+});
+
+Then('no question to the Product Owner mentions {string}', async ({ e2e }, text) => {
+  await expect(poDrawer(e2e.window).getByTestId('po-message-you').filter({ hasText: text })).toHaveCount(0);
+});
+
+Then('the Product Owner says its answer failed', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(poDrawer(page).getByTestId('agent-chat-error').filter({ visible: true }).first()).toBeVisible({ timeout: 30000 });
+  await expect(poAsk(page)).toBeEnabled({ timeout: 30000 });
+});
+
 Then('the suggested questions, {string} and Ask were disabled while the Product Owner worked', async ({ e2e }, register) => {
   expect(register).toMatch(/^Register an issue/);
   const busy = busyStates(await watched(e2e.window));

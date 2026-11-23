@@ -1406,6 +1406,54 @@ Then('the cost meter of the roadmap item {string} grows by {float} dollars witho
   expect(await page.evaluate(() => window.e2eCostNoted === true), 'the window was not reloaded').toBe(true);
 });
 
+// ---- #31: a simulated run spends nothing -----------------------------------------------------------------
+// A simulated run makes no model call: its card's Cost meter (data-testid="roadmap-meter-cost") reads a
+// zero first amount ("$0.00", "US$ 0,00") or says it is simulated ("Simulated", "simulado"), and it adds
+// nothing to the header's Spent number (data-testid="roadmap-stat-value" of the "Spent" column; "—" counts
+// as nothing spent).
+
+const SIMULATED_WORD = /\bsimulated\b|\bsimulad[oa]\b/i;
+// the first money amount of a text, in either locale ("$1,234.56", "US$ 0,56"); null when there is none
+const firstAmount = (text) => {
+  const m = String(text || '').match(/\$\s?(\d[\d.,]*)/);
+  if (!m) return null;
+  const raw = m[1].replace(/[.,]$/, '');
+  const decimal = raw.match(/[.,](\d{1,2})$/);
+  const whole = (decimal ? raw.slice(0, -decimal[0].length) : raw).replace(/[.,]/g, '');
+  return Number(`${whole}.${decimal ? decimal[1] : '0'}`);
+};
+const spentNoted = new WeakMap();
+const spentValue = (page) => headStat(page, 'Spent').getByTestId('roadmap-stat-value');
+
+Then('the cost meter of the roadmap item {string} shows that its run spent nothing', async ({ e2e }, title) => {
+  const meter = roadmapItem(e2e.window, title).getByTestId('roadmap-meter-cost');
+  await expect(meter).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const text = await meter.innerText();
+  // "Simulated" may stand for the amount; an amount shown is the run's cost and is zero
+  const amount = firstAmount(text);
+  if (amount === null) expect(text, 'the card says the run is simulated').toMatch(SIMULATED_WORD);
+  else if (!SIMULATED_WORD.test(text)) expect(amount, `the run's cost on the card ("${text}")`).toBe(0);
+  // whatever else the meter shows, no positive amount spent "so far"
+  const soFar = text.match(/\$\s?(\d[\d.,]*)\s*so far/i);
+  if (soFar) expect(firstAmount(soFar[0]), `the run's cost so far on the card ("${text}")`).toBe(0);
+});
+
+When('I note the {string} number of the roadmap header', async ({ e2e }, label) => {
+  expect(label).toBe('Spent');
+  const value = spentValue(e2e.window);
+  await expect(value).toBeVisible({ timeout: LOAD_TIMEOUT });
+  spentNoted.set(e2e, firstAmount(await value.innerText()) || 0);
+});
+
+Then('the {string} number of the roadmap header has not grown since I noted it', async ({ e2e }, label) => {
+  expect(label).toBe('Spent');
+  const before = spentNoted.get(e2e);
+  expect(before, 'the Spent number noted earlier').not.toBeUndefined();
+  const value = spentValue(e2e.window);
+  await expect(value).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(firstAmount(await value.innerText()) || 0, 'what the roadmap header says was spent').toBeLessThanOrEqual(before);
+});
+
 // ---- #750: the Roadmap header in four bands -----------------------------------------------------------
 // What the screen exposes (the renderer's contract for these steps, new for #750 unless marked):
 // - data-testid="roadmap-head": one card holding the four bands, top to bottom, each band after the

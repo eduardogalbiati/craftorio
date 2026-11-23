@@ -235,3 +235,49 @@ Feature: Backlog Product Owner
     Then the item editor shows "Write" for "E2E tests", marked "neste item"
     And the item editor shows "Fork + PR" for "Mode", marked "do projeto"
     And the item editor shows "Off" for "Screenshots", marked "do projeto"
+
+  # #26: the question box belongs to the project's conversation. Text typed in the demo project's box
+  # and not sent is not shown in another project's box, so it is never glued in front of that
+  # project's question; after a failed turn the text stays in the same project's box. The second
+  # project is added to the demo workspace with its own synced backlog; the Product Owner moves to it
+  # when the header's project changes. The question is typed (not filled), as a person types it.
+  @issue-26
+  Scenario: Text left unsent in one project's question box is not in another project's box
+    Given the app is open
+    And the workspace has a second project "billing-service" whose backlog has the open issue "Refund a failed payment"
+    When I open "Backlog" in the sidebar
+    And I choose the project "demo-app" in the header
+    And I open the Product Owner
+    And I type "Página inicial com o ingrediente" in the Product Owner's question box
+    And I close the Product Owner
+    And I choose the project "billing-service" in the header
+    And I open the Product Owner
+    Then the Product Owner's question box is empty
+
+  @issue-26
+  Scenario: A question asked in another project carries only that project's text
+    Given the app is open
+    And the workspace has a second project "billing-service" whose backlog has the open issue "Refund a failed payment"
+    When I open "Backlog" in the sidebar
+    And I choose the project "demo-app" in the header
+    And I open the Product Owner
+    And I type "Página inicial com o ingrediente" in the Product Owner's question box
+    And I close the Product Owner
+    And I choose the project "billing-service" in the header
+    And I open the Product Owner
+    And I type "Mostrar o feedback do reembolso" in the Product Owner's question box
+    And I send my question to the Product Owner
+    Then the Product Owner answers
+    And my last question to the Product Owner reads exactly "Mostrar o feedback do reembolso"
+    And no question to the Product Owner mentions "Página inicial"
+
+  @issue-26
+  Scenario: After a failed turn the question stays in the same project's box
+    Given the app is open
+    And the Product Owner's answers fail
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I type "Which issues should go first?" in the Product Owner's question box
+    And I send my question to the Product Owner
+    Then the Product Owner says its answer failed
+    And the Product Owner's question box holds "Which issues should go first?"

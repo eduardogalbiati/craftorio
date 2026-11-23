@@ -691,3 +691,22 @@ Then('the session offers {string} and {string}', async ({ e2e }, a, b) => {
     await expect(e2e.window.getByRole('button', { name, exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   }
 });
+
+// ---- #31: a simulated run spends nothing ------------------------------------------------------------------
+// The run chat's header shows the run's cost (#rc-cost, data-testid="runchat-cost", new for #31): for a
+// simulated run, a zero amount ("$0.00", "US$ 0,00") or the word "Simulated" / "simulado", never an
+// amount above zero (it showed "$0.56").
+When("I open the run's Chat tab", async ({ e2e }) => {
+  const tab = runTab(e2e.window, 'Chat');
+  await expect(tab).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await tab.click();
+});
+
+Then("the run chat's header shows that the run spent nothing", async ({ e2e }) => {
+  const cost = visibleTestId(e2e.window, 'runchat-cost');
+  await expect(cost).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const text = (await cost.innerText()).trim();
+  const amount = text.match(/\$\s?(\d[\d.,]*)/);
+  if (!amount) expect(text, 'the run chat says the run is simulated').toMatch(/\bsimulated\b|\bsimulad[oa]\b/i);
+  else expect(Number(amount[1].replace(/[.,]/g, '')), `the run's cost in the run chat's header ("${text}")`).toBe(0);
+});

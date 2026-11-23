@@ -43,6 +43,14 @@ Given("the Product Owner's next answer takes a while", async ({ e2e }) => {
   await holdChannels(e2e, ['po:ask']);
 });
 
+// #26: the Product Owner's turn fails (po:ask rejects, as a provider error would); until the app closes
+Given("the Product Owner's answers fail", async ({ e2e }) => {
+  await e2e.app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('po:ask');
+    ipcMain.handle('po:ask', () => { throw new Error('The Product Owner could not answer (E2E: a failed turn).'); });
+  });
+});
+
 // ---- the proposals' buttons -------------------------------------------------------------------------
 
 const proposals = {
