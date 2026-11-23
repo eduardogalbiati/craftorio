@@ -144,6 +144,31 @@ function filedIssue(out, command = {}) {
   return { url, number };
 }
 
+/**
+ * The issue workflow's run on a project with no remote (workflows/issue.yaml): the drafts the owner approved
+ * (steps.write.output.issues) go into the local backlog, as its filer would have filed them. `create` and
+ * `create_assign` add each draft; `add_to` appends the addition (or the draft's body) to the local issue it names.
+ * Answers the filer's `filed` shape: [{ action, number, url: '', title }] ([] for any other choice).
+ */
+function fileRunDrafts(dir, projectId, steps = {}) {
+  const reviewed = steps.review?.output?.choice;
+  const choice = reviewed || (steps.file?.output ? 'create' : null);
+  const draft = steps.write?.output || {};
+  const drafts = (draft.issues || []).filter((i) => String(i?.title || '').trim());
+  if (choice === 'add_to') {
+    const number = Number(String(steps.review?.output?.feedback || '').match(/#(\d+)/)?.[1]) || Number(draft.existing_issue);
+    if (!isLocal(dir, projectId, number)) return [];
+    const text = draft.addition || drafts[0]?.body || '';
+    const issue = patchLocalIssue(dir, projectId, number, (i) => ({ ...i, body: `${String(i.body || '').trimEnd()}\n\n${text}` }));
+    return [{ action: 'edited', number: issue.number, url: '', title: issue.title }];
+  }
+  if (!['create', 'create_assign'].includes(choice)) return [];
+  return drafts.map((d) => {
+    const issue = createLocalIssue(dir, projectId, { title: d.title, body: d.body, labels: d.labels });
+    return { action: 'created', number: issue.number, url: '', title: issue.title };
+  });
+}
+
 /** Drops local issues (filed on the platform since): the others stay. */
 function removeLocalIssues(dir, projectId, numbers) {
   const gone = new Set((numbers || []).map(Number));
@@ -207,6 +232,7 @@ module.exports = {
   closeLocalIssue,
   createLocalIssue,
   fileLocalIssues,
+  fileRunDrafts,
   filedIssue,
   isLocal,
   labelsOf,

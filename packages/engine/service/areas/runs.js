@@ -268,6 +268,8 @@ module.exports = (ctx) => {
   // What follows a run's end (its workflow.finished event): its chain, epic, refresh, release and
   // conflict map, then the roadmap's next items (the plain queue is retired, #446).
   function afterRunFinished(run, ev) {
+    // #35: an issue run on a project with no remote files its drafts locally, before its chain reads `issues`
+    try { ctx.fileRunLocally?.(run, ev); } catch (e) { console.error('local backlog:', e.message); }
     // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
     ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
       .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));

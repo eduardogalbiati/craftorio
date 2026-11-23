@@ -11,6 +11,9 @@ const simulation = require('../../engine/simulation');
 const workspace = require('../../domains/workspace/workspace');
 const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
+const localIssues = require('../../domains/backlog/local-backlog');
+const { render } = require('../../engine/run/templates');
+const { namesOf } = require('@craftorio/shared/default-workflow');
 const baseHealth = require('../../domains/project/base-health');
 const refreshes = require('../../domains/backlog/backlog-refresh');
 const { git } = require('../../engine/worktree');
@@ -187,9 +190,25 @@ module.exports = (ctx) => {
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
+  // #35: the issue workflow's run on a project with no remote (its filer ran nothing, workflows/issue.yaml):
+  // the approved drafts go into the local backlog, and the run's `issues` output names them, so "Create and
+  // plan" plans them as it does a platform's. A simulated run files nothing, as for a repository.
+  function fileRunLocally(run, ev) {
+    if (!run.projectId || run.mock || ev.status !== 'success' || !namesOf('issue.yaml').includes(run.wf.metadata?.name)) return;
+    const { ws } = ctx;
+    const project = projects.readProject(ws.projects, run.projectId);
+    if (!project || project.repo) return;
+    const filed = localIssues.fileRunDrafts(ws.backlog, project.id, run.ctx.steps);
+    if (!filed.length) return;
+    const issues = JSON.parse(render('{{ filed | filed_issues(analysis) | to_json }}', { filed, analysis: run.ctx.steps.analyze?.output }));
+    ev.outputs = { ...(ev.outputs || {}), issues };
+    ctx.events?.emit('backlog:changed', { projectId: project.id, file: 'local-issues', watching: !!ctx.backlogWatching?.() });
+  }
+
   return {
     afterBacklogRefresh,
     assignWorkflow,
+    fileRunLocally,
     placeFiledInEpic,
     withIssueRuns,
   };
