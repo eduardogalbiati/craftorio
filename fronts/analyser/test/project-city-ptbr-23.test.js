@@ -108,6 +108,24 @@ test('#23 the City\'s churn legend through CityLayout.colourBy in pt-BR: no "No 
   assert.equal(labels.includes('No commit'), false, JSON.stringify(labels));
 });
 
+// The fixture has a single commit, so the busiest file has 1 commit: the legend's top row is singular.
+for (const lang of ['pt-BR', 'en']) {
+  test(`#23 the City's churn legend in ${lang} with at most 1 commit says "1 commit", never "1 commits"`, (t) => {
+    inLanguage(t, lang);
+    const CityLayout = require('@craftorio/shared/city-layout');
+    const model = buildCity({ plan: null, facts: facts(), sources: { imports: [], manifests: {} } }).model;
+    const labels = CityLayout.colourBy(CityLayout.layoutCity(model, {}), 'churn').legend.map((l) => l.label);
+    assert.equal(labels.some((l) => /\b1 commit$/.test(l)), true, JSON.stringify(labels));
+    assert.equal(labels.some((l) => /\b1 commits\b/.test(l)), false, JSON.stringify(labels));
+  });
+}
+
+test('#23 the City\'s churn legend in pt-BR names several commits in the plural', (t) => {
+  inLanguage(t, 'pt-BR');
+  assert.equal(I18n.t('project_city.legend_commits', { count: 4 }), '4 commits');
+  assert.equal(I18n.t('project_city.legend_commits', { count: 1 }), '1 commit');
+});
+
 test('#23 the City\'s quadrant legend through CityLayout.colourBy in pt-BR: no English quadrant name', (t) => {
   inLanguage(t, 'pt-BR');
   const CityLayout = require('@craftorio/shared/city-layout');

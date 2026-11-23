@@ -53,6 +53,17 @@ test('#23 Oracle panel in pt-BR: the header\'s Night watch button is in Portugue
   assert.notEqual(o.night, 'Night watch');
 });
 
+test('#23 Oracle panel in pt-BR: the Night watch form opened from the header reads in Portuguese', { timeout: 30000 }, async () => {
+  const o = await openOracleIn('pt-BR');
+  o.page.$('#oracle-drawer [data-oracle-night]').click();
+  await settle();
+  const form = o.page.$('#oracle-drawer [data-oracle-night-form]');
+  assert.equal(form === null, false, 'the form opens');
+  const formText = String(form.textContent ?? '').replace(/\s+/g, ' ').trim();
+  assert.match(formText, /Vigília noturna até/, formText);
+  assert.equal(/Night watch/i.test(formText), false, formText);
+});
+
 test('#23 Oracle panel in pt-BR: four starter questions, none in English', { timeout: 30000 }, async () => {
   const o = await openOracleIn('pt-BR');
   assert.equal(o.chips.length, 4, JSON.stringify(o.chips));
