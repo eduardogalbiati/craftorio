@@ -54,11 +54,16 @@ const sourceFile = (n) => `function route(kind, value) {\n  if (kind === 'a') re
 
 // a git repository with one commit (fixed identity, no machine config); withCode: a few source files
 // and more commits on one of them, so the analysis has files to score (complexity and churn)
-function makeRepository(scratch, name, { withCode = false } = {}) {
+// files: more files of the first commit, { <relative path>: <text> } (#30: package-lock.json)
+function makeRepository(scratch, name, { withCode = false, pkg = {}, files = {} } = {}) {
   const folder = path.join(scratch, 'folders', name);
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(path.join(folder, 'README.md'), `# ${name}\n`);
-  fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name, private: true, scripts: { test: 'node -e ""' } }, null, 2));
+  fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name, private: true, scripts: { test: 'node -e ""' }, ...pkg }, null, 2));
+  for (const [rel, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(folder, rel)), { recursive: true });
+    fs.writeFileSync(path.join(folder, rel), text);
+  }
   if (withCode) {
     fs.mkdirSync(path.join(folder, 'src'), { recursive: true });
     fs.writeFileSync(path.join(folder, 'src', 'router.js'), sourceFile(0));
@@ -88,6 +93,28 @@ Given('a local git repository is ready to import', async ({ e2e }) => {
 Given('a local git repository with some code is ready to import', async ({ e2e }) => {
   if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
   e2e.localRepo = makeRepository(e2e.scratch, 'sample-repo', { withCode: true });
+});
+
+// #30: an npm project whose package-lock.json is committed and whose node_modules is not (never
+// installed): its `check` script needs a dependency, so the machine checks cannot run before npm ci
+Given('a local git repository with a lockfile and no installed dependencies is ready to import', async ({ e2e }) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const dep = 'left-pad';
+  const name = 'deps-repo';
+  const lock = {
+    name,
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      '': { name, dependencies: { [dep]: '1.3.0' } },
+      [`node_modules/${dep}`]: { version: '1.3.0', resolved: `https://registry.npmjs.org/${dep}/-/${dep}-1.3.0.tgz`, license: 'WTFPL' },
+    },
+  };
+  e2e.localRepo = makeRepository(e2e.scratch, name, {
+    withCode: true,
+    pkg: { scripts: { test: 'node -e ""', check: `node -e "require('${dep}')"` }, dependencies: { [dep]: '1.3.0' } },
+    files: { 'package-lock.json': JSON.stringify(lock, null, 2), '.gitignore': 'node_modules/\n' },
+  });
 });
 
 // ---- #844: a repository whose history the ways of working must read right -----------------------------------
@@ -830,6 +857,16 @@ Then('the Next steps card shows none of these English texts:', async ({ e2e }, t
 Then('the Next steps card says {string}', async ({ e2e }, text) => {
   await expect(nextSteps(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(nextSteps(e2e.window)).toContainText(text, { timeout: LOAD_TIMEOUT });
+});
+
+// #30: a repository imported with a lockfile and no node_modules: the card's entry
+// data-testid="next-step-install-deps" (NEW) names the install command (npm ci, with --ignore-scripts
+// when the project's "install without scripts" setting is on) and its button installs them
+Then('the Next steps card offers to install the dependencies with {string}', async ({ e2e }, command) => {
+  const entry = nextSteps(e2e.window).getByTestId('next-step-install-deps');
+  await expect(entry).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(entry).toContainText(command);
+  await expect(entry.getByRole('button').first()).toBeEnabled();
 });
 
 When('I pick {string} for the suggested {string} workflow', async ({ e2e }, label, kind) => {
