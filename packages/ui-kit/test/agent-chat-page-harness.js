@@ -158,7 +158,8 @@ async function openProductOwner(api) {
   const actions = page.sandbox.BacklogActions;
   assert.ok(actions, 'backlog.js sets window.BacklogActions');
   actions.projectId = () => 'demo';
-  actions.project = () => ({ id: 'demo', name: 'Demo project' });
+  // #25: a project with a repository (with none and no synced backlog the drawer turns Send off)
+  actions.project = () => ({ id: 'demo', name: 'Demo project', repo: 'https://github.com/o/demo.git' });
   await page.sandbox.BacklogPO.open();
   await settle();
   return page;

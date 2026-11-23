@@ -71,6 +71,8 @@ const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_
 const AT = { type: ['string', 'integer'], description: 'An answer of the conversation (its time or index).' };
 // what filing on the platform answers (the Backlog synced again after a real filing, syncError when that failed)
 const FILED = OBJECT;
+// #25: a project with no repository has nothing to sync; the drawer translates this refusal (backlog-po.js chatError)
+const NO_REPOSITORY = 'This project has no repository: add its URL in Projects › Edit to file issues.';
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -78,8 +80,8 @@ module.exports = (ctx) => {
   const target = (projectId) => {
     const id = project(projectId);
     const data = backlog.readBacklog(ctx.ws.backlog, id);
-    if (!data) throw new Error('Sync the backlog first: the Product Owner writes to the synced repository.');
     const p = projects.readProject(ctx.ws.projects, id);
+    if (!data) throw new Error(p && !p.repo ? NO_REPOSITORY : 'Sync the backlog first: the Product Owner writes to the synced repository.');
     const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
     return { id, data, p, platform, repo: data.repo || p?.repo };
   };
@@ -108,7 +110,7 @@ module.exports = (ctx) => {
   const askOptions = (id, simulated, chosen = null) => {
     const p = projects.readProject(ctx.ws.projects, id);
     const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
-    if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
+    if (!data) throw new Error(p && !p.repo ? NO_REPOSITORY : 'Sync the backlog first: the Product Owner reads the synced issues.');
     const settings = workspace.readSettings(ctx.ws);
     return {
       ...agentOptions(id, simulated, settings),

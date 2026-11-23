@@ -42,7 +42,7 @@
 //   card (openProject with nextSteps, project.js; #846: never the Start drawer), then sends the idea to the Inbox (no finding is filed without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
-//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), the folder line
+//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), #25 wizard-no-remote-hint (no Backlog/Roadmap without a repository), the folder line
 //   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the three questions
 //   wizard-question data-question="mode" | "ci" | "release" with their wizard-chip buttons (aria-pressed on the
 //   pick, OnboardingModel.CREATE_ANSWERS / CREATE_DEFAULTS). Next (api.createOnboarding) creates it, ready at
@@ -336,7 +336,7 @@
             <label class="wizard-choice"><input type="checkbox" id="wizard-new-remote" data-testid="wizard-new-remote"${cur.remote ? ' checked' : ''}${locked || !signedIn().length ? ' disabled' : ''}>
               <strong>${esc(t('onboarding.new_remote'))}</strong></label>
             ${remoteSelect(locked)}
-            <p class="muted small wizard-remote-hint" id="wizard-new-remote-hint" data-testid="wizard-new-remote-hint">${esc(remoteHint())}</p>
+            <p class="muted small wizard-remote-hint" id="wizard-new-remote-hint" data-testid="wizard-new-remote-hint">${esc(remoteHint())}</p><p class="muted small" data-testid="wizard-no-remote-hint">${esc(t('onboarding.no_remote_hint'))}</p>
           </div>
           <p class="mono muted small text-cut" id="wizard-new-folder" data-testid="wizard-new-folder" title="${esc(newFolder())}">${esc(newFolder())}</p>
           ${cur.onboarding ? remoteWarning(cur.onboarding.remote) : ''}

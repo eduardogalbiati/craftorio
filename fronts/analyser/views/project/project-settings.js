@@ -135,9 +135,9 @@
   function show(p, box, { open = false, force = false } = {}) {
     if (!p || !box) return;
     // unsaved edits of this project, or the same saved values, stay as they are (the focus too); open: a card's
-    // Edit asks for the section
+    // Edit asks for the section (#25: a clean form asked open, as Next steps' "Add a repository", is drawn again open)
     const sig = signature(p);
-    if (!force && cur?.id === p.id && (cur.dirty || cur.sig === sig) && box.querySelector?.('#ps-form')) {
+    if (!force && cur?.id === p.id && (cur.dirty || (cur.sig === sig && !open)) && box.querySelector?.('#ps-form')) {
       if (open) {
         box.querySelector('details')?.setAttribute('open', '');
         box.scrollIntoView?.({ block: 'start' });
