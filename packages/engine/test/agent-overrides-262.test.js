@@ -134,10 +134,12 @@ test('#262 a model\'s limits from Settings (the `models` option) apply the same 
 test('#262 the run cost limit follows the model: a model\'s max_total_cost_usd lifts the workflow\'s limit when an agent runs on it', async (t) => {
   const limited = TWO_AGENTS.replace('agents:\n', 'orchestrator:\n  limits: { max_total_cost_usd: 0.0001 }\nagents:\n');
   const { dir, file } = writeWorkflow(t, `${limited}models:\n  claude-fable-5-1: { max_total_cost_usd: 1000 }\n`);
-  const plain = await runFile(file, dir);
+  // #31: the mock prices its turns only on request (a simulated run spends nothing)
+  const mockSequences = { simulated_cost: true };
+  const plain = await runFile(file, dir, { mockSequences });
   assert.equal(plain.finished.status, 'failed');
   assert.match(String(plain.finished.error), /Maximum cost exceeded/);
-  const fable = await runFile(file, dir, { agentOverrides: { writer: { model: 'claude-fable-5-1' } } });
+  const fable = await runFile(file, dir, { mockSequences, agentOverrides: { writer: { model: 'claude-fable-5-1' } } });
   assert.equal(fable.finished.status, 'success', fable.finished.error);
 });
 

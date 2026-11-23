@@ -708,6 +708,10 @@ function mockUsageLimited(hint, model) {
   return [hint.provider, `${hint.provider}:${model}`, hint.account && `${hint.provider}@${hint.account}`].some((k) => k && limits.includes(k));
 }
 
+// #31: a simulated turn spends nothing (cost 0, its tokens still reported); sequences.simulated_cost
+// (tests of the cost mechanics) brings back the priced amounts
+const mockCost = (hint, usd) => (hint?.sequences?.simulated_cost ? usd : 0);
+
 async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs, attachments = [] }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
   const scale = +(process.env.CRAFTORIO_MOCK_DELAY_SCALE ?? 1);
@@ -727,8 +731,9 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     await d(300);
     onItem({ kind: 'text', text: MOCK_HANDOFF });
     const usage = { input: 200, output: 150, cache_read: start, cache_write: 0, reasoning: 0 };
-    onItem({ kind: 'usage', usage, costUsd: 0.001 });
-    return { text: MOCK_HANDOFF, usage, costUsd: 0.001, providerSessionId: sid, exitCode: 0 };
+    const costUsd = mockCost(hint, 0.001);
+    onItem({ kind: 'usage', usage, costUsd });
+    return { text: MOCK_HANDOFF, usage, costUsd, providerSessionId: sid, exitCode: 0 };
   }
   await d(600);
   onItem({ kind: 'thinking', text: `Analyzing step "${hint?.stepId ?? 'delegated'}" (visit ${hint?.visit ?? '-'}).\nI will inspect the repository and plan the next steps.` });
@@ -763,7 +768,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   // model calls it made are reported as runCli does (#233: the engine prices them)
   if (hint?.stepId != null && attempt <= (hint?.sequences?.timeouts?.[hint.stepId] || 0)) {
     const usage = { input: 1500, output: 400, cache_read: 2 * start + 10000, cache_write: 0, reasoning: 0 };
-    throw Object.assign(new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`), { partial: { usage, costUsd: null, modelCalls: 2 } });
+    throw Object.assign(new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`), { partial: { usage, costUsd: mockCost(hint, null), modelCalls: 2 } });
   }
   await d(800);
   // sequences.request_budget: { stepId: n }: the first n turns of that step (wrap-up requests not
@@ -772,8 +777,9 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   if (hint?.maxRequests && hint.call <= (hint.sequences?.request_budget?.[hint.stepId] || 0)) {
     onItem({ kind: 'context', tokens: start + 40000 });
     const usage = { input: 1500, output: 400, cache_read: hint.maxRequests * start, cache_write: 0, reasoning: 0 };
-    onItem({ kind: 'usage', usage, costUsd: 0.05 });
-    return { text: '', cut: true, requests: hint.maxRequests, usage, costUsd: 0.05, providerSessionId: sid, exitCode: 0 };
+    const costUsd = mockCost(hint, 0.05);
+    onItem({ kind: 'usage', usage, costUsd });
+    return { text: '', cut: true, requests: hint.maxRequests, usage, costUsd, providerSessionId: sid, exitCode: 0 };
   }
 
   const out = hint?.schema ? mockAnswer(hint) : null;
@@ -792,7 +798,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   onItem({ kind: 'text', text });
 
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };
-  const costUsd = +(usage.input * 3e-6 + usage.output * 15e-6).toFixed(4);
+  const costUsd = mockCost(hint, +(usage.input * 3e-6 + usage.output * 15e-6).toFixed(4));
   onItem({ kind: 'usage', usage, costUsd });
   return { text, usage, costUsd, providerSessionId: sid, exitCode: 0, ...(attachments.length ? { attachments } : {}) };
 }

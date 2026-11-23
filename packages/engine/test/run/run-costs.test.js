@@ -144,7 +144,7 @@ async function mockRun(t, file, opts = {}) {
 
 test('engine (#233): an attempt killed at its timeout adds its estimated cost to the session, step and run totals, and its log line says so', { timeout: 60000 }, async (t) => {
   const { events, finished } = await mockRun(t, path.join(__dirname, '..', 'fixtures', 'attempt-timeout.yaml'), {
-    mockSequences: { timeouts: { work: 1 } }, prices: PRICES,
+    mockSequences: { timeouts: { work: 1 }, simulated_cost: true }, prices: PRICES, // #31: the mock prices its turns on request
   });
   assert.equal(finished.status, 'success', finished.error);
 
@@ -198,7 +198,7 @@ steps:
     prompt: "then this"
 `);
   // without the estimate the two mock turns cost at most ~US$ 0.16: under the limit
-  const { events, finished } = await mockRun(t, file, { mockSequences: { timeouts: { work: 1 } }, prices: PRICES });
+  const { events, finished } = await mockRun(t, file, { mockSequences: { timeouts: { work: 1 }, simulated_cost: true }, prices: PRICES });
   assert.notEqual(finished.status, 'success');
   assert.match(finished.error || '', /Maximum cost exceeded \(US\$ 0\.5\)/);
   const exceeded = events.find((e) => e.type === 'limit.exceeded' && e.limit === 'max_total_cost_usd');

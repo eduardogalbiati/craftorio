@@ -177,11 +177,11 @@ const RELEASE_WORKFLOW = 'release.yaml';
 
 const runsOf = (item, runById) => [...new Set([...(item?.runs || []), ...(item?.runId ? [item.runId] : [])])].map((id) => runById.get(id)).filter(Boolean);
 
-/** The real cost of an item's runs (`runs`: listRuns rows by id), null when it has none. */
+/** The real cost of an item's runs (`runs`: listRuns rows by id), null when it has none (#31: a simulated run counts 0). */
 function actualCost(item, runById) {
   const found = runsOf(item, runById);
   if (!found.length) return null;
-  return round(found.reduce((a, r) => a + (r.costUsd || 0) + (r.childrenCostUsd || 0), 0));
+  return round(found.reduce((a, r) => a + (r.mock ? 0 : (r.costUsd || 0) + (r.childrenCostUsd || 0)), 0));
 }
 
 /**

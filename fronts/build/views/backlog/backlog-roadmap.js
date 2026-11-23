@@ -238,8 +238,8 @@
     return { verdict: tone, level: LEVEL[tone], sign: tone === 'ok' ? '' : '▲', text: tone === 'ok' ? 'on track' : pctText(Math.round((ratio - 1) * 100)), ratio };
   }
   function costMeter(x, running) {
-    const e = x.estimate;
-    if (!e) return meterHtml('cost', { verdict: 'none', value: x.actualUsd != null ? `${money(x.actualUsd)}${running ? ' so far' : ''}` : '—', note: 'no estimate yet', title: t('backlog_roadmap.no_successful_real_run_of_this') });
+    const sim = RoadmapModel.isSimulated(x), e = !sim && x.estimate; // #31: a simulated run spends nothing, whatever its events recorded
+    if (!e) return meterHtml('cost', { verdict: 'none', value: sim ? money(0) : x.actualUsd != null ? `${money(x.actualUsd)}${running ? ' so far' : ''}` : '—', note: sim ? t('backlog_roadmap.simulated') : 'no estimate yet', title: sim ? '' : t('backlog_roadmap.no_successful_real_run_of_this') });
     if (x.actualUsd == null) return meterHtml('cost', { verdict: 'estimate', value: `≈ ${money(e.usd)}${e.estimated ? ' (est.)' : ''}`, note: 'estimate', title: e.basis });
     return againstHtml('cost', x.actualUsd, e.usd, { fmt: money, more: moneyMore, running, extra: [e.basis] });
   }
@@ -593,7 +593,7 @@
     const edit = locked || open ? '' : `<button class="link-btn small" type="button" data-rm-edit title="${t('backlog_roadmap.edit_this_item_s_inputs')}">${t('backlog_roadmap.edit')}</button>`;
     const differs = !!end && !!def?.ending && def.ending !== end; // #195: the badge stands out and its title says so
     const endBadge = end ? `<span class="badge rm-wf${differs ? ' rm-wf-push' : ''}" data-testid="roadmap-item-ending" data-ending="${end}" title="${esc(`${full}. ${t(ENDING[end][1])}${differs ? ` ${t(ENDING[def.ending][2], { file: def.file })}` : ''}`)}">${end === 'local' ? '' : '<span aria-hidden="true">⇡ </span>'}${t(ENDING[end][0])}</span>` : '';
-    const sim = x.mock || x.run?.mock ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '';
+    const sim = RoadmapModel.isSimulated(x) ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '';
     const meta = `${endBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
     return `
         <div class="rm-workflow" data-testid="roadmap-workflow">

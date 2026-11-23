@@ -60,9 +60,11 @@
   const stageCount = (roadmap) => stagesOf(roadmap).filter((x) => !isRelease(x)).length;
   /** #555: a release (an entry, or a stage's cut line) that cannot be moved nor renamed: its run started or it shipped. */
   const isLockedRelease = (entry) => !!entry && (entry.status === 'running' || entry.status === 'shipped');
-  /** #215 #615: a stage's real cost, its items' `actualUsd` summed (cents), or null when none of them ran. */
+  /** #31: an item whose run is simulated: it spends nothing (a cost its events recorded before #31 is not counted). */
+  const isSimulated = (x) => !!(x && (x.mock || x.run?.mock));
+  /** #215 #615: a stage's real cost, its items' `actualUsd` summed (cents), or null when none of them ran (#31: simulated ones left out). */
   function stageActualUsd(items) {
-    const ran = (items || []).map((x) => x.actualUsd).filter((usd) => typeof usd === 'number');
+    const ran = (items || []).filter((x) => !isSimulated(x)).map((x) => x.actualUsd).filter((usd) => typeof usd === 'number');
     return ran.length ? Math.round(ran.reduce((a, usd) => a + usd, 0) * 100) / 100 : null;
   }
   /**
@@ -564,6 +566,7 @@
     isLockedRelease,
     isOpen,
     isRelease,
+    isSimulated,
     itemIssues,
     itemRuns,
     mergeWait,

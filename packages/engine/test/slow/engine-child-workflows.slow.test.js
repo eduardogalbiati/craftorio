@@ -101,8 +101,9 @@ steps:
 
   const finishedEvents = events.filter((e) => e.type === 'workflow.child_finished');
   assert.equal(finishedEvents.length, 2);
-  assert.ok(finishedEvents.every((e) => e.cost_usd > 0), 'each child\'s mock turn has a cost');
-  assert.ok(run.childRuns.every((c) => c.cost_usd > 0));
+  // #31: a simulated child spends nothing: its cost is recorded, as 0
+  assert.ok(finishedEvents.every((e) => e.cost_usd === 0), 'each child\'s simulated turn is recorded at no cost');
+  assert.ok(run.childRuns.every((c) => c.cost_usd === 0));
   const total = run.childRuns.reduce((a, c) => a + c.cost_usd, 0);
   assert.equal(run.childrenCostUsd(), total);
   assert.equal(finished.summary.children_cost_usd, +total.toFixed(6));

@@ -355,7 +355,8 @@
     pill.className = `pill pill-${waiting ? 'warn' : status}`;
     pill.dataset.status = waiting ? 'waiting' : status;
     pill.textContent = StatusPill.statusLabel(status, { waiting: !!waiting });
-    $c('#rc-cost').textContent = r.cost ? `$${r.cost.toFixed(2)}` : '';
+    // #31: a simulated run reads $0.00 (the title's badge says simulated)
+    $c('#rc-cost').textContent = r.mock ? '$0.00' : r.cost ? `$${r.cost.toFixed(2)}` : '';
     $c('#rc-stop').classList.toggle('hidden', !chat.live);
   }
 

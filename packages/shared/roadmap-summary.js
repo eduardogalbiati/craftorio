@@ -60,7 +60,8 @@
     let costed = 0; // #750: the items with a real cost (the header's Spent is "—" without one)
     let since = null;
     for (const x of list.flatMap((s) => (Array.isArray(s.items) ? s.items : []))) {
-      if (['done', 'parked', 'running', 'waiting_merge'].includes(x.status) && num(x.actualUsd) !== null) { spent += num(x.actualUsd); costed += 1; }
+      // #31: a simulated run spends nothing
+      if (['done', 'parked', 'running', 'waiting_merge'].includes(x.status) && num(x.actualUsd) !== null && !model().isSimulated(x)) { spent += num(x.actualUsd); costed += 1; }
       if (x.origin && (!since || Date.parse(x.origin) < Date.parse(since))) since = x.origin;
     }
     const lines = (Array.isArray(releases) ? releases : []).filter((x) => num(x?.at) !== null && x.at >= 0).sort((a, b) => a.at - b.at);

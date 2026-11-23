@@ -133,10 +133,16 @@
   }
 
   // The conversation of `projectId`: another project's attachments not sent yet, messages and notes
-  // belong to that project's conversation and go.
+  // belong to that project's conversation and go. #26: so does its unsent text (typed, or given back by a
+  // failed turn): it is not sent as the next project's question.
   function setProject(projectId) {
     if (po.projectId === projectId) return;
+    clearInputs();
     Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {}, files: [], placeEpic: {}, attached: [], extras: {}, edits: {}, runDefaults: null });
+  }
+  // #26: the text boxes (the drawer's, the Agents window's) of the project being left
+  function clearInputs() {
+    for (const c of [chat, winChat]) if (c) { c.input.value = ''; c.refresh(); }
   }
   // while a question is in flight the service already recorded it: render() leaves out the pending bubble
   // (no history yet may come back empty-handed: an empty conversation;
@@ -157,7 +163,8 @@
   async function open() {
     // #234: with no project selected the drawer opens and says so (nothing can be asked)
     const projectId = actions()?.projectId() || null;
-    // attachments not sent yet belong to the other project's conversation
+    // attachments and text (#26) not sent yet belong to the other project's conversation
+    if (po.projectId !== projectId) clearInputs();
     if (po.projectId !== projectId) Object.assign(po, { files: [], placeEpic: {} });
     if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
     if (po.projectId !== projectId) Object.assign(po, { edits: {}, runDefaults: null });

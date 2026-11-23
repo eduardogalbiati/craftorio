@@ -165,7 +165,8 @@ test('a turn cut by its request budget wraps up in the same session and the visi
 });
 
 test('the cut turn counts its wrap-up request: tokens and cost of both requests of the cut session', { timeout: 60000 }, async (t) => {
-  const { run, finished } = await mockRun(t, { mockSequences: { request_budget: { develop: 1 } } });
+  // #31: simulated_cost: the mock prices its turns (a simulated run spends nothing by default)
+  const { run, finished } = await mockRun(t, { mockSequences: { request_budget: { develop: 1 }, simulated_cost: true } });
   assert.equal(finished.status, 'success', finished.error);
   // the mock's cut turn: 1500 in + 400 out + 40 requests × 20k cached = 801,900 tokens, $0.05;
   // its wrap-up (2nd request of that conversation): 200 + 150 + 50k cached = 50,350 tokens, $0.001
