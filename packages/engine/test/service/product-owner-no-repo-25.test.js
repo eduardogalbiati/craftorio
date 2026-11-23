@@ -50,6 +50,24 @@ test('#25 po:file on a project with no repository says the project has no reposi
   assert.equal(/Sync the backlog first/i.test(error), false, `the refusal: ${error}`);
 });
 
+// a repository that was never synced: syncing is the fix there, so the old message stays
+test('#25 a project with a repository but no synced backlog: po:ask still says "Sync the backlog first"', async (t) => {
+  const { api } = makeService(t);
+  const p = await noRepoProject(api, t);
+  await api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/field-notes.git' } });
+  const error = await errorOf(() => api['po:ask']({ ...ASK, projectId: p.id }));
+  assert.equal(/Sync the backlog first/.test(error), true, `the refusal: ${error}`);
+  assert.equal(/no repository/i.test(error), false, `the refusal: ${error}`);
+});
+
+test('#25 a project with a repository but no synced backlog: po:file still says "Sync the backlog first"', async (t) => {
+  const { api } = makeService(t);
+  const p = await noRepoProject(api, t);
+  await api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/field-notes.git' } });
+  const error = await errorOf(() => api['po:file']({ projectId: p.id, at: 0, action: 'create', preview: true }));
+  assert.equal(/Sync the backlog first/.test(error), true, `the refusal: ${error}`);
+});
+
 test('#25 with a synced repository po:ask answers as today', async (t) => {
   const { service, api } = makeService(t);
   const p = await roadmapProject(api, service.workspace(), t, [1, 2], 'po-repo-25');

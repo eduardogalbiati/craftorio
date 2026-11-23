@@ -92,7 +92,7 @@ async function openDrawer(lang, project) {
     Event: class Event { constructor(type) { this.type = type; } },
     localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
     api: {
-      askProductOwner: (...args) => { asked.push(args.length); return new Promise(() => {}); },
+      askProductOwner: (...args) => new Promise((resolve, reject) => asked.push({ resolve, reject, n: args.length })),
       productOwnerHistory: async () => [], onChatProgress: () => {}, cancelChatTurn: async () => {},
       clearProductOwner: async () => [], listAgents: async () => [], saveAgent: async (_id, d) => d,
     },
@@ -142,7 +142,26 @@ async function openDrawer(lang, project) {
     await settle();
   };
   const sendOff = () => $('#btn-po-ask').disabled === true || $('#po-question').disabled === true;
-  return { notice, type, sendOff, askedCount: () => asked.length };
+  // Enter in the text box (the AgentChat's keydown), as the owner presses it
+  const pressEnter = async () => {
+    const ev = { key: 'Enter', shiftKey: false, isComposing: false, target: $('#po-question'), preventDefault() {} };
+    for (const fn of $('#po-question').listeners.keydown || []) fn(ev);
+    await settle();
+  };
+  // a click on Send, then the engine (the boundary) rejecting the pending question with `error`
+  const sendAndReject = async (error) => {
+    $('#btn-po-ask').onclick({ preventDefault() {} }); await settle();
+    asked.shift().reject(new Error(error)); await settle();
+  };
+  // the text of the chat's error line ('' when none): a string, never a node
+  const errorLine = () => {
+    for (const el of els.values()) {
+      const m = /data-testid="agent-chat-error"[^>]*>([^<]*)</.exec(String(el.innerHTML));
+      if (m) return m[1];
+    }
+    return '';
+  };
+  return { notice, type, sendOff, pressEnter, sendAndReject, errorLine, askedCount: () => asked.length };
 }
 
 // ---- a project without a repository -----------------------------------------------------------------
@@ -175,6 +194,34 @@ test('#25 no repository, pt-BR: sending is off even after the owner types', asyn
   const d = await openDrawer('pt-BR', NO_REPO);
   await d.type('Criar uma issue para a página de login');
   assert.equal(d.sendOff(), true, '#btn-po-ask or #po-question disabled');
+});
+
+test('#25 no repository: Enter in the text box sends nothing and the notice stays', async () => {
+  const d = await openDrawer('en', NO_REPO);
+  await d.type('Create an issue for the login page');
+  await d.pressEnter();
+  assert.equal(d.askedCount(), 0, 'nothing was asked to the Product Owner');
+  assert.equal(d.notice() === null, false, 'the notice is still shown');
+});
+
+// ---- the engine's no-repository refusal reaching the drawer (e.g. the record changed under it) ---------
+
+const ENGINE_NO_REPO = 'This project has no repository: add its URL in Projects › Edit to file issues.';
+
+test('#25 pt-BR: the engine\'s "has no repository" refusal shows in Portuguese in the error line', async () => {
+  const d = await openDrawer('pt-BR', WITH_REPO);
+  await d.type('Criar uma issue para a página de login');
+  await d.sendAndReject(ENGINE_NO_REPO);
+  const line = d.errorLine();
+  assert.equal(line, esc(textOfKey('pt-BR', 'backlog_po.no_repo_notice')));
+  assert.equal(/has no repository/.test(line), false, `no English left: ${line}`);
+});
+
+test('#25 pt-BR: another engine error is still shown as it came', async () => {
+  const d = await openDrawer('pt-BR', WITH_REPO);
+  await d.type('Criar uma issue para a página de login');
+  await d.sendAndReject('The model call failed');
+  assert.equal(d.errorLine(), 'The model call failed');
 });
 
 // ---- a project with a repository: unchanged ---------------------------------------------------------
