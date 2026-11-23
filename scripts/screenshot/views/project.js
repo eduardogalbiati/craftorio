@@ -395,6 +395,16 @@ function seed({ appDir, args, projects, ws, project }) {
     });
     return;
   }
+  // #22: --mode next-steps (opened with the wizard's Next steps card): a backend project (no screenshots
+  // spike) whose Inbox already has the idea noted on the Review ("Capture the first idea" shown done);
+  // --mode next-steps-empty: a frontend project with an empty Inbox (the card as before)
+  if (!args.tab && args.mode?.startsWith('next-steps')) {
+    projects.updateProject(ws.projects, project.id, { kind: args.mode === 'next-steps' ? 'backend' : 'frontend' });
+    if (args.mode === 'next-steps') {
+      require('@craftorio/engine/domains/discovery/discovery').createCard(ws.discovery, project.id, { title: 'Support cross-realm objects', text: 'Noted on the Review.', column: 'inbox' });
+    }
+    return;
+  }
   const tab = tabOf(args);
   if (tab === 'city') return seedArchitecture({ ...args, tab }, ws, project, { appDir, projects });
   if (tab === 'health') {
@@ -416,7 +426,8 @@ function seed({ appDir, args, projects, ws, project }) {
   demoConflictMap(ws, project.id);
 }
 
-const open = ({ js, project }) => js(`openProjectView(${JSON.stringify(project.id)})`);
+// #22: the next-steps modes open the page as the wizard's Finish does (the Next steps card shown)
+const open = ({ args, js, project }) => js(`openProjectView(${JSON.stringify(project.id)}${args?.mode?.startsWith('next-steps') && !args.tab ? ', { nextSteps: true }' : ''})`);
 
 // #360: a seed's run that never ends, or fails with the Oracle's error
 function stubSeedRun(mode) {
@@ -486,7 +497,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-empty', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,
