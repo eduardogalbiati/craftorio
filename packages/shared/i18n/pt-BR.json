@@ -3759,7 +3759,7 @@
   "oracle.undo_this_action": "Desfazer esta ação",
   "oracle.undo_title": "Desfazer: {title}",
   "oracle.unmute": "Reativar som",
-  "oracle.until_then_the_oracle_fixes_what": "Até lá o Oracle corrige o que trava o roadmap sem perguntar, mas só com as permissões que você escolheu na tela do Night watch (por padrão: tentar de novo um item que falhou e atualizar o texto da issue). Cada ação é registrada com seu backup e enviada como notificação. Os gates continuam seus; ele nunca fecha issues nem faz push.",
+  "oracle.until_then_the_oracle_fixes_what": "Até lá o Oracle corrige o que trava o roadmap sem perguntar, mas só com as permissões que você escolheu na tela da Vigília noturna (por padrão: tentar de novo um item que falhou e atualizar o texto da issue). Cada ação é registrada com seu backup e enviada como notificação. Os gates continuam seus; ele nunca fecha issues nem faz push.",
   "oracle.use_this_text": "Usar este texto",
   "oracle.waits_for_your_click": "Aguarda o seu clique",
   "oracle.wake_up": "despertar",
