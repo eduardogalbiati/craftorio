@@ -293,3 +293,80 @@ When('I click {string} on the demo project\'s card', async ({ e2e }, label) => {
 Then('the Start panel shows the {string} list', async ({ e2e }, name) => {
   await expect(startPanelPart(e2e.window).getByRole('combobox', { name, exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
+
+// ---- #36: the Roadmap card and the Assign dialog in the interface language ------------------------
+// Steps of features/36-ptbr-roadmap-card-assign-dialog.feature. Two more parts of the window are read,
+// with the same "shows none of these English texts:" rule as #28 above:
+// - a Roadmap card: data-testid="roadmap-item" holding the item's title (exists); its meters
+//   data-testid="roadmap-meter-cost" / "roadmap-meter-time" (exist; their labels "Cost" / "Time" are drawn
+//   in capitals by CSS, "COST" / "TIME", and read as written), its mode chips data-testid="roadmap-mode"
+//   (exists), its stations data-testid="roadmap-station" (exist; the visible name, not data-step, counts);
+// - the Assign dialog: data-testid="assign-modal" (exists), its workflow inputs' labels and options.
+// "shows these texts:" is the positive side: each text is the whole text of a visible element of the part
+// (or its own text, without its children's), a title / aria-label / placeholder, or an option of a select.
+// "I open the Assign dialog for the backlog issue {string}" goes through the Backlog's Board in whichever
+// language is shown: the language is the page's (the html lang attribute, #444) and each English label
+// (the Board tab, the "Board view" group's List button, a row's "Select #n" checkbox, the selection bar's
+// "Assign workflow…" button) is read from that language's catalog, as the #330 steps do.
+// Reuses fronts/build/features/steps/roadmap-ending-and-skip.steps.js ("the roadmap plans the item
+// {string} on the workflow {string} in {string} mode"), backlog.steps.js ("I open the Roadmap"),
+// backlog-archive.steps.js ("the backlog has the open issues {string} and {string}") and
+// backlog-plan-roadmap.steps.js ("the Assign dialog has the {string} workflow chosen").
+
+const roadmapCardPart = (page, title) => page.getByTestId('roadmap-item').filter({ hasText: title }).filter({ visible: true }).first();
+const assignDialogPart = (page) => page.getByTestId('assign-modal');
+
+async function expectTheseTexts(locator, table, what) {
+  const texts = tableTexts(table);
+  await expect(locator, what).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(async () => {
+    const { whole, all } = await visibleTextsOf(locator);
+    const set = new Set(whole);
+    const own = new Set(all.split(' \n ').map((s) => s.trim()));
+    return texts.filter((t) => !set.has(t) && !own.has(t));
+  }, { message: `texts missing from ${what}`, timeout: LOAD_TIMEOUT }).toEqual([]);
+}
+
+Then('the roadmap card {string} shows these texts:', async ({ e2e }, title, table) => {
+  await expectTheseTexts(roadmapCardPart(e2e.window, title), table, `the roadmap card "${title}"`);
+});
+
+Then('the roadmap card {string} shows none of these English texts:', async ({ e2e }, title, table) => {
+  await expectNoneOfTheseTexts(roadmapCardPart(e2e.window, title), table, `the roadmap card "${title}"`);
+});
+
+Then('the Assign dialog shows these texts:', async ({ e2e }, table) => {
+  await expectTheseTexts(assignDialogPart(e2e.window), table, 'the Assign dialog');
+});
+
+Then('the Assign dialog shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(assignDialogPart(e2e.window), table, 'the Assign dialog');
+});
+
+// the language the page is shown in, by its html lang attribute ("en", "pt-BR")
+const LANGUAGE_NAMES = Object.fromEntries(Object.entries(LANGUAGE_FILES).map(([name, code]) => [code, name]));
+async function shownLanguage(page) {
+  const code = await page.locator('html').getAttribute('lang', { timeout: LOAD_TIMEOUT });
+  const name = LANGUAGE_NAMES[code];
+  if (!name) throw new Error(`the page's language "${code}" has no catalog (known: ${Object.keys(LANGUAGE_NAMES).join(', ')})`);
+  return name;
+}
+// an English label as it reads in the shown language, as a pattern: "Select #{number}" → /^Selecionar #.+$/;
+// `prefix` lets a count follow ("Atribuir workflow… (1)")
+async function shownLabel(page, english, { prefix = false } = {}) {
+  const texts = translations(english, await shownLanguage(page));
+  return new RegExp(`^(${texts.map((s) => s.split(/\{[^}]+\}/).map(escapeRe).join('.+')).join('|')})${prefix ? '' : '$'}`);
+}
+
+When('I open the Assign dialog for the backlog issue {string}', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await page.getByRole('tab', { name: await shownLabel(page, 'Board') }).filter({ visible: true }).first().click();
+  await page.getByRole('group', { name: await shownLabel(page, 'Board view') }).filter({ visible: true }).first()
+    .getByRole('button', { name: await shownLabel(page, 'List') }).click();
+  const list = page.getByTestId('backlog-list');
+  await expect(list).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await list.getByTestId('backlog-issue').filter({ hasText: title }).first()
+    .getByRole('checkbox', { name: await shownLabel(page, 'Select #{number}') }).check();
+  await page.getByRole('button', { name: await shownLabel(page, 'Assign workflow…', { prefix: true }) }).filter({ visible: true }).first().click();
+  await expect(assignDialogPart(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
