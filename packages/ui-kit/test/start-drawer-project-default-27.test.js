@@ -19,14 +19,15 @@ const CREATED = { id: 'p1', name: 'Shop', folder: 'C:/p/shop', exists: true, wor
 const IMPORTED = { id: 'p2', name: 'Imported', folder: 'C:/p/imported', exists: true, repo: 'https://github.com/o/imported', workflows: [{ name: 'fix', category: 'fix' }, { name: 'feature', category: 'feature' }], defaultWorkflow: 'fix' };
 const BARE = { id: 'p3', name: 'Bare', folder: 'C:/p/bare', exists: true };
 
-async function page({ projects = [CREATED, IMPORTED, BARE], lastWorkflow = '', currentProject = null } = {}) {
+async function page({ projects = [CREATED, IMPORTED, BARE], lastWorkflow = '', currentProject = null, hiddenWorkflows = [], pipelines = [] } = {}) {
   const app = loadApp({
     storage: currentProject ? { 'craftorio.currentProject': currentProject } : {},
     api: {
-      getSettings: async () => ({ setupDone: true, lastWorkflow }),
-      setSettings: async (s) => ({ setupDone: true, lastWorkflow, ...s }),
+      getSettings: async () => ({ setupDone: true, lastWorkflow, hiddenWorkflows }),
+      setSettings: async (s) => ({ setupDone: true, lastWorkflow, hiddenWorkflows, ...s }),
       listWorkflows: async () => WORKFLOWS,
       listProjects: async () => projects,
+      listPipelines: async () => pipelines,
     },
   });
   await app.boot();
@@ -67,4 +68,33 @@ test('#27 guard: an explicit workflow wins over the project\'s default (the Back
 test('#27 guard: with no project at all, settings.lastWorkflow is selected', async () => {
   const app = await page({ projects: [], lastWorkflow: 'issue.yaml' });
   assert.equal(await selectedWorkflow(app, {}), 'issue.yaml');
+});
+
+// #790: a project with no default of its own still has one, `feature` (the page shows "Workflow padrão: feature")
+test('#27 a project with no default of its own opens on feature, the default its page shows, over settings.lastWorkflow', async () => {
+  const app = await page({ lastWorkflow: 'issue.yaml' });
+  assert.equal(await selectedWorkflow(app, { project: 'p3' }), 'feature.yaml');
+});
+
+// the repository's manifest `default` (projects:list adds `manifest` to the record) is the project's default too
+test('#27 a project whose default comes from its repository manifest opens on that workflow', async () => {
+  const fromManifest = { id: 'p4', name: 'Manifest', folder: 'C:/p/manifest', exists: true, manifest: { default: 'fix' } };
+  const app = await page({ projects: [fromManifest], lastWorkflow: 'issue.yaml' });
+  assert.equal(await selectedWorkflow(app, { project: 'p4' }), 'fix.yaml');
+});
+
+test('#27 guard: an explicit pipeline wins over the project\'s default', async () => {
+  const pipe = { file: 'ship.json', name: 'Ship', category: 'feature', stages: [{ workflow: 'issue.yaml' }, { workflow: 'fix.yaml' }] };
+  const app = await page({ pipelines: [pipe] });
+  assert.equal(await selectedWorkflow(app, { pipeline: 'ship.json', project: 'p1' }), 'pipe:ship.json');
+});
+
+// #319: the Setup hid the project's default from Start; the drawer must not fall to the first workflow listed
+// (analyze-project, a real model call: the very proposal #27 removes) but to the last workflow used
+test('#27 a project whose default the Setup hid from Start opens on settings.lastWorkflow, not the first workflow', async () => {
+  const app = await page({ lastWorkflow: 'issue.yaml', hiddenWorkflows: ['feature'] });
+  const selected = await selectedWorkflow(app, { project: 'p1' });
+  const offered = Array.from(app.el('#wf-select').querySelectorAll('option')).map((o) => String(o.value));
+  assert.equal(offered.includes('feature.yaml'), false, 'feature is hidden from Start by the Setup');
+  assert.equal(selected, 'issue.yaml');
 });
