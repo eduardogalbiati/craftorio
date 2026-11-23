@@ -47,8 +47,11 @@
   const CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>';
   const PENCIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>';
   const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h8l-1 8 10-12h-8z" /></svg>';
-  // a column automation's modes (#259), as the settings dialog names them
-  const AUTOMATION_MODES = { ask: 'Ask me', on: 'On', off: 'Off' };
+  // a column automation's modes (#259), as the settings dialog names them (#28: in the interface language)
+  const AUTOMATION_MODES = { ask: 'discovery.mode_ask', on: 'discovery.mode_on', off: 'discovery.mode_off' };
+  const modeLabel = (mode) => t(AUTOMATION_MODES[mode] || AUTOMATION_MODES.ask);
+  // #28: a card's kind in the interface language, the id when the catalog lacks it (the Inbox's too)
+  const typeLabel = (type) => window.I18n.translated(`discovery.type_${type}`, type);
 
   // menu: the card whose "Move to…" menu is open; wipEdit: the column whose limit is being edited;
   // drag: the card being dragged; open: the opened card (of the project openProject) with its
@@ -76,7 +79,9 @@
   const lines = (s) => String(s ?? '').replace(/\r\n/g, '\n');
   const isFast = (c) => FAST.includes(c.type);
   // the board's columns: the Inbox column is the Inbox screen's
-  const columns = () => (dv.board?.columns || []).filter((c) => c.id !== 'inbox');
+  // #28: a column's title in the interface language by its id (the engine writes it in English), its own else
+  const columnTitle = (c) => { const key = `discovery.column_${c.id}`, text = t(key); return text === key ? c.title : text; };
+  const columns = () => (dv.board?.columns || []).filter((c) => c.id !== 'inbox').map((c) => ({ ...c, title: columnTitle(c) }));
   const columnOf = (id) => columns().find((c) => c.id === id) || null;
   const cardOf = (id) => dv.cards.find((c) => c.id === id) || null;
   // #258: a committed card is off the board, in the Committed list; its panel is read-only
@@ -101,7 +106,7 @@
   function age(iso) {
     const min = Math.floor(Math.max(0, Date.now() - Date.parse(iso)) / 60000);
     if (!Number.isFinite(min)) return '';
-    if (min < 1) return 'now';
+    if (min < 1) return t('discovery.now');
     if (min < 60) return `${min} min`;
     return min < 1440 ? `${Math.floor(min / 60)} h` : `${Math.floor(min / 1440)} d`;
   }
@@ -160,8 +165,8 @@
       if (!values.includes(dv.filter[key])) dv.filter[key] = '';
       $(sel).innerHTML = `<option value="">${all}</option>${values.map((v) => `<option value="${esc(v)}"${v === dv.filter[key] ? ' selected' : ''}>${esc(v)}</option>`).join('')}`;
     };
-    fill('#dsc-filter-tag', 'tag', 'All tags', [...new Set(dv.cards.flatMap((c) => c.tags || []))].sort());
-    fill('#dsc-filter-author', 'author', 'All authors', [...new Set(dv.cards.map((c) => c.author).filter(Boolean))].sort());
+    fill('#dsc-filter-tag', 'tag', t('discovery.all_tags'), [...new Set(dv.cards.flatMap((c) => c.tags || []))].sort());
+    fill('#dsc-filter-author', 'author', t('discovery.all_authors'), [...new Set(dv.cards.map((c) => c.author).filter(Boolean))].sort());
   }
 
   function cardHtml(c) {
@@ -180,7 +185,7 @@
         <button type="button" class="dsc-card-title" data-testid="discovery-card-title" data-open="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>
         <div class="dsc-card-foot">
           <div class="dsc-card-meta muted small">
-            <span class="badge dsc-type" data-testid="discovery-card-type">${esc(c.type)}</span>
+            <span class="badge dsc-type" data-testid="discovery-card-type">${esc(typeLabel(c.type))}</span>
             <span data-testid="discovery-card-age" title="${t('discovery.in_value_since_c', { value: esc(columnOf(c.column)?.title || c.column), c: esc(dateOf(since(c))) })}">${esc(age(since(c)))}</span>
             ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? t('discovery.needs_grilling_below_the_clarity_bar', { bar }) : t('discovery.at_or_above_the_clarity_bar', { bar }))}"><span data-testid="discovery-card-clarity">${t('discovery.clarity_score', { score: esc(score) })}</span></span>` : ''}
             ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(t('discovery.moved_to_ready_below_the_clarity', { reason: override.reason }))}">${t('discovery.moved_anyway')}</span>` : ''}
@@ -239,7 +244,7 @@
     // the column's automation (#259): its mode on the button, the rest in its settings
     const auto = c.on_enter;
     const mode = auto ? (AUTOMATION_MODES[auto.mode] ? auto.mode : 'ask') : null;
-    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(t('discovery.automation_of_title_value_value2', { title: c.title, value: auto.name || auto.pipeline || auto.workflow || 'automation', value2: AUTOMATION_MODES[mode] }))}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${t('discovery.automation')} ${esc(AUTOMATION_MODES[mode])}</span></button>`;
+    const automation = !auto ? '' : `<button type="button" class="btn sm ghost dsc-auto-btn" data-testid="discovery-column-automation" data-column="${esc(c.id)}" data-mode="${esc(mode)}" aria-label="${esc(t('discovery.automation_of_title_value_value2', { title: c.title, value: auto.name || auto.pipeline || auto.workflow || 'automation', value2: modeLabel(mode) }))}" title="${esc(`Entering ${c.title} ${mode === 'off' ? 'runs nothing' : mode === 'on' ? 'runs' : 'proposes'} ${auto.name || auto.pipeline || auto.workflow || 'an automation'}${mode === 'off' ? ` (${auto.name || 'the automation'} is off)` : ''}: change it`)}">${BOLT}<span class="dsc-auto-mode">${t('discovery.automation')} ${esc(modeLabel(mode))}</span></button>`;
     return `
       <section class="dsc-col" data-testid="discovery-column" data-column="${esc(c.id)}" data-drop="${esc(c.id)}"${over ? ' data-over-wip="true"' : ''} style="grid-column:${i + 1}" aria-label="${esc(c.title)}">
         <header class="dsc-col-head">
@@ -763,7 +768,7 @@
           <div class="dsc-fields">
             <div class="field">
               <label for="dsc-type">${t('discovery.type')}</label>
-              <select id="dsc-type" data-testid="card-type"${ro ? ' disabled' : ''}>${TYPES.map((t) => `<option value="${t}"${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select>
+              <select id="dsc-type" data-testid="card-type"${ro ? ' disabled' : ''}>${TYPES.map((k) => `<option value="${k}"${k === c.type ? ' selected' : ''}>${esc(typeLabel(k))}</option>`).join('')}</select>
             </div>
             <div class="field">
               <label for="dsc-tags">${t('discovery.tags')}</label>
@@ -1347,6 +1352,7 @@
   }
 
   window.DiscoveryRuns = { started: runStarted };
+  window.DiscoveryTypes = { label: typeLabel }; // #28: the Inbox's kind badge
   // the Backlog's badge of an issue's discovery card (#258): the board with that card's panel open
   window.DiscoveryActions = {
     committed,
@@ -1372,7 +1378,7 @@
             <label for="dsc-filter-type">${t('discovery.type')}</label>
             <select id="dsc-filter-type" data-testid="discovery-filter-type">
               <option value="">${t('discovery.all_types')}</option>
-              ${TYPES.map((t) => `<option value="${t}">${t}</option>`).join('')}
+              ${TYPES.map((k) => `<option value="${k}">${esc(typeLabel(k))}</option>`).join('')}
             </select>
           </div>
           <div class="field">
@@ -1450,7 +1456,7 @@
       <div class="field dsc-automation-field">
         <label for="dsc-automation-mode">${t('discovery.when_a_card_enters')}</label>
         <select id="dsc-automation-mode" data-testid="discovery-automation-mode">
-          ${Object.entries(AUTOMATION_MODES).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}
+          ${Object.keys(AUTOMATION_MODES).map((v) => `<option value="${v}">${modeLabel(v)}</option>`).join('')}
         </select>
         <div class="hint">${t('discovery.ask_me_proposes_it_with_its')}</div>
       </div>

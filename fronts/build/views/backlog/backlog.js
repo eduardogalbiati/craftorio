@@ -1222,7 +1222,7 @@
     // #269: the Roadmap draws its own filter row (the epic with its view filters), above its bar
     $b('#bl-toolbar').classList.toggle('hidden', roadmap);
     const plat = $b('#bl-platform');
-    plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
+    plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ` ${t('backlog.soon')}` : ''}</option>`).join('');
     plat.value = bl.platform || DEFAULT_PLATFORM;
     // #745: a known platform as a badge; the select only for a host the URL can't tell (saved on the project)
     const known = knownPlatform(), badge = $b('#bl-platform-badge');

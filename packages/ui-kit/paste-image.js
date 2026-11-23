@@ -9,7 +9,7 @@
 // usual, even when it also holds an image (a copy from Office). Pasting never sends anything: the
 // screen that submits the field takes its images (PasteImage.settle, then .attachments) and clears
 // the chips with the text (.clear). Fields rendered later get it from one document-level paste
-// listener; the hint ("Paste an image (Ctrl+V)") is added by the same MutationObserver pattern as
+// listener; the hint (paste_image.paste_an_image) is added by the same MutationObserver pattern as
 // voice.js. Fields with their own image paste (the Product Owner #117, the Oracle #171) are left to
 // it. Pure helpers (pastedFiles, checkImage, formatSize) are exported for the tests.
 // load: after voice.js
@@ -18,7 +18,8 @@
   // the limits of a turn's attachments (packages/engine/engine/providers.js ATTACHMENT_LIMITS)
   const LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
   const TYPES = { 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-  const HINT = 'Paste an image (Ctrl+V)';
+  // #28: the hint in the interface language, read when a field is attached
+  const hint = () => t('paste_image.paste_an_image');
   // fields that already handle a pasted image themselves
   const OWN_PASTE = '#inbox-text, #po-question, .oracle-input';
 
@@ -39,7 +40,7 @@
     return null;
   }
 
-  const helpers = { checkImage, formatSize, HINT, LIMITS, pastedFiles };
+  const helpers = { checkImage, formatSize, hint, LIMITS, pastedFiles };
   if (typeof module === 'object' && module.exports) module.exports = helpers;
   if (typeof document === 'undefined') return;
 
@@ -155,7 +156,8 @@
     if (ta._paste || ta.matches(OWN_PASTE)) return;
     ta._paste = { items: [], row: null, seq: 0 };
     const ph = ta.getAttribute('placeholder') || '';
-    if (!ph.includes(HINT)) ta.setAttribute('placeholder', ph ? `${ph} · ${HINT}` : HINT);
+    const text = hint();
+    if (!ph.includes(text)) ta.setAttribute('placeholder', ph ? `${ph} · ${text}` : text);
   }
 
   function scan(node) {

@@ -623,7 +623,7 @@
     if (!po.unread) po.unreadCount = 0;
     renderButton();
     // #263: the Agents window's pane shows the same conversation
-    if (winChat) winChat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy, turn: turnFor(winChat) });
+    if (winChat) winChat.update({ messages: po.messages, live: po.live, error: chatError(po.error), busy: po.busy, turn: turnFor(winChat) });
     window.AgentsWindow?.changed?.();
     if (!po.open) return;
     const agent = window.productOwnerAgent;
@@ -650,7 +650,7 @@
       ...(po.moreSuggestions ? MORE_QUESTIONS.map(chip) : [`<button class="chip" type="button" data-testid="po-suggestion-more" data-more${off}>${t('backlog_po.suggestions_more')}</button>`])].join('');
     $p('#po-chips').classList.toggle('hidden', issueMode);
     // #274: the messages, the question in flight, the live turn and the error, through the shared chat
-    chat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy, turn: turnFor(chat) });
+    chat.update({ messages: po.messages, live: po.live, error: chatError(po.error), busy: po.busy, turn: turnFor(chat) });
     // #148: the simulation-only scenario picker (never in the production UI)
     $p('#po-sim').classList.toggle('hidden', !simulated);
     $p('#po-scenario').innerHTML = simulated ? SCENARIOS.map((s) => `<button type="button" class="po-sim-opt${s.id === po.scenario ? ' active' : ''}" data-po-scenario="${esc(s.id)}" aria-pressed="${s.id === po.scenario}"${po.busy ? ' disabled' : ''}>${esc(s.label)}</button>`).join('') : '';
@@ -672,8 +672,9 @@
       const tip = `${i ? `#${n} ${i.title}` : `#${n} (not synced)`}${closed ? ' · closed: left out of the proposal' : ''}`;
       return `<span class="badge po-file${closed ? ' closed' : ''}" title="${esc(tip)}"><span>#${n}</span> <span class="muted">${esc(i?.title || '')}</span><button type="button" data-po-unattach-issue="${n}" aria-label="${t('backlog_po.remove_n', { n })}"${po.busy ? ' disabled' : ''}>×</button></span>`;
     }).join('')}<button class="link-btn small" type="button" data-po-unattach-all${po.busy ? ' disabled' : ''} title="${t('backlog_po.ask_about_the_whole_backlog_again')}">${t('backlog_po.clear')}</button>` : '';
+    // #28: registering an issue takes screenshots: the shared paste hint (packages/ui-kit/paste-image.js) too
     $p('#po-question').placeholder = issueMode
-      ? (openDraftIndex() >= 0 ? t('backlog_po.what_should_change_or_add_this') : t('backlog_po.describe_the_issue_in_a_few'))
+      ? `${openDraftIndex() >= 0 ? t('backlog_po.what_should_change_or_add_this') : t('backlog_po.describe_the_issue_in_a_few')} · ${t('paste_image.paste_an_image')}`
       : attached ? t('backlog_po.ask_about_the_attached_issues') : t('backlog_po.ask_about_the_backlog_which_issues');
     $p('#btn-po-ask').textContent = issueMode ? t('backlog_po.send') : t('backlog_po.ask');
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
@@ -681,7 +682,7 @@
     window.BacklogPoSettings?.renderChip({ busy: po.busy, issueMode });
     // #235: the Cost chip only where the Cost axis applies to the default workflow
     if (!costOn()) $p('#po-cost-chip').classList.add('hidden');
-    $p('#po-note').textContent = `${simulated ? `Simulated: no model is called and nothing is spent.${issueMode ? ' Filing only previews: nothing reaches GitHub/GitLab.' : ''}` : 'Each question is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
+    $p('#po-note').textContent = noteText(simulated, issueMode, cost);
     // last: the footer above may have changed the log's height
     log.scrollTop = toEnd ? log.scrollHeight : top;
   }
@@ -817,10 +818,14 @@
   function markNextStepIssue(out) { const filed = !out.preview && out.filed?.number; if (filed && po.issueFor === po.projectId) { try { localStorage.setItem('craftorio.nextStepsPoIssue', JSON.stringify({ ...JSON.parse(localStorage.getItem('craftorio.nextStepsPoIssue') || '{}'), [po.projectId]: { issue: filed, url: out.filed.url || null } })); } catch { /* storage unavailable */ } } }
 
   // ---- the chat (#274) ------------------------------------------------------------------------------
+  // #28: the engine's "no synced backlog" refusal (product-owner.js, oracle.js) in the interface language; other errors as they are
+  function chatError(msg) { return msg && /Sync the backlog first/.test(msg) ? t('backlog_po.sync_the_backlog_first') : msg; }
+  function noteText(simulated, issueMode, cost) { // #28: the footer through the catalog
+    return [simulated ? t('backlog_po.note_simulated') : t('backlog_po.note_real_call'), simulated && issueMode ? t('backlog_po.note_filing_preview') : '',
+      cost ? t('backlog_po.note_conversation_cost', { cost: fmtCost(cost) }) : ''].filter(Boolean).join(' ');
+  }
   function emptyHtml() {
-    const empty = po.mode === 'issue'
-      ? 'Describe the issue in a few words: type it, dictate it, or paste a screenshot. I look at the code and the backlog for evidence and duplicates, ask a question if I must, and draft it. Nothing is filed until you click Create or Add to #n.'
-      : 'I read the synced issues, the queue, the runs in progress and past runs (and the code, read-only), and propose which issues to run together, which not, and in what order. I never start runs or edit issues: you apply a proposal with a click.';
+    const empty = po.mode === 'issue' ? t('backlog_po.empty_issue') : t('backlog_po.empty_planning');
     return `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
         <p class="muted small">${empty}</p></div>`;
   }

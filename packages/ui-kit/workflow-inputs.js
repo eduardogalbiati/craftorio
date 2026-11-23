@@ -317,6 +317,31 @@
     return m ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : '';
   }
 
+  // #28: a bundled workflow's own texts (an unmodified copy, origin default) in the interface language, for the Start
+  // drawer: its description (projects.workflows_desc_<name>, the wizard's #23 keys), its stations
+  // (workflow_texts.<name>_step_<id>) and its inputs (workflow_texts.<name>_<key>_label|_desc|_opt_<value>), names
+  // snake_cased; the file's text in English or where the catalog lacks a key. A modified or custom one stays as it is.
+  const i18n = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n);
+  const snake = (s) => String(s ?? '').replace(/\.ya?ml$/, '').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+  function localized(wf) {
+    const I18n = i18n();
+    if (!wf || wf.error || !['bundled', 'default'].includes(wf.origin) || !I18n?.translated) return wf;
+    const name = snake(wf.file || wf.name);
+    const tr = (suffix, own) => I18n.translated(`workflow_texts.${name}_${snake(suffix)}`, own);
+    const options = (key, def) => Object.fromEntries((def.enum || Object.keys(def.options || {})).map((v) => [v, tr(`${key}_opt_${v}`, optionLabel(def, v))]));
+    return {
+      ...wf,
+      description: I18n.translated(`projects.workflows_desc_${name}`, wf.description || ''),
+      steps: (wf.steps || []).map((s) => ({ ...s, display: tr(`step_${s.id}`, s.display || '') || s.display })),
+      inputs: Object.fromEntries(Object.entries(wf.inputs || {}).map(([key, def]) => [key, {
+        ...def,
+        label: tr(`${key}_label`, label(key, def)),
+        ...(def.description ? { description: tr(`${key}_desc`, def.description) } : {}),
+        ...(def.enum || def.options ? { options: options(key, def) } : {}),
+      }])),
+    };
+  }
+
   // ---- where a value comes from (#785) --------------------------------------------------------
   // The rule is packages/shared/run-inputs.js, the run's own, without what is typed: an item's saved
   // value (a blank one counts as not saved) > the project's run default (projects:inputHints'
@@ -447,6 +472,7 @@
     isBoolean,
     kind,
     label,
+    localized,
     modeInput,
     optionHint,
     optionLabel,

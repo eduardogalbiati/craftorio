@@ -68,6 +68,9 @@
     else renderList();
   }
 
+  // #28: a card's kind in the interface language (views/discovery/), the id without the board
+  const typeLabel = (type) => window.DiscoveryTypes?.label(type) ?? type;
+
   function renderList() {
     const box = $('#inbox-list');
     if (!inbox.projectId) {
@@ -85,7 +88,7 @@
         <div class="inbox-card-main">
           <button type="button" class="inbox-card-title" data-action="open" data-card="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>
           <span class="inbox-card-meta muted small">
-            <span class="badge">${esc(c.type)}</span>
+            <span class="badge">${esc(typeLabel(c.type))}</span>
             <span data-testid="inbox-card-author">${esc(c.author)}</span>
             <span data-testid="inbox-card-age" title="${esc(dateOf(c.created))}">${esc(ncAgo(c.created))}</span>
             <span class="inbox-card-files" data-testid="inbox-card-attachments" title="${esc(plural(n, 'inbox.attachments_count'))}">${CLIP} ${n}</span>
@@ -522,7 +525,7 @@
           <button type="button" class="btn sm ghost" data-detail="close" title="${t('inbox.close_esc')}">${t('common.close')}</button>
         </div>
         <p class="inbox-card-meta muted small">
-          <span class="badge">${esc(c.type)}</span>
+          <span class="badge">${esc(typeLabel(c.type))}</span>
           <span>${esc(c.author)}</span>
           <span>${esc(dateOf(c.created))}</span>
           <span class="mono" title="${t('inbox.the_card_s_folder_in_the')}">${esc(c.id)}</span>

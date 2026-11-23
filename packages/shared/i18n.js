@@ -60,6 +60,8 @@
   function pluralOf(value, lang, count) {
     let form = 'other';
     try { form = new Intl.PluralRules(lang).select(Number(count)); } catch { /* an unknown language: other */ }
+    // #28: Intl files Portuguese's zero under "one" ("0 issue"); the interface writes it plural ("0 issues")
+    if (Number(count) === 0 && /^pt\b/i.test(lang)) form = 'other';
     return value[form] ?? value.other;
   }
 

@@ -24,6 +24,13 @@
     queue: 'Plan the issues (Roadmap)',
     workflow: 'Start a workflow with it',
   };
+  // #28: an action's label in the interface language (chain_picker.action_<action>), the English one when the
+  // catalog lacks it; the catalog is read at the call (node: the shared module, the page: window.I18n)
+  const i18n = () => (typeof module === 'object' && module.exports ? require('./i18n') : root.I18n);
+  function actionLabel(action) {
+    const key = `chain_picker.action_${action}`, text = i18n()?.t(key);
+    return text && text !== key ? text : (ACTION_LABELS[action] || action);
+  }
   const RUN_SOURCE = '@run';
   // inputs a next run takes from the previous run's own inputs when it has one with the same name
   const CARRIED = /path|dir|branch|language|platform/i;
@@ -361,6 +368,7 @@
     CHAIN_STATES,
     MAX_DEPTH,
     RUN_SOURCE,
+    actionLabel,
     blockedReason,
     chainBadgesHtml,
     chainWorkflows,

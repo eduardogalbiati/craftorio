@@ -37,7 +37,7 @@
       const outs = outputsOf();
       const action = then?.action || 'none';
       const issuesTip = producesIssues() ? '' : ` (${esc(src?.name || 'this workflow')} produces no issues)`;
-      const opt = (a, disabled = false, tip = '') => `<option value="${a}"${a === action ? ' selected' : ''}${disabled ? ' disabled' : ''}>${esc(ChainModel.ACTION_LABELS[a])}${tip}</option>`;
+      const opt = (a, disabled = false, tip = '') => `<option value="${a}"${a === action ? ' selected' : ''}${disabled ? ' disabled' : ''}>${esc(ChainModel.actionLabel(a))}${tip}</option>`;
       let body = '';
       if (action === 'workflow') {
         const next = byFile(then.workflow);

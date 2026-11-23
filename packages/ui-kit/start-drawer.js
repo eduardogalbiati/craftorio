@@ -169,9 +169,11 @@ function selectWorkflow(file) {
   state.pipeline = pipeline;
   const wf = state.workflows.find((w) => w.file === (pipeline ? pipeline.stages[0].workflow : file));
   state.wf = wf;
+  // #28: a bundled workflow's description, stations and inputs drawn in the interface language (state.wf keeps the file's)
+  const shown = WorkflowInputs.localized(wf);
   $('#drawer .drawer-title').textContent = pipeline ? t('start_drawer.start_pipeline') : t('start_drawer.start_workflow');
-  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? t('start_drawer.error_error', { error: wf.error }) : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
-  $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
+  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? t('start_drawer.error_error', { error: wf.error }) : [shown.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
+  $('#wf-steps-mini').innerHTML = (shown.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(`${s.id}${s.type === 'human_approval' ? ' (human approval)' : s.agent ? ` · ${s.agent}` : ''}`)}">${esc(s.display || (typeof displayName === 'function' ? displayName(s.id) : s.id))}</span>`).join('<span class="arrow">›</span>');
   // #262: each agent's provider, model and effort for this run (the workflow's as defaults, never
   // remembered), with what it may use (capabilities) and how its conversation is kept (session);
@@ -181,7 +183,7 @@ function selectWorkflow(file) {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(`${LS_KEY}.${wf.file}`) || '{}'); } catch { /* ignore */ }
 
-  const entries = Object.entries(wf.inputs || {}).filter(([key]) => !isPathInput(key));
+  const entries = Object.entries(shown.inputs || {}).filter(([key]) => !isPathInput(key));
   // the main field is a free-text one: never a run id or a fixed list
   const textual = entries.filter(([, d]) => d.type !== 'run' && !d.enum);
   const mainKey = textual.find(([k]) => k === 'task')?.[0] || textual.find(([, d]) => d.required)?.[0] || textual[0]?.[0];
