@@ -39,7 +39,10 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   // #27: with a project (given or the header's) and no workflow, the project's default before lastWorkflow
   const rec = state.projects.find((p) => p.id === (project || window.CurrentProject.get()));
   const projectDefault = rec && window.DefaultWorkflow?.projectDefault?.(rec, rec.manifest?.default);
-  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || (projectDefault ? `${projectDefault}.yaml` : state.settings.lastWorkflow));
+  // only when Start offers it: a default the Setup hid (#319) falls back to lastWorkflow, not the first listed
+  const defaultFile = projectDefault && `${projectDefault}.yaml`;
+  const offered = state.workflows.some((w) => w.file === defaultFile && !hiddenFromStart(w));
+  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || (offered ? defaultFile : state.settings.lastWorkflow));
   if (inputs && (!workflow || state.wf?.file === workflow)) {
     for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
