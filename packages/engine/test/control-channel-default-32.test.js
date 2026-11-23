@@ -72,6 +72,15 @@ test('saved controlChannel: false is kept when another preference is saved', asy
   assert.equal(fs.existsSync(endpointFile(service)), false);
 });
 
+test('a new workspace that then saves another preference (e.g. the Setup) keeps the channel on', async (t) => {
+  const { service, api } = makeService(t);
+  api['settings:set']({ keepAwake: true, setupDone: true });
+  assert.equal(api['settings:get']().controlChannel, true);
+  const control = openControl(t, service);
+  assert.equal((await control.update()).enabled, true);
+  assert.equal(fs.existsSync(endpointFile(service)), true);
+});
+
 test('unticking it on a new workspace closes the channel and deletes endpoint.json', async (t) => {
   const { service, api } = makeService(t);
   const control = openControl(t, service);
