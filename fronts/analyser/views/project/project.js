@@ -26,8 +26,7 @@
 // left out for a project of kind 'backend' (no user interface); #30: next-step-install-deps, shown while the
 // clone has a lockfile and no node_modules (api.onboardingStatus's deps), names the command and runs it
 // (api.installOnboardingDeps: npm ci, --ignore-scripts per the project's setting);
-// #25: a project with no repository (created without a remote) gets next-step-needs-repo first instead of the PO's
-// entry (the PO can only refuse there): its next-step-add-repo opens the project's settings, as Projects › Edit;
+// #35: a project with no repository (created without a remote) has a local backlog, so its first entry is the PO's too;
 // next-steps-dismiss), remembered per project in localStorage craftorio.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -56,8 +55,6 @@ const PV_NEXT_STEPS_KEY = 'craftorio.nextSteps';
 // reason it is shown disabled, or null]: mock-7, spec R11 (release CI and screenshots come in later phases);
 // #744: the PO's issue first
 const PV_NEXT_STEPS = [
-  // #25: only for a project with no repository, which shows no po-issue entry
-  ['needs-repo', 'onboarding.next_steps_needs_repo', 'onboarding.next_steps_needs_repo_text', 'onboarding.add_repo', null],
   ['po-issue', 'onboarding.next_steps_po_issue', 'onboarding.next_steps_po_issue_text', 'onboarding.open_po', null],
   // #30: shown only while the imported clone has a lockfile and no installed dependencies
   ['install-deps', 'onboarding.deps_title', 'onboarding.deps_missing', 'onboarding.deps_install', null],
@@ -148,7 +145,7 @@ function nextStepsMarkup(pv) {
     if (step === 'install-deps' && pv.nextStepDeps?.status === 'installing') {
       return `<button type="button" class="btn sm" disabled aria-disabled="true">${esc(t('onboarding.deps_installing'))}</button>`;
     }
-    const testid = { 'po-issue': ' data-testid="next-step-po-issue-open"', 'needs-repo': ' data-testid="next-step-add-repo"' }[step] || '';
+    const testid = { 'po-issue': ' data-testid="next-step-po-issue-open"' }[step] || '';
     // #744: a disabled step says why, in its tooltip and in a line of its entry
     const reason = later ? esc(t(later)) : '';
     return `<button type="button" class="btn sm" data-next-step="${step}"${testid}${later ? ` disabled aria-disabled="true" title="${reason}"` : ''}>${esc(step === 'refactors' ? fileAndAddLabel(pv) : t(action))}</button>
@@ -171,10 +168,8 @@ function nextStepsMarkup(pv) {
     </li>`;
   // #744: no refactors step once the proposals are read and there are none (never "File and add 0")
   // #22: no screenshots spike for a project without a user interface (the wizard's kind 'backend')
-  // #25: without a repository the PO's entry gives way to the one that says a repository is needed
-  const hasRepo = !!pv.project?.repo;
-  const shown = PV_NEXT_STEPS.filter(([step]) => (step !== 'needs-repo' || !hasRepo) && (step !== 'po-issue' || hasRepo)
-    && (step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length)
+  // #35: the PO's entry stays first with or without a repository (a project with none has a local backlog)
+  const shown = PV_NEXT_STEPS.filter(([step]) => (step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length)
     && (step !== 'screenshots' || pv.project?.kind !== 'backend')
     && (step !== 'install-deps' || ['missing', 'installing', 'failed'].includes(pv.nextStepDeps?.status)));
   // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
@@ -206,8 +201,6 @@ function onNextStepClick(step) {
   }
   // #744: the Product Owner's chat in issue mode on this project (the Build front's backlog-po.js)
   else if (step === 'po-issue' && state.pv) window.Actions?.call('openPoIssue', state.pv.id);
-  // #25: the project's settings, where its repository URL is added (as a Projects card's Edit)
-  else if (step === 'needs-repo' && state.pv) openProjectView(state.pv.id, { settings: true });
   else if (step === 'install-deps') installNextStepDeps(state.pv);
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {

@@ -1,5 +1,5 @@
 {
- "hash": "190ea2e7170a",
+ "hash": "23685fd36e2c",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -2366,6 +2366,109 @@
    "method": "onBacklogChanged"
   },
   {
+   "channel": "backlog:close-issue",
+   "method": "closeBacklogIssue",
+   "params": [
+    "projectId",
+    "number"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      },
+      "number": {
+       "type": [
+        "integer",
+        "string"
+       ],
+       "description": "An issue number (a string of digits is read as one)."
+      }
+     },
+     "required": [
+      "projectId",
+      "number"
+     ]
+    },
+    "result": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "description": "The Backlog: issues with their runs, the queue, the roadmap (null before the first sync)."
+    }
+   }
+  },
+  {
+   "channel": "backlog:create-issue",
+   "method": "createBacklogIssue",
+   "params": [
+    "projectId",
+    "title",
+    "body",
+    "labels"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      },
+      "title": {
+       "type": "string"
+      },
+      "body": {
+       "oneOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "labels": {
+       "oneOf": [
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     "required": [
+      "projectId",
+      "title"
+     ]
+    },
+    "result": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "description": "The Backlog: issues with their runs, the queue, the roadmap (null before the first sync)."
+    }
+   }
+  },
+  {
    "channel": "backlog:dismiss-refresh",
    "method": "dismissBacklogRefresh",
    "params": [
@@ -2394,6 +2497,83 @@
       "null"
      ],
      "description": "The Backlog: issues with their runs, the queue, the roadmap (null before the first sync)."
+    }
+   }
+  },
+  {
+   "channel": "backlog:file-local",
+   "method": "fileLocalIssues",
+   "params": [
+    "projectId",
+    "preview"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      },
+      "preview": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "projectId"
+     ]
+    },
+    "result": {
+     "type": "object",
+     "properties": {
+      "preview": {
+       "type": "boolean"
+      },
+      "issues": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "number": {
+          "type": [
+           "integer",
+           "string"
+          ],
+          "description": "An issue number (a string of digits is read as one)."
+         },
+         "title": {
+          "type": "string"
+         },
+         "command": {
+          "type": "string"
+         },
+         "url": {},
+         "error": {}
+        },
+        "required": [
+         "number"
+        ]
+       }
+      },
+      "backlog": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "description": "The Backlog: issues with their runs, the queue, the roadmap (null before the first sync)."
+      }
+     },
+     "required": [
+      "preview",
+      "issues"
+     ]
     }
    }
   },
@@ -2880,6 +3060,69 @@
      "items": {
       "type": "object"
      }
+    }
+   }
+  },
+  {
+   "channel": "backlog:update-issue",
+   "method": "updateBacklogIssue",
+   "params": [
+    "projectId",
+    "number",
+    "title",
+    "body"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      },
+      "number": {
+       "type": [
+        "integer",
+        "string"
+       ],
+       "description": "An issue number (a string of digits is read as one)."
+      },
+      "title": {
+       "oneOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "body": {
+       "oneOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     "required": [
+      "projectId",
+      "number"
+     ]
+    },
+    "result": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "description": "The Backlog: issues with their runs, the queue, the roadmap (null before the first sync)."
     }
    }
   },

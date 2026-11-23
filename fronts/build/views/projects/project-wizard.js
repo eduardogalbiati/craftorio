@@ -42,7 +42,7 @@
 //   card (openProject with nextSteps, project.js; #846: never the Start drawer), then sends the idea to the Inbox (no finding is filed without its own click, #730); an analysis still running at Finish shows a toast when it ends. wizard-close (×, Esc too) sits beside the pills.
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
-//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), #25 wizard-no-remote-hint (no Backlog/Roadmap without a repository), the folder line
+//   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), #25/#35 wizard-no-remote-hint (without a repository the issues live in a local backlog), the folder line
 //   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the three questions
 //   wizard-question data-question="mode" | "ci" | "release" with their wizard-chip buttons (aria-pressed on the
 //   pick, OnboardingModel.CREATE_ANSWERS / CREATE_DEFAULTS). Next (api.createOnboarding) creates it, ready at

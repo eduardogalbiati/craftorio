@@ -81,7 +81,7 @@ module.exports = (ctx) => {
     const data = backlog.projectBacklog(ctx.ws.backlog, p);
     if (!data) throw new Error('Sync the backlog first: the Product Owner writes to the synced repository.');
     const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
-    return { id, data, p, platform, repo: p?.repo ? data.repo || p.repo : null };
+    return { id, data, p, platform, repo: data.repo || p?.repo || null }; // a synced cache keeps its repository
   };
   // #35: what only a platform does (several issues at once: a hot spot, a spec, a split, an epic); a local backlog
   // files one draft at a time (po:file)
@@ -91,9 +91,9 @@ module.exports = (ctx) => {
     return t;
   };
   // After a real write the Backlog shows the new or updated issues right away (#35: a local backlog, read again).
-  const resync = async (res, { id, p, platform }) => {
+  const resync = async (res, { id, p, platform, repo }) => {
     if (res.preview) return res;
-    if (!p?.repo) return { ...res, backlog: ctx.withIssueRuns(backlog.projectBacklog(ctx.ws.backlog, p)) };
+    if (!repo) return { ...res, backlog: ctx.withIssueRuns(backlog.projectBacklog(ctx.ws.backlog, p)) };
     try {
       return { ...res, backlog: ctx.withIssueRuns(await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform })) };
     } catch (e) {

@@ -414,9 +414,10 @@
   }
 
   // New issue (#81): the Start drawer on the issue workflow, for this project and platform;
-  // the owner writes the request and starts it. The issue shows here after the next sync.
+  // the owner writes the request and starts it. The issue shows here after the next sync. #35: a
+  // project with no repository has a local backlog, so New issue works there too.
   function newIssue() {
-    if (!project()?.repo) return;
+    if (!project()) return;
     openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: platformOf(bl.platform).short } });
   }
 
@@ -1200,11 +1201,11 @@
     return `<div class="empty-state" data-testid="backlog-issues-disabled"><b>${t('backlog.issues_disabled')}</b>${link}</div>`;
   }
 
-  // the list's place when there is no list to draw (no project, no repository, nothing synced, Issues off), else ''
+  // the list's place when there is no list to draw (no project, nothing synced, Issues off), else ''.
+  // #35: a project with no repository lists its local backlog (bl.data, from the workspace).
   function listStateHtml(p) {
     if (!bl.projects.length) return `<div class="empty-state"><b>${t('backlog.no_projects_yet')}</b><p class="muted">${t('backlog.create_a_project_with_a_repository')}</p></div>`;
-    if (!p?.repo) return `<div class="empty-state"><b>${t('backlog.this_project_has_no_repository')}</b><p class="muted">${t('backlog.add_a_repository_url_to_the')}</p></div>`;
-    if (PLATFORMS[bl.platform]?.soon) return `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} ${t('backlog.sync_is_not_available_yet')}</b><p class="muted">${t('backlog.pick_github_or_gitlab')}</p></div>`;
+    if (p?.repo && PLATFORMS[bl.platform]?.soon) return `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} ${t('backlog.sync_is_not_available_yet')}</b><p class="muted">${t('backlog.pick_github_or_gitlab')}</p></div>`;
     if (!bl.data) return bl.syncing ? `<p class="muted">${t('backlog.loading_issues')}</p>` : `<p class="muted">${t('backlog.not_synced_yet')}</p>`;
     // (the Roadmap tab keeps its stages: its items need no issue read)
     if (bl.data.issuesDisabled && bl.mode !== 'roadmap') return issuesDisabledHtml(bl.data);
@@ -1232,9 +1233,11 @@
 
     const p = project();
     const btn = $b('#btn-bl-sync');
+    // #35: a local backlog (no repository) has nothing to sync with: Sync is hidden, New issue stays on
+    btn.classList.toggle('hidden', !!p && !p.repo);
     btn.disabled = !p?.repo || bl.syncing || !!PLATFORMS[bl.platform]?.soon;
     btn.textContent = bl.syncing ? t('backlog.syncing') : t('backlog.sync');
-    $b('#btn-bl-new-issue').disabled = !p?.repo || !!PLATFORMS[bl.platform]?.soon;
+    $b('#btn-bl-new-issue').disabled = !p || (!!p.repo && !!PLATFORMS[bl.platform]?.soon);
     $b('#bl-sort').value = bl.sort;
     $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap' || bl.mode === 'epics');
 

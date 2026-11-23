@@ -33,6 +33,7 @@ module.exports = [
   { channel: 'app-update:state', reason: "fetches the app's repository (network)" },
   { channel: 'audio:downloadModel', reason: 'downloads a speech model (network)' },
   { channel: 'backlog:archive', reason: 'closes an issue with gh/glab' },
+  { channel: 'backlog:file-local', reason: 'files the local issues with gh/glab once a repository is added (#35)' },
   { channel: 'backlog:push', reason: 'git push of a project base branch' },
   { channel: 'backlog:resolve-push', reason: 'git fetch/push of a project base branch' },
   { channel: 'backlog:restore', reason: 'reopens an issue with gh/glab' },

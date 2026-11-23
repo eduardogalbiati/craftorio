@@ -273,7 +273,7 @@ module.exports = (ctx) => {
         const data = backlog.projectBacklog(ctx.ws.backlog, project);
         if (!data) throw new Error('Sync the backlog first: a commit files its issues on the synced repository.');
         const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
-        const repo = project?.repo ? data.repo || project.repo : null;
+        const repo = data.repo || project?.repo || null; // a synced cache keeps its repository
         const local = repo ? {} : { backlogDir: ctx.ws.backlog };
         const simulated = simulation.simulationOnly();
         const issuesLanguage = Language.issuesLanguage(workspace.readSettings(ctx.ws)); // #328

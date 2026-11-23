@@ -219,11 +219,12 @@
     $p('#po-question').focus({ preventScroll: true });
   }
 
-  // #234: a short message where the owner clicked (no project selected); #25: else, up front, a project with no repository
+  // #234: a short message where the owner clicked (no project selected). #35: a project with no repository has a
+  // local backlog, so there is no "no repository" notice any more.
   function showNotice(text) {
-    po.notice = text; const el = $p('#po-notice'), bare = !text && noRepo();
-    if (bare) el.innerHTML = `<span data-testid="po-no-repo-notice">${esc(t('backlog_po.no_repo_notice'))}</span>`; else el.textContent = text;
-    el.classList.toggle('hidden', !text && !bare);
+    po.notice = text; const el = $p('#po-notice');
+    el.textContent = text;
+    el.classList.toggle('hidden', !text);
   }
 
   async function ask(question) {
@@ -411,7 +412,6 @@
 
   // the header project's record (its set, its default, #791 its workflowKinds), as the Backlog holds it
   const projectRecord = () => actions()?.project?.() || (state.projects || []).find((p) => p.id === po.projectId) || null;
-  const noRepo = () => !!po.projectId && !!projectRecord() && !projectRecord().repo && !actions()?.data?.(); // #25: created without a remote and no synced backlog: nothing for the PO to read or file into
   const taskWorkflows = () => (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
   // #486, #790, #791: the pickers offer the project's workflows only (every one with a task when it has none)
   const planWorkflows = () => DefaultWorkflow.projectWorkflows(taskWorkflows(), projectRecord());
@@ -819,7 +819,7 @@
 
   // ---- the chat (#274) ------------------------------------------------------------------------------
   // #28: the engine's "no synced backlog" refusal (product-owner.js, oracle.js) in the interface language; other errors as they are
-  function chatError(msg) { return msg && /Sync the backlog first/.test(msg) ? t('backlog_po.sync_the_backlog_first') : msg && /has no repository/.test(msg) ? t('backlog_po.no_repo_notice') : msg; } // #25: the no-repository refusal too
+  function chatError(msg) { return msg && /Sync the backlog first/.test(msg) ? t('backlog_po.sync_the_backlog_first') : msg; }
   function noteText(simulated, issueMode, cost) { // #28: the footer through the catalog
     return [simulated ? t('backlog_po.note_simulated') : t('backlog_po.note_real_call'), simulated && issueMode ? t('backlog_po.note_filing_preview') : '',
       cost ? t('backlog_po.note_conversation_cost', { cost: fmtCost(cost) }) : ''].filter(Boolean).join(' ');
@@ -844,8 +844,8 @@
     renderMessage: (msg, m) => messageHtml(msg, m),
     emptyHtml,
     pendingHtml: () => (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">${t('backlog_po.you_2')}</div><div>${esc(po.pending)}</div></div>` : ''),
-    canSend: () => !noRepo(), // #25: Send stays off on a project with no repository; #234: no silent no-op when no project is selected (the text stays in the box)
-    beforeSend: () => { if (po.projectId && !noRepo()) return true; showNotice(po.projectId ? '' : NO_PROJECT); return false; },
+    // #234: no silent no-op when no project is selected (the text stays in the box); #35: a project with no repository sends too
+    beforeSend: () => { if (po.projectId) return true; showNotice(NO_PROJECT); return false; },
     send: async (q) => { po.liveIn = from(); await ask(q); return po.error ? { ok: false } : null; },
     workingLine,
     onStop: stopTurn,
