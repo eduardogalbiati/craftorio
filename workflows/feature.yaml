@@ -1201,7 +1201,8 @@ steps:
       {% set rc = steps.red_check.output %}
       {% if acc and (acc.tests_added or []) | length %}
       Acceptance tests ({{ 'written after your code' if inputs.test_order == 'code_first' else 'written before the code' }}, from the task): {{ acc.tests_added | join(', ') }}.
-      {% if rc %}{{ rc.message }}
+      {% if rc and inputs.test_order == 'code_first' %}{% if rc.red_check and (rc.red_check.red or []) | length %}Code first: these acceptance tests fail after your code, a gap in it to close: make them pass ({{ rc.red_check.red | join(', ') }}).
+      {% endif %}{% elif rc %}{{ rc.message }}
       {% if rc.red_check and (rc.red_check.green | length) %}An already-green test passes before any change: it guards existing behaviour (keep it passing) or it is wrong (say which in `summary`; never edit it).
       {% endif %}{% endif %}
       Existing tests to keep green, from the code → tests map (through what the acceptance tests
