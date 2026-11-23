@@ -485,7 +485,18 @@ async function showNoFolder({ mode, click, js }) {
   await click(mode === 'city-no-folder' ? '[data-testid="project-city-analyze"]' : '[data-testid="architecture-analyze"]');
 }
 
+// #30: --mode next-steps-deps: the imported clone has a lockfile and no node_modules (the Next steps card offers
+// npm ci); --mode next-steps-deps-failed: the install was tried and failed (its last line on the entry)
+const DEMO_DEPS = { status: 'missing', lockfile: 'package-lock.json', command: 'npm ci --ignore-scripts' };
+async function showMissingDeps({ args, click, js }) {
+  stubChannel('onboarding:status', (_e, arg) => ({ projectId: arg?.projectId, status: 'ready', deps: DEMO_DEPS }));
+  stubChannel('onboarding:install-deps', (_e, arg) => ({ projectId: arg?.projectId, status: 'ready', deps: { ...DEMO_DEPS, status: 'failed', reason: 'npm error code EUSAGE: package.json and package-lock.json are not in sync' } }));
+  await js('state.pv.nextStepDeps = undefined; renderProjectView()');
+  if (args.mode === 'next-steps-deps-failed') await click('[data-testid="next-step-install-deps"] button');
+}
+
 async function afterOpen({ args, click, js, project }) {
+  if (!args.tab && args.mode?.startsWith('next-steps-deps')) return showMissingDeps({ args, click, js });
   if (!args.tab) return;
   const tab = tabOf(args);
   // the tab's first read never ends: its loading state stays on screen
@@ -497,7 +508,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-empty', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-deps', 'next-steps-deps-failed', 'next-steps-empty', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,
