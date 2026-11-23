@@ -82,6 +82,66 @@ test('#22 with an empty Inbox, "Capture the first idea" still offers "Open the I
   assert.equal(doneMark(idea) === null, true, 'not marked done');
 });
 
+test('#22 coming back from the Inbox, an idea noted there marks "Capture the first idea" done', { timeout: 30000 }, async () => {
+  const inbox = [];
+  const app = loadApp({
+    api: {
+      listProjects: async () => [clone(BASE)],
+      onboardingStatus: async () => null,
+      refactorProposals: async () => [],
+      getBacklog: async () => ({ issues: [] }),
+      refactorCadence: async () => ({ on: false, every: 10, since: null }),
+      listDiscoveryCards: async (projectId, column) => (projectId === PID && (!column || column === 'inbox') ? clone(inbox) : []),
+      listDiscoveryWaiting: async () => [],
+    },
+    storage: { 'craftorio.nextSteps': JSON.stringify({ [PID]: 'open' }) },
+  });
+  await app.boot();
+  app.run(`openProjectView(${JSON.stringify(PID)})`);
+  await app.settle(30);
+  assert.equal(enabledButton(entry(app, 'idea'), 'idea') === null, false, 'first: "Open the Inbox" offered');
+  // the person goes to the Inbox, notes an idea, comes back to the same project page
+  app.run('showView("inbox")');
+  await app.settle(10);
+  inbox.push(IDEA);
+  app.run('showView("project")');
+  await app.settle(30);
+  const idea = entry(app, 'idea');
+  if (idea === null) return; // left out: fine
+  assert.equal(enabledButton(idea, 'idea') === null, true, `no enabled "Open the Inbox" after the way back: ${H.visibleText(idea.inner)}`);
+  assert.equal(doneMark(idea) === null, false, 'the idea entry carries data-testid="next-step-idea-done"');
+});
+
+test('#22 when the Inbox cannot be read, "Capture the first idea" stays as today', { timeout: 30000 }, async () => {
+  const app = loadApp({
+    api: {
+      listProjects: async () => [clone(BASE)],
+      onboardingStatus: async () => null,
+      refactorProposals: async () => [],
+      getBacklog: async () => ({ issues: [] }),
+      refactorCadence: async () => ({ on: false, every: 10, since: null }),
+      listDiscoveryCards: async () => { throw new Error('discovery folder unreadable'); },
+      listDiscoveryWaiting: async () => [],
+    },
+    storage: { 'craftorio.nextSteps': JSON.stringify({ [PID]: 'open' }) },
+  });
+  await app.boot();
+  app.run(`openProjectView(${JSON.stringify(PID)})`);
+  await app.settle(30);
+  assert.equal(card(app) === null, false, 'the Next steps card is shown');
+  const idea = entry(app, 'idea');
+  assert.equal(idea === null, false, 'the idea entry is shown');
+  assert.equal(enabledButton(idea, 'idea') === null, false, 'its "Open the Inbox" button is enabled');
+  assert.equal(doneMark(idea) === null, true, 'not marked done');
+});
+
+test('#22 a project with no kind recorded keeps the screenshots entry', { timeout: 30000 }, async () => {
+  const app = await projectPage({ lang: 'pt-BR' });
+  const shots = entry(app, 'screenshots');
+  assert.equal(shots === null, false, 'the screenshots entry is shown');
+  assert.equal(/sem interface/i.test(reasonOf(shots)), false, `no "sem interface" reason: ${reasonOf(shots)}`);
+});
+
 // ---- the screenshots entry follows the project's kind -----------------------------------------------
 
 test('#22 a backend project (no UI) is not proposed the screenshots spike, or is told it has no interface', { timeout: 30000 }, async () => {

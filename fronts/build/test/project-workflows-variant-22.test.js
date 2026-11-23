@@ -91,6 +91,19 @@ test('#22 a fix card with the local-code variant never shows a "Tests first" des
   assert.equal(TESTS_FIRST.test(says), false, `no "Tests first" description: ${says}`);
 });
 
+test('#22 a fix card with the local-e2e variant keeps the fix workflow\'s own description', { timeout: 20000 }, async () => {
+  const app = await overviewWith({ feature: 'local-code', fix: 'local-e2e' });
+  const says = saysOf(cardOf(app, 'fix'));
+  assert.equal(says.includes('Reproduces a bug, fixes it with its regression test'), true, `the fix card's description: ${says}`);
+  assert.equal(CODE_FIRST.test(says), false, `no "code first" on the fix card: ${says}`);
+});
+
+test('#22 a workflow with no variant keeps its file\'s description', { timeout: 20000 }, async () => {
+  const app = await overviewWith({ feature: undefined });
+  const says = saysOf(cardOf(app, 'feature'));
+  assert.equal(says.includes(FEATURE_DESCRIPTION), true, `the file's description: ${says}`);
+});
+
 test('#22 in pt-BR the local-code feature card says what runs in Portuguese, never the file\'s English description', { timeout: 20000 }, async () => {
   const app = await overviewWith({ feature: 'local-code' }, { lang: 'pt-BR' });
   const feature = cardOf(app, 'feature');
