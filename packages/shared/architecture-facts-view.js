@@ -166,8 +166,9 @@
     return m ? m[0] : s;
   }
 
-  /** #23: a finding's severity in the interface's language (the Health tab, the wizard's Review); the raw value otherwise. */
-  const severityLabel = (s) => ({ high: t('project_architecture.severity_high'), low: t('project_architecture.severity_low'), medium: t('project_architecture.severity_medium') })[s] ?? String(s ?? '');
+  /** #23: a finding's severity in the interface's language (the Health tab, the wizard's Review), the same word as the
+   * Health filters; the raw value otherwise. */
+  const severityLabel = (s) => ({ high: t('project_architecture.filter_high'), low: t('project_architecture.filter_low'), medium: t('project_architecture.filter_medium') })[s] ?? String(s ?? '');
 
   const api = {
     SCORE_FORMULA,

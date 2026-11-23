@@ -89,6 +89,16 @@ window.ProjectWorkflows = (() => {
   const ORDER_DESCRIPTIONS = {
     feature: { code_first: 'projects.workflows_desc_feature_code_first', e2e_first: 'projects.workflows_desc_feature_e2e_first' },
   };
+  // #23: the i18n key of each bundled workflow's own description, shown outside English (in English the file's text)
+  const BUNDLED_DESCRIPTIONS = {
+    feature: 'projects.workflows_desc_feature',
+    fix: 'projects.workflows_desc_fix',
+    release: 'projects.workflows_desc_release',
+  };
+  const bundledDescription = (name, w, inst) => {
+    const bundled = (w.origin || inst?.origin) === 'bundled' && Object.hasOwn(BUNDLED_DESCRIPTIONS, name);
+    return bundled && window.I18n?.getLanguage() !== 'en' ? t(BUNDLED_DESCRIPTIONS[name]) : '';
+  };
 
   function cardHtml(w, known, def) {
     const name = bare(w.name);
@@ -96,7 +106,7 @@ window.ProjectWorkflows = (() => {
     // #22: a Feature / Fix card with a variant says what that variant runs (in the interface language), never
     // the file's generic description (feature.yaml's "Tests first" on a code-first pick)
     const orderKey = Object.hasOwn(ORDER_DESCRIPTIONS, name) ? ORDER_DESCRIPTIONS[name][DefaultWorkflow.variantTestOrder(w.variant)] : null;
-    const description = orderKey ? t(orderKey) : (w.description || inst?.description || '');
+    const description = orderKey ? t(orderKey) : (bundledDescription(name, w, inst) || w.description || inst?.description || '');
     const variant = choiceLabel(name, w.variant);
     const ci = w.ci ? t('projects.workflows_ci', { ci: esc(choiceLabel('ci', w.ci)) }) : '';
     const isDefault = name === def;

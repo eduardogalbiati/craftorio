@@ -21,6 +21,13 @@
   };
   // the page in standards mode with the CSP first (the page's own doctype dropped: one after content is ignored)
   const framed = (html) => `<!doctype html>${RESULT_CSP}${String(html).replace(/^\s*<!doctype[^>]*>/i, '')}`;
+  // #23: a seed's summary / cost outside English from project_seeds.<field>_<id> (seed.md is English); in English, or
+  // with no key (t() answers the key itself), the seed.md text
+  const seedText = (row, field) => {
+    const key = `project_seeds.${field}_${String(row.id).replace(/-/g, '_')}`;
+    const v = window.I18n?.getLanguage() !== 'en' ? t(key) : key;
+    return v === key ? row[field] : v;
+  };
   const costText =(r) => (r.simulated ? t('project_seeds.cost_simulated') : r.source === 'tool' || r.costUsd === 0 ? t('project_seeds.cost_free') : r.costUsd == null ? t('project_seeds.cost_unknown') : fmtUsd(r.costUsd));
 
   // the row's status: [text, badge class]
@@ -53,8 +60,8 @@
         <button type="button" class="btn sm ghost" data-seed-history="${id}" data-testid="seed-history-${id}" aria-expanded="${!!history}">${t('project_seeds.history')}</button>
         <button type="button" class="btn sm ghost" data-seed-make-tool="${id}" data-testid="seed-make-tool-${id}">${t('project_seeds.make_it_a_tool')}</button>
       </div>
-      <div class="small muted seed-summary" title="${esc(row.summary)}">${esc(row.summary)}</div>
-      <div class="small muted">${row.lastRun ? t('project_seeds.last_run_date_lastrun', { date: esc(shortDate(row.lastRun.date)), lastRun: esc(costText(row.lastRun)) }) : t('project_seeds.cost_amount', { cost: row.cost ? esc(row.cost) : t('project_seeds.one_oracle_turn') })}
+      <div class="small muted seed-summary" title="${esc(seedText(row, 'summary'))}">${esc(seedText(row, 'summary'))}</div>
+      <div class="small muted">${row.lastRun ? t('project_seeds.last_run_date_lastrun', { date: esc(shortDate(row.lastRun.date)), lastRun: esc(costText(row.lastRun)) }) : t('project_seeds.cost_amount', { cost: row.cost ? esc(seedText(row, 'cost')) : t('project_seeds.one_oracle_turn') })}
         · <button type="button" class="link-btn" data-seed-tool-edit="${id}" data-testid="seed-tool-edit-${id}">${row.tool ? `${t('project_seeds.tool_label')} <span class="mono">${esc(row.tool)}</span>` : t('project_seeds.tool_command')}</button></div>
       ${editing ? `<div class="seed-tool-edit" data-testid="seed-tool-form-${id}">
         <label class="small" for="seed-tool-input-${id}">${t('project_seeds.the_command_that_prints_the_seed')}</label>

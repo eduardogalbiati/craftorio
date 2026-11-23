@@ -624,15 +624,16 @@
     <div class="drawer-head oracle-head">
       <div class="oracle-who">${avatar()}
         <div class="sup-head">
-          <h2 class="drawer-title oracle-title">${t('oracle.oracle_2')}</h2>
+          <h2 class="drawer-title oracle-title" data-i18n="oracle.oracle_2">${t('oracle.oracle_2')}</h2>
           <div class="muted small oracle-cut">${t('oracle.on')} <span id="oracle-screen-${w}"></span></div>
           <div class="small oracle-status" id="oracle-status-${w}"></div>
         </div>
       </div>
       <div class="row">
-        <button class="btn ghost sm" type="button" data-oracle-night title="${t('oracle.let_the_oracle_fix_what_stops')}">${t('oracle.night_watch')}</button>
-        <button class="btn ghost sm" type="button" data-oracle-memory title="${t('oracle.the_owner_s_standing_decisions_read')}">${t('oracle.memory')}</button>
-        <button class="btn ghost sm" type="button" data-oracle-reset title="${t('oracle.a_new_session_from_a_handoff')}">${t('oracle.new_session')}</button>
+        <!-- #23: the head is mounted once: its data-i18n hooks are repainted when the language changes (interface-language.js) -->
+        <button class="btn ghost sm" type="button" data-oracle-night data-testid="oracle-night-watch" data-i18n="oracle.night_watch" data-i18n-title="oracle.let_the_oracle_fix_what_stops" title="${t('oracle.let_the_oracle_fix_what_stops')}">${t('oracle.night_watch')}</button>
+        <button class="btn ghost sm" type="button" data-oracle-memory data-i18n="oracle.memory" data-i18n-title="oracle.the_owner_s_standing_decisions_read" title="${t('oracle.the_owner_s_standing_decisions_read')}">${t('oracle.memory')}</button>
+        <button class="btn ghost sm" type="button" data-oracle-reset data-i18n="oracle.new_session" data-i18n-title="oracle.a_new_session_from_a_handoff" title="${t('oracle.a_new_session_from_a_handoff')}">${t('oracle.new_session')}</button>
         ${w === WINDOW ? '' : OPEN_WINDOW_BUTTON}${w === 'drawer' ? `<button id="btn-oracle-close" class="icon-btn" type="button" title="${t('oracle.close_esc')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>` : ''}
       </div>
     </div>

@@ -109,12 +109,30 @@
     return out;
   }
 
+  // #23: the engine's evidence fields and number keys (workflow-interview.js) in words; an unknown one shows its key
+  const EVIDENCE_FIELDS = {
+    merge: 'ways_of_working.evidence_merge',
+    mode: 'ways_of_working.evidence_mode',
+    release: 'ways_of_working.evidence_release',
+    team: 'ways_of_working.evidence_team',
+  };
+  const EVIDENCE_NUMBERS = {
+    authors: 'ways_of_working.evidence_authors',
+    commits: 'ways_of_working.evidence_commits',
+    identities: 'ways_of_working.evidence_identities',
+    mergeCommits: 'ways_of_working.evidence_merge_commits',
+    ownerStraightCommits: 'ways_of_working.evidence_owner_straight_commits',
+    tags: 'ways_of_working.evidence_tags',
+  };
+  const evidenceNumber = (k, v) => (Object.hasOwn(EVIDENCE_NUMBERS, k) ? t(EVIDENCE_NUMBERS[k], { count: v }) : `${k} ${v}`);
+
   // one line per fact behind the profile: its field, its numbers, its commits
   function evidenceHtml(evidence) {
     const rows = Object.entries(evidence || {}).map(([field, ev]) => {
-      const numbers = Object.entries(ev?.numbers || {}).map(([k, v]) => `${esc(k)} ${esc(String(v))}`).join(' · ');
+      const numbers = Object.entries(ev?.numbers || {}).map(([k, v]) => esc(evidenceNumber(k, v))).join(' · ');
       const commits = (ev?.commits || []).slice(0, 3).map((c) => `<span class="mono">${esc(String(c).slice(0, 8))}</span>`).join(' ');
-      return `<li class="small" data-testid="ways-of-working-evidence"><b>${esc(field)}</b> <span class="muted">${numbers || t('ways_of_working.no_numbers')}</span> ${commits}</li>`;
+      const label = Object.hasOwn(EVIDENCE_FIELDS, field) ? t(EVIDENCE_FIELDS[field]) : field;
+      return `<li class="small" data-testid="ways-of-working-evidence"><b>${esc(label)}</b> <span class="muted">${numbers || t('ways_of_working.no_numbers')}</span> ${commits}</li>`;
     });
     return rows.length ? `<ul class="wow-evidence">${rows.join('')}</ul>` : '';
   }
