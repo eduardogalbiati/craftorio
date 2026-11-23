@@ -208,6 +208,34 @@ test('#26 the question sent from project B after unsent text in A carries only B
   assert.equal(d.asks[0][1], 'Analyze the backlog of project B');
 });
 
+test('#26 a turn of project A that fails after the drawer moved to project B does not put A\'s question in B\'s box', async () => {
+  const d = loadDrawer();
+  await d.open();
+  d.type('Plan the login epic for project A');
+  await d.send();
+  await d.switchTo('proj-b');
+  d.type('Typed in B');
+  await d.fail();
+  assert.equal(d.box(), 'Typed in B');
+});
+
+test('#26 reopening the drawer on the same project keeps the text left in its box', async () => {
+  const d = loadDrawer();
+  await d.open();
+  d.type('Half-written question for A');
+  await d.switchTo('proj-a');
+  assert.equal(d.box(), 'Half-written question for A');
+});
+
+test('#26 back on project A after B, the box is empty (the chosen behaviour: a project switch clears the text)', async () => {
+  const d = loadDrawer();
+  await d.open();
+  d.type('Draft for A');
+  await d.switchTo('proj-b');
+  await d.switchTo('proj-a');
+  assert.equal(d.box(), '');
+});
+
 test('#26 guard: after a failed turn in project A the question is back in A\'s text box', async () => {
   const d = loadDrawer();
   await d.open();

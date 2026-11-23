@@ -70,14 +70,34 @@ steps:
     prompt: "do it"
 `;
 
-async function simulatedRun(t) {
+// The opt-in kept for the tests of the cost mechanics (#233, #302, #262): without it a simulated turn is
+// free (above); with sequences.simulated_cost it is priced again from its tokens.
+test('#31 sequences.simulated_cost brings back a priced amount for a simulated turn (opt-in for cost tests)', async () => {
+  const items = [];
+  const res = await turn({ stepId: 'develop', visit: 1, call: 1, agent: 'developer', sequences: { simulated_cost: true } }, items);
+  assert.equal(res.costUsd > 0, true, `costUsd: ${res.costUsd}`);
+  assert.deepEqual(usageCosts(items), [res.costUsd]);
+});
+
+test('#31 sequences.simulated_cost: false keeps a simulated turn free', async () => {
+  const res = await turn({ stepId: 'develop', visit: 1, call: 1, agent: 'developer', sequences: { simulated_cost: false } });
+  assert.equal(res.costUsd, 0);
+});
+
+// the same step, its agent retried once (a killed attempt is retried)
+const ONE_STEP_RETRY = ONE_STEP.replace(
+  '  a: { provider: claude, model: claude-opus-5-5, session: ephemeral }',
+  '  a: { provider: claude, model: claude-opus-5-5, session: ephemeral, retry: { max_attempts: 2, initial_delay: 10ms } }',
+);
+
+async function simulatedRun(t, opts = {}, yaml = ONE_STEP) {
   const { WorkflowRun } = require('../engine/workflow');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-31-'));
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-31-'));
   t.after(() => { fs.rmSync(dir, { recursive: true, force: true }); fs.rmSync(runsDir, { recursive: true, force: true }); });
   const file = path.join(dir, 'wf.yaml');
-  fs.writeFileSync(file, ONE_STEP);
-  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, skillsDirs: [] });
+  fs.writeFileSync(file, yaml);
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, skillsDirs: [], ...opts });
   const events = [];
   run.on('event', (ev) => events.push(ev));
   await run.start();
@@ -93,6 +113,19 @@ test('#31 every session.message_received of a simulated run carries cost_usd 0',
 
 test('#31 a simulated run\'s summary (workflow.finished) reports cost_usd 0', async (t) => {
   const events = await simulatedRun(t);
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished?.status, 'success', `the run finished: ${finished?.status} ${finished?.error || ''}`);
+  assert.equal(finished.summary.cost_usd, 0);
+});
+
+// The engine prices a killed attempt from its tokens when the provider reports no cost (#233): a simulated
+// attempt killed at its timeout must not be priced either.
+test('#31 a simulated attempt killed at its timeout costs nothing (stopped attempt and summary)', async (t) => {
+  const events = await simulatedRun(t, { mockSequences: { timeouts: { work: 1 } } }, ONE_STEP_RETRY);
+  const stopped = events.filter((e) => e.type === 'session.attempt_stopped');
+  assert.equal(stopped.length, 1, 'the first attempt was killed');
+  assert.equal(stopped[0].cost_usd, 0);
+  assert.equal(stopped[0].estimated, false, 'no estimate from the tokens');
   const finished = events.find((e) => e.type === 'workflow.finished');
   assert.equal(finished?.status, 'success', `the run finished: ${finished?.status} ${finished?.error || ''}`);
   assert.equal(finished.summary.cost_usd, 0);
