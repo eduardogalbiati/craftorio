@@ -524,7 +524,7 @@
           <div id="rc-title" class="rc-title"></div>
           <span id="rc-status" class="pill" data-testid="run-screen-status"></span>
           <div class="spacer"></div>
-          <span id="rc-cost" class="mono small muted" title="${t('runchat.cost_so_far')}"></span>
+          <span id="rc-cost" data-testid="runchat-cost" class="mono small muted" title="${t('runchat.cost_so_far')}"></span>
           <button id="rc-logs" class="btn ghost sm" type="button" title="${t('runchat.open_the_run_folder_events_sessions')}">${t('runchat.run_folder')}</button>
           <button id="rc-stop" class="btn danger sm hidden" type="button">${t('runchat.stop')}</button>
         </header>
