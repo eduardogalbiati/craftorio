@@ -220,6 +220,14 @@ When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) 
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(fileOf(name));
 });
 
+// #27: the Start panel just opened (its Start button data-testid="start-workflow") with that workflow chosen in its
+// "Workflow" select (a name, a title or a file, as above)
+Then('the Start panel opens on the workflow {string}', async ({ e2e }, name) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('start-workflow')).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole('combobox', { name: 'Workflow', exact: true })).toHaveValue(fileOf(name), { timeout: 30000 });
+});
+
 // #846: the Start panel's own Start button, on the workflow and project already chosen
 When('I start the chosen workflow from the Start panel', async ({ e2e }) => {
   await e2e.window.getByTestId('start-workflow').click();

@@ -395,6 +395,13 @@ Then('no ways-of-working analysis has run', async ({ e2e }) => {
   expect(waysOfWorkingRuns(e2e), 'ways-of-working runs in the workspace').toEqual([]);
 });
 
+// #27: the Overview's "Default workflow: <name>" line (pt-BR "Workflow padrão"), data-testid="project-default-workflow"
+Then("the project page's default workflow is {string}", async ({ e2e }, name) => {
+  const line = visible(projectPageOf(e2e.window).getByTestId('project-default-workflow')).first();
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toHaveText(new RegExp(`:\\s*${escapeRe(name)}\\s*$`));
+});
+
 Then('the project page lists the proposed workflows as repository workflows', async ({ e2e }) => {
   const page = projectPageOf(e2e.window);
   await expect(page).toBeVisible({ timeout: LOAD_TIMEOUT });

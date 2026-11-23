@@ -186,6 +186,16 @@ When('I choose Start workflow on the project {string} in the Projects screen', a
   await expect(e2e.window.getByTestId('start-workflow')).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
+// #27: the project page's own "Start workflow" (pt-BR "Iniciar workflow"), not a Projects card's; it opens the
+// Start panel on this project (its Start button data-testid="start-workflow"). The page's run list may offer a
+// second Start for the same project: the first visible one, in the page's header, is clicked.
+When('I choose Start workflow on the project page', async ({ e2e }) => {
+  const start = visible(projectPage(e2e.window).getByRole('button', { name: 'Start workflow', exact: true })).first();
+  await expect(start).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await start.click();
+  await expect(e2e.window.getByTestId('start-workflow')).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
 Then('the settings of the project {string} are open', async ({ e2e }, name) => {
   const page = projectPage(e2e.window);
   await expect(page).toBeVisible({ timeout: LOAD_TIMEOUT });

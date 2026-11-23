@@ -19,6 +19,14 @@ When('I open the Board as a kanban', async ({ e2e }) => {
   await expect(board(page)).toBeVisible();
 });
 
+// #27: a button of the Backlog's toolbar by its label, e.g. "New issue…" (pt-BR "Nova issue…"), which opens the
+// Start panel on the issue workflow
+When('I choose {string} on the Backlog', async ({ e2e }, label) => {
+  const button = e2e.window.getByRole('button', { name: label, exact: true }).filter({ visible: true }).first();
+  await expect(button).toBeEnabled({ timeout: 30000 });
+  await button.click();
+});
+
 // #254: the Roadmap is its own screen (Code & Build › Roadmap), no longer a Backlog tab
 When('I open the Roadmap', async ({ e2e }) => {
   await e2e.window.getByRole('navigation').getByRole('button', { name: /^Roadmap(\s+\d+)?$/ }).click();
