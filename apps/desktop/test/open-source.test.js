@@ -58,6 +58,11 @@ test('#314: package.json declares MIT, the author, the public repository, homepa
   assert.equal(p.private, true);
 });
 
+test('#24: package.json bugs.url is the Craftorio repository\'s issues', () => {
+  const p = pkg();
+  assert.equal(typeof p.bugs === 'object' ? p.bugs.url : p.bugs, 'https://github.com/eduardogalbiati/craftorio/issues');
+});
+
 test('#314: package.json description names the three CLIs: Claude Code, Codex CLI, Grok Build', () => {
   const d = pkg().description || '';
   for (const cli of ['Claude Code', 'Codex CLI', 'Grok Build']) assert.ok(d.includes(cli), cli);

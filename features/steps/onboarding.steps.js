@@ -769,7 +769,20 @@ const workflowRow = (page, kind) => wizard(page).locator(`[data-testid="wizard-w
 const WIZARD_PART = {
   'suggested workflows': (page) => workflowsColumn(page),
   'ways of working profile': (page) => wizard(page).getByTestId('wizard-profile'),
+  // #23: step 4, the review (its cards, the language legend, the idea's help line)
+  review: (page) => review(page),
 };
+
+// none of the texts anywhere in the element: its text, its titles and aria-labels (case-sensitive)
+async function expectNoEnglishTexts(el, table, what) {
+  await expect(el).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  const texts = table.raw().map((r) => String(r[0] || '').trim()).filter(Boolean);
+  await expect.poll(async () => {
+    const all = await el.evaluate((n) => [n, ...n.querySelectorAll('*')]
+      .map((x) => `${x === n ? x.textContent : ''} ${x.getAttribute('title') || ''} ${x.getAttribute('aria-label') || ''}`).join(' '));
+    return texts.filter((t) => all.includes(t));
+  }, { message: `English texts left in ${what}`, timeout: LOAD_TIMEOUT }).toEqual([]);
+}
 
 // every row (feature, fix, release, CI) once analyzed: its "Why" label, a separate element in bold and the
 // accent colour, then the reason's own text
@@ -805,14 +818,18 @@ Then('every suggested workflow shows a highlighted {string} label', async ({ e2e
 Then("the wizard's {string} shows none of these English texts:", async ({ e2e }, part, table) => {
   const locate = WIZARD_PART[part];
   if (!locate) throw new Error(`unknown part of the wizard "${part}": one of ${Object.keys(WIZARD_PART).join(', ')}`);
-  const el = locate(e2e.window);
-  await expect(el).toBeVisible({ timeout: IMPORT_TIMEOUT });
-  const texts = table.raw().map((r) => String(r[0] || '').trim()).filter(Boolean);
-  await expect.poll(async () => {
-    const all = await el.evaluate((n) => [n, ...n.querySelectorAll('*')]
-      .map((x) => `${x === n ? x.textContent : ''} ${x.getAttribute('title') || ''} ${x.getAttribute('aria-label') || ''}`).join(' '));
-    return texts.filter((t) => all.includes(t));
-  }, { message: `English texts left in the wizard's ${part}`, timeout: LOAD_TIMEOUT }).toEqual([]);
+  await expectNoEnglishTexts(locate(e2e.window), table, `the wizard's ${part}`);
+});
+
+// #23: the Next steps card on the project page after Finish (project-next-steps), e.g. with the interface in
+// Português (Brasil) its idea entry says "Caixa de entrada", never "Inbox"
+Then('the Next steps card shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoEnglishTexts(nextSteps(e2e.window), table, 'the Next steps card');
+});
+
+Then('the Next steps card says {string}', async ({ e2e }, text) => {
+  await expect(nextSteps(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(nextSteps(e2e.window)).toContainText(text, { timeout: LOAD_TIMEOUT });
 });
 
 When('I pick {string} for the suggested {string} workflow', async ({ e2e }, label, kind) => {
@@ -1526,6 +1543,13 @@ Then('the wizard offers no {string} button', async ({ e2e }, label) => {
 Then("the review's project card says {string}", async ({ e2e }, text) => {
   const card = review(e2e.window).getByTestId('wizard-review-project');
   await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(text, { timeout: LOAD_TIMEOUT });
+});
+
+// #23: a card once its analysis is done (data-state="ready"), e.g. the City card's line "<n> arquivos · <n> bairros"
+Then("the review's {string} card says {string}", async ({ e2e }, name, text) => {
+  const card = reviewCard(e2e.window, name);
+  await expect(card).toHaveAttribute('data-state', 'ready', { timeout: ANALYSIS_TIMEOUT });
   await expect(card).toContainText(text, { timeout: LOAD_TIMEOUT });
 });
 

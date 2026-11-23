@@ -202,3 +202,24 @@ When('I save the Oracle\'s memory', async ({ e2e }) => {
   // saved: the panel goes back to its view, which offers "Edit"
   await expect(panel.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
 });
+
+// ---- #23: the Oracle's panel in Português (Brasil) ------------------------------------------------------
+// On a new workspace the Oracle has no history, so its panel offers its suggested questions (each a button
+// with data-testid="oracle-suggestion", to add on the chips of fronts/ai/views/oracle/oracle.js). In the
+// interface's language none of the English texts is left: the panel's text, titles and aria-labels (case-sensitive).
+Then('the Oracle offers its suggested questions', async ({ e2e }) => {
+  const chips = oraclePanel(e2e.window).getByTestId('oracle-suggestion');
+  await expect(chips.first()).toBeVisible({ timeout: 30000 });
+  expect(await chips.count(), 'suggested questions').toBeGreaterThan(0);
+});
+
+Then('the Oracle\'s panel shows none of these English texts:', async ({ e2e }, table) => {
+  const panel = oraclePanel(e2e.window);
+  await expect(panel).toBeVisible({ timeout: 30000 });
+  const texts = table.raw().map((r) => String(r[0] || '').trim()).filter(Boolean);
+  await expect.poll(async () => {
+    const all = await panel.evaluate((n) => [n, ...n.querySelectorAll('*')]
+      .map((x) => `${x === n ? x.textContent : ''} ${x.getAttribute('title') || ''} ${x.getAttribute('aria-label') || ''}`).join(' '));
+    return texts.filter((t) => all.includes(t));
+  }, { message: 'English texts left in the Oracle\'s panel', timeout: 30000 }).toEqual([]);
+});

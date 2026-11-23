@@ -133,3 +133,38 @@ Then('the workspace settings record the setup as done', async ({ e2e }) => {
 When('I ask to run the setup again', async ({ e2e }) => {
   await e2e.window.getByRole('button', { name: 'Run setup again', exact: true }).click();
 });
+
+// ---- #23: the Setup in Português (Brasil) ----------------------------------------------------------------
+// The Setup's own "Interface language" select (data-testid="setup-language", a native select labelled by
+// the language's name) saves the interface language at once; the page's html lang follows it.
+// The Try it safely step's machine line (data-testid="machine-profile-line", the engine's machine profile)
+// reads in the interface language once read: in Português (Brasil) none of the English line's words
+// ("This machine: 20 threads, 32 GB → up to 5 runs at once, 2 test workers per run") is left.
+const LANGUAGE_CODE = { English: 'en', 'Português (Brasil)': 'pt-BR' };
+const READING = /^(Reading this machine…|Lendo esta máquina…)$/;
+const ENGLISH_MACHINE_WORDS = ['This machine', 'run at once', 'runs at once', 'test worker', 'per run', "couldn't be read"];
+
+When("I choose {string} as the Setup's language", async ({ e2e }, label) => {
+  const page = e2e.window;
+  const code = LANGUAGE_CODE[label];
+  if (!code) throw new Error(`no catalog for the language "${label}" (known: ${Object.keys(LANGUAGE_CODE).join(', ')})`);
+  const select = setup(page).getByTestId('setup-language');
+  await expect(select).toBeVisible({ timeout: 30000 });
+  await select.selectOption({ label });
+  await expect(page.locator('html')).toHaveAttribute('lang', code, { timeout: 30000 });
+});
+
+Then("the Setup's line about this machine reads in {string}", async ({ e2e }, language) => {
+  const line = setup(e2e.window).getByTestId('machine-profile-line');
+  await expect(line).toBeVisible({ timeout: 30000 });
+  // the profile is read: no "Reading this machine…" placeholder any more
+  await expect(line).not.toHaveText(READING, { timeout: 30000 });
+  const text = (await line.innerText()).replace(/\s+/g, ' ').trim();
+  if (language === 'English') {
+    expect(text, 'the machine line in English').toMatch(/This machine/);
+    return;
+  }
+  if (language !== 'Português (Brasil)') throw new Error(`unknown language "${language}"`);
+  expect(ENGLISH_MACHINE_WORDS.filter((w) => text.includes(w)), `English words left in the machine line "${text}"`).toEqual([]);
+  expect(text, 'the machine line names the machine in Portuguese').toMatch(/máquina/i);
+});
