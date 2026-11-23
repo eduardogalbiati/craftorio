@@ -1,16 +1,14 @@
-// #25 acceptance, written before the code: the Product Owner drawer (fronts/build/views/backlog/backlog-po.js) on a
-// project created without a repository. Today the owner types a request and only then reads the engine's
-// "Sync the backlog first: the Product Owner reads the synced issues." Expected (decision of #25: "add a
-// repository"): as soon as the drawer opens, before the owner types, it says the project has no repository, in
-// the interface language, and sending is off.
+// #25, revised by #35: the Product Owner drawer (fronts/build/views/backlog/backlog-po.js) on a project created
+// without a repository. #25 showed data-testid="po-no-repo-notice" (backlog_po.no_repo_notice) and turned Send off.
+// #35's decision: "a project with no remote gets a local backlog", so the drawer works there as for a project with a
+// repository: no "no repository" notice, typing enables Send, Enter asks the Product Owner.
 //
 // The contract assumed here:
 // - the drawer reads the project record it already reads (BacklogActions.project() / state.projects); a record
-//   without `repo` is a project with no repository;
-// - the notice is an element data-testid="po-no-repo-notice" whose text holds the catalog's
-//   backlog_po.no_repo_notice in the interface language;
-// - the send button #btn-po-ask (or the input #po-question) is disabled, even after the owner types;
-// - a project with a repository: no notice, and typing enables sending as today.
+//   without `repo` is a project with a local backlog;
+// - NO_REPO's BacklogActions.data() is null: the drawer opened before the Backlog's data was read (as from the
+//   project page's Next steps "Create an issue with the PO"); a project with no repository is never refused for it;
+// - the send button #btn-po-ask and the input #po-question are enabled once the owner types.
 //
 // Harness: the whole drawer in a vm sandbox with a small fake DOM, as renderer-backlog-po-refusal-28.test.js (the
 // real LiveTurn, AgentChat, WorkflowInputs and backlog-po-settings.js); api.* is the boundary.
@@ -28,8 +26,6 @@ const read = (...p) => fs.readFileSync(pageFileOf(p.join('/')), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const settle = async () => { for (let i = 0; i < 5; i++) await tick(); };
-const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', `${lang}.json`), 'utf8'));
-const textOfKey = (lang, key) => String(catalog(lang)[key] ?? `(missing ${key})`);
 
 test.afterEach(() => I18n.setLanguage('en'));
 
@@ -164,58 +160,27 @@ async function openDrawer(lang, project) {
   return { notice, type, sendOff, pressEnter, sendAndReject, errorLine, askedCount: () => asked.length };
 }
 
-// ---- a project without a repository -----------------------------------------------------------------
+// ---- a project without a repository: its local backlog, the drawer as for a repository (#35) ----------
 
-test('#25 no repository, en: the drawer shows data-testid="po-no-repo-notice" before the owner types', async () => {
-  const d = await openDrawer('en', NO_REPO);
-  assert.equal(d.notice() === null, false, 'the notice is shown');
-});
-
-test('#25 no repository, en: the notice reads backlog_po.no_repo_notice in English', async () => {
-  const d = await openDrawer('en', NO_REPO);
-  const text = d.notice() || '';
-  assert.equal(text.includes(textOfKey('en', 'backlog_po.no_repo_notice')), true, `the notice: ${text}`);
-});
-
-test('#25 no repository, pt-BR: the notice reads backlog_po.no_repo_notice in Portuguese', async () => {
+test('#35 no repository, pt-BR: the drawer shows no po-no-repo-notice', async () => {
   const d = await openDrawer('pt-BR', NO_REPO);
-  const text = d.notice() || '';
-  assert.equal(text.includes(textOfKey('pt-BR', 'backlog_po.no_repo_notice')), true, `the notice: ${text}`);
-  assert.equal(/repositório/i.test(text), true, `it says "repositório": ${text}`);
+  assert.equal(d.notice(), null);
 });
 
-test('#25 no repository: sending is off even after the owner types', async () => {
-  const d = await openDrawer('en', NO_REPO);
-  await d.type('Create an issue for the login page');
-  assert.equal(d.sendOff(), true, '#btn-po-ask or #po-question disabled');
-});
-
-test('#25 no repository, pt-BR: sending is off even after the owner types', async () => {
+test('#35 no repository, pt-BR: typing a request enables sending', async () => {
   const d = await openDrawer('pt-BR', NO_REPO);
   await d.type('Criar uma issue para a página de login');
-  assert.equal(d.sendOff(), true, '#btn-po-ask or #po-question disabled');
+  assert.equal(d.sendOff(), false);
 });
 
-test('#25 no repository: Enter in the text box sends nothing and the notice stays', async () => {
+test('#35 no repository: Enter in the text box asks the Product Owner', async () => {
   const d = await openDrawer('en', NO_REPO);
   await d.type('Create an issue for the login page');
   await d.pressEnter();
-  assert.equal(d.askedCount(), 0, 'nothing was asked to the Product Owner');
-  assert.equal(d.notice() === null, false, 'the notice is still shown');
+  assert.equal(d.askedCount(), 1);
 });
 
-// ---- the engine's no-repository refusal reaching the drawer (e.g. the record changed under it) ---------
-
-const ENGINE_NO_REPO = 'This project has no repository: add its URL in Projects › Edit to file issues.';
-
-test('#25 pt-BR: the engine\'s "has no repository" refusal shows in Portuguese in the error line', async () => {
-  const d = await openDrawer('pt-BR', WITH_REPO);
-  await d.type('Criar uma issue para a página de login');
-  await d.sendAndReject(ENGINE_NO_REPO);
-  const line = d.errorLine();
-  assert.equal(line, esc(textOfKey('pt-BR', 'backlog_po.no_repo_notice')));
-  assert.equal(/has no repository/.test(line), false, `no English left: ${line}`);
-});
+// ---- an engine error reaching the drawer ---------------------------------------------------------------
 
 test('#25 pt-BR: another engine error is still shown as it came', async () => {
   const d = await openDrawer('pt-BR', WITH_REPO);

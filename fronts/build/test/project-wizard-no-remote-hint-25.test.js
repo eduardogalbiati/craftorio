@@ -1,14 +1,13 @@
-// #25 acceptance, written before the code: the new-project wizard's create step (fronts/build/views/projects/
-// project-wizard.js, step 2 of "Create new project"), on the real page (packages/ui-kit/test/renderer-app-harness.js)
-// as project-wizard-create-632.test.js drives it.
+// #25, revised by #35: the new-project wizard's create step (fronts/build/views/projects/project-wizard.js, step 2
+// of "Create new project"), on the real page (packages/ui-kit/test/renderer-app-harness.js) as
+// project-wizard-create-632.test.js drives it.
 //
-// The contract assumed here: next to the checkbox "Create a private repository too" (data-testid="wizard-new-remote")
-// a hint data-testid="wizard-no-remote-hint" says that without a repository the Backlog and the Roadmap are not
-// available (the catalog's onboarding.no_remote_hint, in the interface language).
+// #25 added data-testid="wizard-no-remote-hint" (onboarding.no_remote_hint): "Without a repository the Backlog and
+// the Roadmap are not available…" / "Sem um repositório, o Backlog e o Roadmap não ficam disponíveis…". #35's
+// decision: "a project with no remote gets a local backlog", so the step no longer says so (a hint may stay, saying
+// something else, e.g. that the issues stay in the workspace).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
 const H = require('@craftorio/ui-kit/test/page-pieces');
 const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
 const { clickRendered, existing } = require('@craftorio/front-analyser/test/project-page-helpers');
@@ -16,8 +15,6 @@ const { clickRendered, existing } = require('@craftorio/front-analyser/test/proj
 const GH_IN = { provider: 'github', cli: 'gh', installed: true, signedIn: true, account: 'eduardo' };
 const GL_OUT = { provider: 'gitlab', cli: 'glab', installed: false, signedIn: false };
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const catalog = (lang) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', `${lang}.json`), 'utf8'));
-const textOfKey = (lang, key) => String(catalog(lang)[key] ?? `(missing ${key})`);
 
 // the markup of an element by id, with what was written into the ids inside it (as in the #632 test)
 function markupOf(app, id) {
@@ -68,26 +65,19 @@ async function atCreate(lang) {
   return app;
 }
 
-const hintText = (app) => {
-  const el = byTestId(wizardMarkup(app), 'wizard-no-remote-hint');
-  return el === null ? null : H.visibleText(el.inner);
-};
+// the create step's visible text (a string)
+const stepText = (app) => H.visibleText(wizardMarkup(app));
 
-test('#25 wizard step 2: a hint data-testid="wizard-no-remote-hint" is shown with the remote checkbox', { timeout: 20000 }, async () => {
+test('#35 wizard step 2, en: nothing says the Backlog and the Roadmap are not available without a repository', { timeout: 20000 }, async () => {
   const app = await atCreate('en');
-  assert.equal(hintText(app) === null, false, 'data-testid="wizard-no-remote-hint" in the create step');
+  const text = stepText(app);
+  assert.equal(text.includes('Without a repository the Backlog and the Roadmap are not available'), false, text);
+  assert.equal(/not available/i.test(text), false, text);
 });
 
-test('#25 wizard step 2, en: the hint says the Backlog and the Roadmap need a repository', { timeout: 20000 }, async () => {
-  const app = await atCreate('en');
-  const text = hintText(app) || '';
-  assert.equal(text.includes(textOfKey('en', 'onboarding.no_remote_hint')), true, `the hint: ${text}`);
-  assert.equal(/Backlog/.test(text) && /Roadmap/.test(text), true, `the hint: ${text}`);
-});
-
-test('#25 wizard step 2, pt-BR: the hint says it in Portuguese', { timeout: 20000 }, async () => {
+test('#35 wizard step 2, pt-BR: nothing says "o Backlog e o Roadmap não ficam disponíveis"', { timeout: 20000 }, async () => {
   const app = await atCreate('pt-BR');
-  const text = hintText(app) || '';
-  assert.equal(text.includes(textOfKey('pt-BR', 'onboarding.no_remote_hint')), true, `the hint: ${text}`);
-  assert.equal(/repositório/i.test(text), true, `it says "repositório": ${text}`);
+  const text = stepText(app);
+  assert.equal(text.includes('o Backlog e o Roadmap não ficam disponíveis'), false, text);
+  assert.equal(/não ficam disponíveis/i.test(text), false, text);
 });

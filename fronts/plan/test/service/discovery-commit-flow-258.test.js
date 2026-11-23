@@ -82,7 +82,7 @@ test('discovery:commit-proposal refuses like the commit: under 85%, and without 
   const { service, api } = makeService(t);
   const ws = service.workspace();
   const projectId = await project(t, api, ws, { synced: false });
-  // #25: a repository that was never synced (a project with no repository at all is refused as such, below)
+  // #25: a repository that was never synced (#35: a project with no repository at all has a local backlog, below)
   await api['projects:update']({ id: projectId, patch: { repo: REPO } });
   const low = readyCard(ws.discovery, projectId, { score: 70 });
   await assert.rejects(async () => api['discovery:commit-proposal']({ projectId, cardId: low }), /85%.*Who reads the file/);
@@ -92,12 +92,14 @@ test('discovery:commit-proposal refuses like the commit: under 85%, and without 
   assert.equal(discovery.readCard(ws.discovery, projectId, clear).column, 'ready');
 });
 
-test('#25 discovery:commit-proposal on a project with no repository says it has no repository', async (t) => {
+// #35 (replaces #25's "says it has no repository"): a project with no repository has a local backlog to commit into
+test('#35 discovery:commit-proposal on a project with no repository proposes the split by the rules, no refusal', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();
   const projectId = await project(t, api, ws, { synced: false });
   const clear = readyCard(ws.discovery, projectId);
-  await assert.rejects(async () => api['discovery:commit-proposal']({ projectId, cardId: clear }), /no repository/i);
+  const proposal = await api['discovery:commit-proposal']({ projectId, cardId: clear });
+  assert.deepEqual(proposal.split.issues.map((i) => i.title), ['Export runs as CSV']);
   assert.equal(discovery.readCard(ws.discovery, projectId, clear).column, 'ready');
 });
 

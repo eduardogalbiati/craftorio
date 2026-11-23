@@ -75,6 +75,16 @@ test('GitLab issues come from glab and are normalized', async () => {
   assert.equal(issues[1].body, '');
 });
 
+// #35 (replaces the rejection "has no repository"): a project with no repository has a local backlog; its sync
+// resolves with that backlog's issues and never runs a platform CLI
+test('#35 sync of a project with no repository resolves with its issues and runs no CLI', async (t) => {
+  const dir = tmp(t);
+  const { exec, calls } = fakeExec([GH_ISSUE]);
+  const data = await backlog.syncBacklog({ dir, project: { id: 'q', repo: null }, platform: 'github', exec });
+  assert.equal(Array.isArray(data?.issues), true, `syncBacklog: ${JSON.stringify(data)}`);
+  assert.equal(calls.length, 0);
+});
+
 test('a repository on a known host refuses the other platforms; Bitbucket has no sync yet', async () => {
   const { exec, calls } = fakeExec([]);
   await assert.rejects(backlog.fetchIssues({ platform: 'gitlab', repo: 'git@github.com:o/r.git', exec }), /on github\.com; pick GitHub/);
@@ -93,7 +103,6 @@ test('sync caches the issues per project, newest update first', async (t) => {
   assert.deepEqual(data.issues.map((i) => i.number), [29, 1]);
   assert.equal(data.platform, 'github');
   assert.deepEqual(backlog.readBacklog(dir, 'p'), data);
-  await assert.rejects(backlog.syncBacklog({ dir, project: { id: 'q', repo: null }, platform: 'github', exec }), /has no repository/);
   // project ids never reach outside the backlog folder
   assert.deepEqual(backlog.readBacklog(dir, '../p'), data);
 });

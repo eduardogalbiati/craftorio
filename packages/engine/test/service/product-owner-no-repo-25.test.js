@@ -1,11 +1,11 @@
-// #25 acceptance, written before the code: packages/engine/service/channels/product-owner.js for a project created
-// without a repository. Today po:ask answers "Sync the backlog first: the Product Owner reads the synced issues."
-// (askOptions) and po:file "Sync the backlog first: the Product Owner writes to the synced repository." (target),
-// though no sync can ever help. Expected (decision of #25: "add a repository"): the refusal says the project has no
-// repository; a project with a synced backlog is answered as today.
+// #25, revised by #35: packages/engine/service/channels/product-owner.js for a project created without a repository.
+// #25 made po:ask / po:file refuse it ("This project has no repository: add its URL in Projects › Edit to file
+// issues."). #35's decision: "a project with no remote gets a local backlog", so the Product Owner reads and files
+// into that local backlog like a synced repository's: po:ask answers, po:file in simulation shows its preview, and
+// the "no repository" refusal is gone. A repository that was never synced is still told to sync (unchanged).
 //
 // Seams: the service's api['po:ask'] / api['po:file'] (as product-owner.test.js), a project made with
-// api['projects:create'] without `repo`; simulation-only (no model call).
+// api['projects:create'] without `repo`; simulation-only (no model call, po:file previews).
 process.env.CRAFTORIO_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -28,26 +28,33 @@ async function errorOf(call) {
   return '';
 }
 
-test('#25 po:ask on a project with no repository no longer says "Sync the backlog first"', async (t) => {
+test('#35 po:ask on a project with no repository answers (its local backlog), no refusal', async (t) => {
   const { api } = makeService(t);
   const p = await noRepoProject(api, t);
-  const error = await errorOf(() => api['po:ask']({ ...ASK, projectId: p.id }));
-  assert.equal(/Sync the backlog first/i.test(error), false, `the refusal: ${error}`);
+  let out = null;
+  const error = await errorOf(async () => { out = await api['po:ask']({ ...ASK, projectId: p.id }); });
+  assert.equal(error, '');
+  assert.equal(typeof out?.message, 'object');
 });
 
-test('#25 po:ask on a project with no repository says the project has no repository', async (t) => {
+test('#35 po:file on a project with no repository previews the draft in simulation, as for a repository', async (t) => {
   const { api } = makeService(t);
   const p = await noRepoProject(api, t);
-  const error = await errorOf(() => api['po:ask']({ ...ASK, projectId: p.id }));
-  assert.equal(/no repository/i.test(error), true, `the refusal: ${error}`);
+  const asked = await api['po:ask']({ ...ASK, projectId: p.id, question: 'Login crashes every time I click save on the settings page', mode: 'issue' });
+  assert.equal(typeof asked?.message?.issue?.draft?.title, 'string', 'the Product Owner drafted an issue');
+  let out = null;
+  const error = await errorOf(async () => { out = await api['po:file']({ projectId: p.id, at: asked.message.ts, action: 'create', preview: true }); });
+  assert.equal(error, '');
+  assert.equal(out?.preview, true);
+  assert.equal(/no repository/i.test(JSON.stringify(out)), false, 'no "no repository" refusal in the answer');
 });
 
-test('#25 po:file on a project with no repository says the project has no repository, not "Sync the backlog first"', async (t) => {
+test('#35 the po:file preview on a project with no repository names no gh / glab command', async (t) => {
   const { api } = makeService(t);
   const p = await noRepoProject(api, t);
-  const error = await errorOf(() => api['po:file']({ projectId: p.id, at: 0, action: 'create', preview: true }));
-  assert.equal(/no repository/i.test(error), true, `the refusal: ${error}`);
-  assert.equal(/Sync the backlog first/i.test(error), false, `the refusal: ${error}`);
+  const asked = await api['po:ask']({ ...ASK, projectId: p.id, question: 'Login crashes every time I click save on the settings page', mode: 'issue' });
+  const out = await api['po:file']({ projectId: p.id, at: asked.message.ts, action: 'create', preview: true });
+  assert.equal(/\b(gh|glab) issue\b/.test(String(out?.message?.text || '')), false, `the preview: ${out?.message?.text}`);
 });
 
 // a repository that was never synced: syncing is the fix there, so the old message stays
