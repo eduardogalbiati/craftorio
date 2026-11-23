@@ -97,7 +97,7 @@ window.ProjectWorkflows = (() => {
   };
   const bundledDescription = (name, w, inst) => {
     const bundled = (w.origin || inst?.origin) === 'bundled' && Object.hasOwn(BUNDLED_DESCRIPTIONS, name);
-    return bundled && window.I18n?.getLanguage() !== 'en' ? t(BUNDLED_DESCRIPTIONS[name]) : '';
+    return bundled ? window.I18n.translated(BUNDLED_DESCRIPTIONS[name], w.description || inst?.description) : '';
   };
 
   function cardHtml(w, known, def) {

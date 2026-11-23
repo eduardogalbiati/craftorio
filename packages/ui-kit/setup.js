@@ -204,7 +204,7 @@
     if (!m) return t('setup.try.reading');
     const p = m.proposal;
     const hw = m.machine;
-    if (!p || !hw) return window.I18n.getLanguage() === 'en' && m.line ? m.line : t('settings.machine.unread');
+    if (!p || !hw) return window.I18n.translated('settings.machine.unread', m.line);
     return t('setup.try.machine_line', {
       threads: hw.threads,
       gb: Math.round(hw.totalBytes / 1024 ** 3),

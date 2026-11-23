@@ -23,11 +23,7 @@
   const framed = (html) => `<!doctype html>${RESULT_CSP}${String(html).replace(/^\s*<!doctype[^>]*>/i, '')}`;
   // #23: a seed's summary / cost outside English from project_seeds.<field>_<id> (seed.md is English); in English, or
   // with no key (t() answers the key itself), the seed.md text
-  const seedText = (row, field) => {
-    const key = `project_seeds.${field}_${String(row.id).replace(/-/g, '_')}`;
-    const v = window.I18n?.getLanguage() !== 'en' ? t(key) : key;
-    return v === key ? row[field] : v;
-  };
+  const seedText = (row, field) => window.I18n.translated(`project_seeds.${field}_${String(row.id).replace(/-/g, '_')}`, row[field]);
   const costText =(r) => (r.simulated ? t('project_seeds.cost_simulated') : r.source === 'tool' || r.costUsd === 0 ? t('project_seeds.cost_free') : r.costUsd == null ? t('project_seeds.cost_unknown') : fmtUsd(r.costUsd));
 
   // the row's status: [text, badge class]

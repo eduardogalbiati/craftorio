@@ -110,7 +110,8 @@
   }
 
   // #23: a filter's word in the interface's language (data-arch-filter keeps the raw key)
-  const filterLabel = (key) => ({ high: t('project_architecture.filter_high'), kept: t('project_architecture.filter_kept'), low: t('project_architecture.filter_low'), medium: t('project_architecture.filter_medium'), new: t('project_architecture.filter_new') })[key] ?? esc(key);
+  // (the severity words come from ArchitectureFactsView.severityLabel, the one map of them)
+  const filterLabel = (key) => ({ kept: t('project_architecture.filter_kept'), new: t('project_architecture.filter_new') })[key] ?? esc(ArchitectureFactsView.severityLabel(key));
 
   // the filters by severity and by new / kept, with their counts, and "Create issues" for the ones shown
   function findingsToolbarHtml(all) {

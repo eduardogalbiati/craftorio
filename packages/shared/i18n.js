@@ -7,6 +7,8 @@
 // - t(key, params?, lang?): the text in lang (the current language when omitted), `{name}` replaced
 //   from params, a plural's form picked from params.count; a key missing in a language shows the
 //   English text, a key missing everywhere the key itself;
+// - translated(key, fallback, params?): a text with an English original outside the catalog (a workflow
+//   file, a seed row): the original in English, the key's text in another language;
 // - setLanguage(lang) / getLanguage(); languages(): the codes with a catalog;
 // - resolveLanguage(chosen, systemLocale): the language to show ('pt' or 'pt-PT' find 'pt-BR');
 // - formatNumber(n, lang?, options?), formatPercent(ratio, lang?), formatCost(usd, lang?, digits = 2):
@@ -71,6 +73,14 @@
     return String(text);
   }
 
+  /** #23: a text that has an English original outside the catalog (a workflow file, a seed's row, the engine's line):
+   * that original in English (when given), else the key's text in the current language; the original (or '') when no
+   * catalog has the key. */
+  function translated(key, fallback, params) {
+    const text = t(key, params);
+    return (current === ENGLISH && fallback) || text === key ? (fallback ?? '') : text;
+  }
+
   /** The chosen language when it has a catalog, else the computer's (or its base language's), else English. */
   function resolveLanguage(chosen, systemLocale) {
     if (has(chosen)) return chosen;
@@ -110,6 +120,7 @@
     resolveLanguage,
     setLanguage,
     t,
+    translated,
   };
   if (node) module.exports = api;
   else {
