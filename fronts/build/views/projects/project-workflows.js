@@ -84,11 +84,6 @@ window.ProjectWorkflows = (() => {
     return label ? t(label) : value;
   }
 
-  // #22: the i18n key of each described workflow's description per test order (DefaultWorkflow.variantTestOrder,
-  // the engine's rule); only feature.yaml takes a test_order: fix.yaml has no test writer, its own description stays
-  const ORDER_DESCRIPTIONS = {
-    feature: { code_first: 'projects.workflows_desc_feature_code_first', e2e_first: 'projects.workflows_desc_feature_e2e_first' },
-  };
   // #23: the i18n key of each bundled workflow's own description, shown outside English (in English the file's text)
   const BUNDLED_DESCRIPTIONS = {
     feature: 'projects.workflows_desc_feature',
@@ -105,7 +100,7 @@ window.ProjectWorkflows = (() => {
     const inst = known.get(name);
     // #22: a Feature / Fix card with a variant says what that variant runs (in the interface language), never
     // the file's generic description (feature.yaml's "Tests first" on a code-first pick)
-    const orderKey = Object.hasOwn(ORDER_DESCRIPTIONS, name) ? ORDER_DESCRIPTIONS[name][DefaultWorkflow.variantTestOrder(w.variant)] : null;
+    const orderKey = DefaultWorkflow.orderDescriptionKey(name, DefaultWorkflow.variantTestOrder(w.variant));
     const description = orderKey ? t(orderKey) : (bundledDescription(name, w, inst) || w.description || inst?.description || '');
     const variant = choiceLabel(name, w.variant);
     const ci = w.ci ? t('projects.workflows_ci', { ci: esc(choiceLabel('ci', w.ci)) }) : '';

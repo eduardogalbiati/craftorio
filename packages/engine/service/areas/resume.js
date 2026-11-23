@@ -10,6 +10,7 @@ const { inputsRead } = require('../../engine/run/templates');
 const { isAnyQuotaError } = require('../../engine/providers');
 const { displayName } = require('@craftorio/shared/display-name');
 const runs = require('../../domains/run/runs');
+const { startStep } = require('@craftorio/shared/run-progress-model');
 const sessionCache = require('@craftorio/shared/session-cache');
 const supervisor = require('../../domains/supervisor/supervisor');
 const { gitOut } = require('../common');
@@ -40,6 +41,9 @@ function inputInEffect(spec, wf, key) {
   const override = spec.agentOverrides?.[agent]?.[settingReading(wf, agent, key)];
   return override == null ? spec.inputs[key] ?? wf.inputs?.[key]?.default : override || 'default';
 }
+
+// #29: a resume with no step recorded starts where a new run with these inputs starts (code_first → warm_up)
+const firstStep = (wf, values) => startStep({ steps: wf.steps, inputs: wf.inputs, values });
 
 // #799: the line of a run's error that says a provider's limit stopped it, or null. A CLI's message
 // may end in |<epoch>, when the limit resets.
@@ -296,7 +300,7 @@ module.exports = (ctx) => {
     const refused = Object.keys(inputs || {}).filter((k) => !offeredInputs(wf).includes(k));
     if (refused.length) throw new Error(`Cannot change ${refused.join(', ')} on a resume: a resume only changes ${offeredInputs(wf).join(', ') || 'no input of this workflow'}.`);
     const pausedAt = step ? null : pausedStep(runDir);
-    const fromStep = step || pausedAt?.step || spec.stoppedAt || wf.steps[0].id;
+    const fromStep = step || pausedAt?.step || spec.stoppedAt || firstStep(wf, { ...spec.inputs, ...inputs });
     if (!wf.steps.some((s) => s.id === fromStep)) throw new Error(`Cannot resume: step "${fromStep}" does not exist in the current version of the workflow.`);
     const gate = pausedAt ? null : supervisor.skippedGate(wf, fromStep, spec.steps);
     let confirmedGate = null;

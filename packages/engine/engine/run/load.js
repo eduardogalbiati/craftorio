@@ -316,6 +316,17 @@ function steps(wf, ctx) {
 }
 const groups = (wf) => validateGroups(wf.groups, new Set(wf.steps.map((s) => s.id)));
 const outputs = (wf) => validateOutputs(wf.outputs);
+// #29: an input's `starts` ({ value: step id }) names steps that exist (startStep starts the run there)
+function inputStarts(wf) {
+  const ids = new Set(wf.steps.map((s) => s.id));
+  for (const [name, def] of Object.entries(wf.inputs || {})) {
+    if (def?.starts === undefined) continue;
+    if (!def.starts || typeof def.starts !== 'object' || Array.isArray(def.starts)) throw new Error(`Input "${name}": starts must be a map of { value: step id }.`);
+    for (const [value, id] of Object.entries(def.starts)) {
+      if (!ids.has(id)) throw new Error(`Input "${name}": starts.${value} names the step "${id}", which does not exist.`);
+    }
+  }
+}
 
 // The order the checks run in, so a YAML with several problems reports the same one first: a name is
 // the table's entries for that field, a function a named rule
@@ -347,7 +358,7 @@ const WORKFLOW_CHECKS = resolveChecks('', [
   'env.passthrough',
   'orchestrator.limits.max_total_context', 'orchestrator.local_preview.command', 'orchestrator.supervisor.on_call',
   'orchestrator.supervisor.max_cost_usd', 'orchestrator.supervisor.stall.same_output', 'orchestrator.supervisor.stall.slow_factor',
-  groups, outputs,
+  groups, outputs, inputStarts,
 ]);
 
 // #389: the parsed YAML of each file, kept while its mtime and size do not change (the Backlog and

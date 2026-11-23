@@ -32,7 +32,11 @@ const { writeResultSummary } = require('../domains/evidence/result-summary');
 const { stopProcessesIn } = require('./processes');
 const { sharedMemoryGuard } = require('./memory-guard');
 const machineActions = require('./machine-actions');
-const { StepTrail, endingGroups } = require('@craftorio/shared/run-progress-model');
+const {
+  StepTrail,
+  endingGroups,
+  startStep,
+} = require('@craftorio/shared/run-progress-model');
 const { ending } = require('@craftorio/shared/default-workflow');
 const chain = require('@craftorio/shared/chain-model');
 const Language = require('@craftorio/shared/language');
@@ -436,6 +440,11 @@ class WorkflowRun extends EventEmitter {
     return endingGroups(this.wf.groups, ending(this.wf, this.inputs));
   }
 
+  // #29: the step a new run starts at: an input's `starts` for its value (test_order: code_first), else the first
+  startStepId() {
+    return startStep({ steps: this.wf.steps, inputs: this.wf.inputs, values: this.inputs });
+  }
+
   async start() {
     // #607: a recovered run keeps its start
     this.startedAt = this.recovered?.startedAt || Date.now();
@@ -449,7 +458,7 @@ class WorkflowRun extends EventEmitter {
     if (this.recovered) this.startRecovered();
 
     // a recovered run that had nothing left to run ends where it was
-    let current = this.recovered ? this.recovered.nextStep || 'end' : this.resume?.fromStep || this.wf.steps[0].id;
+    let current = this.recovered ? this.recovered.nextStep || 'end' : this.resume?.fromStep || this.startStepId();
     let guard = 0;
     let status = 'success';
     let error = null;
@@ -541,7 +550,7 @@ class WorkflowRun extends EventEmitter {
       .filter((s) => s.id !== 'orchestrator' && !s.closedAt && ['active', 'retrying'].includes(s.status))
       .map((s) => names[s.agent] || s.agent);
     return {
-      state: 'pausing', step: this.prevStepId || this.resume?.fromStep || this.wf.steps[0].id, at: this.pausing.at,
+      state: 'pausing', step: this.prevStepId || this.resume?.fromStep || this.startStepId(), at: this.pausing.at,
       ...(agents.length ? { agents: [...new Set(agents)] } : {}),
       ...(this.liveCommand ? { command: this.liveCommand } : {}),
     };

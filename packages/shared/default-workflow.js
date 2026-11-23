@@ -149,6 +149,13 @@
   const modeOfPicks = (picks) => (picks || []).map((w) => modeOfVariant(w?.variant)).find(Boolean) || null;
   /** #785/#22: the test order a wizard variant runs ('*-code' → code_first, '*-e2e' → e2e_first), or null. */
   const variantTestOrder = (v) => (/-code$/.test(v || '') ? 'code_first' : /-e2e$/.test(v || '') ? 'e2e_first' : null);
+  // #22/#29: the i18n key of each described workflow's description per test order; only feature.yaml takes a
+  // test_order: fix.yaml has no test writer, its own description stays
+  const ORDER_DESCRIPTIONS = {
+    feature: { code_first: 'projects.workflows_desc_feature_code_first', e2e_first: 'projects.workflows_desc_feature_e2e_first' },
+  };
+  /** #22/#29: the i18n key that describes workflow `name` run in this test order, or null (no such description). */
+  const orderDescriptionKey = (name, order) => (Object.hasOwn(ORDER_DESCRIPTIONS, name) && order ? ORDER_DESCRIPTIONS[name][order] || null : null);
   /** #791: the kind whose entry serves `kind`: a refactor uses the Feature entry. */
   const entryKind = (kind) => (kind === 'refactor' ? 'feature' : kind);
   // #791: the kinds with an entry of their own: the only keys of a project's or a manifest's map
@@ -262,6 +269,7 @@
     modeOfVariant,
     namesOf,
     oldValidation,
+    orderDescriptionKey,
     projectDefault,
     projectFirst,
     projectWorkflows,

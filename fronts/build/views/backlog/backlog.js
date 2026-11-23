@@ -445,7 +445,10 @@
   function renderAssignInputs() {
     const pipe = assignPipeline();
     const wf = bl.workflows.find((w) => w.file === (pipe ? pipe.stages[0].workflow : $b('#assign-workflow').value));
-    const about = (pipe ? pipe.description : wf?.description) || '';
+    // #29: the project's variant runs another test order than the file's default (code first): its description
+    const order = DefaultWorkflow.variantTestOrder(project()?.workflows?.find((w) => w.name === wf?.name)?.variant);
+    const orderKey = !pipe && order !== wf?.inputs?.test_order?.default ? DefaultWorkflow.orderDescriptionKey(wf?.name, order) : null;
+    const about = (orderKey ? t(orderKey) : pipe ? pipe.description : wf?.description) || '';
     $b('#assign-wf-desc').textContent = firstSentence(about);
     $b('#assign-wf-desc').title = about;
     $b('#assign-wf-about-text').textContent = about;
@@ -1619,7 +1622,7 @@
         <div class="field">
           <label for="assign-workflow">${t('backlog.workflow')}</label>
           <select id="assign-workflow"></select>
-          <div id="assign-wf-desc" class="hint"></div>
+          <div id="assign-wf-desc" class="hint" data-testid="assign-wf-desc"></div>
           <details id="assign-wf-about" class="assign-about"><summary>${t('backlog.about_this_workflow')}</summary><p id="assign-wf-about-text"></p></details>
           <div id="assign-proposed" class="small hidden"></div>
         </div>

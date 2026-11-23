@@ -167,6 +167,13 @@
   // ---- the fixed stations of a workflow's pipeline (#282: the roadmap card's Workflow band) -----------
   // #630: feature's validation mode is the `validation` input (`mode` names local | remote there)
   const MODE_GATE = (mode) => new RegExp(`inputs\\.(?:mode|validation)\\s*==\\s*['"]${String(mode).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
+  // #29: a run that starts at another step (startStep) visits it first: the steps of its station lead
+  function startingAt(steps, groups, start) {
+    if (!start || steps.findIndex((s) => s.id === start) <= 0) return steps;
+    const first = groups?.find((g) => (g.steps || []).includes(start));
+    const lead = (s) => (first ? (first.steps || []).includes(s.id) : s.id === start);
+    return [...steps.filter(lead), ...steps.filter((s) => !lead(s))];
+  }
   /**
    * A workflow's stations, in the order of its steps: one per group (`human`: a group of human gates
    * only), one per step in no group. A human gate in no group is never a station of its own, but the
@@ -176,14 +183,8 @@
    * `steps`: [{ id, type, agent, agents, transitions: [{ goto, when }] }], `groups`: [{ name, steps }]
    * → [{ key, name, grouped, steps: [ids], human?: true, gate?: true, host?: { name, grouped } }]
    */
-  function workflowStations({ steps = [], groups = [], mode = null, start = null } = {}) {
-    // #29: a run that starts at another step (startStep) visits it first: its station leads
-    const at = start ? steps.findIndex((s) => s.id === start) : -1;
-    if (at > 0) {
-      const first = groups?.find((g) => (g.steps || []).includes(start));
-      const lead = (s) => (first ? (first.steps || []).includes(s.id) : s.id === start);
-      steps = [...steps.filter(lead), ...steps.filter((s) => !lead(s))];
-    }
+  function workflowStations({ steps: all = [], groups = [], mode = null, start = null } = {}) {
+    const steps = startingAt(all, groups, start);
     const groupOf = new Map();
     for (const g of groups || []) for (const s of g.steps || []) groupOf.set(s, g.name);
     const human = (s) => s.type === 'human_approval';

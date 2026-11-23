@@ -87,6 +87,11 @@ fields (references between steps, agents, transitions, groups) are the named rul
   `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
   `packages/ui-kit/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
   label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
+- An input's `starts` (#29, `{ <value>: <step id> }`) picks the step a new run starts at for that
+  value (the run's value, else the default), instead of the first step: `feature.yaml`'s
+  `test_order: { starts: { code_first: warm_up } }`. `startStep` (`packages/shared/run-progress-model.js`)
+  is the one rule: the engine starts there (`WorkflowRun.startStepId`, a resume with no step), and
+  the Roadmap card draws that step's station first.
 - Images attached to inputs (#129): `attachments: { <input>: [path | { path, name }] }` on
   `run:start` / `WorkflowRun` (`--attach task=<file>` in `scripts/run.js`). Checked in the
   constructor (limits in capabilities.md, "Images"), copied into `<run_dir>/attachments/<input>/`

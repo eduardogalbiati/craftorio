@@ -431,8 +431,12 @@ The inputs that choose the run:
   the team merges it on the platform.
 - `validation`: `auto` (default) goes from the developer straight to the review; `validated` stops at
   `developer_check` so you try the change first (an old `mode: auto | validated` still means this).
-- `test_order`: `e2e_first` (default) writes the issue's E2E scenarios with the acceptance tests;
-  `code_first` writes unit tests only.
+- `test_order`: `e2e_first` (default) writes the issue's E2E scenarios with the acceptance tests,
+  before the code; `code_first` (#29) starts at Warm Up: the developer writes the code and its unit
+  tests first, then the test writer writes the acceptance tests (unit only, no E2E) from the issue's
+  criteria, the red check runs them (a red one goes back to develop) and the run goes on to the
+  review: Warm Up → develop → acceptance tests → red check → code review → … The Roadmap card draws
+  Develop before Tests, and the Assign dialog shows the code-first description.
 - `review`: `single` (default) or `multi_model` (what `multi-model-review.yaml` did).
 - `retrospective` (#631, off by default): when the run ends, `retrospective.yaml` analyses it (what the
   old `develop-to-retrospective` pipeline did; one more model call).

@@ -515,11 +515,11 @@
   function stationsOf(x, v) {
     const wf = wfOf(x);
     const run = v?.run;
-    // the workflow as installed; a run of a workflow that is not: what its trail and its groups say
+    // the workflow as installed; a run of a workflow that is not: what its trail and its groups say (#29: startStep's station leads)
     const steps = wf?.steps?.length ? wf.steps : [...new Map((run?.progress || []).map((e) => [e.step, { id: e.step, type: e.type }])).values()];
     const groups = RunProgress.endingGroups(wf?.groups?.length ? wf.groups : run?.groups || [], itemEnding(x)); // #792
     const status = !run || run.status === 'running' || run.status === 'pending' ? 'running' : run.status;
-    const list = RunProgress.pipeline({ steps, groups, mode: modeOf(x) || null, progress: run?.progress || [], status, sentBackBy: v?.round ? v.est.sentBackBy : null, merged: run?.mergedCommit || null }); // #614
+    const list = RunProgress.pipeline({ steps, groups, mode: modeOf(x) || null, start: RunProgress.startStep({ steps, inputs: inputDefs(x), values: x.inputs }), progress: run?.progress || [], status, sentBackBy: v?.round ? v.est.sentBackBy : null, merged: run?.mergedCommit || null }); // #614
     // the roadmap knows the gate before the trail says so
     return x.waiting ? list.map((st) => (st.state === 'running' ? { ...st, state: 'waiting' } : st)) : list;
   }
