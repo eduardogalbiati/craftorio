@@ -82,11 +82,22 @@ test('discovery:commit-proposal refuses like the commit: under 85%, and without 
   const { service, api } = makeService(t);
   const ws = service.workspace();
   const projectId = await project(t, api, ws, { synced: false });
+  // #25: a repository that was never synced (a project with no repository at all is refused as such, below)
+  await api['projects:update']({ id: projectId, patch: { repo: REPO } });
   const low = readyCard(ws.discovery, projectId, { score: 70 });
   await assert.rejects(async () => api['discovery:commit-proposal']({ projectId, cardId: low }), /85%.*Who reads the file/);
   const clear = readyCard(ws.discovery, projectId);
   await assert.rejects(async () => api['discovery:commit-proposal']({ projectId, cardId: clear }), /Sync the backlog first/);
   await assert.rejects(async () => api['discovery:commit']({ projectId, cardId: clear, split: { issues: [{ title: 'One', tasks: ['A'] }] } }), /Sync the backlog first/);
+  assert.equal(discovery.readCard(ws.discovery, projectId, clear).column, 'ready');
+});
+
+test('#25 discovery:commit-proposal on a project with no repository says it has no repository', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const projectId = await project(t, api, ws, { synced: false });
+  const clear = readyCard(ws.discovery, projectId);
+  await assert.rejects(async () => api['discovery:commit-proposal']({ projectId, cardId: clear }), /no repository/i);
   assert.equal(discovery.readCard(ws.discovery, projectId, clear).column, 'ready');
 });
 
