@@ -15,7 +15,9 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
-const { Then } = require('./fixtures');
+const { When, Then } = require('./fixtures');
+const { demoProjectCard } = require('../support/run-screen');
+const { tableTexts } = require('../support/english-texts');
 
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -182,4 +184,112 @@ Then('Settings offers the {string} tab', async ({ e2e }, name) => {
 Then('Settings no longer offers the {string} tab', async ({ e2e }, name) => {
   await expect(e2e.window.getByTestId('settings-tabs').filter({ visible: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(settingsTab(e2e.window, name)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
+// ---- #28: the screens of the first issue in the interface language --------------------------------
+// Steps of features/28-ptbr-first-issue-screens.feature. Three parts of the window are read:
+// - the open screen: the visible content of the <main> landmark (every view is kept in the DOM, the
+//   hidden ones are skipped);
+// - the Product Owner's drawer: the aside "Product Owner" (same name in both catalogs), its text box
+//   data-testid="agent-chat-input";
+// - the Start panel: the drawer (an aside, role complementary once open) holding the Start button
+//   data-testid="start-workflow".
+// "shows none of these English texts:" follows features/support/english-texts.js's rule (a text of 12
+// characters or fewer counts only as the whole text of an element, an option or an attribute, so "now" never
+// matches inside a Portuguese word; a longer one counts anywhere), on visible elements only: their own
+// text, title, aria-label and placeholder, and the options of a visible select (a closed one's too).
+// Column titles drawn in capitals by CSS ("TRIAGE") are read as written ("Triage").
+// Reuses app.steps.js ("I open {string} in the sidebar"), settings-language.steps.js ("I choose {string}
+// as the {string} language"), fronts/plan/features/steps/inbox.steps.js ("I capture the idea {string}
+// with the text {string}", "I open the Inbox card {string}", "I accept the opened card"),
+// fronts/build/features/steps/backlog.steps.js ("I open the Product Owner", "I click the suggested
+// question {string}"), fronts/build/features/steps/run.steps.js ("I choose the workflow {string} in the
+// Start panel").
+
+const SHORT_TEXT = 12;
+const openScreen = (page) => page.getByRole('main').filter({ visible: true }).first();
+const poDrawerPart = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true });
+const startPanelPart = (page) => page.getByRole('complementary').filter({ has: page.getByTestId('start-workflow') }).first();
+
+// what the owner reads in the part: { whole: texts of single elements / options / attributes, all: one string }
+async function visibleTextsOf(locator) {
+  return locator.evaluate((root) => {
+    const shown = (n) => (typeof n.checkVisibility === 'function' ? n.checkVisibility() : !!n.offsetParent);
+    const whole = new Set();
+    const parts = [];
+    for (const n of [root, ...root.querySelectorAll('*')]) {
+      if (!shown(n)) continue;
+      const own = [...n.childNodes].filter((c) => c.nodeType === 3).map((c) => c.textContent).join('').trim();
+      if (own) parts.push(own);
+      const text = (n.textContent || '').trim();
+      if (text) whole.add(text);
+      for (const a of ['title', 'aria-label', 'placeholder']) {
+        const v = n.getAttribute(a);
+        if (v) { whole.add(v.trim()); parts.push(v.trim()); }
+      }
+      if (n.tagName === 'SELECT') {
+        for (const o of n.options) { const v = (o.textContent || '').trim(); if (v) { whole.add(v); parts.push(v); } }
+      }
+    }
+    return { whole: [...whole], all: parts.join(' \n ') };
+  });
+}
+
+async function expectNoneOfTheseTexts(locator, table, what) {
+  const texts = tableTexts(table);
+  await expect(locator, what).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(async () => {
+    const { whole, all } = await visibleTextsOf(locator);
+    const set = new Set(whole);
+    return texts.filter((t) => (t.length <= SHORT_TEXT ? set.has(t) : all.includes(t)));
+  }, { message: `English texts left in ${what}`, timeout: LOAD_TIMEOUT }).toEqual([]);
+}
+
+Then('the open screen shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(openScreen(e2e.window), table, 'the open screen');
+});
+
+Then('the Product Owner\'s drawer shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(poDrawerPart(e2e.window), table, 'the Product Owner\'s drawer');
+});
+
+Then('the Start panel shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(startPanelPart(e2e.window), table, 'the Start panel');
+});
+
+// the open screen's title: its visible level-1 heading
+Then('the open screen\'s title is {string}', async ({ e2e }, title) => {
+  const heading = openScreen(e2e.window).getByRole('heading', { level: 1 }).filter({ visible: true }).first();
+  await expect(heading).toHaveText(title, { timeout: LOAD_TIMEOUT });
+});
+
+// an option of a visible select of the open screen, e.g. the Backlog's platform select "Bitbucket (em breve)"
+Then('the open screen offers the option {string}', async ({ e2e }, option) => {
+  const screen = openScreen(e2e.window);
+  await expect(screen).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => screen.evaluate((root, text) => [...root.querySelectorAll('select')]
+    .filter((s) => (typeof s.checkVisibility === 'function' ? s.checkVisibility() : !!s.offsetParent))
+    .some((s) => [...s.options].some((o) => (o.textContent || '').trim() === text)), option),
+  { message: `a select of the open screen offers "${option}"`, timeout: LOAD_TIMEOUT }).toBe(true);
+});
+
+// the hint the shared paste helper (packages/ui-kit/paste-image.js) adds to the text box's placeholder
+Then('the Product Owner\'s text box hints {string}', async ({ e2e }, hint) => {
+  const box = poDrawerPart(e2e.window).getByTestId('agent-chat-input');
+  await expect(box).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(box).toHaveAttribute('placeholder', new RegExp(escapeRe(hint)), { timeout: LOAD_TIMEOUT });
+});
+
+// Projects › the demo project's card › its Start button, named in the interface language
+// ("Iniciar workflow" in Portuguese); the Start panel opens
+When('I click {string} on the demo project\'s card', async ({ e2e }, label) => {
+  const card = demoProjectCard(e2e);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await card.getByRole('button', { name: label, exact: true }).click();
+  await expect(e2e.window.getByTestId('start-workflow')).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+// a select of the Start panel named by its label, e.g. the chain picker's "Quando terminar"
+Then('the Start panel shows the {string} list', async ({ e2e }, name) => {
+  await expect(startPanelPart(e2e.window).getByRole('combobox', { name, exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
