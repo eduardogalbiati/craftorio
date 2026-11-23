@@ -66,7 +66,7 @@ test('parseClaude: a total below the session\'s previous one (a new count) is ta
 test('engine: a killed attempt without a price for its model is "cost not recorded", not a zero cost', { timeout: 60000 }, async (t) => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-costs-int-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
-  const run = new WorkflowRun({ file: path.join(__dirname, '..', 'fixtures', 'attempt-timeout.yaml'), inputs: {}, mock: true, runsDir, mockSequences: { timeouts: { work: 1 } } });
+  const run = new WorkflowRun({ file: path.join(__dirname, '..', 'fixtures', 'attempt-timeout.yaml'), inputs: {}, mock: true, runsDir, mockSequences: { timeouts: { work: 1 }, simulated_cost: true } }); // #31: the mock prices its turns on request
   const events = [];
   run.on('event', (ev) => events.push(ev));
   await run.start();
