@@ -21,7 +21,9 @@
 // filed and added to the roadmap, then the Roadmap), next-step-idea → the Inbox, next-step-cadence's "Turn on"
 // → the Health tab, where the findings become issues (#730; it does not turn anything on itself), and
 // next-step-release-ci / next-step-screenshots shown disabled (later phases), their reason in the button's
-// tooltip and a line (#744);
+// tooltip and a line (#744); #22: the idea step shows next-step-idea-done instead of its button once the
+// project's Inbox has a card (api.listDiscoveryCards, read once per page), and the screenshots step is
+// left out for a project of kind 'backend' (no user interface);
 // next-steps-dismiss), remembered per project in localStorage craftorio.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -77,6 +79,12 @@ function loadNextStepProposals(pv) {
   // shows no count, since everything the workspace can run is not the project's
   const set = pv.project?.workflows;
   pv.nextStepWorkflows = Array.isArray(set) ? set.length : 0;
+  // #22: the project's Inbox, read once too: an idea already there (the Review's "Note an idea") marks the idea step done
+  pv.nextStepIdeas = null;
+  new Promise((resolve) => resolve(api.listDiscoveryCards?.(pv.id, 'inbox'))).then((list) => list, () => []).then((list) => {
+    pv.nextStepIdeas = Array.isArray(list) ? list : [];
+    if (state.pv === pv && state.view === 'project') renderProjectView();
+  });
 }
 
 const fileAndAddLabel = (pv) => t('onboarding.next_steps_file_add', { count: pv.nextStepPicked.size });
@@ -97,6 +105,10 @@ function nextStepsMarkup(pv) {
     if (step === 'po-issue' && filed) {
       return `<a class="small" data-testid="next-step-po-issue-link" href="${esc(filed.url || '#')}" target="_blank" rel="noopener">${esc(t('onboarding.next_steps_po_issue_done', { issue: filed.issue }))}</a>`;
     }
+    // #22: the idea step is done once the project's Inbox has an idea: a mark instead of "Open the Inbox"
+    if (step === 'idea' && pv.nextStepIdeas?.length) {
+      return `<span class="small" data-testid="next-step-idea-done">${esc(t('onboarding.next_steps_idea_done'))}</span>`;
+    }
     const testid = step === 'po-issue' ? ' data-testid="next-step-po-issue-open"' : '';
     // #744: a disabled step says why, in its tooltip and in a line of its entry
     const reason = later ? esc(t(later)) : '';
@@ -112,7 +124,9 @@ function nextStepsMarkup(pv) {
       ${button(step, action, reasonOf(step, later))}
     </li>`;
   // #744: no refactors step once the proposals are read and there are none (never "File and add 0")
-  const shown = PV_NEXT_STEPS.filter(([step]) => step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length);
+  // #22: no screenshots spike for a project without a user interface (the wizard's kind 'backend')
+  const shown = PV_NEXT_STEPS.filter(([step]) => (step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length)
+    && (step !== 'screenshots' || pv.project?.kind !== 'backend'));
   // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
   // ranking made proposals
   const ready = [t('onboarding.next_steps_ready', { name: pv.project?.name || '' })];
@@ -154,7 +168,7 @@ function newProjectPage(id) {
   const tab = projectTabs()[id];
   return {
     id, project: state.projects.find((p) => p.id === id) || null, runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map(),
-    nextStepProposals: undefined, nextStepPicked: new Set(),
+    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepPicked: new Set(),
     tab: PV_TABS.some(([t]) => t === tab) ? tab : 'overview',
   };
 }

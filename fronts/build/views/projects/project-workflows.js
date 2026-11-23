@@ -16,7 +16,8 @@
 // Uses app.js globals ($, esc, t, state, errMsg, showToast), workflows.js's
 // WF_SECTIONS, wfSectionOf and wfSectionName, DefaultWorkflow.firstBuild
 // (the default's rule, shared with packages/engine/domains/project/projects.js) and OnboardingModel's
-// variant labels (packages/shared/onboarding-model.js).
+// variant labels (packages/shared/onboarding-model.js). #22: a Feature / Fix card whose variant ends in -code or
+// -e2e describes that test order (projects.workflows_desc_*), not the workflow file's generic description.
 
 window.ProjectWorkflows = (() => {
   const bare = (s) => String(s || '').replace(/\.ya?ml$/i, '');
@@ -83,10 +84,22 @@ window.ProjectWorkflows = (() => {
     return label ? t(label) : value;
   }
 
+  // #22: the test order a wizard variant runs, as packages/engine/domains/project/project-run-defaults.js
+  // variantTestOrder resolves it ('*-code' → code_first, '*-e2e' → e2e_first), else null
+  const variantTestOrder = (variant) => (/-code$/.test(variant || '') ? 'code_first' : /-e2e$/.test(variant || '') ? 'e2e_first' : null);
+  // the i18n key of each described workflow's description per test order
+  const ORDER_DESCRIPTIONS = {
+    feature: { code_first: 'projects.workflows_desc_feature_code_first', e2e_first: 'projects.workflows_desc_feature_e2e_first' },
+    fix: { code_first: 'projects.workflows_desc_fix_code_first', e2e_first: 'projects.workflows_desc_fix_e2e_first' },
+  };
+
   function cardHtml(w, known, def) {
     const name = bare(w.name);
     const inst = known.get(name);
-    const description = w.description || inst?.description || '';
+    // #22: a Feature / Fix card with a variant says what that variant runs (in the interface language), never
+    // the file's generic description (feature.yaml's "Tests first" on a code-first pick)
+    const orderKey = Object.hasOwn(ORDER_DESCRIPTIONS, name) ? ORDER_DESCRIPTIONS[name][variantTestOrder(w.variant)] : null;
+    const description = orderKey ? t(orderKey) : (w.description || inst?.description || '');
     const variant = choiceLabel(name, w.variant);
     const ci = w.ci ? t('projects.workflows_ci', { ci: esc(choiceLabel('ci', w.ci)) }) : '';
     const isDefault = name === def;
