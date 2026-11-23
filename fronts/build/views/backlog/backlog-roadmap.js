@@ -556,8 +556,7 @@
     const stations = stationsOf(x, v);
     if (!stations.length) return workflows ? `<div class="rm-pipe rm-pipe-none small muted" data-testid="roadmap-pipeline">${t('backlog_roadmap.no_pipeline_to_show_this_workflow')}</div>` : '';
     const wf = wfOf(x);
-    // the localized workflow's names win (#36): run.stepNames keep the file's English from the run's start
-    const stepNames = { ...run?.stepNames, ...Object.fromEntries((wf?.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) };
+    const stepNames = { ...run?.stepNames, ...Object.fromEntries((wf?.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) }; // the localized workflow's names win over run.stepNames (#36)
     const active = !!run && (run.status === 'running' || run.status === 'pending');
     const html = stations.map((st) => {
       const name = st.gate ? t('backlog_roadmap.your_check') : st.grouped ? RunProgress.groupName(st.name, t) : readable(st.name, stepNames);
