@@ -32,10 +32,15 @@ module.exports = (ctx) => {
     const { ws } = ctx;
     const project = projects.listProjects(ws.projects).find((p) => p.id === data.projectId);
     const list = project ? runs.runsForProject(runs.listRuns(ws.runs), project) : [];
+    // #35: a local issue the sync renumbered (local-backlog.js renumberedFrom) keeps the runs started for its
+    // earlier number (a link with no url) and its Discovery card; the platform's issue with that number gets neither
+    const moved = localIssues.renumberedFrom(data.issues);
+    const follow = (a) => (a && !a.url && moved.has(Number(a.number)) ? { ...a, number: moved.get(Number(a.number)) } : a);
     const live = list.map((r) => {
       const run = ctx.active.get(r.runId);
       const pr = ctx.withPrState(run?.pr || r.pr, r.mock); // the card's PR icon (#84)
-      return run ? { ...r, status: 'running', waiting: run.approvals.size > 0, pr } : { ...r, pr };
+      const linked = moved.size ? { ...r, ...(Array.isArray(r.issues) ? { issues: r.issues.map(follow) } : {}), ...(r.issue ? { issue: follow(r.issue) } : {}) } : r;
+      return run ? { ...linked, status: 'running', waiting: run.approvals.size > 0, pr } : { ...linked, pr };
     });
     const local = backlog.readLocal(ws.backlog, data.projectId);
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
@@ -48,7 +53,11 @@ module.exports = (ctx) => {
     // the issues a release shipped (#260) are marked Released (`released`: its version, shown on the card)
     // the issues filed from a discovery card (#258) name it (`discoveryCard`: { id, title }, the card's
     // badge); the card store is the discovery channels' (packages/engine/fronts/plan/channels/discovery.js)
-    const cards = ctx.discoveryIssueCards?.(data.projectId) || new Map();
+    const cards = new Map();
+    for (const [number, card] of ctx.discoveryIssueCards?.(data.projectId) || new Map()) {
+      if (moved.has(number)) cards.set(moved.get(number), card);
+      else if (!cards.has(number)) cards.set(number, card);
+    }
     const issues = ctx.markReleasedIssues(data.projectId, backlog.linkRuns(data.issues, live, local))
       .map((i) => (cards.has(i.number) ? { ...i, discoveryCard: cards.get(i.number) } : i))
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))

@@ -120,7 +120,8 @@ function restoreLocalIssues(dir, projectId, { numbers }) {
 
 /**
  * A repository added after the local issues: the local issues whose number a synced issue has (`taken`) get the
- * next free numbers, so no number names two issues. Answers { old: new } ({} when none moved).
+ * next free numbers, so no number names two issues. Answers { old: new } ({} when none moved). A moved issue keeps
+ * its earlier numbers in `was` (renumberedFrom): the runs and the Discovery card that name them stay its own.
  */
 function renumberLocalIssues(dir, projectId, taken = []) {
   const own = readLocalIssues(dir, projectId) || [];
@@ -130,10 +131,17 @@ function renumberLocalIssues(dir, projectId, taken = []) {
   const issues = own.map((i) => {
     if (!used.has(i.number)) return i;
     moved[i.number] = next;
-    return { ...i, number: next++ };
+    return { ...i, number: next++, was: [...(i.was || []), i.number] };
   });
   if (Object.keys(moved).length) writeLocalIssues(dir, projectId, issues);
   return moved;
+}
+
+/** The earlier numbers of the renumbered local issues among `issues`: old number → its current one. */
+function renumberedFrom(issues = []) {
+  const out = new Map();
+  for (const i of issues || []) if (i?.local) for (const old of i.was || []) out.set(Number(old), i.number);
+  return out;
 }
 
 /** What an issue-create command answered: { url, number } (the number in the platform's URL, or the local backlog's). */
@@ -241,6 +249,7 @@ module.exports = {
   localSaveCommand,
   readLocalIssues,
   removeLocalIssues,
+  renumberedFrom,
   renumberLocalIssues,
   restoreLocalIssues,
   updateLocalIssue,
