@@ -1113,6 +1113,44 @@
     }];
   }
 
+  // #35: issues created before the project had a repository stay local until the owner files them: an info alert
+  // with "File on <platform>…", which shows backlog:file-local's preview (each issue and its command) in the confirm
+  // modal and files only on its Yes (the engine refuses a real filing in simulation-only).
+  function fileLocalAlert() {
+    const p = project();
+    const open = (bl.data?.issues || []).filter((i) => i.local && i.state === 'open');
+    if (!p?.repo || !open.length) return [];
+    const platform = platformOf(bl.data?.platform || bl.platform).label;
+    return [{
+      id: `file-local:${bl.projectId}`,
+      level: 'info',
+      title: t('backlog.local_issues_title'),
+      text: t('backlog.local_issues_kept', { count: open.length, platform }),
+      dismissible: true,
+      actions: [{ label: t('backlog.local_issues_file', { platform }), primary: true, attrs: { 'data-file-local': '', 'data-testid': 'backlog-file-local' }, onClick: () => fileLocal(p, platform) }],
+    }];
+  }
+
+  async function fileLocal(p, platform) {
+    const projectId = bl.projectId;
+    let preview;
+    try { preview = await api.fileLocalIssues(projectId, true); } catch (err) { bl.error = errMsg(err); render(); return; }
+    const issues = preview.issues || [];
+    if (!issues.length) return;
+    const asked = confirmDialog(t('backlog.local_issues_file_title', { count: issues.length, platform }), t('backlog.local_issues_file_message', { count: issues.length, repo: p.repo }), t('backlog.local_issues_file_confirm'));
+    const list = $('#confirm-details'); // after confirmDialog (it hides the list), as project-remove.js
+    list.innerHTML = issues.map((i) => `<li><span class="mono">#${esc(i.number)}</span> ${esc(i.title)} <span class="muted">— ${esc(i.command)}</span></li>`).join('');
+    list.classList.remove('hidden');
+    if (!await asked) return;
+    try {
+      const r = await api.fileLocalIssues(projectId, false);
+      if (r.backlog) setData(r.backlog);
+      const failed = (r.issues || []).filter((i) => i.error);
+      bl.error = failed.length ? t('backlog.local_issues_file_failed', { list: failed.map((i) => `#${i.number} ${i.error}`).join(' · ') }) : null;
+    } catch (err) { bl.error = errMsg(err); }
+    render();
+  }
+
   // ---- the page's alerts (#270, alerts.js) ---------------------------------------------------
   // On top of the Board, the Epics view and the Roadmap, above the filter row, one at a time: a roadmap paused by
   // an item (an error; the plain queue's alert left with the queue, #446), a stale Backlog Refresh and the retired
@@ -1125,6 +1163,7 @@
       ...refreshAlert(),
       ...deprioritizedAlert(),
       ...localAlert(),
+      ...fileLocalAlert(),
     ]);
   }
 
