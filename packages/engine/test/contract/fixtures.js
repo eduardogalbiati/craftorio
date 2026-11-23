@@ -292,6 +292,8 @@ module.exports = {
   // #738: a repository the owner can push to (here none reached) has no fork to create or decline: 400
   // #741: Finish marks the onboarding finished
   'onboarding:finish': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
+  // #30: npm ci in the clone; an onboarding with nothing to install answers its state, never rejects
+  'onboarding:install-deps': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'onboarding:fork': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'onboarding:retry': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #741: the wizard's step and picks saved with the project

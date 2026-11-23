@@ -19,7 +19,8 @@ test('feature: the test pipeline steps are contiguous, with e2e / heal / check_f
   const ids = load('feature').steps.map((s) => s.id);
   const start = ids.indexOf('test');
   assert.deepEqual(ids.filter((id) => BLOCK.includes(id)), BLOCK);
-  assert.deepEqual(ids.slice(start, start + 9), ['test', 'suite', 'e2e', 'heal', 'check_failed', 'test_failed', 'build', 'build_failed', 'evidence']);
+  // #30: check_environment (the rule checks could not run here) sits next to check_failed
+  assert.deepEqual(ids.slice(start, start + 10), ['test', 'suite', 'e2e', 'heal', 'check_failed', 'check_environment', 'test_failed', 'build', 'build_failed', 'evidence']);
   assert.equal(ids[ids.indexOf('verify_change') + 1], 'verify_failed');
 });
 
