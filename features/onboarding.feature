@@ -879,3 +879,37 @@ Feature: Bring a project in with a guided wizard
     Then the wizard is on its "review" step
     And the review's Backlog card says why the issues could not be read, mentioning "error connecting to api.github.com", and offers a Retry
     And the review's Backlog card does not say "Issues are turned off in this repository"
+
+  # #22: the project page opened after the onboarding reads what it recorded. An idea already in the project's
+  # Inbox marks "Capture the first idea" done (or leaves it out); a backend project is not offered the screenshots
+  # investigation (or it is disabled, saying the project has no interface); the Feature workflow's card describes
+  # the variant picked in step 3, not the generic "Tests first" of the workflow file. The project is written as the
+  # wizard's Finish leaves it (its kind, its Feature variant, the Next steps card open, the review's idea).
+  @issue-22
+  Scenario: A backend project with an idea in its Inbox sees the idea step done and no screenshots step
+    Given the app is open
+    And the workspace has a just-onboarded "backend" project "api-22" with the idea "Export orders as CSV" in its Inbox
+    When I open "Projects" in the sidebar
+    And I open the project "api-22" from the Projects screen
+    Then the project page shows the Next steps card
+    And the Next steps card shows the first idea as captured
+    And the Next steps card does not propose investigating screenshots
+
+  @issue-22
+  Scenario: A frontend project with no idea yet is still offered the Inbox and the screenshots step
+    Given the app is open
+    And the workspace has a just-onboarded "frontend" project "web-22" with no idea in its Inbox
+    When I open "Projects" in the sidebar
+    And I open the project "web-22" from the Projects screen
+    Then the project page shows the Next steps card
+    And the Next steps card still offers "Open Inbox" for the first idea
+    And the Next steps card still lists the screenshots step
+
+  @issue-22
+  Scenario: The Feature workflow card of a project working "Local merge · code first" does not describe tests first
+    Given the app is open
+    And the workspace has a just-onboarded "backend" project "code-22" whose Feature workflow is "Local merge · code first"
+    When I open "Projects" in the sidebar
+    And I open the project "code-22" from the Projects screen
+    Then the project's Workflows block shows exactly the card "feature"
+    And the workflow card "feature" does not say "Tests first"

@@ -1634,3 +1634,97 @@ Then("no analysis of the wizard is left waiting without saying why", async ({ e2
     return silent;
   }, { message: 'the rows waiting with no reason', timeout: IMPORT_TIMEOUT }).toEqual([]);
 });
+
+// ---- #22: the project page reads what the onboarding recorded --------------------------------------------------------
+// A project "just onboarded" is what the wizard's Finish leaves (written here, not through the wizard): the project
+// record with its `kind` ('backend' | 'frontend' | 'full-stack') and its `workflows` (the Feature one with the variant
+// picked in step 3), the Next steps card left open (localStorage craftorio.nextSteps = { <projectId>: 'open' }), and
+// the idea typed in the review kept as an Inbox card (api.createDiscoveryCard, column inbox) or none.
+// What the card exposes (project-next-steps, as #642/#744):
+// - next-step-idea ("Capture the first idea", its button "Open the Inbox"): with an idea in the project's Inbox
+//   (api.listDiscoveryCards(projectId, 'inbox')) it shows data-testid="next-step-idea-done" and no "Open the Inbox",
+//   or the entry is left out; with none it stays as before;
+// - next-step-screenshots: absent for a backend project, or disabled with a no-interface reason
+//   ("projeto sem interface" in Portuguese); frontend / full-stack projects keep it.
+const { FEATURE } = require('../support/workflows');
+// the Feature variants of step 3 by their label (packages/shared/onboarding-model.js VARIANTS)
+const FEATURE_VARIANTS = {
+  'Local merge · code first': 'local-code',
+  'Local merge · E2E first': 'local-e2e',
+  'Remote · code first': 'remote-code',
+  'Remote · E2E first': 'remote-e2e',
+};
+const NO_INTERFACE = /no (user )?interface|without (an? |a user )?interface|no UI\b|sem interface/i;
+
+async function seedOnboardedProject(e2e, name, { kind, variant = 'local-e2e', idea = null }) {
+  const root = path.join(__dirname, '..', '..');
+  const workspace = require(path.join(root, 'packages', 'engine', 'domains', 'workspace', 'workspace'));
+  const projects = require(path.join(root, 'packages', 'engine', 'domains', 'project', 'projects'));
+  const ws = workspace.setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
+  const created = await projects.createProject(ws.projects, { name, description: 'A project just onboarded (simulated data)' });
+  const project = projects.updateProject(ws.projects, created.id, {
+    repo: `https://github.com/example/${name}`,
+    kind,
+    workflows: [{ name: FEATURE.name, origin: 'bundled', category: 'build', variant }],
+    defaultWorkflow: FEATURE.name,
+  });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+  const res = await e2e.window.evaluate(async ({ projectId, idea }) => {
+    try {
+      localStorage.setItem('craftorio.nextSteps', JSON.stringify({ ...JSON.parse(localStorage.getItem('craftorio.nextSteps') || '{}'), [projectId]: 'open' }));
+      if (idea) await window.api.createDiscoveryCard(projectId, idea, idea, 'idea');
+      return {};
+    } catch (e) {
+      return { thrown: String(e?.message || e) };
+    }
+  }, { projectId: project.id, idea });
+  expect(res?.thrown, `the onboarding of "${name}" could not be recorded`).toBeFalsy();
+}
+
+Given('the workspace has a just-onboarded {string} project {string} with the idea {string} in its Inbox', async ({ e2e }, kind, name, idea) => {
+  await seedOnboardedProject(e2e, name, { kind, idea });
+});
+
+Given('the workspace has a just-onboarded {string} project {string} with no idea in its Inbox', async ({ e2e }, kind, name) => {
+  await seedOnboardedProject(e2e, name, { kind });
+});
+
+Given('the workspace has a just-onboarded {string} project {string} whose Feature workflow is {string}', async ({ e2e }, kind, name, label) => {
+  const variant = FEATURE_VARIANTS[label];
+  if (!variant) throw new Error(`"${label}": expected one of ${Object.keys(FEATURE_VARIANTS).join(', ')}`);
+  await seedOnboardedProject(e2e, name, { kind, variant });
+});
+
+Then('the Next steps card shows the first idea as captured', async ({ e2e }) => {
+  const card = nextSteps(e2e.window);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // done, or left out: never an "Open the Inbox" to capture what is already there
+  await expect(card.locator('button[data-next-step="idea"]:not([disabled])')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  const entry = card.getByTestId('next-step-idea');
+  if (await entry.count()) await expect(card.getByTestId('next-step-idea-done'), 'the idea step marked done').toBeVisible();
+});
+
+Then('the Next steps card still offers {string} for the first idea', async ({ e2e }, label) => {
+  const entry = nextSteps(e2e.window).getByTestId('next-step-idea');
+  await expect(entry).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(entry.getByRole('button', { name: label, exact: true })).toBeEnabled();
+  await expect(nextSteps(e2e.window).getByTestId('next-step-idea-done')).toHaveCount(0);
+});
+
+Then('the Next steps card does not propose investigating screenshots', async ({ e2e }) => {
+  const card = nextSteps(e2e.window);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const entry = card.getByTestId('next-step-screenshots');
+  if (!(await entry.count())) return;
+  // or kept, disabled, saying the project has no interface
+  const button = entry.getByRole('button').first();
+  await expect(button, 'the screenshots step of a project with no interface').toBeDisabled();
+  await expect(entry, 'the reason: the project has no interface').toContainText(NO_INTERFACE);
+});
+
+Then('the Next steps card still lists the screenshots step', async ({ e2e }) => {
+  const entry = nextSteps(e2e.window).getByTestId('next-step-screenshots');
+  await expect(entry).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(entry).not.toContainText(NO_INTERFACE);
+});

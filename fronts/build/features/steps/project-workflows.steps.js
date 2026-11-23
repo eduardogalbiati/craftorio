@@ -131,6 +131,18 @@ Then('the workflow card {string} has no {string} badge', async ({ e2e }, name, l
   await expect(card.getByTestId('pj-wf-default-badge'), `no "${label}" badge on "${name}"`).toHaveCount(0);
 });
 
+// #22: a card's description follows the project's variant of the workflow (e.g. feature's local-code), in the
+// interface language, never the workflow file's generic one ("Tests first: …" of workflows/feature.yaml), neither
+// in the card's text nor in a tooltip of it
+Then('the workflow card {string} does not say {string}', async ({ e2e }, name, words) => {
+  const card = cardOf(e2e.window, name);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const said = new RegExp(escapeRe(words), 'i');
+  await expect(card).not.toContainText(said);
+  const tooltips = await card.evaluate((el) => [el, ...el.querySelectorAll('[title]')].map((n) => n.getAttribute('title') || ''));
+  expect(tooltips.filter((t) => said.test(t)), `the tooltips of the card "${name}"`).toEqual([]);
+});
+
 Then('the workflow card {string} shows the category {string} and offers {string} and {string}', async ({ e2e }, name, category, makeDefault, remove) => {
   const card = cardOf(e2e.window, name);
   await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
