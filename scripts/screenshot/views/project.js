@@ -397,9 +397,10 @@ function seed({ appDir, args, projects, ws, project }) {
   }
   // #22: --mode next-steps (opened with the wizard's Next steps card): a backend project (no screenshots
   // spike) whose Inbox already has the idea noted on the Review ("Capture the first idea" shown done);
-  // --mode next-steps-empty: a frontend project with an empty Inbox (the card as before)
+  // --mode next-steps-empty: a frontend project with an empty Inbox (the card as before);
+  // #25: --mode next-steps-no-repo: a project created with no remote (Add a repository leads)
   if (!args.tab && args.mode?.startsWith('next-steps')) {
-    projects.updateProject(ws.projects, project.id, { kind: args.mode === 'next-steps' ? 'backend' : 'frontend' });
+    projects.updateProject(ws.projects, project.id, { kind: args.mode === 'next-steps' ? 'backend' : 'frontend', ...(args.mode === 'next-steps-no-repo' ? { repo: '' } : {}) });
     if (args.mode === 'next-steps') {
       require('@craftorio/engine/domains/discovery/discovery').createCard(ws.discovery, project.id, { title: 'Support cross-realm objects', text: 'Noted on the Review.', column: 'inbox' });
     }
@@ -508,7 +509,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-deps', 'next-steps-deps-failed', 'next-steps-empty', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-deps', 'next-steps-deps-failed', 'next-steps-empty', 'next-steps-no-repo', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,
