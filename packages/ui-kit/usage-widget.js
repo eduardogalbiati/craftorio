@@ -241,4 +241,7 @@ function initUsageWidget() {
   });
   document.querySelectorAll('[data-scope]').forEach((b) => (b.onclick = () => setUsageScope(b.dataset.scope)));
   renderScopeToggles();
+  // #24 a language change repaints index.html's placeholder title (data-i18n-title): the widget's
+  // own title, with the month and the brand, comes back in the new language
+  globalThis.I18n?.onChange?.(() => { if (state.usage) renderUsageAll(); });
 }

@@ -6085,7 +6085,7 @@
   "usage_widget.no_providers": "Nenhum provedor.",
   "usage_widget.no_runs_recorded_yet_simulation_runs": "Nenhuma execução registrada ainda (execuções simuladas não contam).",
   "usage_widget.not_installed": "não instalado",
-  "usage_widget.orchestrator_usage_in_month": "Uso do Craftorio em {month}: {total} tokens, {costUsd} — {status}",
+  "usage_widget.orchestrator_usage_in_month": "Uso Craftorio em {month}: {total} tokens, {costUsd} — {status}",
   "usage_widget.over_limit": "Acima do limite",
   "usage_widget.plan_p": "plano {p}%",
   "usage_widget.raised_for_this_period": " (aumentado para este período)",

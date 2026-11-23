@@ -182,6 +182,18 @@ function relabelNav() {
   }
 }
 
+// #23 a screen drawn again keeps what other screens drew into it with ViewRegistry.draw (the Oracle's
+// dock on Home) and the classes they put on it: their live nodes move into the new element, with their
+// state and handlers, since only the redrawn screen mounts again
+function keepDrawnInto(old, now) {
+  if (typeof document.createTreeWalker !== 'function') return; // no DOM walker (the tests' stub): nothing drawn was remembered
+  for (const cls of old.classList) now.classList.add(cls);
+  for (const drawn of drawnMarkups) {
+    if (drawn.def) continue;
+    for (const n of drawn.nodes) if (n.parentNode === old) now.appendChild(n);
+  }
+}
+
 /**
  * Puts the screens whose markup or modals are functions in the new language (#329, #330): repainted in
  * place, else (structure changed, no DOM walker) the markup drawn again and mounted again; the screen
@@ -208,6 +220,7 @@ function redrawMarkup() {
       const drawn = drawnMarkups.find((d) => d.def === def);
       const now = document.getElementById(`view-${id}`);
       if (drawn && now) Object.assign(drawn, { html, nodes: nodesOf([now]) });
+      if (now) keepDrawnInto(old, now);
       now?.classList.toggle('hidden', hidden);
       def.mount?.();
     }
