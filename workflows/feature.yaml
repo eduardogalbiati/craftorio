@@ -3,6 +3,9 @@
 # The local-hero pipeline with the tests written BEFORE the code (owner, 2026-10-03; option C of
 # reports/piramide-de-testes-com-agentes-2026-10-03.md, #220):
 #   acceptance_tests ─► red_check ─► warm_up ─► develop ─► rule_check ─► docs_check ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge
+#   #29, test order "code first" (inputs.test_order.starts): the run starts at warm_up and the test
+#   writer comes after the developer's first commit:
+#   warm_up ─► develop ─► acceptance_tests ─► red_check ─► rule_check ─► … (the same chain from there)
 #   - acceptance_tests (the test writer, Opus 5.5): the acceptance tests of the task, from the issue
 #     and its criteria, not from the implementation, committed on the run's branch. It gets the
 #     project's code → tests map (`test_map: true`, #219) to put the tests where they belong and
@@ -141,7 +144,7 @@ kind: Workflow
 metadata:
   name: feature
   version: 0.3.0
-  description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build and verification. Local mode: the local merge, then push main. Remote mode: a pull request and its CI; the team merges it. Fork + PR mode: the branch on your fork, a pull request to the original and its CI; the maintainers merge it."
+  description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build and verification. Code first (the test order input): the developer writes the code and its unit tests first, the test writer writes the acceptance tests after it. Local mode: the local merge, then push main. Remote mode: a pull request and its CI; the team merges it. Fork + PR mode: the branch on your fork, a pull request to the original and its CI; the maintainers merge it."
   tags: [dev, review, test, tests-first, tdd, build, local, remote, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: build
@@ -246,7 +249,10 @@ inputs:
     enum: [e2e_first, code_first]
     default: e2e_first
     options: { e2e_first: "E2E first", code_first: "Code first" }
-    description: "E2E first: the test writer writes the issue's E2E scenarios with the acceptance tests, before the code. Code first: the acceptance tests are unit tests only; no E2E scenarios in this run."
+    description: "E2E first: the test writer writes the issue's E2E scenarios with the acceptance tests, before the code. Code first: the developer writes the code and its unit tests first; the test writer writes the acceptance tests after it (unit tests only, no E2E scenarios in this run)."
+    # #29: the step a run starts at, per value (the engine's and the roadmap card's startStep); a value
+    # not listed starts at the first step
+    starts: { code_first: warm_up }
   # #630: the multi-model review (the old multi-model-review workflow) as a second reviewer on another model
   review:
     label: "Review"
@@ -518,8 +524,8 @@ agents:
       Merge-friendly (parallel runs): add new code next to related code, not before a shared
       section comment; write shared name lists (module.exports, destructured requires) one item
       per line, sorted; document a file in its header comment or a topic doc, not in an index.
-      Tests first: the test writer writes the acceptance tests of the task before you, from the
-      task and its criteria. Never edit, delete, skip or weaken them (the orchestrator refuses a
+      Acceptance tests: the test writer writes them from the task and its criteria, before you
+      (tests first) or after your first commit (test order "code first", #29). Never edit, delete, skip or weaken them (the orchestrator refuses a
       turn that changes one); if one contradicts the task, say why in `summary` and leave it (the
       reviewer decides). You may add your own tests for
       internal details in new test files, written with the code: your own tests go into the
@@ -752,6 +758,7 @@ steps:
   # Tests first (owner, 2026-10-03): the acceptance tests of the task, from the issue and its criteria,
   # written before any code on the run's branch. Pointing at the right tests is what makes tests-first
   # work (TDAD, arXiv 2603.17973: TDD instructions without the affected tests made regressions worse).
+  # #29: with the test order "code first" it comes after develop's first commit instead.
   - id: acceptance_tests
     display: Write tests (E2E)
     agent: test_writer
@@ -797,6 +804,27 @@ steps:
       Keep `tests_added`{% if inputs.e2e_tests != 'off' %} and `e2e_files`{% endif %} the complete lists of the run's acceptance files (the
       developer may not change them), with any new file added: so far `tests_added`: {{ ((prev.tests_added if prev else []) or []) | join(', ') or 'none' }}{% if inputs.e2e_tests != 'off' %}; `e2e_files`: {{ ((prev.e2e_files if prev else []) or []) | join(', ') or 'none' }}{% endif %}.
       Keep `criteria`, `not_testable`{% if inputs.e2e_tests != 'off' %}, `e2e_scope` and `scenarios`{% endif %} from your previous answer, updated.
+      {% elif inputs.test_order == 'code_first' %}
+      {# #29: code first: the developer already committed the change; the tests come after it #}
+      Write the ACCEPTANCE TESTS of this task AFTER the code (test order: code first). The developer
+      already implemented the change on the run's branch `{{ steps.develop.output.branch if steps.develop.output else "(the worktree's branch)" }}`
+      (the worktree is on it: stay on it, never create another, never fetch, pull or push).
+      1. Derive the tests from the task and its acceptance criteria, not from the implementation:
+         each checkable criterion or task of the issue gets at least one unit test, through the
+         PUBLIC interfaces the criteria name. The code → tests map of this checkout is
+         {{ test_map }} (search it for the files the change touched, do not read it whole): add the
+         new tests in the test file of that area or a new file next to it, and list in
+         `affected_tests` the existing test files the map gives for the changed files.
+      2. Test files only: never edit production code. A test that fails shows a gap in the code:
+         keep it (the orchestrator runs your files right after your turn and sends a red one back to
+         the developer); never bend a test to the current code. A criterion that cannot be tested
+         automatically goes in `not_testable` with the reason, never a fake test.
+      3. Few and precise: one behaviour per test, mocks only at system boundaries.
+      4. Commit the test files on the branch (message: "Acceptance tests for <issues>") and report
+         the commit hash in `commit` and `committed: true`.
+      A task with no observable behaviour (docs, refactor, infrastructure): write no test, leave
+      `tests_added` empty and say why in `summary`.
+      End-to-end scenarios: none in this run (test order: code first, #630); set `e2e_scope: none`.
       {% else %}
       Write the ACCEPTANCE TESTS of this task BEFORE any code is written (tests first). The developer
       implements the change after you and must make your tests pass without editing them.
@@ -827,9 +855,7 @@ steps:
          the commit hash in `commit` and `committed: true`.
       A task with no observable behaviour (docs, refactor, infrastructure): write no test, still
       create the branch, leave `tests_added` empty and say why in `summary`.
-      {% if inputs.test_order == 'code_first' %}
-      End-to-end scenarios: none written first (test order: code first, #630); set `e2e_scope: none`.
-      {% endif %}{% if inputs.e2e_tests != 'off' and inputs.test_order != 'code_first' %}{% set tags %}{% for n in inputs | issue_numbers %}{{ ', ' if not loop.first }}`@issue-{{ n }}`{% endfor %}{% endset %}
+      {% if inputs.e2e_tests != 'off' and inputs.test_order != 'code_first' %}{% set tags %}{% for n in inputs | issue_numbers %}{{ ', ' if not loop.first }}`@issue-{{ n }}`{% endfor %}{% endset %}
       {% if not tags %}
       End-to-end scenarios: none in this run. It has no issue number, so the scenarios could not be
       tagged `@issue-<n>` and the orchestrator would never run them: write no scenario, set
@@ -900,6 +926,19 @@ steps:
         criteria_note:    { type: string }
         tests_changed:    { type: array, items: { type: string } }
     transitions:
+      # #29: code first, the tests written after the developer's commit: they are checked (red_check)
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and (output.tests_added or []) | length"
+        goto: red_check
+      # #29: code first, nothing testable: develop's own routes after a commit (as in testid_check)
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
+        goto: developer_screenshots
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
+        goto: developer_screenshots
+      # rule_check (a skipped check included) takes the docs, the owner's gate and the review from there
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes'"
+        goto: rule_check
       # nothing testable: straight to develop
       - when: "(output.tests_added or []) | length == 0"
         goto: develop
@@ -928,6 +967,17 @@ steps:
         # counts this transition: one way back
         max_visits: 1
         on_exhausted: develop
+      # #29: code first, the tests written after the code all pass: develop's own routes after a
+      # commit (as in testid_check); a red test goes back to develop (the last route)
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and not (output.red_check and (output.red_check.red or []) | length) and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and not (output.red_check and (output.red_check.red or []) | length) and inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and inputs.screenshots != 'off'"
+        goto: developer_screenshots
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and not (output.red_check and (output.red_check.red or []) | length) and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
+        goto: developer_screenshots
+      # rule_check (a skipped check included) takes the docs, the owner's gate and the review from there
+      - when: "inputs.test_order == 'code_first' and steps.develop.output and vars.criteria_triage != 'yes' and not (output.red_check and (output.red_check.red or []) | length)"
+        goto: rule_check
       # #301: the first implementation starts from the Warm Up map; an owner's change request
       # (develop already ran) starts from the request
       - when: "not steps.develop.output"
@@ -1114,7 +1164,14 @@ steps:
       Write them (a README section in docs/readme/ when the project generates its README), commit,
       and answer again in full; a doc you leave out on purpose goes to `left_out` with its reason.
       {% endif %}
-      {% if not steps.develop.output %}
+      {% if not steps.develop.output and inputs.test_order == 'code_first' and not acc %}
+      {# #29: code first, the developer goes first and the test writer after its commit #}
+      Code first: you implement the change first, then the test writer writes the acceptance tests
+      from the issue after your commit. Create the run's branch where the worktree starts (the
+      local {{ inputs.base_branch }}): `git switch -c <branch>` (a short name for the change); never
+      fetch, pull or push. Write the code and its unit tests (your own test files, in your commit),
+      run them focused, and commit on that branch.
+      {% elif not steps.develop.output %}
       Tests first: the test writer already worked on this task, on the run's branch
       `{{ acc.branch if acc else '(none: create it with git switch -c)' }}`{% if acc and acc.commit %} (commit {{ acc.commit }}){% endif %}.
       Stay on that branch (the worktree is on it); do not create another.
@@ -1143,7 +1200,7 @@ steps:
       {% endif %}
       {% set rc = steps.red_check.output %}
       {% if acc and (acc.tests_added or []) | length %}
-      Acceptance tests (written before the code, from the task): {{ acc.tests_added | join(', ') }}.
+      Acceptance tests ({{ 'written after your code' if inputs.test_order == 'code_first' else 'written before the code' }}, from the task): {{ acc.tests_added | join(', ') }}.
       {% if rc %}{{ rc.message }}
       {% if rc.red_check and (rc.red_check.green | length) %}An already-green test passes before any change: it guards existing behaviour (keep it passing) or it is wrong (say which in `summary`; never edit it).
       {% endif %}{% endif %}
@@ -1300,6 +1357,9 @@ steps:
       # same screens go on to the review
       - when: "not output.committed and previous_step == 'developer_screenshots' and vars.mockup_self_check == 'yes'"
         goto: developer_screenshots
+      # #29: code first: the test writer writes the acceptance tests after the developer's first commit
+      - when: "output.committed and inputs.test_order == 'code_first' and not steps.acceptance_tests.output"
+        goto: acceptance_tests
       # #246: scenarios written first: their test ids are checked right after each commit
       # (testid_check, no model call); it then takes the routes below
       - when: "output.committed and inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
@@ -1715,7 +1775,7 @@ steps:
       unless the developer reported it as not done:
       {{ steps.develop.output.issues | to_yaml }}
       {% endif %}
-      {% set acc = steps.acceptance_tests.output %}{% if acc and (acc.tests_added or []) | length %}Tests first: the acceptance tests were written before the code, at commit
+      {% set acc = steps.acceptance_tests.output %}{% if acc and (acc.tests_added or []) | length %}{% if inputs.test_order == 'code_first' %}Code first (#29): the acceptance tests were written after the developer's first commit, at commit{% else %}Tests first: the acceptance tests were written before the code, at commit{% endif %}
       `{{ acc.commit }}`: {{ acc.tests_added | join(', ') }}. Check with
       `git diff {{ acc.commit }} {{ steps.develop.output.branch }} -- {{ acc.tests_added | join(' ') }}`
       that the developer did not change them: any change to an acceptance test is a blocker

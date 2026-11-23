@@ -176,7 +176,14 @@
    * `steps`: [{ id, type, agent, agents, transitions: [{ goto, when }] }], `groups`: [{ name, steps }]
    * → [{ key, name, grouped, steps: [ids], human?: true, gate?: true, host?: { name, grouped } }]
    */
-  function workflowStations({ steps = [], groups = [], mode = null } = {}) {
+  function workflowStations({ steps = [], groups = [], mode = null, start = null } = {}) {
+    // #29: a run that starts at another step (startStep) visits it first: its station leads
+    const at = start ? steps.findIndex((s) => s.id === start) : -1;
+    if (at > 0) {
+      const first = groups?.find((g) => (g.steps || []).includes(start));
+      const lead = (s) => (first ? (first.steps || []).includes(s.id) : s.id === start);
+      steps = [...steps.filter(lead), ...steps.filter((s) => !lead(s))];
+    }
     const groupOf = new Map();
     for (const g of groups || []) for (const s of g.steps || []) groupOf.set(s, g.name);
     const human = (s) => s.type === 'human_approval';
@@ -213,6 +220,20 @@
   }
 
   /**
+   * #29: the step a run of this workflow starts at: an input whose `starts` maps the run's value
+   * (`values[name]`, else the input's default) to a step that exists (`starts: { code_first: warm_up }`),
+   * else the first step. `inputs`: the workflow's input definitions → a step id (null: no steps).
+   */
+  function startStep({ steps = [], inputs = {}, values = {} } = {}) {
+    for (const [name, def] of Object.entries(inputs || {})) {
+      const value = values?.[name] ?? def?.default;
+      const id = def?.starts && value != null ? def.starts[String(value)] : null;
+      if (id && steps.some((s) => s.id === id)) return id;
+    }
+    return steps[0]?.id ?? null;
+  }
+
+  /**
    * The stations with what a run did at each (its trail): → the stations, each with
    * state: todo (not reached) | gate (a mode's gate not reached) | done | skipped (the run went past
    *   it without entering) | running | waiting | failed | stopped | back (it sent the run back to an
@@ -241,8 +262,8 @@
   }
   /** #792: a group's name on screen (`t`: the screen's translator): OPEN_PR is translated, a workflow's own names are not. */
   const groupName = (name, t) => (name === OPEN_PR ? t('run_list.open_pr') : name);
-  function trailStations({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
-    const stations = workflowStations({ steps, groups, mode });
+  function trailStations({ steps = [], groups = [], mode = null, start = null, progress = [], status = 'running', sentBackBy = null } = {}) {
+    const stations = workflowStations({ steps, groups, mode, start });
     const idle = (st) => ({ ...st, state: st.gate ? 'gate' : 'todo', round: 0, current: null, agents: [] });
     const chips = progressGroups(progress, stations.map((st) => ({ name: st.key, steps: st.steps })), status);
     const indexOf = (chip) => stations.findIndex((st) => chip.key === `group:${st.key}`);
@@ -437,6 +458,7 @@
     pipeline,
     progressGroups,
     runClock,
+    startStep,
     timerTone,
     trailOf,
     typicalStepTimes,
