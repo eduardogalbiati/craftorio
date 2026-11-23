@@ -56,6 +56,13 @@ test('renderAssignInputs: the workflow\'s inputs are drawn by WorkflowInputs (hu
   assert.match(fn, /\$b\('#assign-settings'\)\.classList\.toggle\('hidden', !Object\.keys\(defs\)\.length\);/);
 });
 
+test('#36 renderAssignInputs: the chosen workflow goes through WorkflowInputs.localized before its inputs and description are drawn', () => {
+  const fn = /function renderAssignInputs\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const wf = WorkflowInputs\.localized\(bl\.workflows\.find\(/);
+  // the form and the description are drawn from that localized copy, never from bl.workflows' raw entry again
+  assert.doesNotMatch(fn, /bl\.workflows\.find\([^\n]*\)\.inputs/);
+});
+
 test('renderAssignInputs: the workflow\'s "About" details only appear when its description is more than the leading one-line summary', () => {
   const fn = /function renderAssignInputs\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /\$b\('#assign-wf-about'\)\.classList\.toggle\('hidden', !about \|\| firstSentence\(about\) === about\.trim\(\)\);/);

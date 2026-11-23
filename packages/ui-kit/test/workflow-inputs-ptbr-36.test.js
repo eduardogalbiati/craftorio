@@ -128,7 +128,7 @@ function gateHelpText(lang, record) {
 }
 const GATE_HELP = ['Runs the rule checks again, once the dependencies are installed.', 'Ends the run as failed; its branch keeps the work to resume it.'];
 
-for (const [dir, file, origin] of [FILES[0], FILES[2]]) {
+for (const [dir, file, origin] of [FILES[0], FILES[2], FILES[3]]) {
   test(`#36 pt-BR ${file}: the check_environment gate's choice help is not in English`, () => {
     I18n.setLanguage('pt-BR');
     const html = gateHelpText('pt-BR', gateRecord(load(dir, file, origin), 'check_environment'));

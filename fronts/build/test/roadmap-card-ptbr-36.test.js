@@ -211,6 +211,57 @@ test('#36 English unchanged: the hero workflow\'s stations keep the file\'s name
   for (const en of ['Write tests (E2E)', 'Develop', 'Review', 'Validate', 'Merge']) assert.equal(names.includes(en), true, `${en} in ${names.join(' › ')}`);
 });
 
+// ---- 1. a stopped run and the "at {where}" step (review of #36) ----------------------------------------
+
+function stoppedCard() {
+  const start = H.NOW - 30 * H.MIN;
+  return card({ status: 'failed', runId: 'run-s', runs: ['run-s'], error: 'Run run-s was stopped', run: H.run({ status: 'cancelled', workflow: FEATURE, startedAt: H.iso(start), finishedAt: H.iso(start + 20 * H.MIN), progress: [step('develop', 'failed', start)], groups: wfEntry(FEATURE).groups }) });
+}
+
+test('#36 pt-BR: a stopped item reads "Parou em …", never "Stopped at"', async () => {
+  const { R } = await ready('pt-BR');
+  const outer = H.itemEl(draw(R, one(stoppedCard(), { state: 'paused', pausedBy: 'a' })), 'a').outer;
+  assert.equal(outer.includes('Stopped at'), false);
+  assert.equal(outer.includes('Parou em'), true);
+});
+
+test('#36 English unchanged: a stopped item reads "Stopped at …"', async () => {
+  const { R } = await ready('en');
+  assert.equal(H.itemEl(draw(R, one(stoppedCard(), { state: 'paused', pausedBy: 'a' })), 'a').outer.includes('Stopped at'), true);
+});
+
+test('#36 pt-BR: a failed item reads "Falhou em Desenvolver" and its step line "em Desenvolver", not "at Develop"', async () => {
+  const { R } = await ready('pt-BR');
+  const outer = H.itemEl(draw(R, one(failedCard(), { state: 'paused', pausedBy: 'a' })), 'a').outer;
+  assert.equal(outer.includes('Falhou em Desenvolver'), true);
+  assert.equal(/\bat Develop\b/.test(outer), false);
+});
+
+// ---- 2. a hero item with a run: its stations named from run.stepNames (review of #36) -----------------
+
+function heroRunCard() {
+  const start = H.NOW - 20 * H.MIN;
+  const hero = wfEntry(HERO, path.join('.craftorio', 'workflows'), 'repository');
+  // the run's display names come from the file at run start (run.started's display.steps): English
+  const stepNames = Object.fromEntries(hero.steps.filter((s) => s.display).map((s) => [s.id, s.display]));
+  const progress = [step('acceptance_tests', 'done', start), step('red_check', 'done', start + 5 * H.MIN), step('develop', 'running', start + 10 * H.MIN)];
+  return card({ status: 'running', workflow: HERO, workflowName: 'ai-development-local-hero', runId: 'run-h', runs: ['run-h'], run: H.run({ status: 'running', workflow: HERO, startedAt: H.iso(start), progress, groups: hero.groups, stepNames }) });
+}
+
+test('#36 pt-BR: a running hero item\'s stations are not the run\'s English step names', async () => {
+  const { R } = await ready('pt-BR');
+  const names = stationNames(draw(R, one(heroRunCard(), { state: 'running' })));
+  const ENGLISH = ['Write tests (E2E)', 'Red check (TDD)', 'Develop', 'Rule checks', 'Docs check', 'Review', 'Validate'];
+  assert.deepEqual(names.filter((n) => ENGLISH.includes(n)), []);
+  for (const pt of ['Escrever testes (E2E)', 'Desenvolver']) assert.equal(names.includes(pt), true, `${pt} in ${names.join(' › ')}`);
+});
+
+test('#36 English unchanged: a running hero item\'s stations keep the run\'s step names', async () => {
+  const { R } = await ready('en');
+  const names = stationNames(draw(R, one(heroRunCard(), { state: 'running' })));
+  for (const en of ['Write tests (E2E)', 'Develop']) assert.equal(names.includes(en), true, `${en} in ${names.join(' › ')}`);
+});
+
 // ---- 3. the Live roadmap ------------------------------------------------------------------------------
 
 test('#36 pt-BR: the Live roadmap switched off does not say "Off. Turning it on starts the roadmap first."', async () => {
