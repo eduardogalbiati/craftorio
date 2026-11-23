@@ -79,7 +79,12 @@ function loadNextStepProposals(pv) {
   // shows no count, since everything the workspace can run is not the project's
   const set = pv.project?.workflows;
   pv.nextStepWorkflows = Array.isArray(set) ? set.length : 0;
-  // #22: the project's Inbox, read once too: an idea already there (the Review's "Note an idea") marks the idea step done
+}
+
+// #22: the project's Inbox, read with a guard of its own (the view's show() clears it, so an idea noted through
+// the card's "Open the Inbox" counts on the way back): an idea there (the Review's "Note an idea") marks the idea step done
+function loadNextStepIdeas(pv) {
+  if (nextSteps()[pv.id] !== 'open' || pv.nextStepIdeas !== undefined) return;
   pv.nextStepIdeas = null;
   new Promise((resolve) => resolve(api.listDiscoveryCards?.(pv.id, 'inbox'))).then((list) => list, () => []).then((list) => {
     pv.nextStepIdeas = Array.isArray(list) ? list : [];
@@ -254,6 +259,7 @@ function renderProjectView() {
   }
   if (pv.tab !== 'overview') return;
   loadNextStepProposals(pv);
+  loadNextStepIdeas(pv);
   $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv);
   $('#project-info').innerHTML = `
     <dl class="kv">
@@ -361,6 +367,7 @@ registerView({
     // the header's project changed while the page was open: the page switches to it
     const current = window.CurrentProject?.get();
     if (current && state.pv?.id !== current) state.pv = newProjectPage(current);
+    else if (state.pv) state.pv.nextStepIdeas = undefined; // #22: the Inbox read again on the way back
     renderProjectView();
     loadProjectRuns(state.pv?.runs ? 'refresh' : 'reset');
   },

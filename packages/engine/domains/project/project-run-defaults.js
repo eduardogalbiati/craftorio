@@ -30,7 +30,11 @@ const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand } = require('../../engine/check-step');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { detectLanguage, listBranches } = require('./project-inputs');
-const { modeOfPicks, modeOfVariant } = require('@craftorio/shared/default-workflow');
+const {
+  modeOfPicks,
+  modeOfVariant,
+  variantTestOrder,
+} = require('@craftorio/shared/default-workflow');
 const { PROFILE, PROJECT_KINDS: KINDS } = require('@craftorio/shared/onboarding-model');
 const { resolveRunInputs, withAliases } = require('@craftorio/shared/run-inputs');
 
@@ -111,12 +115,6 @@ const wizardMode = (project) => modeOfPicks(project?.workflows);
 function wizardVariant(project) {
   const variants = (project?.workflows || []).map((w) => String(w?.variant || '')).filter(Boolean);
   return variants.find(modeOfVariant) || variants[0] || null;
-}
-
-// #785: the order of a variant's tests, or null when it does not say
-function variantTestOrder(variant) {
-  if (/-code$/.test(variant || '')) return 'code_first';
-  return /-e2e$/.test(variant || '') ? 'e2e_first' : null;
 }
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);

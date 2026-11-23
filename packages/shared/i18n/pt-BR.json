@@ -4637,8 +4637,6 @@
   "projects.workflows_default_badge": "padrão",
   "projects.workflows_desc_feature_code_first": "O desenvolvedor escreve o código e seus testes unitários; os testes de aceitação vêm depois, seguidos de revisão, suíte e verificação.",
   "projects.workflows_desc_feature_e2e_first": "Os cenários E2E e os testes de aceitação vêm da issue antes do desenvolvimento; depois o desenvolvedor os faz passar.",
-  "projects.workflows_desc_fix_code_first": "O desenvolvedor reproduz o bug e o corrige com seus testes unitários; os testes de aceitação vêm depois da correção.",
-  "projects.workflows_desc_fix_e2e_first": "O cenário E2E e os testes de aceitação reproduzem o bug antes da correção; depois o desenvolvedor os faz passar.",
   "projects.workflows_empty": "Nenhum workflow ainda: os novos itens do roadmap usam o padrão acima",
   "projects.workflows_in_repository": "no repositório",
   "projects.workflows_kind_feature": "Workflow de Feature",

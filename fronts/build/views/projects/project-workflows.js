@@ -84,13 +84,10 @@ window.ProjectWorkflows = (() => {
     return label ? t(label) : value;
   }
 
-  // #22: the test order a wizard variant runs, as packages/engine/domains/project/project-run-defaults.js
-  // variantTestOrder resolves it ('*-code' → code_first, '*-e2e' → e2e_first), else null
-  const variantTestOrder = (variant) => (/-code$/.test(variant || '') ? 'code_first' : /-e2e$/.test(variant || '') ? 'e2e_first' : null);
-  // the i18n key of each described workflow's description per test order
+  // #22: the i18n key of each described workflow's description per test order (DefaultWorkflow.variantTestOrder,
+  // the engine's rule); only feature.yaml takes a test_order: fix.yaml has no test writer, its own description stays
   const ORDER_DESCRIPTIONS = {
     feature: { code_first: 'projects.workflows_desc_feature_code_first', e2e_first: 'projects.workflows_desc_feature_e2e_first' },
-    fix: { code_first: 'projects.workflows_desc_fix_code_first', e2e_first: 'projects.workflows_desc_fix_e2e_first' },
   };
 
   function cardHtml(w, known, def) {
@@ -98,7 +95,7 @@ window.ProjectWorkflows = (() => {
     const inst = known.get(name);
     // #22: a Feature / Fix card with a variant says what that variant runs (in the interface language), never
     // the file's generic description (feature.yaml's "Tests first" on a code-first pick)
-    const orderKey = Object.hasOwn(ORDER_DESCRIPTIONS, name) ? ORDER_DESCRIPTIONS[name][variantTestOrder(w.variant)] : null;
+    const orderKey = Object.hasOwn(ORDER_DESCRIPTIONS, name) ? ORDER_DESCRIPTIONS[name][DefaultWorkflow.variantTestOrder(w.variant)] : null;
     const description = orderKey ? t(orderKey) : (w.description || inst?.description || '');
     const variant = choiceLabel(name, w.variant);
     const ci = w.ci ? t('projects.workflows_ci', { ci: esc(choiceLabel('ci', w.ci)) }) : '';

@@ -27,7 +27,8 @@
 //   project's way of working: the picks' mode, a fork, a repository (remote), else local);
 //   entryKind(kind): the kind whose entry serves it (a refactor uses the Feature entry);
 //   modeOfVariant(variant) / modeOfPicks(workflows): the local | remote | fork a wizard pick names
-//   (also project-run-defaults.js); installedFile(name, files): a workflow name's file, an old name's
+//   (also project-run-defaults.js); variantTestOrder(variant): the test order it runs (code_first |
+//   e2e_first | null, project-run-defaults.js and the project's Workflows cards); installedFile(name, files): a workflow name's file, an old name's
 //   through its alias; kindTarget(entry, files) → { file, inputs }: what a kind's entry runs;
 //   KIND_ENTRIES (feature, fix): the kinds with an entry of their own, the map's keys;
 //   projectWorkflows(list, project, kinds): the workflows the Product Owner is offered: of `list`
@@ -146,6 +147,8 @@
   const modeOfVariant = (v) => (String(v || '').match(/^(local|remote|fork)\b/) || [])[1] || null;
   /** The mode the wizard picked for a project's workflows ([{ variant }]): the first variant that names one, or null. */
   const modeOfPicks = (picks) => (picks || []).map((w) => modeOfVariant(w?.variant)).find(Boolean) || null;
+  /** #785/#22: the test order a wizard variant runs ('*-code' → code_first, '*-e2e' → e2e_first), or null. */
+  const variantTestOrder = (v) => (/-code$/.test(v || '') ? 'code_first' : /-e2e$/.test(v || '') ? 'e2e_first' : null);
   /** #791: the kind whose entry serves `kind`: a refactor uses the Feature entry. */
   const entryKind = (kind) => (kind === 'refactor' ? 'feature' : kind);
   // #791: the kinds with an entry of their own: the only keys of a project's or a manifest's map
@@ -264,6 +267,7 @@
     projectWorkflows,
     resolve,
     runEnding,
+    variantTestOrder,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.DefaultWorkflow = api;
