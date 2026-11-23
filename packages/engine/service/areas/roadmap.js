@@ -437,7 +437,9 @@ module.exports = (ctx) => {
     try { known = projects.readProject(ws.projects, projectId); } catch { /* reported at the start */ }
     // an item that reads its issues from the platform at its start (#168) is never skipped on the
     // cache's state (an issue reopened since the sync still runs): the fresh read decides below
-    const fromPlatform = (item) => !mockOf(item) && !!known?.repo;
+    // #35: a local issue (the local backlog, also once a repository was added) is only in the workspace
+    const localNumbers = new Set((cache?.issues || []).filter((i) => i.local).map((i) => i.number));
+    const fromPlatform = (item) => !mockOf(item) && !!known?.repo && !backlog.itemIssues(item).some((i) => localNumbers.has(i.number));
     const { roadmap, start, refill, release } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n, item) => !fromPlatform(item) && closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
     });

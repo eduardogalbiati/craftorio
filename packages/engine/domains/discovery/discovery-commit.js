@@ -205,20 +205,22 @@ const issueLabels = (card, issue) => [KINDS[['bug', 'hotfix'].includes(card.type
  *   dir: the workspace's discovery folder; issuesLanguage (#328): the issues' headings
  * @returns {Promise<{ issues: { number, url, title, tasks, complexity, workflow }[], card: object, skippedLabels?: string[], failed?: { title, error }[], preview?: true, commands?: string[] }>}
  */
-async function commitCard({ dir, projectId, cardId, split, platform, repo, exec = backlog.execCli, by = 'owner', preview = false, issuesLanguage = null }) {
+async function commitCard({ dir, projectId, cardId, split, platform, repo, exec = backlog.execCli, by = 'owner', preview = false, issuesLanguage = null, backlogDir = null }) {
   const card = discovery.readCard(dir, projectId, cardId);
   const check = checkCommit(card);
   if (!check.ok) throw new Error(check.reason);
   const wanted = checkSplit(split);
   const folder = discovery.filedDir(dir, projectId, cardId);
   const at = stamp();
+  // #35: no repository, the issues go into the project's local backlog (`backlogDir`), never through a CLI
+  const createCommand = (o) => (repo ? backlog.issueCreateCommand(o) : backlog.localCreateCommand({ ...o, dir: backlogDir, projectId }));
   if (preview) {
-    const commands = wanted.map((issue, index) => backlog.issueCreateCommand({
+    const commands = wanted.map((issue, index) => createCommand({
       platform, repo, title: issue.title, labels: issueLabels(card, issue), file: path.join(folder, `${at}-issue-${index + 1}.md`), text: issueBody({ card, issue, index, total: wanted.length, issuesLanguage }),
     }).display);
     return { preview: true, commands, issues: [], card };
   }
-  const known = await backlog.repoLabels({ platform, repo, exec });
+  const known = repo ? await backlog.repoLabels({ platform, repo, exec }) : null;
   const skipped = new Set();
   const issues = [];
   const failed = [];
@@ -229,14 +231,15 @@ async function commitCard({ dir, projectId, cardId, split, platform, repo, exec 
     if (known) { labels.filter((l) => !known.includes(l)).forEach((l) => skipped.add(l)); labels = labels.filter((l) => known.includes(l)); }
     const file = path.join(folder, `${at}-issue-${index + 1}.md`);
     try {
-      const command = backlog.issueCreateCommand({ platform, repo, title: issue.title, labels, file, text: body });
+      const command = createCommand({ platform, repo, title: issue.title, labels, file, text: body });
       // gh reads the body from it; for glab it is the record of what was sent
       fs.mkdirSync(folder, { recursive: true });
       fs.writeFileSync(file, body);
-      const url = String(await exec(command.cli, command.args) || '').match(/https?:\/\/\S+/)?.[0] || null;
-      const number = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
+      const out = String(await (command.run ? command.run() : exec(command.cli, command.args)) || '');
+      const url = out.match(/https?:\/\/\S+/)?.[0] || null;
+      const number = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || (command.local && Number(out)) || null;
       // filed, but its number is unknown: it cannot be linked, and trying again could file it twice
-      if (!number) throw new Error(`${command.cli} did not answer with the URL of "${issue.title}": look for it in the repository before committing again.`);
+      if (!number) throw new Error(`${command.cli || 'The local backlog'} did not answer with the URL of "${issue.title}": look for it in the repository before committing again.`);
       issues.push({ number, url, ...issue });
     } catch (e) {
       // nothing filed yet: the card stays in Ready and the commit can be tried again
@@ -280,7 +283,7 @@ function simulatedExec({ backlogDir, projectId, platform, repo }) {
     const now = new Date().toISOString();
     data.issues = [
       { number, title: flag(args, '--title'), state: 'open', labels: flags(args, '--label').flatMap((l) => l.split(',')).map((name) => ({ name, color: null })), url, author: null, assignees: [], body, tasks: backlog.taskProgress(body), createdAt: now, updatedAt: now, pullRequests: [] },
-      ...(data.issues || []),
+      ...(data.issues || []).filter((i) => !i.local), // #35: the local backlog's issues stay in their own file
     ];
     fs.writeFileSync(path.join(backlogDir, `${path.basename(String(projectId))}.json`), JSON.stringify(data, null, 2));
     return `${url}\n`;

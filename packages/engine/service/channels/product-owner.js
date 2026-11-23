@@ -42,7 +42,7 @@ const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
 const { isArchived } = require('@craftorio/shared/backlog-archive');
 const { isRelease, stageCount } = require('@craftorio/shared/roadmap-model');
-const { requireObject } = require('../common');
+const { clientError, requireObject } = require('../common');
 const {
   productOwnerWorkflows,
   projectListing,
@@ -71,23 +71,29 @@ const onProject = (properties = {}, required = []) => args({ projectId: PROJECT_
 const AT = { type: ['string', 'integer'], description: 'An answer of the conversation (its time or index).' };
 // what filing on the platform answers (the Backlog synced again after a real filing, syncError when that failed)
 const FILED = OBJECT;
-// #25: a project with no repository has nothing to sync; the drawer translates this refusal (backlog-po.js chatError)
-const NO_REPOSITORY = 'This project has no repository: add its URL in Projects › Edit to file issues.';
-
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
-  // The synced backlog, its platform and the project: what every write to the platform needs.
+  // The synced backlog, its platform and the project: what every write to the platform needs. #35: a project with no
+  // repository works on its local backlog (repo null: the domain files into the workspace, never a CLI).
   const target = (projectId) => {
     const id = project(projectId);
-    const data = backlog.readBacklog(ctx.ws.backlog, id);
     const p = projects.readProject(ctx.ws.projects, id);
-    if (!data) throw new Error(p && !p.repo ? NO_REPOSITORY : 'Sync the backlog first: the Product Owner writes to the synced repository.');
+    const data = backlog.projectBacklog(ctx.ws.backlog, p);
+    if (!data) throw new Error('Sync the backlog first: the Product Owner writes to the synced repository.');
     const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
-    return { id, data, p, platform, repo: data.repo || p?.repo };
+    return { id, data, p, platform, repo: p?.repo ? data.repo || p.repo : null };
   };
-  // After a real write the Backlog shows the new or updated issues right away.
+  // #35: what only a platform does (several issues at once: a hot spot, a spec, a split, an epic); a local backlog
+  // files one draft at a time (po:file)
+  const platformTarget = (projectId) => {
+    const t = target(projectId);
+    if (!t.repo) throw clientError('The local backlog files one issue at a time: create each one from its draft, or add a repository in Projects › Edit.');
+    return t;
+  };
+  // After a real write the Backlog shows the new or updated issues right away (#35: a local backlog, read again).
   const resync = async (res, { id, p, platform }) => {
     if (res.preview) return res;
+    if (!p?.repo) return { ...res, backlog: ctx.withIssueRuns(backlog.projectBacklog(ctx.ws.backlog, p)) };
     try {
       return { ...res, backlog: ctx.withIssueRuns(await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform })) };
     } catch (e) {
@@ -109,8 +115,8 @@ module.exports = (ctx) => {
   // What every question to the Product Owner reads: the synced backlog, the runs, the workflows, its agent and budget.
   const askOptions = (id, simulated, chosen = null) => {
     const p = projects.readProject(ctx.ws.projects, id);
-    const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
-    if (!data) throw new Error(p && !p.repo ? NO_REPOSITORY : 'Sync the backlog first: the Product Owner reads the synced issues.');
+    const data = ctx.withIssueRuns(backlog.projectBacklog(ctx.ws.backlog, p)); // #35: or the local backlog
+    if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
     const settings = workspace.readSettings(ctx.ws);
     return {
       ...agentOptions(id, simulated, settings),
@@ -135,7 +141,7 @@ module.exports = (ctx) => {
   const numbersOf = (list) => [...new Set((Array.isArray(list) ? list : [list]).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
   const refs = (numbers) => numbers.map((n) => `#${n}`).join(', ');
   const syncedIssues = (id) => {
-    const issues = backlog.readBacklog(ctx.ws.backlog, id)?.issues;
+    const issues = backlog.projectBacklog(ctx.ws.backlog, projects.readProject(ctx.ws.projects, id))?.issues;
     if (!issues) throw new Error('Sync the backlog first: the Product Owner plans the synced issues.');
     return issues;
   };
@@ -343,7 +349,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'index', 'preview'],
       schema: { params: onProject({ at: AT, index: INT, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, index, preview }) => {
-        const t = target(projectId);
+        const t = platformTarget(projectId);
         const res = await productOwner.fileDecongest({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, index, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
@@ -358,7 +364,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'preview'],
       schema: { params: onProject({ at: AT, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, preview }) => {
-        const t = target(projectId);
+        const t = platformTarget(projectId);
         const res = await productOwner.fileSpec({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
@@ -371,7 +377,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'split', 'preview'],
       schema: { params: onProject({ at: AT, split: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, split, preview }) => {
-        const t = target(projectId);
+        const t = platformTarget(projectId);
         const res = await productOwner.applySplit({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273
@@ -386,7 +392,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'key', 'epic', 'issues', 'preview'],
       schema: { params: onProject({ at: AT, key: ANY, epic: ANY, issues: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, key, epic, issues, preview }) => {
-        const t = target(projectId);
+        const t = platformTarget(projectId);
         const res = await productOwner.applyEpicProposal({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, key, epic, issues, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
           issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328

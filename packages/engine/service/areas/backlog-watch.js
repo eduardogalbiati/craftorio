@@ -14,7 +14,14 @@ const path = require('path');
 
 const DEBOUNCE_MS = 300;
 // <project id>[.<kind>].json; .bak and .tmp files (packages/engine/domains/workspace/state-file.js) are not the data
-const KINDS = ['local', 'queue', 'refresh', 'roadmap'];
+// #35: local-issues, the local backlog (else 'proj.local-issues.json' would be read as project 'proj.local-issues')
+const KINDS = [
+  'local',
+  'local-issues',
+  'queue',
+  'refresh',
+  'roadmap',
+];
 
 // 'proj.roadmap.json' → { projectId: 'proj', file: 'roadmap' }; 'proj.json' → { projectId: 'proj', file: 'issues' }
 function parseBacklogFile(name) {

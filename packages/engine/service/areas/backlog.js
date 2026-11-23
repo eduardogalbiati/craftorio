@@ -106,6 +106,7 @@ module.exports = (ctx) => {
     if (!refreshes.isRefreshRun({ file: run.file }) || !run.projectId || run.mock) return;
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, run.projectId);
+    if (!project.repo) return; // #35: a local backlog, nothing to sync
     const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || platformOrDefault(run.inputs?.git_platform).id;
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
@@ -128,7 +129,8 @@ module.exports = (ctx) => {
     }
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
-    const data = backlog.readBacklog(ws.backlog, project.id);
+    // #35: a project with no repository plans from its local backlog
+    const data = backlog.projectBacklog(ws.backlog, project);
     if (!data) throw new Error('Sync the backlog first.');
     // in the order they were selected; only open issues
     const open = (list) => [...new Set((list || []).map(Number))].map((n) => data.issues.find((i) => i.number === n)).filter((i) => i?.state === 'open');
@@ -164,8 +166,8 @@ module.exports = (ctx) => {
     if (allowKeptWork) for (const x of added.items) ctx.allowKeptWork(project.id, x.id);
     const answer = runNow ? await ctx.startRoadmap({ projectId: project.id, simulated: false, stage: added.id, ask }) : null;
     // #805: the stage is planned; its Start waits for the person's answer on the Roadmap (`stage`: the one to start)
-    if (answer?.confirm) return { ...withIssueRuns(backlog.readBacklog(ws.backlog, project.id)), ...answer, stage: added.id };
-    return runNow ? answer : withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
+    if (answer?.confirm) return { ...withIssueRuns(backlog.projectBacklog(ws.backlog, project)), ...answer, stage: added.id };
+    return runNow ? answer : withIssueRuns(backlog.projectBacklog(ws.backlog, project));
   }
 
   // Issue tracker (#81) and epics (#138): the created issues join the existing epic the analyzer
@@ -176,7 +178,8 @@ module.exports = (ctx) => {
     const plan = epics.filedToEpic({ workflow: run.wf.metadata?.name, status: ev.status, steps: run.ctx.steps });
     if (!plan || !run.projectId || run.mock) return;
     const project = projects.readProject(ws.projects, run.projectId);
-    if (!project?.autoEpic) return;
+    // #35: a local backlog has no epics on a platform
+    if (!project?.autoEpic || !project.repo) return;
     const platform = platformOrDefault(run.inputs.git_platform).id;
     const synced = await backlog.syncBacklog({ dir: ws.backlog, project, platform });
     const list = synced?.epics || backlog.readBacklog(ws.backlog, project.id)?.epics || [];

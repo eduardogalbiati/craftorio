@@ -2,9 +2,12 @@
 // issue with the runs working on it), Assign into the roadmap (#446) and the local merges not pushed, and
 // saving a Write & Review document back to its issue, archiving and restoring issues (#238).
 // E2E hook (simulation only): CRAFTORIO_E2E_ISSUES_FAIL=disabled|network (#845, e2eIssuesFail).
+// #35: a project with no remote has a local backlog: New issue / edit / close, archive and restore of its issues stay
+// in the workspace, its sync reads nothing; backlog:file-local files them once a repository was added.
 
 const path = require('path');
 const backlog = require('../../domains/backlog/backlog');
+const localBacklog = require('../../domains/backlog/local-backlog');
 const refreshes = require('../../domains/backlog/backlog-refresh');
 const simulation = require('../../engine/simulation');
 const projects = require('../../domains/project/projects');
@@ -44,7 +47,22 @@ const PROGRESS = nullable(shape({ source: STRING, what: STRING, read: nullable(I
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
-  const current = (projectId) => ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, projectId));
+  const projectOf = (id) => projects.listProjects(ctx.ws.projects).find((p) => p.id === id) || null;
+  // #35: a project with no repository answers its local backlog (empty at first), never null
+  const current = (projectId) => ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, projectId) || backlog.projectBacklog(ctx.ws.backlog, projectOf(project(projectId))));
+  // #35: the local issue's New issue / edit / close: written to the workspace, nothing sent anywhere
+  const localChange = (projectId, fn) => {
+    const id = project(projectId);
+    if (!projectOf(id)) throw clientError(`Project not found: ${projectId}`);
+    fn(id);
+    return current(id);
+  };
+  // #35: which of `numbers` are local issues (archived and restored in the workspace) and which are the platform's
+  const splitLocal = (id, numbers) => {
+    const own = new Set((localBacklog.readLocalIssues(ctx.ws.backlog, id) || []).map((i) => i.number));
+    const list = (numbers || []).map(Number);
+    return { mine: list.filter((n) => own.has(n)), theirs: list.filter((n) => !own.has(n)) };
+  };
   // where a platform write goes: the synced backlog's platform and repository (else the project's);
   // simulation-only, or `simulate` (scripts/screenshot.js), answers every CLI call with nothing
   const platformTarget = (projectId, simulate) => {
@@ -120,10 +138,13 @@ module.exports = (ctx) => {
         const proj = projects.readProject(ctx.ws.projects, id);
         const asked = platform || workspace.readSettings(ctx.ws).backlogPlatform;
         const source = backlog.platformOf(proj, asked);
+        const e2e = e2eIssuesFail(proj);
+        // #35: no repository, no platform: the local backlog as it is (no git fetch, no PR read)
+        if (!proj.repo && !e2e) return current(id);
         progress.set(id, { source, what: 'issues', read: 0, total: null });
         try {
           const [data] = await Promise.all([
-            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, followed: !!followed, onProgress: (p) => progress.set(id, { source, ...p }), ...e2eIssuesFail(proj) }),
+            backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: asked, followed: !!followed, onProgress: (p) => progress.set(id, { source, ...p }), ...e2e }),
             ctx.refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
           ]);
           await ctx.syncWaitingPrs(id); // #797
@@ -250,8 +271,11 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, numbers: NUMBERS, simulate: FLAG }, ['projectId']), result: PER_ISSUE },
       fn: async ({ projectId, numbers, simulate }) => {
         const id = project(projectId);
-        const { results } = await backlog.archiveIssues({ ...platformTarget(id, simulate), numbers, issues: current(id)?.issues || [], dir: ctx.ws.backlog, projectId: id });
-        return { results, backlog: current(id) };
+        const issues = current(id)?.issues || [];
+        const { mine, theirs } = splitLocal(id, numbers);
+        const own = localBacklog.archiveLocalIssues(ctx.ws.backlog, id, { numbers: mine, issues }).results;
+        const { results } = theirs.length ? await backlog.archiveIssues({ ...platformTarget(id, simulate), numbers: theirs, issues, dir: ctx.ws.backlog, projectId: id }) : { results: [] };
+        return { results: [...own, ...results], backlog: current(id) };
       },
     },
     {
@@ -261,8 +285,61 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, numbers: NUMBERS, simulate: FLAG }, ['projectId']), result: PER_ISSUE },
       fn: async ({ projectId, numbers, simulate }) => {
         const id = project(projectId);
-        const { results } = await backlog.restoreIssues({ ...platformTarget(id, simulate), numbers, dir: ctx.ws.backlog, projectId: id });
-        return { results, backlog: current(id) };
+        const { mine, theirs } = splitLocal(id, numbers);
+        const own = localBacklog.restoreLocalIssues(ctx.ws.backlog, id, { numbers: mine }).results;
+        const { results } = theirs.length ? await backlog.restoreIssues({ ...platformTarget(id, simulate), numbers: theirs, dir: ctx.ws.backlog, projectId: id }) : { results: [] };
+        return { results: [...own, ...results], backlog: current(id) };
+      },
+    },
+    // #35: the local backlog of a project with no remote (packages/engine/domains/backlog/local-backlog.js): New issue,
+    // edit and close write to the workspace (simulation-only too: nothing leaves the machine); each answers the Backlog
+    {
+      channel: 'backlog:create-issue',
+      method: 'createBacklogIssue',
+      params: ['projectId', 'title', 'body', 'labels'],
+      schema: { params: args({ projectId: PROJECT_ID, title: STRING, body: nullable(STRING), labels: nullable(listOf(STRING)) }, ['projectId', 'title']), result: BACKLOG },
+      fn: ({ projectId, title, body, labels }) => localChange(projectId, (id) => {
+        const taken = (backlog.readBacklog(ctx.ws.backlog, id)?.issues || []).map((i) => i.number);
+        localBacklog.createLocalIssue(ctx.ws.backlog, id, { title, body: body || '', labels: labels || [], taken });
+      }),
+    },
+    {
+      channel: 'backlog:update-issue',
+      method: 'updateBacklogIssue',
+      params: ['projectId', 'number', 'title', 'body'],
+      schema: { params: args({ projectId: PROJECT_ID, number: ISSUE_NUMBER, title: nullable(STRING), body: nullable(STRING) }, ['projectId', 'number']), result: BACKLOG },
+      fn: ({ projectId, number, title, body }) => localChange(projectId, (id) => localBacklog.updateLocalIssue(ctx.ws.backlog, id, Number(number), { title, body })),
+    },
+    {
+      channel: 'backlog:close-issue',
+      method: 'closeBacklogIssue',
+      params: ['projectId', 'number'],
+      schema: { params: args({ projectId: PROJECT_ID, number: ISSUE_NUMBER }, ['projectId', 'number']), result: BACKLOG },
+      fn: ({ projectId, number }) => localChange(projectId, (id) => localBacklog.closeLocalIssue(ctx.ws.backlog, id, Number(number))),
+    },
+    // #35: a repository added later: the local issues are kept until the owner files them on its platform. `preview`
+    // names them and the commands and runs nothing; a filing (the owner's click; refused in simulation-only) runs
+    // one create per issue, drops the filed ones from the local backlog and syncs.
+    {
+      channel: 'backlog:file-local',
+      method: 'fileLocalIssues',
+      params: ['projectId', 'preview'],
+      schema: {
+        params: args({ projectId: PROJECT_ID, preview: FLAG }, ['projectId']),
+        result: shape({ preview: BOOL, issues: listOf(shape({ number: ISSUE_NUMBER, title: STRING, command: STRING, url: ANY, error: ANY }, ['number'])), backlog: BACKLOG }, ['preview', 'issues']),
+      },
+      fn: async ({ projectId, preview }) => {
+        const id = project(projectId);
+        const proj = projectOf(id);
+        if (!proj) throw clientError(`Project not found: ${projectId}`);
+        if (!proj.repo) throw clientError('Add a repository in Projects › Edit first: the local issues are filed there.');
+        if (!preview) simulation.refuseReal('filing the local issues on GitHub/GitLab');
+        const target = { platform: backlog.platformOf(proj, workspace.readSettings(ctx.ws).backlogPlatform), repo: proj.repo };
+        const out = await localBacklog.fileLocalIssues({ dir: ctx.ws.backlog, projectId: id, ...target, preview: preview !== false });
+        if (!out.preview && out.issues.some((i) => i.url)) {
+          await backlog.syncBacklog({ dir: ctx.ws.backlog, project: proj, platform: target.platform }).catch((e) => console.error('backlog sync after filing:', e.message));
+        }
+        return { ...out, backlog: current(id) };
       },
     },
   ];

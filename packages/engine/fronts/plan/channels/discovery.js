@@ -268,27 +268,29 @@ module.exports = (ctx) => {
       fn: async ({ projectId, cardId, split, preview }) => {
         committable(projectId, cardId);
         const id = path.basename(String(projectId));
-        const data = backlog.readBacklog(ctx.ws.backlog, id);
-        if (!data) throw new Error('Sync the backlog first: a commit files its issues on the synced repository.');
         const project = projects.readProject(ctx.ws.projects, id);
+        // #35: a project with no repository commits into its local backlog (no CLI, no sync, simulated or not)
+        const data = backlog.projectBacklog(ctx.ws.backlog, project);
+        if (!data) throw new Error('Sync the backlog first: a commit files its issues on the synced repository.');
         const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
-        const repo = data.repo || project?.repo;
+        const repo = project?.repo ? data.repo || project.repo : null;
+        const local = repo ? {} : { backlogDir: ctx.ws.backlog };
         const simulated = simulation.simulationOnly();
         const issuesLanguage = Language.issuesLanguage(workspace.readSettings(ctx.ws)); // #328
-        if (preview && !simulated) return commits.commitCard({ dir: dir(), projectId, cardId, split, platform, repo, preview: true, issuesLanguage });
+        if (preview && !simulated) return commits.commitCard({ dir: dir(), projectId, cardId, split, platform, repo, preview: true, issuesLanguage, ...local });
         const key = `${id}/${cardId}`;
         if (committing.has(key)) throw new Error('This card is being committed: its issues are being filed.');
         committing.add(key);
         let res;
         try {
           res = await commits.commitCard({
-            dir: dir(), projectId, cardId, split, platform, repo, by: owner(), issuesLanguage,
-            ...(simulated ? { exec: commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: id, platform, repo }) } : {}),
+            dir: dir(), projectId, cardId, split, platform, repo, by: owner(), issuesLanguage, ...local,
+            ...(simulated && repo ? { exec: commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: id, platform, repo }) } : {}),
           });
         } finally {
           committing.delete(key);
         }
-        if (simulated) return { ...res, simulated };
+        if (simulated || !repo) return { ...res, simulated };
         // after a real filing the Backlog shows the new issues right away
         try {
           await backlog.syncBacklog({ dir: ctx.ws.backlog, project, platform });

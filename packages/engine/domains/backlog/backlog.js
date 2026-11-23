@@ -22,12 +22,15 @@
 // Archive (#238): `archiveIssues` closes issues as not planned with the `archived` label (guards:
 // packages/shared/backlog-archive.js), `restoreIssues` reopens them.
 // The platform CLI helpers and the issue copies live in packages/engine/domains/backlog/issues.js (re-exported here, #345).
+// #35: a project with no repository has a local backlog (local-backlog.js): readBacklog joins its issues, syncBacklog
+// answers it without a CLI, projectBacklog never answers null for such a project.
 // Screen: fronts/build/views/backlog/backlog.js; channels: packages/engine/service/channels/backlog.js.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { readEpics } = require('./epics');
+const localIssues = require('./local-backlog');
 const {
   DEFAULT_PLATFORM,
   MAX_ISSUES,
@@ -124,9 +127,27 @@ const cacheFile = (dir, projectId) => path.join(dir, `${path.basename(String(pro
 /** #745: the platform a project syncs with: its own (projectPlatform), else `fallback`, else GitHub. */
 const platformOf = (project, fallback = null) => projectPlatform(project)?.id || fallback || DEFAULT_PLATFORM;
 
-/** The last sync of a project, or null. */
-function readBacklog(dir, projectId) {
+// The synced cache alone (what a write to it starts from), or null.
+function readCache(dir, projectId) {
   try { return JSON.parse(fs.readFileSync(cacheFile(dir, projectId), 'utf8')); } catch { return null; }
+}
+
+/**
+ * The last sync of a project, or null. #35: with the local backlog's issues (local-backlog.js) after the synced
+ * ones; a project with local issues and no sync (no repository, or one added later) answers its local backlog.
+ */
+function readBacklog(dir, projectId) {
+  const cache = readCache(dir, projectId);
+  const own = localIssues.readLocalIssues(dir, projectId);
+  if (!own) return cache;
+  if (!cache) return localIssues.localBacklog(projectId, own);
+  return { ...cache, issues: [...(cache.issues || []), ...own] };
+}
+
+/** #35: readBacklog, or an empty local backlog for a project with no repository (never null for one). */
+function projectBacklog(dir, project) {
+  if (!project) return null;
+  return readBacklog(dir, project.id) || (project.repo ? null : localIssues.localBacklog(project.id));
 }
 
 /**
@@ -138,7 +159,8 @@ function readBacklog(dir, projectId) {
  * @param {{ dir: string, project: { id: string, repo?: string }, platform: string, exec?: Function, onProgress?: Function, followed?: boolean }} opts
  */
 async function syncBacklog({ dir, project, platform: asked, exec, onProgress, followed = false }) {
-  if (!project.repo) throw new Error('This project has no repository. Add one in Projects to sync its issues.');
+  // #35: a project with no repository has its local backlog, nothing to read from a platform
+  if (!project.repo) return projectBacklog(dir, project);
   // #745: the project's platform (its host, or the one stored on it) wins over the one asked
   const platform = platformOf(project, asked);
   // the issues are what the screen needs: PRs that cannot be read leave a note, not an error
@@ -323,7 +345,7 @@ function issueAppendBody({ original = '', addition, date = new Date(), timeZone 
 
 /** Replaces one issue in a project's cache (its pull requests are kept); returns the cache, or null without one. */
 function updateCachedIssue(dir, projectId, issue) {
-  const data = readBacklog(dir, projectId);
+  const data = readCache(dir, projectId);
   if (!data) return null;
   data.issues = (data.issues || []).map((i) => (i.number === issue.number ? { ...i, ...issue, pullRequests: i.pullRequests || [] } : i));
   fs.writeFileSync(cacheFile(dir, projectId), JSON.stringify(data, null, 2));
@@ -341,7 +363,7 @@ const sameLabel = (l, name) => String(l?.name ?? l).toLowerCase() === name;
 const notAnIssue = (n) => (Number.isInteger(n) && n > 0 ? null : `Not an issue number: ${n}`);
 
 function patchCachedIssue(dir, projectId, number, fn) {
-  const issue = dir && projectId ? readBacklog(dir, projectId)?.issues?.find((i) => i.number === number) : null;
+  const issue = dir && projectId ? readCache(dir, projectId)?.issues?.find((i) => i.number === number) : null;
   if (issue) updateCachedIssue(dir, projectId, fn(issue));
 }
 
@@ -534,6 +556,9 @@ async function saveRunToIssue({ run, mode = 'replace', preview = false, platform
   return out;
 }
 
+// "Issue: <url>" before an issue's body; #35: a local issue has no URL, so no line
+const issueLine = (i) => (i.url ? `Issue: ${i.url}\n\n` : '');
+
 // The task of a group: every issue (title, URL and body) in the order selected, shipped together.
 function groupTask(issues) {
   const refs = issues.map((i) => `#${i.number}`).join(', ');
@@ -541,7 +566,7 @@ function groupTask(issues) {
     `Implement these ${issues.length} issues together (${refs}).`,
     'They ship together in one branch and one PR/MR that closes every one of them. Account for each issue: '
       + 'say what was done for each one, and if one cannot be done, say which and why (never drop it silently).',
-    ...issues.map((i, n) => `## ${n + 1}. #${i.number} ${i.title}\n\nIssue: ${i.url}\n\n${i.body || ''}`.trim()),
+    ...issues.map((i, n) => `## ${n + 1}. #${i.number} ${i.title}\n\n${issueLine(i)}${i.body || ''}`.trim()),
   ].join('\n\n');
 }
 
@@ -566,12 +591,12 @@ function runInputs(item, wf, folder, projectDefaults = null) {
     }
   }
   const issues = itemIssues(item);
-  if (defs.task) inputs.task = issues.length > 1 ? groupTask(issues) : `${item.title}\n\nIssue: ${item.url}\n\n${item.body || ''}`.trim();
+  if (defs.task) inputs.task = issues.length > 1 ? groupTask(issues) : `${item.title}\n\n${issueLine(item)}${item.body || ''}`.trim();
   for (const [k, def] of Object.entries(defs)) {
     if (k !== 'task' && (def.type || 'string') === 'string' && /path|dir/i.test(k) && !inputs[k] && folder) inputs[k] = folder;
   }
-  if (defs.issue) inputs.issue = item.url;
-  if (defs.issues) inputs.issues = issues.map((i) => i.url);
+  if (defs.issue && item.url) inputs.issue = item.url;
+  if (defs.issues) inputs.issues = issues.map((i) => i.url).filter(Boolean);
   return inputs;
 }
 
@@ -649,7 +674,10 @@ module.exports = {
   issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,
+  localCreateCommand: localIssues.localCreateCommand,
+  localSaveCommand: localIssues.localSaveCommand,
   prCommentCommand,
+  projectBacklog,
   readIssueSaves,
   recordedIssues,
   repoLabels,

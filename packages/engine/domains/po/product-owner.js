@@ -1235,38 +1235,38 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
     body = createBody(issue.draft, issuesLanguage);
     let labels = issue.draft.labels;
     // gh refuses a label the repository does not have: file without it and say so
-    const names = preview ? null : await backlog.repoLabels({ platform, repo, exec });
+    const names = preview || !repo ? null : await backlog.repoLabels({ platform, repo, exec });
     if (names) { skippedLabels = labels.filter((l) => !names.includes(l)); labels = labels.filter((l) => names.includes(l)); }
-    file = path.join(dir, `${stamp}-new.md`);
-    command = backlog.issueCreateCommand({ platform, repo, title: issue.draft.title, labels, file, text: body });
+    file = path.join(dir, `${stamp}-new.md`); // #35: no repository, the local backlog (local-backlog.js) instead of a CLI
+    command = (repo ? backlog.issueCreateCommand : backlog.localCreateCommand)({ dir: backlogDir, projectId, platform, repo, title: issue.draft.title, labels, file, text: body });
   } else {
     target = Number(number) || issue.existingIssue;
     if (!target) throw new Error('Pick the issue to add to.');
     const addition = issue.existingIssue === target && issue.addition ? issue.addition : issue.draft ? `### ${issue.draft.title}\n\n${issue.draft.body}` : '';
     if (!addition) throw new Error('There is nothing to add yet.');
     if (action === 'comment') body = `${addition}\n`;
-    else body = backlog.issueAppendBody({ original: preview ? cached?.body : (await backlog.fetchIssue({ platform, repo, number: target, exec })).body, addition, timeZone });
+    else body = backlog.issueAppendBody({ original: preview || !repo ? cached?.body : (await backlog.fetchIssue({ platform, repo, number: target, exec })).body, addition, timeZone });
     file = path.join(dir, `${stamp}-${target}.md`);
-    command = backlog.issueSaveCommand({ platform, repo, number: target, mode: action === 'comment' ? 'comment' : 'replace', file, text: body });
+    command = (repo ? backlog.issueSaveCommand : backlog.localSaveCommand)({ dir: backlogDir, projectId, platform, repo, number: target, mode: action === 'comment' ? 'comment' : 'replace', file, text: body });
   }
   const out = { preview: !!preview, action, command: command.display, body };
   const epic = action === 'create' && placeEpic && issue.draft?.epic ? (epicList || []).find((e) => e.id === issue.draft.epic) : null;
   if (preview) {
     const filed = { action, number: target, preview: true, draft: at, command: command.display, ...(epic ? { epic: epic.id } : {}) };
-    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: `**Preview** (simulated): nothing was filed. The app would run \`${command.display}\`${epic ? `, then place the issue in the epic ${epic.id} ${epic.title}` : ''}.`, filed });
+    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: `**Preview** (simulated): nothing was filed. The app would ${command.local ? command.display : `run \`${command.display}\``}${epic ? `, then place the issue in the epic ${epic.id} ${epic.title}` : ''}.`, filed });
     return { ...out, filed, message, messages: readConversation(backlogDir, projectId) };
   }
   // gh reads the body from it; for glab it is the record of what was sent
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, body);
-  const stdout = String(await exec(command.cli, command.args) || '');
+  const stdout = String(await (command.run ? command.run() : exec(command.cli, command.args)) || '');
   const url = stdout.match(/https?:\/\/\S+/)?.[0] || null;
   let filed;
   let text;
   if (action === 'create') {
-    const n = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
-    filed = { action, number: n, url, title: issue.draft.title, draft: at, labels: issue.draft.labels.filter((l) => !skippedLabels.includes(l)) };
-    text = `Filed ${n ? `[#${n}](${url})` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
+    const n = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || (command.local && Number(stdout)) || null;
+    filed = { action, number: n, url, title: issue.draft.title, draft: at, labels: issue.draft.labels.filter((l) => !skippedLabels.includes(l)), ...(command.local ? { local: true } : {}) };
+    text = `Filed ${n && url ? `[#${n}](${url})` : n ? `#${n} in the local backlog` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
     if (epic && n) {
       try {
         await epics.applyEpic({ platform, repo, epic: { id: epic.id }, issues: [n], epics: epicList, dir, issuesLanguage, exec });
