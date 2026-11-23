@@ -1707,14 +1707,8 @@ Then("no analysis of the wizard is left waiting without saying why", async ({ e2
 //   or the entry is left out; with none it stays as before;
 // - next-step-screenshots: absent for a backend project, or disabled with a no-interface reason
 //   ("projeto sem interface" in Portuguese); frontend / full-stack projects keep it.
-const { FEATURE } = require('../support/workflows');
-// the Feature variants of step 3 by their label (packages/shared/onboarding-model.js VARIANTS)
-const FEATURE_VARIANTS = {
-  'Local merge · code first': 'local-code',
-  'Local merge · E2E first': 'local-e2e',
-  'Remote · code first': 'remote-code',
-  'Remote · E2E first': 'remote-e2e',
-};
+// the Feature variants of step 3 by their label: features/support/workflows.js
+const { FEATURE, FEATURE_VARIANTS } = require('../support/workflows');
 const NO_INTERFACE = /no (user )?interface|without (an? |a user )?interface|no UI\b|sem interface/i;
 
 async function seedOnboardedProject(e2e, name, { kind, variant = 'local-e2e', idea = null }) {

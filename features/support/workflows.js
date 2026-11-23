@@ -27,6 +27,15 @@ const REMOTE = { mode: 'remote' };
 const FORK = { mode: 'fork' };
 const VALIDATED = { validation: 'validated' };
 
+// #29: the Feature variants of the wizard's step 3 by their label (packages/shared/onboarding-model.js
+// VARIANTS), named once for every step that records one on a project
+const FEATURE_VARIANTS = {
+  'Local merge · code first': 'local-code',
+  'Local merge · E2E first': 'local-e2e',
+  'Remote · code first': 'remote-code',
+  'Remote · E2E first': 'remote-e2e',
+};
+
 // the workflow file of a name, a display title or a file: "feature", "Feature", "feature.yaml",
 // "Test backfill" -> "feature.yaml" / "test-backfill.yaml"
 function fileOf(name) {
@@ -36,6 +45,7 @@ function fileOf(name) {
 
 module.exports = {
   FEATURE,
+  FEATURE_VARIANTS,
   FORK,
   LOCAL,
   REMOTE,

@@ -128,12 +128,7 @@ Then('the stations of the roadmap item {string} are {string}', async ({ e2e }, t
 
 // the Feature variant of step 3 by its label (packages/shared/onboarding-model.js VARIANTS), recorded on
 // the demo project as the wizard's Finish does; then the app reloads, as the project's workflows do
-const FEATURE_VARIANTS = {
-  'Local merge · code first': 'local-code',
-  'Local merge · E2E first': 'local-e2e',
-  'Remote · code first': 'remote-code',
-  'Remote · E2E first': 'remote-e2e',
-};
+const { FEATURE_VARIANTS } = workflows;
 
 Given("the demo project's Feature workflow is {string}", async ({ e2e }, label) => {
   expect(Object.keys(FEATURE_VARIANTS), `a Feature variant labelled "${label}"`).toContain(label);
