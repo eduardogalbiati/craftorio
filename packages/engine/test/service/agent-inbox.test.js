@@ -178,6 +178,8 @@ test('a plan request on a project whose backlog is not synced fails and says to 
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-inbox-unsynced-'));
   t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
   const p = await api['projects:create']({ name: 'demo', folder });
+  // #25: a repository that was never synced (a project with no repository at all is refused as such, below)
+  await api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/acme/demo' } });
   const out = await api['po:request']({ projectId: p.id, kind: 'plan', params: { question: 'Plan it' }, from: 'oracle', ref: 'plan-unsynced', mock: true });
   assert.equal(out.ok, false);
   assert.match(out.error, /Sync the backlog/);
