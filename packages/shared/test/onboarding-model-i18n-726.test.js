@@ -158,6 +158,16 @@ test('#726 ciChoice: the reason of each CI is an i18n key translated in pt-BR, d
   assertTranslated(load().ciChoice(null).reason, 'ciChoice\'s reason with no profile');
 });
 
+// #29: code first means the developer implements first, then the tests are written
+test('#29 the feature reason of a unit-tests-only profile says it implements first, then writes the tests', () => {
+  for (const mode of ['local', 'remote']) {
+    const r = suggestion({ mode, ci: 'none', tests: 'unit' }, 'feature').reason;
+    assert.equal(keysOf(r).includes('onboarding.why_feature_unit'), true, `${mode}: the reason holds why_feature_unit`);
+    assert.match(resolve(r, 'en'), /implements first, then writes the unit tests/);
+    assert.match(resolve(r, 'pt-BR'), /implementa primeiro e depois escreve os testes/);
+  }
+});
+
 // ---- 3. the choices and the profile's labels ---------------------------------------------------------
 
 test('#726 every choice label (feature, fix, release, CI) is an i18n key translated in pt-BR', () => {

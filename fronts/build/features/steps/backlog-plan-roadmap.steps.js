@@ -18,6 +18,7 @@
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('../../../../features/steps/fixtures');
+const workflows = require('../../../../features/support/workflows');
 
 const LOAD_TIMEOUT = 30000;
 
@@ -55,6 +56,20 @@ When('I add the issues to the roadmap from the Assign dialog', async ({ e2e }) =
   await add.click();
   await expect(assignDialog(page)).toBeHidden({ timeout: LOAD_TIMEOUT });
   await expect(page.getByTestId('roadmap-stage').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+// #29: the chosen workflow, by its display title (the select labelled "Workflow", exists)
+Then('the Assign dialog has the {string} workflow chosen', async ({ e2e }, title) => {
+  const select = assignDialog(e2e.window).getByRole('combobox', { name: 'Workflow', exact: true });
+  await expect(select).toHaveValue(workflows.fileOf(title), { timeout: LOAD_TIMEOUT });
+});
+
+// #29: the one-line description under the workflow select: data-testid="assign-wf-desc" (NEW: today only
+// the element id is assign-wf-desc); it says something, and not the given words
+Then("the Assign dialog's workflow description does not say {string}", async ({ e2e }, words) => {
+  const desc = assignDialog(e2e.window).getByTestId('assign-wf-desc');
+  await expect(desc).toHaveText(/\S/, { timeout: LOAD_TIMEOUT });
+  await expect(desc).not.toContainText(words, { ignoreCase: true });
 });
 
 // ---- the new last stage ----------------------------------------------------------------------------

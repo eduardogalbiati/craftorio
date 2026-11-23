@@ -100,6 +100,53 @@ Then('the last station of the roadmap item {string} is {string}', async ({ e2e }
   await expect(last).toContainText(STATIONS[name].text);
 });
 
+// ---- #29: a code-first item runs the developer before the tests ---------------------------------
+// The test order of feature.yaml (inputs.test_order) by its option label. The stations are read from
+// data-step (the workflow's group names, untranslated), in the order the card draws them.
+
+const TEST_ORDERS = { 'E2E first': 'e2e_first', 'Code first': 'code_first' };
+
+// as the existing seed above, in Local mode (Automatic: no owner's gate), with the item's test order
+Given('the roadmap plans the item {string} on the workflow {string} with the test order {string}', async ({ e2e }, title, name, label) => {
+  expect(Object.keys(TEST_ORDERS), `a test order labelled "${label}"`).toContain(label);
+  editRoadmap(e2e, (r) => {
+    const item = seedItem(e2e, r, 3970, title, { workflow: workflows.fileOf(name), workflowName: name, inputs: { ...workflows.LOCAL, test_order: TEST_ORDERS[label] } });
+    Object.assign(r, {
+      state: 'planned', simulated: true, pausedBy: null, error: null, scope: null, budget: null, live: false,
+      stages: [{ id: 'stage-test-order', name: 'Test order', note: '', items: [item] }],
+    });
+  });
+});
+
+// "Develop, Tests, Review, Validate, Merge": every station of the card, in this order
+Then('the stations of the roadmap item {string} are {string}', async ({ e2e }, title, list) => {
+  const expected = list.split(',').map((s) => s.trim()).filter(Boolean);
+  const stations = roadmapItem(e2e.window, title).getByTestId('roadmap-pipeline').getByTestId('roadmap-station');
+  await expect(stations.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => stations.evaluateAll((els) => els.map((el) => el.getAttribute('data-step'))), { message: `the stations of "${title}"`, timeout: LOAD_TIMEOUT }).toEqual(expected);
+});
+
+// the Feature variant of step 3 by its label (packages/shared/onboarding-model.js VARIANTS), recorded on
+// the demo project as the wizard's Finish does; then the app reloads, as the project's workflows do
+const FEATURE_VARIANTS = {
+  'Local merge · code first': 'local-code',
+  'Local merge · E2E first': 'local-e2e',
+  'Remote · code first': 'remote-code',
+  'Remote · E2E first': 'remote-e2e',
+};
+
+Given("the demo project's Feature workflow is {string}", async ({ e2e }, label) => {
+  expect(Object.keys(FEATURE_VARIANTS), `a Feature variant labelled "${label}"`).toContain(label);
+  const projects = require(enginePath('domains', 'project', 'projects'));
+  const variant = FEATURE_VARIANTS[label];
+  projects.updateProject(path.join(e2e.scratch, 'workspace', 'projects'), e2e.project.id, {
+    workflows: [{ name: workflows.FEATURE.name, origin: 'bundled', category: 'build', variant }],
+    defaultWorkflow: workflows.FEATURE.name,
+  });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
 // ---- #804: Skip says what starts next and can leave the roadmap paused --------------------------
 
 const refused = (e2e, r, title) => seedItem(e2e, r, 3980, title, { error: 'The start was refused.' });

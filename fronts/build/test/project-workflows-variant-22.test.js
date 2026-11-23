@@ -66,6 +66,14 @@ test('#22 a feature card with the local-code variant never shows a "Tests first"
   assert.equal(TESTS_FIRST.test(saysOf(feature).replace('Local merge · code first', '')), false, `no "Tests first" description: ${says}`);
 });
 
+// #29: code first means the developer codes first; the card says the acceptance tests come after the code
+test('#29 a feature card with the local-code variant says the code comes first and the acceptance tests after it', { timeout: 20000 }, async () => {
+  const app = await overviewWith({ feature: 'local-code' });
+  const says = saysOf(cardOf(app, 'feature')).replace('Local merge · code first', '');
+  assert.equal(/developer writes the code/i.test(says), true, `the developer codes first: ${says}`);
+  assert.equal(/acceptance tests are written after/i.test(says), true, `the acceptance tests come after the code: ${says}`);
+});
+
 test('#22 a feature card with the local-e2e variant never shows a "code first" description', { timeout: 20000 }, async () => {
   const app = await overviewWith({ feature: 'local-e2e' });
   const says = saysOf(cardOf(app, 'feature'));
