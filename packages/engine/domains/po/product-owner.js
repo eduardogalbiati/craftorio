@@ -79,6 +79,7 @@ const path = require('path');
 const agentInbox = require('../agents/agent-inbox');
 const agentsUsage = require('../agents/agents-usage');
 const backlog = require('../backlog/backlog');
+const { filedIssue } = require('../backlog/local-backlog');
 const { isArchived } = require('@craftorio/shared/backlog-archive');
 const costEstimate = require('../usage/cost-estimate');
 const DefaultWorkflow = require('@craftorio/shared/default-workflow');
@@ -1234,12 +1235,10 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
   // gh reads the body from it; for glab it is the record of what was sent
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, body);
-  const stdout = String(await (command.run ? command.run() : exec(command.cli, command.args)) || '');
-  const url = stdout.match(/https?:\/\/\S+/)?.[0] || null;
+  const { url, number: n } = filedIssue(await (command.run ? command.run() : exec(command.cli, command.args)), command);
   let filed;
   let text;
   if (action === 'create') {
-    const n = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || (command.local && Number(stdout)) || null;
     filed = { action, number: n, url, title: issue.draft.title, draft: at, labels: issue.draft.labels.filter((l) => !skippedLabels.includes(l)), ...(command.local ? { local: true } : {}) };
     text = `Filed ${n && url ? `[#${n}](${url})` : n ? `#${n} in the local backlog` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
     if (epic && n) {

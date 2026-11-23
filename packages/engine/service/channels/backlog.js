@@ -67,7 +67,7 @@ module.exports = (ctx) => {
   // simulation-only, or `simulate` (scripts/screenshot.js), answers every CLI call with nothing
   const platformTarget = (projectId, simulate) => {
     const data = backlog.readBacklog(ctx.ws.backlog, projectId);
-    const proj = projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId);
+    const proj = projectOf(projectId);
     return {
       platform: backlog.platformOf(proj, data?.platform || workspace.readSettings(ctx.ws).backlogPlatform),
       repo: data?.repo || proj?.repo,

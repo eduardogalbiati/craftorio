@@ -2,7 +2,8 @@
 // <workspace>/backlog/<project id>.local-issues.json, apart from the synced cache (<id>.json, which a sync
 // rewrites) and the push status (<id>.local.json). Each issue has the shape of a synced one (fetchIssues), with
 // `url: null` and `local: true`, so the runs, the roadmap and the Product Owner read it unchanged; its number is
-// the next free one in the file. Reading and writing them never calls a platform CLI or git: nothing leaves the machine.
+// the next free one in the file (renumberLocalIssues moves it past the platform's numbers when a repository is
+// added later: backlog.js syncBacklog). Reading and writing them never calls a platform CLI or git: nothing leaves the machine.
 // packages/engine/domains/backlog/backlog.js readBacklog joins these issues to the synced ones; once a repository
 // is added the owner may file them on the platform (fileLocalIssues, backlog:file-local: a preview, then the only
 // CLI call here, on the owner's click), which removes the filed ones from here.
@@ -117,6 +118,32 @@ function restoreLocalIssues(dir, projectId, { numbers }) {
   }));
 }
 
+/**
+ * A repository added after the local issues: the local issues whose number a synced issue has (`taken`) get the
+ * next free numbers, so no number names two issues. Answers { old: new } ({} when none moved).
+ */
+function renumberLocalIssues(dir, projectId, taken = []) {
+  const own = readLocalIssues(dir, projectId) || [];
+  const used = new Set(taken.map(Number).filter(Number.isInteger));
+  let next = Math.max(0, ...used, ...own.map((i) => i.number)) + 1;
+  const moved = {};
+  const issues = own.map((i) => {
+    if (!used.has(i.number)) return i;
+    moved[i.number] = next;
+    return { ...i, number: next++ };
+  });
+  if (Object.keys(moved).length) writeLocalIssues(dir, projectId, issues);
+  return moved;
+}
+
+/** What an issue-create command answered: { url, number } (the number in the platform's URL, or the local backlog's). */
+function filedIssue(out, command = {}) {
+  const text = String(out || '');
+  const url = text.match(/https?:\/\/\S+/)?.[0] || null;
+  const number = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || (command.local && Number(text)) || null;
+  return { url, number };
+}
+
 /** Drops local issues (filed on the platform since): the others stay. */
 function removeLocalIssues(dir, projectId, numbers) {
   const gone = new Set((numbers || []).map(Number));
@@ -141,8 +168,7 @@ async function fileLocalIssues({ dir, projectId, platform, repo, preview = true,
     if (!preview) {
       try {
         fs.writeFileSync(file, i.body || '');
-        const out = String(await exec(command.cli, command.args) || '');
-        entry.url = out.match(/https?:\/\/\S+/)?.[0] || null;
+        entry.url = filedIssue(await exec(command.cli, command.args), command).url;
         filed.push(i.number);
       } catch (e) { entry.error = e.message; }
     }
@@ -181,12 +207,15 @@ module.exports = {
   closeLocalIssue,
   createLocalIssue,
   fileLocalIssues,
+  filedIssue,
   isLocal,
+  labelsOf,
   localBacklog,
   localCreateCommand,
   localSaveCommand,
   readLocalIssues,
   removeLocalIssues,
+  renumberLocalIssues,
   restoreLocalIssues,
   updateLocalIssue,
 };

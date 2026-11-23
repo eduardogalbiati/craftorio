@@ -85,7 +85,7 @@ module.exports = (ctx) => {
   };
   // #35: what only a platform does (several issues at once: a hot spot, a spec, a split, an epic); a local backlog
   // files one draft at a time (po:file)
-  const platformTarget = (projectId) => {
+  const repositoryTarget = (projectId) => {
     const t = target(projectId);
     if (!t.repo) throw clientError('The local backlog files one issue at a time: create each one from its draft, or add a repository in Projects › Edit.');
     return t;
@@ -349,7 +349,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'index', 'preview'],
       schema: { params: onProject({ at: AT, index: INT, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, index, preview }) => {
-        const t = platformTarget(projectId);
+        const t = repositoryTarget(projectId);
         const res = await productOwner.fileDecongest({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, index, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
@@ -364,7 +364,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'preview'],
       schema: { params: onProject({ at: AT, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, preview }) => {
-        const t = platformTarget(projectId);
+        const t = repositoryTarget(projectId);
         const res = await productOwner.fileSpec({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo,
         });
@@ -377,7 +377,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'split', 'preview'],
       schema: { params: onProject({ at: AT, split: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, split, preview }) => {
-        const t = platformTarget(projectId);
+        const t = repositoryTarget(projectId);
         const res = await productOwner.applySplit({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
           timeZone: workspace.readSettings(ctx.ws).timeZone, // #273
@@ -392,7 +392,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'at', 'key', 'epic', 'issues', 'preview'],
       schema: { params: onProject({ at: AT, key: ANY, epic: ANY, issues: ANY, preview: FLAG }), result: FILED },
       fn: async ({ projectId, at, key, epic, issues, preview }) => {
-        const t = platformTarget(projectId);
+        const t = repositoryTarget(projectId);
         const res = await productOwner.applyEpicProposal({
           backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, key, epic, issues, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
           issuesLanguage: Language.issuesLanguage(workspace.readSettings(ctx.ws)), // #328

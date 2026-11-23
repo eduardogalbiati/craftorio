@@ -53,7 +53,11 @@ const {
   taskProgress,
   withSyncedText,
 } = require('./issues');
-const { refreshCopies } = require('../roadmap/roadmap');
+const {
+  readRoadmap,
+  refreshCopies,
+  updateRoadmap,
+} = require('../roadmap/roadmap');
 const TimeZone = require('../analytics/time-zone');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('@craftorio/shared/backlog-archive');
 const { namesOf } = require('@craftorio/shared/default-workflow');
@@ -153,6 +157,27 @@ function projectBacklog(dir, project) {
 }
 
 /**
+ * #35: a repository added after local issues: the local issues whose number the platform's `issues` use get the next
+ * free numbers (local-backlog.js renumberLocalIssues), and the roadmap's copies of them (the copies with no url) follow,
+ * so a number never names two issues in the Backlog, the roadmap or the Product Owner. A roadmap that cannot be
+ * written leaves a note, like refreshCopies.
+ */
+function renumberLocal(dir, projectId, issues) {
+  const moved = localIssues.renumberLocalIssues(dir, projectId, issues.map((i) => i.number));
+  if (!Object.keys(moved).length) return moved;
+  const follow = (i) => (!i.url && moved[i.number] ? { ...i, number: moved[i.number] } : i);
+  const renumber = (x) => {
+    const list = itemIssues(x).map(follow);
+    return { ...x, ...list[0], issues: list };
+  };
+  const hit = (r) => r.stages.some((s) => (s.items || []).some((x) => itemIssues(x).some((i) => !i.url && moved[i.number])));
+  try {
+    if (hit(readRoadmap(dir, projectId))) updateRoadmap(dir, projectId, (r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, items: (s.items || []).map(renumber) })) }));
+  } catch (e) { console.error('renumbered local issue copies:', e.message); }
+  return moved;
+}
+
+/**
  * Fetches the project's issues and caches them.
  * #781: onProgress({ what: 'issues', read, total }): what is read so far (total null until known), with read === total
  * at the end. `followed`: a screen shows the count, so the list is read in steps and the count grows (issues.js
@@ -187,6 +212,8 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress, fo
   const { issues, epics, epicsError } = await readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError, ...(issuesDisabled ? { issuesDisabled } : {}) };
+  // #35: before the platform's numbers are cached, the local issues that share one move past them
+  renumberLocal(dir, project.id, issues);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(cacheFile(dir, project.id), JSON.stringify(data, null, 2));
   // the planned items not started yet show (and the Product Owner reads) the current text (#168);
