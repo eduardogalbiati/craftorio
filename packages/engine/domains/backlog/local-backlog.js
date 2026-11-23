@@ -9,12 +9,16 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execCli, issueCreateCommand, taskProgress } = require('./issues');
+const {
+  ARCHIVED_COLOR,
+  execCli,
+  issueCreateCommand,
+  sameLabel,
+  taskProgress,
+} = require('./issues');
 const { ARCHIVED_LABEL, archiveBlockReason } = require('@craftorio/shared/backlog-archive');
 
-const ARCHIVED_COLOR = '#ededed';
 const fileOf = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.local-issues.json`);
-const sameLabel = (l, name) => String(l?.name ?? l).toLowerCase() === name;
 const labelsOf = (labels) => (labels || []).map((l) => (typeof l === 'string' ? { name: l, color: null } : l)).filter((l) => l?.name);
 
 /** The project's local issues, or null when it never had one (no file). */
@@ -100,7 +104,7 @@ function archiveLocalIssues(dir, projectId, { numbers, issues = [] }) {
     if (refused) throw new Error(refused);
     patchLocalIssue(dir, projectId, number, (i) => ({
       ...i, state: 'closed', closedAt: new Date().toISOString(),
-      labels: [...(i.labels || []).filter((l) => !sameLabel(l, ARCHIVED_LABEL)), { name: ARCHIVED_LABEL, color: ARCHIVED_COLOR }],
+      labels: [...(i.labels || []).filter((l) => !sameLabel(l, ARCHIVED_LABEL)), { name: ARCHIVED_LABEL, color: `#${ARCHIVED_COLOR}` }],
     }));
   });
 }
@@ -174,13 +178,13 @@ function localSaveCommand({ dir, projectId, number, mode, text = '' }) {
 
 module.exports = {
   archiveLocalIssues,
-  fileLocalIssues,
-  localCreateCommand,
-  localSaveCommand,
   closeLocalIssue,
   createLocalIssue,
+  fileLocalIssues,
   isLocal,
   localBacklog,
+  localCreateCommand,
+  localSaveCommand,
   readLocalIssues,
   removeLocalIssues,
   restoreLocalIssues,

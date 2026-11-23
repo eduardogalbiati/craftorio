@@ -106,7 +106,6 @@ module.exports = (ctx) => {
     if (!refreshes.isRefreshRun({ file: run.file }) || !run.projectId || run.mock) return;
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, run.projectId);
-    if (!project.repo) return; // #35: a local backlog, nothing to sync
     const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || platformOrDefault(run.inputs?.git_platform).id;
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }

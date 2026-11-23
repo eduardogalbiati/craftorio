@@ -32,6 +32,7 @@ const path = require('path');
 const { readEpics } = require('./epics');
 const localIssues = require('./local-backlog');
 const {
+  ARCHIVED_COLOR,
   DEFAULT_PLATFORM,
   MAX_ISSUES,
   PLATFORMS,
@@ -48,6 +49,7 @@ const {
   platformOfHost,
   repoLabels,
   runCommand,
+  sameLabel,
   taskProgress,
   withSyncedText,
 } = require('./issues');
@@ -358,8 +360,6 @@ function updateCachedIssue(dir, projectId, issue) {
 // that issue's { ok: false, error }, the issue is put back as it was, and the others still go through.
 // The cache is patched at once (no re-read), so the issue moves between the state chips right away.
 
-const ARCHIVED_COLOR = 'ededed';
-const sameLabel = (l, name) => String(l?.name ?? l).toLowerCase() === name;
 const notAnIssue = (n) => (Number.isInteger(n) && n > 0 ? null : `Not an issue number: ${n}`);
 
 function patchCachedIssue(dir, projectId, number, fn) {

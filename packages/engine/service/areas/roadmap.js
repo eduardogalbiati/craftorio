@@ -424,6 +424,13 @@ module.exports = (ctx) => {
     try { return loadWorkflow(ctx.projectWorkflowFile(projectId, file)).metadata?.merges === false; } catch { return false; }
   }
 
+  // An item that reads its issues from the platform at its start (#168): a real item of a project with a
+  // repository, none of whose issues is local (#35: the local backlog, also once a repository was added).
+  function platformReader(cache, project, mockOf) {
+    const localNumbers = new Set((cache?.issues || []).filter((i) => i.local).map((i) => i.number));
+    return (item) => !mockOf(item) && !!project?.repo && !backlog.itemIssues(item).some((i) => localNumbers.has(i.number));
+  }
+
   async function advanceRoadmap(projectId) {
     const { ws } = ctx;
     const before = roadmaps.readRoadmap(ws.backlog, projectId);
@@ -437,9 +444,7 @@ module.exports = (ctx) => {
     try { known = projects.readProject(ws.projects, projectId); } catch { /* reported at the start */ }
     // an item that reads its issues from the platform at its start (#168) is never skipped on the
     // cache's state (an issue reopened since the sync still runs): the fresh read decides below
-    // #35: a local issue (the local backlog, also once a repository was added) is only in the workspace
-    const localNumbers = new Set((cache?.issues || []).filter((i) => i.local).map((i) => i.number));
-    const fromPlatform = (item) => !mockOf(item) && !!known?.repo && !backlog.itemIssues(item).some((i) => localNumbers.has(i.number));
+    const fromPlatform = platformReader(cache, known, mockOf);
     const { roadmap, start, refill, release } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n, item) => !fromPlatform(item) && closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
     });

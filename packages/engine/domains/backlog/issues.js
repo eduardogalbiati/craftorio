@@ -4,7 +4,8 @@
 // - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress); a repository
 //   with Issues turned off rejects with `issuesDisabled: true` on the error (#845, the adapter's issuesDisabled);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);
-// - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168).
+// - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168);
+// - ARCHIVED_COLOR, sameLabel: the `archived` label of the synced and the local archive (#238, #35).
 // The commands and JSON of each platform come from its adapter (packages/shared/platforms/, #351):
 // adapterOf (the adapter of a syncing platform, or null), runCommand ({ cli, args } with an exec),
 // commandDisplay (a command as a preview shows it).
@@ -32,6 +33,11 @@ function taskProgress(body) {
   const boxes = String(body || '').match(/^\s*[-*+] \[[ xX]\]/gm) || [];
   return { done: boxes.filter((b) => /\[[xX]\]/.test(b)).length, total: boxes.length };
 }
+
+// The `archived` label's colour (hex, without '#', as the platform CLIs take it) and a label name test,
+// shared by the synced archive (backlog.js) and the local one (local-backlog.js, #35).
+const ARCHIVED_COLOR = 'ededed';
+const sameLabel = (l, name) => String(l?.name ?? l).toLowerCase() === name;
 
 // The platform's issues (the adapter's parseIssue) with their task progress.
 function normalize(adapter, raw) {
@@ -181,6 +187,7 @@ function withSyncedText(copy, synced) {
 
 module.exports = {
   adapterOf,
+  ARCHIVED_COLOR,
   cliTarget,
   cliTargetOrName,
   commandDisplay,
@@ -197,6 +204,7 @@ module.exports = {
   PLATFORMS,
   repoLabels,
   runCommand,
+  sameLabel,
   taskProgress,
   withSyncedText,
 };

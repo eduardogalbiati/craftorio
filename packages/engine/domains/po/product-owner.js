@@ -96,6 +96,7 @@ const {
 } = require('./po-kinds');
 const poFileIssues = require('./po-file-issues');
 const { decongestIssue } = poFileIssues;
+const { draftCommand } = require('./po-draft-command');
 const { separateSharedFiles } = require('./po-hot-files');
 const { mockSteps, partialText } = require('../chat/chat-progress');
 const {
@@ -1199,10 +1200,6 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   };
 }
 
-// The body filed for a new issue: the draft, with its Related line (in any language, #328) when the body has none.
-const createBody = (draft, issuesLanguage) => (draft.related.length && !Language.relatedPattern().test(draft.body)
-  ? `${draft.body}\n\n${Language.issueHeadings(issuesLanguage).related} ${draft.related.map((n) => `#${n}`).join(', ')}\n` : `${draft.body}\n`);
-
 /**
  * Files the current draft on the owner's click and records it in the conversation.
  * at: the draft message's ts (a draft revised, filed or discarded since is refused);
@@ -1225,30 +1222,8 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
   const thread = threadOf(messages, projectId);
   const dir = path.join(threadDir(where, thread), 'filed');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  let command;
-  let body;
-  let file;
-  let target = null;
-  let skippedLabels = [];
-  if (action === 'create') {
-    if (!issue.draft) throw new Error('There is no draft to file yet.');
-    body = createBody(issue.draft, issuesLanguage);
-    let labels = issue.draft.labels;
-    // gh refuses a label the repository does not have: file without it and say so
-    const names = preview || !repo ? null : await backlog.repoLabels({ platform, repo, exec });
-    if (names) { skippedLabels = labels.filter((l) => !names.includes(l)); labels = labels.filter((l) => names.includes(l)); }
-    file = path.join(dir, `${stamp}-new.md`); // #35: no repository, the local backlog (local-backlog.js) instead of a CLI
-    command = (repo ? backlog.issueCreateCommand : backlog.localCreateCommand)({ dir: backlogDir, projectId, platform, repo, title: issue.draft.title, labels, file, text: body });
-  } else {
-    target = Number(number) || issue.existingIssue;
-    if (!target) throw new Error('Pick the issue to add to.');
-    const addition = issue.existingIssue === target && issue.addition ? issue.addition : issue.draft ? `### ${issue.draft.title}\n\n${issue.draft.body}` : '';
-    if (!addition) throw new Error('There is nothing to add yet.');
-    if (action === 'comment') body = `${addition}\n`;
-    else body = backlog.issueAppendBody({ original: preview || !repo ? cached?.body : (await backlog.fetchIssue({ platform, repo, number: target, exec })).body, addition, timeZone });
-    file = path.join(dir, `${stamp}-${target}.md`);
-    command = (repo ? backlog.issueSaveCommand : backlog.localSaveCommand)({ dir: backlogDir, projectId, platform, repo, number: target, mode: action === 'comment' ? 'comment' : 'replace', file, text: body });
-  }
+  // #35: with no repository, the command adds to the local backlog instead of calling a CLI (po-draft-command.js)
+  const { command, body, file, target, skippedLabels } = await draftCommand({ action, issue, number, preview, platform, repo, cached, backlogDir, projectId, dir, stamp, timeZone, issuesLanguage, exec });
   const out = { preview: !!preview, action, command: command.display, body };
   const epic = action === 'create' && placeEpic && issue.draft?.epic ? (epicList || []).find((e) => e.id === issue.draft.epic) : null;
   if (preview) {
