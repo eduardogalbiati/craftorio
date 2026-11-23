@@ -564,7 +564,7 @@
       $(`#oracle-starters-${w}`).innerHTML = starters
         ? starters.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${startersOn ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-chips-${w}`).innerHTML = !starters && (v.state === 'empty' || (v.state === 'answering' && !or.messages.length))
-        ? suggestions().map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
+        ? suggestions().map((q) => `<button class="chip" type="button" data-testid="oracle-suggestion" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || t('oracle.pasted_image'))}"><img src="${esc(i.dataUrl)}" alt="${t('oracle.pasted_image')}" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="${t('oracle.remove_this_image')}" aria-label="${t('oracle.remove_this_image')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
       chat.form.classList.toggle('hidden', v.state === 'unavailable');
       // Send and the text box follow the state (paused, unavailable, answering); the chips just redrawn get the busy lock
@@ -630,10 +630,10 @@
         </div>
       </div>
       <div class="row">
-        <!-- #23: the head is mounted once: its data-i18n hooks are repainted when the language changes (interface-language.js) -->
-        <button class="btn ghost sm" type="button" data-oracle-night data-testid="oracle-night-watch" data-i18n="oracle.night_watch" data-i18n-title="oracle.let_the_oracle_fix_what_stops" title="${t('oracle.let_the_oracle_fix_what_stops')}">${t('oracle.night_watch')}</button>
-        <button class="btn ghost sm" type="button" data-oracle-memory data-i18n="oracle.memory" data-i18n-title="oracle.the_owner_s_standing_decisions_read" title="${t('oracle.the_owner_s_standing_decisions_read')}">${t('oracle.memory')}</button>
-        <button class="btn ghost sm" type="button" data-oracle-reset data-i18n="oracle.new_session" data-i18n-title="oracle.a_new_session_from_a_handoff" title="${t('oracle.a_new_session_from_a_handoff')}">${t('oracle.new_session')}</button>
+        <!-- #23: the head is mounted once: its buttons' data-i18n text is repainted when the language changes (interface-language.js) -->
+        <button class="btn ghost sm" type="button" data-oracle-night data-testid="oracle-night-watch" data-i18n="oracle.night_watch" title="${t('oracle.let_the_oracle_fix_what_stops')}">${t('oracle.night_watch')}</button>
+        <button class="btn ghost sm" type="button" data-oracle-memory data-i18n="oracle.memory" title="${t('oracle.the_owner_s_standing_decisions_read')}">${t('oracle.memory')}</button>
+        <button class="btn ghost sm" type="button" data-oracle-reset data-i18n="oracle.new_session" title="${t('oracle.a_new_session_from_a_handoff')}">${t('oracle.new_session')}</button>
         ${w === WINDOW ? '' : OPEN_WINDOW_BUTTON}${w === 'drawer' ? `<button id="btn-oracle-close" class="icon-btn" type="button" title="${t('oracle.close_esc')}"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>` : ''}
       </div>
     </div>
