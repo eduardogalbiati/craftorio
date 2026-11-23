@@ -175,5 +175,8 @@ test('#485 this repository keeps its own ai-development-local-hero copy, without
   const names = Object.keys(wf.agents);
   assert.deepEqual(runsOn(wf, names), runsOn(bundled, names), 'every agent runs on the bundled provider / model / effort');
   assert.equal(String(wf.orchestrator?.model), String(bundled.orchestrator?.model));
-  assert.deepEqual(wf.inputs?.developer_model, bundled.inputs?.developer_model);
+  // #36: the copy may carry its own translation keys (label_key / help_key / options_key) for its texts; the model
+  // choice itself (models, default, labels) stays the bundled one
+  const choice = (def) => Object.fromEntries(Object.entries(def || {}).filter(([k]) => !/_key$/.test(k)));
+  assert.deepEqual(choice(wf.inputs?.developer_model), choice(bundled.inputs?.developer_model));
 });
