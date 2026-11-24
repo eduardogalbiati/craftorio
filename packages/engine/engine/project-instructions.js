@@ -4,7 +4,8 @@
 // them and the adapter passes the file (packages/engine/engine/run/sessions.js sessionInstructions,
 // docs/agents/capabilities.md). `instructionsRoot`: the repository folder an agent works in;
 // `composeInstructions`: its CLAUDE.md with the imports inside the repository, or its AGENTS.md.
-// Every file is checked by its real path: nothing outside the repository is read.
+// Every file is checked by its real path: nothing outside the repository is read. `instructionsExcludes`:
+// the workspace's own instruction files, which no Claude agent of a run loads (#43).
 
 'use strict';
 
@@ -110,7 +111,21 @@ function composeInstructions(root) {
   return { files, text, refused };
 }
 
+/**
+ * #43: the instruction files of the workspace's root, as Claude Code's `claudeMdExcludes`: a worktree is under
+ * the workspace, and a CLI that loads the folders above its own would take the Oracle's role (and a CLAUDE.md
+ * of the user there would leave out the repository's AGENTS.md). Absolute paths, real and as given. The setting
+ * is a list of globs: a character with a meaning there is `?` (any one character).
+ * @param {string} root the workspace's folder
+ * @returns {string[]}
+ */
+function instructionsExcludes(root) {
+  const dirs = new Set([canonicalPath(root), path.resolve(root)]);
+  return [...dirs].flatMap((dir) => ROOT_FILES.map((name) => path.join(dir, name).split(path.sep).join('/').replace(/[\\[\](){}*?"]/g, '?')));
+}
+
 module.exports = {
   composeInstructions,
+  instructionsExcludes,
   instructionsRoot,
 };

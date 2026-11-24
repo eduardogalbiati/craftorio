@@ -39,7 +39,7 @@ them in `~/.cargo/bin`) on the PATH the app starts with; nothing else is install
 
 | | Claude Code | Codex CLI | Grok Build |
 |---|---|---|---|
-| Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources ''` (no settings file at all: neither the user's plugins, hooks and permission rules nor the checkout's `.claude/settings*.json`, #468; no instructions file either, so the engine passes the repository's with `--append-system-prompt-file`, #45), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
+| Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources ''` (no settings file at all: neither the user's plugins, hooks and permission rules nor the checkout's `.claude/settings*.json`, #468; no instructions file either, so the engine passes the repository's with `--append-system-prompt-file`, #45), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` (a run adds `claudeMdExcludes`, also with `isolation: false`: the workspace's own instruction files, #43) | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
 | Tools | `--tools` (only these built-ins are offered: fewer definitions in context) + `--allowedTools` (`Bash(git:*)` per `bash:git`) | `-s read-only`, or `workspace-write` when `edit`/`write` | read-only sets: `--tools read_file,list_dir,grep[,web_search,web_fetch]` |
 | Writes | `--permission-mode acceptEdits` with `edit`/`write` | workspace-write sandbox (no network for commands) | not restricted (`--always-approve`) |
 | Commands | allowlist per command (`Bash(npm:*)`), plus the same with the `AGENT_ENV` prefix and the shell utilities (below); `--add-dir <run_dir>/evidence`, `<run_dir>/logs` and `<run_dir>/scratch` | **not enforceable** (the sandbox limits writes, not which command runs) | not restricted |
@@ -88,6 +88,20 @@ composes them (`packages/engine/engine/project-instructions.js`) and passes the 
   why when empty), and `instructions` in the session's record: what the engine passed.
 - An agent or provider whose own arguments have `--append-system-prompt[-file]` keeps only that one
   (the log warns). The flag was checked in `claude --help` and with a fake CLI, not with a real call.
+
+**The workspace's `AGENTS.md` (#43)**: opening a workspace seeds `<workspace>/AGENTS.md`
+(`packages/engine/domains/workspace/workspace-instructions.js`): a session the user opens there is the
+Oracle (how to open it: [INSTALL.md](../../INSTALL.md), section 7). Never a `CLAUDE.md`. Who reads it,
+measured on 2026-11-24 (Claude Code 2.1.316 with Haiku, Codex 0.157.1, Linux, one call per case):
+- a session in the root, Claude or Codex: yes. Codex in a worktree: only the worktree's own.
+- an isolated Claude in a worktree: no. Not isolated: yes, besides the worktree's `AGENTS.md`; a root
+  `CLAUDE.md` importing it suppresses the worktree's `AGENTS.md`.
+- so a run's Claude agent gets `claudeMdExcludes` with the root's `CLAUDE.md` and `AGENTS.md`
+  (`instructionsExcludes`, `--settings`), isolated or not; measured with `--setting-sources project`, it
+  kept the root's out and the worktree's in. A glob character in the workspace's path becomes `?`.
+- a workflow whose own arguments have `--settings` keeps only that one (the log warns when not isolated):
+  add the root's files to its `claudeMdExcludes`.
+- not measured: Windows, a user with their own `~/.claude/CLAUDE.md`, Grok, a path with glob characters.
 
 Grok Build, per its
 README (`~/.grok/README.md`, section "AGENTS.md", 1.0.41), reads `Agents.md`, `Claude.md`,

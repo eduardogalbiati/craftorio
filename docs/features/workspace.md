@@ -13,6 +13,7 @@ order: 100
   agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model, effort, Speed ↔ Quality calibration and Economy ↔ Generous cost)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
+  AGENTS.md  the Oracle's role, for a session you open in this folder
 
 <!-- section:workspace-tree order:300 -->
   .lock      the app that has the workspace open (pid, host, heartbeat)

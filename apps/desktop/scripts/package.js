@@ -132,7 +132,9 @@ function packagerOptions({ platform, arch, out }) {
     // one node_modules); the workspaces' test folders and the desktop app's own scripts/ stay out, and so
     // do the tests inside the dereferenced copies of the workspaces under node_modules/@craftorio/ (the
     // packager follows the workspace links: the asar holds those copies, which `require('@craftorio/…')`
-    // resolves, next to packages/ and apps/ themselves, which the renderer's <script> paths reach)
+    // resolves, next to packages/ and apps/ themselves, which the renderer's <script> paths reach).
+    // The bundled defaults at the root are packed: skills/, workflows/, pipelines/, seeds/, fragments/ and
+    // workspace-instructions/ (the workspace's AGENTS.md, #43)
     ignore: [
       /^\/(runs|dist|build|scripts|test|supabase|poc|native|resources|\.github|\.claude|\.test-output|\.features-gen)(\/|$)/,
       // phase 3 (#579): what a workspace holds that is not the app, in the workspace itself and in its

@@ -1493,6 +1493,11 @@ docked on **Home** (its Overview tab); on every other screen the **Oracle** butt
 header opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
 The button's badge counts the answers that arrived while the conversation was out of view.
 
+- **Also a session of your own** (#43): a Claude Code or Codex session you open in the workspace folder
+  takes the Oracle's role from the folder's `AGENTS.md` and operates the app for you, from the phone too
+  with Remote Control. How to open it: [INSTALL.md](INSTALL.md), section 7. It is a separate
+  conversation from the one below, on your CLI's account; a run's Claude and Codex agents do not load
+  that file.
 - **What it reads**, read-only: the runs (events, summaries, sessions, decisions, handoff notes,
   costs), the roadmaps, the Backlog caches and queues, local merges not pushed, the workflows and
   skills (and whether a newer default exists), your projects' repositories (git log/diff/show,
@@ -2545,6 +2550,7 @@ Everything the app produces lives in a local workspace folder:
   agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model, effort, Speed ↔ Quality calibration and Economy ↔ Generous cost)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
+  AGENTS.md  the Oracle's role, for a session you open in this folder
   index.db   SQLite index next to the files: runs cache, pending gates, notifications
   attachments/pending/  images pasted into prompt fields, until sent (cleared at the next start)
   findings/<timestamp>/ findings saved by the Findings button (screenshot, marks, context, note)
@@ -2552,6 +2558,11 @@ Everything the app produces lives in a local workspace folder:
   .lock      the app that has the workspace open (pid, host, heartbeat)
 ```
 <!-- /generated:workspace-tree -->
+
+`AGENTS.md` gives a session opened in the workspace folder the Oracle's role (#43; how to open one:
+[INSTALL.md](INSTALL.md), section 7). The app writes it when it opens the workspace and treats it as a
+bundled default (below, recorded in the root's `.seeded.json`): yours to edit or delete, and a file you
+already had stays yours. It writes no `CLAUDE.md`. A run's Claude and Codex agents do not load the file.
 
 <!-- generated:workspace -->
 - **One app per workspace.** The app locks the workspace it opens. A second copy on the same

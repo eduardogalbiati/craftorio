@@ -232,16 +232,18 @@ const ADAPTER_LIB = {
  * denyCommands: command prefixes the agent may not run (DEPS_DENIED_COMMANDS); only Claude refuses them.
  * instructionsFile: the repository's instructions the engine composed (#45), for an adapter with
  * `instructionsFlags`; null for the internal agents (Oracle, supervisor chat, Product Owner).
+ * instructionsExcludes: the instruction files a run's agent must not load (the workspace's own, #43), for an
+ * adapter with a `settingsFlag`; none for the internal agents, always isolated.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
  * @param {string} type
- * @param {{ caps?: object | null, isolated?: boolean, mcpServers?: object, denyEdits?: string[], denyCommands?: string[], runDir?: string | null, env?: object, instructionsFile?: string | null }} [options]
+ * @param {{ caps?: object | null, isolated?: boolean, mcpServers?: object, denyEdits?: string[], denyCommands?: string[], runDir?: string | null, env?: object, instructionsFile?: string | null, instructionsExcludes?: string[] }} [options]
  */
-function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV, instructionsFile = null } = {}) {
+function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV, instructionsFile = null, instructionsExcludes = [] } = {}) {
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
   const adapter = registry.byType(type);
   // each CLI's own flags: its adapter's isolationArgs (packages/shared/providers/<id>.js)
   const { args, notes } = adapter?.isolationArgs
-    ? adapter.isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile }, ADAPTER_LIB)
+    ? adapter.isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile, instructionsExcludes }, ADAPTER_LIB)
     : { args: [], notes: [] };
   const enforced = !!adapter?.enforcesDenyRules;
   if (denyEdits.length && !enforced && (!caps || !readOnly(caps))) notes.push('test paths (edits_tests: false) are not refused by the tools: the engine checks the turn\'s changes');

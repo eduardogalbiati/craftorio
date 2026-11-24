@@ -12,6 +12,11 @@ docked on **Home** (its Overview tab); on every other screen the **Oracle** butt
 header opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
 The button's badge counts the answers that arrived while the conversation was out of view.
 
+- **Also a session of your own** (#43): a Claude Code or Codex session you open in the workspace folder
+  takes the Oracle's role from the folder's `AGENTS.md` and operates the app for you, from the phone too
+  with Remote Control. How to open it: [INSTALL.md](INSTALL.md), section 7. It is a separate
+  conversation from the one below, on your CLI's account; a run's Claude and Codex agents do not load
+  that file.
 - **What it reads**, read-only: the runs (events, summaries, sessions, decisions, handoff notes,
   costs), the roadmaps, the Backlog caches and queues, local merges not pushed, the workflows and
   skills (and whether a newer default exists), your projects' repositories (git log/diff/show,

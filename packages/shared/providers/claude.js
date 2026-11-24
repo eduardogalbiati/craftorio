@@ -23,15 +23,21 @@
   const SUBAGENT_TOOLS = ['Agent', 'Task'];
 
   // The isolation and capability flags of one turn (capabilities.providerArgs; `lib`: its helpers).
-  function isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile = null }, lib) {
+  function isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile = null, instructionsExcludes = [] }, lib) {
     const args = [];
-    if (isolated) {
+    // one --settings per call. #43: the workspace's own instruction files never load in a run's agent
+    const settings = {
+      ...(isolated && { autoMemoryEnabled: false }),
+      ...(instructionsExcludes.length && { claudeMdExcludes: instructionsExcludes }),
+    };
+    const settingsArgs = Object.keys(settings).length ? ['--settings', JSON.stringify(settings)] : [];
+    if (!isolated) args.push(...settingsArgs);
+    else {
       // no settings source at all: neither the user's (plugins, hooks, permission rules) nor the
       // checkout's .claude/settings*.json, whose hooks and permissions.allow the repository controls
       // (#468, SEC-3); no MCP servers but the declared ones, no Chrome integration, no skill listing
       // (the engine injects the workflow's skills), no auto-memory
-      args.push('--strict-mcp-config', '--no-chrome', '--setting-sources', '', '--disable-slash-commands',
-        '--settings', JSON.stringify({ autoMemoryEnabled: false }));
+      args.push('--strict-mcp-config', '--no-chrome', '--setting-sources', '', '--disable-slash-commands', ...settingsArgs);
       // #45: with no settings source the CLI loads no CLAUDE.md either: the engine's copy of the
       // repository's, on every turn (the flag holds for one process; a resumed one does not add it twice)
       if (instructionsFile) args.push('--append-system-prompt-file', instructionsFile);
@@ -228,6 +234,8 @@
     // #45: isolated, it loads no instructions file by itself: the engine passes the repository's
     // (isolationArgs' instructionsFile), unless the workflow's own args hold one of these flags
     instructionsFlags: ['--append-system-prompt', '--append-system-prompt-file'],
+    // #43: what carries isolationArgs' instructionsExcludes (the CLI takes one)
+    settingsFlag: '--settings',
     // deny rules (test paths, `npm ci` on the shared cache) are refused by the CLI itself
     enforcesDenyRules: true,
     // --max-turns: the agent's max_requests is enforced per turn (#302)

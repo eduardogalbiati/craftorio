@@ -1,6 +1,6 @@
 // Service area: the open workspace ({ root, runs, repos, projects, skills, workflows, worktrees,
-// settings }, see packages/engine/domains/workspace/workspace.js). Opening one seeds the bundled skills, workflows, pipelines and
-// analysis seeds (#360), opens its index, moves a leftover Backlog queue into the roadmap once (#446),
+// settings }, see packages/engine/domains/workspace/workspace.js). Opening one seeds the bundled skills, workflows, pipelines,
+// analysis seeds (#360) and its AGENTS.md (#43), opens its index, moves a leftover Backlog queue into the roadmap once (#446),
 // moves an old global default workflow to the projects once (#790) and lets started roadmaps continue.
 // `ctx.ws` is read at call time: it changes with the workspace.
 
@@ -16,6 +16,7 @@ const skills = require('../../domains/agents/skills');
 const { storeFor } = require('../../domains/workspace/store');
 const workflows = require('../../domains/workflow/workflows');
 const workspace = require('../../domains/workspace/workspace');
+const instructions = require('../../domains/workspace/workspace-instructions');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
 
 module.exports = (ctx) => {
@@ -26,12 +27,14 @@ module.exports = (ctx) => {
     return ws;
   };
 
-  // Copies/updates the bundled skills, workflows and pipelines (#135) into the workspace.
+  // Copies/updates the bundled skills, workflows, pipelines (#135), analysis seeds (#360) and the
+  // workspace's AGENTS.md (#43) into the workspace.
   function seedDefaults() {
     try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
     try { workflows.seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows); } catch (e) { console.error('workflow seeding:', e); }
     try { pipelines.seedPipelines(pipelines.BUNDLED_PIPELINES_DIR, ws.pipelines); } catch (e) { console.error('pipeline seeding:', e); }
     try { seeds.seedSeeds(seeds.BUNDLED_SEEDS_DIR, ws.seeds); } catch (e) { console.error('analysis seed seeding:', e); }
+    try { instructions.seedWorkspaceInstructions(instructions.BUNDLED_INSTRUCTIONS_DIR, ws.root); } catch (e) { console.error('workspace instructions seeding:', e); }
   }
 
   function setWorkspace(next) {

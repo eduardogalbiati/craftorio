@@ -5,7 +5,8 @@
 // handoff, `max_context` and `fresh_after_idle` rotation, the test-file and protected-file guards,
 // cuts by `max_requests` #302), the handoff notes (`saveHandoff`, `requestHandoffNote`,
 // `continueAfterCut`; `takeHandoff` reads one, packages/engine/engine/run/outputs.js), the skills a prompt
-// includes (`loadSkills`) and the repository's instructions a session starts with (`sessionInstructions`, #45). The provider call itself is packages/engine/engine/run/turns.js.
+// includes (`loadSkills`) and the repository's instructions a session starts with (`sessionInstructions`, #45; the workspace's own stay out,
+// `workspaceExcludes` #43). The provider call itself is packages/engine/engine/run/turns.js.
 
 'use strict';
 
@@ -21,6 +22,7 @@ const capabilities = require('../capabilities');
 const evidence = require('../../domains/evidence/evidence');
 const {
   composeInstructions,
+  instructionsExcludes,
   instructionsRoot,
 } = require('../project-instructions');
 const testPaths = require('../test-paths');
@@ -335,6 +337,24 @@ const methods = {
     return session.instructions.file;
   },
 
+  // #43: the workspace's own instruction files (its AGENTS.md is the Oracle's), left out of a CLI that loads
+  // the folders above its own. The CLI takes one settings flag: the workflow's own keeps its place, and the
+  // log warns when nothing else keeps the files out (not isolated).
+  workspaceExcludes(session, { providerType, isolated, ownArgs }) {
+    const flag = registry.byType(providerType)?.settingsFlag;
+    if (!flag || this.machine.simulated) return [];
+    if (!ownArgs.some((a) => String(a).split('=')[0] === flag)) return instructionsExcludes(path.dirname(path.dirname(this.runDir)));
+    const key = `${session.agent}|${flag}`;
+    if (!isolated && !this.capsLogged.has(key)) {
+      this.capsLogged.add(key);
+      this.emitEvent('log', {
+        level: 'warn', kind: 'instructions', agent: session.agent, session_id: session.id,
+        message: `[${session.agent}] the workflow's own arguments have ${flag}: the workspace's AGENTS.md may load (add it to claudeMdExcludes there)`,
+      });
+    }
+    return [];
+  },
+
   // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
   // cannot open images still gets their paths, with one warning per step and agent.
   async agentTurn(agentName, prompt, turnOpts = {}) {
@@ -443,8 +463,10 @@ const methods = {
     const denyCommands = depsLinked ? capabilities.DEPS_DENIED_COMMANDS : [];
     // cli_args may be keyed by provider when the provider is picked at run time
     const cliArgs = Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || [];
-    const instructionsFile = this.sessionInstructions(session, agent, { providerType, isolated, ownArgs: [...cliArgs, ...(provider?.args || [])] });
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv, instructionsFile });
+    const own = { providerType, isolated, ownArgs: [...cliArgs, ...(provider?.args || [])] };
+    const instructionsFile = this.sessionInstructions(session, agent, own);
+    const instructionsExcludes = this.workspaceExcludes(session, own);
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv, instructionsFile, instructionsExcludes });
     // #302: only a CLI with a request limit per turn can stop a turn after n requests (claude --max-turns)
     const enforced = budget && !!registry.byType(providerType)?.requestLimit;
     if (budget && providerType && !enforced) notes.push(`max_requests (${budget}) not enforceable: ${providerType} has no request limit per turn`);
