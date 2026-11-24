@@ -35,6 +35,7 @@ const {
 const {
   pushBase,
   shipRelease,
+  writeProductVersion,
   writeReleaseVersion,
 } = require('../domains/releases/releases');
 const {
@@ -70,6 +71,14 @@ function simulatedMonitor(state) {
 // The affected tests of a simulated change (scope: affected, run-tests `affected`)
 const SIMULATED_FILES = ['test/simulated.test.js', 'test/simulated-other.test.js'];
 
+// #470 (SEC-5): the allowlisted environment; the platform tokens pass (the workflow's own
+// `gh pr merge` / `glab mr merge`), plus the workflow's env.passthrough
+const runCommand = (cmd, { cwd, passthrough = [] } = {}) => new Promise((resolve) => {
+  exec(cmd, { cwd, windowsHide: true, env: childEnv(process.env, { platforms: PLATFORM_CLIS, passthrough }) }, (err, stdout, stderr) => {
+    resolve({ skipped: false, exit_code: err ? err.code ?? 1 : 0, output: `${stdout}${stderr}`.slice(-4000), stdout, stderr });
+  });
+});
+
 function real() {
   return {
     simulated: false,
@@ -88,13 +97,7 @@ function real() {
     guardShip: (check) => check(),
     // a transition's action / merge / ship: no simulated failure
     transitionFault: () => {},
-    // #470 (SEC-5): the allowlisted environment; the platform tokens pass (the workflow's own
-    // `gh pr merge` / `glab mr merge`), plus the workflow's env.passthrough
-    runAction: (cmd, { cwd, passthrough = [] } = {}) => new Promise((resolve) => {
-      exec(cmd, { cwd, windowsHide: true, env: childEnv(process.env, { platforms: PLATFORM_CLIS, passthrough }) }, (err, stdout, stderr) => {
-        resolve({ skipped: false, exit_code: err ? err.code ?? 1 : 0, output: `${stdout}${stderr}`.slice(-4000), stdout, stderr });
-      });
-    }),
+    runAction: runCommand,
     probe: (args) => runProbe(args),
     // #810: a merge or close from the app (an adapter's requestMergeCommand / requestCloseCommand { cli, args },
     // no shell) → { exit_code, output }; the platform tokens pass, as for runAction
@@ -139,6 +142,8 @@ function real() {
     },
     // #649: a project without a screenshot command is captured through its local preview (Run App)
     captureScreenshots: (opts) => captureScreenshots({ capturePreview, ...opts, mock: false }),
+    // #46: the product's own version command runs as a transition's action does
+    writeProductVersion: ({ passthrough = [], ...opts }) => writeProductVersion({ ...opts, mock: false, run: (cmd, o) => runCommand(cmd, { ...o, passthrough }) }),
     writeReleaseVersion: (opts) => writeReleaseVersion({ ...opts, mock: false }),
     provider: (agent, providers) => providers?.[agent.provider],
     // #414: the run's temp folder (<run>/tmp), created → its path
@@ -201,7 +206,8 @@ function simulated({ sequences = null } = {}) {
       changed: ['src/simulated.js'], slow: [], why: `${SIMULATED_FILES.length} test file(s) reach the 1 changed file(s) (simulated)`,
     }),
     captureScreenshots: (opts) => captureScreenshots({ ...opts, mock: true }),
-    // writes nothing: says what a real run would set
+    // runs and writes nothing: say what a real run would set
+    writeProductVersion: ({ passthrough: _, ...opts }) => writeProductVersion({ ...opts, mock: true }),
     writeReleaseVersion: (opts) => writeReleaseVersion({ ...opts, mock: true }),
     provider: () => ({ type: 'mock' }),
     // #414: no temp folder (a mock run changes nothing on disk it did not before)

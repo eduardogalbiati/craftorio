@@ -52,6 +52,10 @@ A repository's `.craftorio/project.yaml`: the workflows a project is worked on w
   `agents.<name>.provider` / `model` / `effort` are layered onto the repository copy (`ownerCopy`,
   `packages/engine/engine/run/setup.js` `applyOwnerCopy`), under the run's own choices (#262).
   `workflow.started.agents.<name>.from` says where each agent's model came from.
+- **Products** (#46): `products: [{ id, folder, tag_prefix, version_command, paths? }]`, what a release
+  run releases apart ([release.md](../../features/release.md)). A problem of one is in `errors` and in
+  `productErrors` and leaves `products` empty: the release run stops on it. The other errors of the
+  manifest do not void the products. `mergeManifest` keeps them.
 - **Triggers** (#568, `packages/engine/domains/triggers/`): `triggers: [{ on, label | mention | branch,
   workflow, inputs? }]`, `on` one of `issue_labeled` (with `label`), `pr_comment` (with `mention`, e.g.
   `@orchestrator`) and `ci_failed` (with `branch`). `workflow` names one of the manifest's own entries;

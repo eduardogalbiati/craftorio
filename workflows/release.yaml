@@ -20,6 +20,15 @@
 #           Nothing is written for a name that is not a semver (`release-<run id>`, `v1.4`), a project
 #           without package.json, the same version or a lower one (never a downgrade): the run log
 #           says why and the run goes on. A simulation writes nothing and says what it would set.
+#           Products (#46): a repository that declares `products` in its .craftorio/project.yaml
+#           ({ id, folder, tag_prefix, version_command }) releases one of them, the `product` input
+#           (not needed with only one): its own version_command writes the version and the changelog,
+#           the run commits them, and Ship tags <tag_prefix><version>. The run stops before the suites
+#           when the product is unknown or not chosen, the version is not a semver, is lower, or is not
+#           the one the command wrote (both are said). A product already at the version is released as
+#           it is (a first release): no command, no commit. The last release is the product's own last
+#           tag. Its merged issues with no changeset (a repository with a .changeset folder) are in the
+#           log and in the Ship gate; you can ship anyway.
 # 1. unit:  a suite step (#177: no agent, no tokens): the project's WHOLE unit suite in the run's own
 #           worktree of the local base, every round.
 # 2. e2e:   a suite step: the project's end-to-end suite (`e2e_command`; skipped with `e2e_suite:
@@ -46,7 +55,7 @@
 # 4. ship: your gate, never answered by automation (a decision gate: not the supervisor, no
 #           timeout, not --auto-approve). Ship: the run's branch (the version commit, a fix made
 #           here) is merged into the local base (merge: local), the local base is pushed to origin (never forced) and tagged with the
-#           release's name, then the optional build command runs (`ship:`, packages/engine/domains/releases/releases.js). A
+#           release's name, then the optional build command runs (`ship:`). A
 #           local base that moved since the suites ran (another run merged) is refused: it would
 #           ship commits nobody checked. Hold:
 #           the run ends, nothing is pushed or tagged; its branch keeps the version commit and a fix
@@ -78,7 +87,12 @@ inputs:
     label: "Version"
     type: string
     default: ""
-    description: "The release's name or version (e.g. v1.4.0): the tag Ship pushes. A semver (a leading v dropped) is also written into a Node project's package.json before the suites. Empty: release-<run id>. A roadmap's cut line fills it with its name."
+    description: "The release's name or version (e.g. v1.4.0): the tag Ship pushes. A semver (a leading v dropped) is also written into a Node project's package.json before the suites. Empty: release-<run id>. A roadmap's cut line fills it with its name. With a product: its version, written by the product's own command; the tag is the product's prefix and the version."
+  product:
+    label: "Product"
+    type: string
+    default: ""
+    description: "The product this release is of, when the repository declares more than one (products in .craftorio/project.yaml: the id of one of them). Empty: its only product. Ignored by a repository that declares none."
   repo_path:
     label: "Repository"
     type: string
@@ -244,10 +258,12 @@ steps:
   # #325: the release's version into a Node project's package.json (and its lockfile's root), one
   # commit on the run's branch before the suites: what they pass on is what Ship tags. Never fails the
   # run: a name that is not a semver, no package.json or nothing to change is said in the run log.
+  # With a product (#46) its own command writes the version, and what cannot be released stops the run.
   - id: version
     display: Release version
     type: release_version
     version: "{{ inputs.version or ('release-' ~ run_id) }}"
+    product: "{{ inputs.product }}"
     branch: "release-fix-{{ run_id }}"
     transitions:
       - when: "true"
@@ -324,8 +340,8 @@ steps:
       broke them, alone or together with another one. The history since the last release:
       {% if inputs.history %}{{ inputs.history }}
       {% endif %}
-      - Commits: `git log --oneline origin/{{ inputs.base_branch }}..HEAD` (what origin does not have; with a
-        release tag, `git log --oneline <last tag>..HEAD`). Each message names the issues it closes (`Closes #n`).
+      - Commits: `git log --oneline origin/{{ inputs.base_branch }}..HEAD` (what origin does not have; {% if steps.version.output.product %}{% if steps.version.output.previous_version %}since the last release of {{ steps.version.output.product }}, `git log --oneline {{ steps.version.output.previous_version }}..HEAD`{% else %}{{ steps.version.output.product }} has no release yet{% endif %}{% else %}with a
+        release tag, `git log --oneline <last tag>..HEAD`{% endif %}). Each message names the issues it closes (`Closes #n`).
       - Runs and issues: the `summary.json` files under {{ runs_dir }} whose local merge commit is in
         that range (run id, workflow, issues, title).
       - Decisions: each of those runs' `decisions.tsv` (why its agents chose what they did).
@@ -368,13 +384,15 @@ steps:
       deciding whether to push and tag. Everything you need is below: do not read the run's
       events.jsonl or logs (read a file of the repository only when a fix's diff is unclear).
 
-      Release `{{ inputs.version or ('release-' ~ run_id) }}` of the local `{{ inputs.base_branch }}` ({{ inputs.task }}).
-      Project version: {{ (worktree_dir or inputs.repo_path) | project_version or 'no version file found' }}
+      Release `{{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}` of the local `{{ inputs.base_branch }}` ({{ inputs.task }}).
+      {% if steps.version.output.product %}Product: {{ steps.version.output.product }}. {% endif %}Project version: {{ (worktree_dir or inputs.repo_path) | project_version(steps.version.output.folder) or 'no version file found' }}
       {% if steps.version.output.change %}The run's version commit ({{ steps.version.output.commit or 'simulation: not written' }}) ships with the release: {{ steps.version.output.change }}. It already matches the release: do not report the version as a mismatch.
       {% else %}The run wrote no version: {{ steps.version.output.message | one_line(200) }}
-      {% endif %}The repository's last tags (newest first):
-      {{ (worktree_dir or inputs.repo_path) | git_tags(5) or '(none)' }}
-
+      {% endif %}The {{ "product's" if steps.version.output.product else "repository's" }} last tags (newest first):
+      {{ (worktree_dir or inputs.repo_path) | git_tags(5, steps.version.output.tag_prefix) or '(none)' }}
+      {% if steps.version.output.product %}The commits {% if steps.version.output.previous_version %}since its last release, {{ steps.version.output.previous_version }}{% else %}of the repository (the product has no release yet){% endif %}, newest first, at most 30:
+      {{ steps.version.output.history or '(none)' }}
+      {% endif %}
       Round by round (step #visit: result, time, cost), {{ ((trail | sum('durationMs')) / 60000) | round(1) }} minutes and US$ {{ (trail | sum('cost')) | round(2) }} so far:
       {% for t in trail %}{% if t.step != 'review' %}- {{ t.step }} #{{ t.visit }}: {{ t.status }}, {{ (t.durationMs / 1000) | round | int }} s{% if t.cost %}, US$ {{ t.cost | round(2) }}{% endif %}
       {% endif %}{% endfor %}
@@ -432,16 +450,17 @@ steps:
     # #290: the release summary leads the message (rendered apart on the screens)
     report: "{{ steps.review.output.release_summary }}"
     summary: |
-      {{ inputs.version or 'The release' }}: {{ 'the unit suite is' if inputs.e2e_suite == 'skip' else 'both suites are' }} green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
+      {{ steps.version.output.tag or inputs.version or 'The release' }}: {{ 'the unit suite is' if inputs.e2e_suite == 'skip' else 'both suites are' }} green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
       Unit: {{ steps.unit.output.message | one_line(160) }}
       E2E: {{ 'skipped (the project has no E2E suite)' if inputs.e2e_suite == 'skip' else (steps.e2e.output.message | one_line(160)) }}
     message: |
       {% if steps.review.output and not steps.review.output.release_summary %}The release summary is missing: its step failed ({{ steps.review.output.error | one_line(200) }}); the run's chat has the rounds.
-      {% endif %}Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
+      {% endif %}Release {{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
       Unit: {{ steps.unit.output.message }}
       {% if inputs.e2e_suite != 'skip' %}E2E: {{ steps.e2e.output.message }}{% endif %}
       {% if steps.version.output.change %}Version: {{ steps.version.output.change }}{% if steps.version.output.commit %} (commit {{ steps.version.output.commit | truncate(8, true, '') }} on `release-fix-{{ run_id }}`, checked by both suites){% else %} (a simulation: not written){% endif %}.
       {% elif steps.version.output.message %}Version: unchanged: {{ steps.version.output.message | one_line(200) }}
+      {% endif %}{% if steps.version.output.missing_changesets | length %}Merged issues of {{ steps.version.output.product }} with no changeset (not in its changelog): #{{ steps.version.output.missing_changesets | join(', #') }}. You can ship anyway.
       {% endif %}
       {% if steps.fix.visits %}
       A regression was fixed on branch `release-fix-{{ run_id }}` ({{ steps.fix.visits }} round(s)): {{ steps.fix.output.summary }}
@@ -451,7 +470,7 @@ steps:
       Not on origin yet:
       {{ worktree_dir | git_commits('origin/' ~ inputs.base_branch) }}
       The release notes are in Code & Build › Releases: edit them there before you ship.
-      {% set branch_has = (['the version commit'] if steps.version.output.written else []).concat(['the fix'] if steps.fix.visits else []) | join(' and ') %}Ship: {% if branch_has %}merge {{ branch_has }} into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} to origin and tag it `{{ inputs.version or ('release-' ~ run_id) }}`{% if inputs.build_command %}, then run `{{ inputs.build_command }}`{% endif %}.
+      {% set branch_has = (['the version commit'] if steps.version.output.written else []).concat(['the fix'] if steps.fix.visits else []) | join(' and ') %}Ship: {% if branch_has %}merge {{ branch_has }} into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} to origin and tag it `{{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}`{% if inputs.build_command %}, then run `{{ inputs.build_command }}`{% endif %}.
       Hold: end the run; nothing is pushed or tagged{% if branch_has %} (the branch keeps {{ branch_has }}: resume the run from this gate to ship it later){% endif %}.
     diff_base: "{{ inputs.base_branch }}"
     choices:
@@ -463,7 +482,7 @@ steps:
       # #630: with release_ci wait, the run then waits for the release CI the tag starts (release_ci)
       - when: "choice == 'ship' and inputs.release_ci == 'wait' and (worktree_dir | git_commits(inputs.base_branch))"
         merge: local
-        ship: &ship { tag: "{{ inputs.version or ('release-' ~ run_id) }}", build: "{{ inputs.build_command }}" }
+        ship: &ship { tag: "{{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}", build: "{{ inputs.build_command }}" }
         goto: release_ci
         on_error: ship_failed
       - when: "choice == 'ship' and inputs.release_ci == 'wait'"
@@ -524,14 +543,14 @@ steps:
     display: Release CI
     agent: ci_pusher
     goal:
-      description: "The release CI green for the tag {{ inputs.version or ('release-' ~ run_id) }}"
+      description: "The release CI green for the tag {{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}"
       until: "output.ci_status == 'success'"
       on_exhausted: release_ci_failed
     loop:
       interval: 1m
       max_duration: 1h
     prompt: |
-      Ship pushed the local {{ inputs.base_branch }} and the tag `{{ inputs.version or ('release-' ~ run_id) }}`.
+      Ship pushed the local {{ inputs.base_branch }} and the tag `{{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}`.
       Check the CI runs that tag (or that push) started on the remote: running or not started → pending;
       a failure → failed with failure_log (job, step, error, probable cause); every run passed → success;
       no CI at all for the tag → success with a failure_log saying so. Never push, tag or edit files.
@@ -555,7 +574,7 @@ steps:
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     message: |
-      The release CI for `{{ inputs.version or ('release-' ~ run_id) }}` did not pass (status: {{ steps.release_ci.output.ci_status }}).
+      The release CI for `{{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}` did not pass (status: {{ steps.release_ci.output.ci_status }}).
       {% if steps.release_ci.output.run_url %}Run: {{ steps.release_ci.output.run_url }}
       {% endif %}Last error: {{ steps.release_ci.output.failure_log or '(none reported)' }}
       Approve: check the release CI again (after a re-run). Reject: end the run as failed (the tag stays on the remote).
@@ -602,11 +621,12 @@ outputs:
   version:
     type: string
     description: The release's name (the tag Ship pushes).
-    value: "{{ inputs.version or ('release-' ~ run_id) }}"
+    value: "{{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}"
   previous_version:
     type: string
     description: "The tag before this release (empty when the project has none): the `since` of a refactor-proposals stage (#378)."
     value: "{{ steps.version.output.previous_version or '' }}"
+    default: ""
   commit:
     type: string
     description: "The shipped commit (empty when the run did not ship, or in a simulation)."

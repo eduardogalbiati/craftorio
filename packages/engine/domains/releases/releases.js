@@ -24,6 +24,10 @@
 // GitHub release into the latest one) and recorded with `rc`, the issues since the last stable
 // (`issuesSinceStable`) and the version packages/shared/release-version.js suggests (`stableVersion`).
 // A held candidate (`holdCandidate`) is never promoted by the night's train (packages/engine/domains/night/night-watch.js).
+// #46 products: a repository that declares products in its manifest (packages/engine/domains/project/project-manifest.js)
+// releases one at a time (`productOf`): its own version command, tag (`productTag`) and last release
+// (`writeProductVersion`). The history's releases are the main product's (`mainProduct`: the one tagged
+// vX.Y.Z); one of another product carries `product` and never counts as the last release.
 
 const fs = require('fs');
 const path = require('path');
@@ -32,7 +36,19 @@ const {
   identityArgs,
   repoRoot,
 } = require('../../engine/worktree');
-const { defaultBase, pushBase } = require('../local/local-push');
+const { projectVersion } = require('../../engine/project-version');
+const {
+  closingCommits,
+  defaultBase,
+  pushBase,
+} = require('../local/local-push');
+const { readManifest } = require('../project/project-manifest');
+const {
+  compareSemver,
+  releaseSemver,
+  SEMVER,
+} = require('./semver');
+const { issuesOf } = require('@craftorio/shared/city-release');
 const { suggestVersion } = require('@craftorio/shared/release-version');
 const { writeJsonSafe } = require('../workspace/state-file');
 
@@ -69,10 +85,10 @@ function historyProblem(h) {
 
 const writeReleases = (dir, projectId, history) => writeJsonSafe(releasesFile(dir, projectId), history, { validate: historyProblem });
 
-/** Adds a shipped release to the project's history; the next release starts with empty notes. */
+/** Adds a shipped release to the project's history; the next release starts with empty notes (another product's, #46, leaves them). */
 function recordRelease(dir, projectId, release) {
   const h = readReleases(dir, projectId);
-  return writeReleases(dir, projectId, { releases: [...h.releases, { ...release, status: 'shipped' }], ...withCandidates(h.candidates), next: { notes: '' } });
+  return writeReleases(dir, projectId, { releases: [...h.releases, { ...release, status: 'shipped' }], ...withCandidates(h.candidates), next: release.product ? h.next : { notes: '' } });
 }
 
 /** The owner's notes of the next release (empty: generated again from its issues and runs). */
@@ -82,8 +98,8 @@ function saveNextNotes(dir, projectId, notes) {
 }
 
 const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || ''));
-/** The project's last shipped release, or null. */
-const lastRelease = (history) => [...(history?.releases || [])].sort(byDate).at(-1) || null;
+/** The project's last shipped release, or null; another product's (#46) does not count. */
+const lastRelease = (history) => (history?.releases || []).filter((r) => !r.product).sort(byDate).at(-1) || null;
 
 // #489: where the last stable release cuts the candidates: the date of the rc it promoted (by its
 // tag or commit), not the promotion's own time, so a later rc held or red when an older one was
@@ -311,33 +327,7 @@ async function remoteTag(root, name) {
   return (lines.find((l) => l[1].endsWith('^{}')) || lines[0])?.[0] || null;
 }
 
-const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const LOCKFILES = ['npm-shrinkwrap.json', 'package-lock.json'];
-
-// The release's name as a semver (a leading `v` dropped), or null (`release-<run id>`, `v1.4`, `Spring drop`).
-function releaseSemver(name) {
-  const v = String(name || '').trim().replace(/^v(?=\d)/, '');
-  return SEMVER.test(v) ? v : null;
-}
-
-// Semver precedence: <0, 0 or >0 (a pre-release is lower than its release; build metadata ignored).
-function compareSemver(a, b) {
-  const pa = SEMVER.exec(a);
-  const pb = SEMVER.exec(b);
-  for (let i = 1; i <= 3; i++) if (Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) - Number(pb[i]);
-  if (!pa[4] || !pb[4]) return (pa[4] ? -1 : 0) + (pb[4] ? 1 : 0);
-  const xa = pa[4].split('.');
-  const xb = pb[4].split('.');
-  for (let i = 0; i < Math.max(xa.length, xb.length); i++) {
-    if (xa[i] === undefined || xb[i] === undefined) return xa[i] === undefined ? -1 : 1;
-    const na = /^\d+$/.test(xa[i]);
-    const nb = /^\d+$/.test(xb[i]);
-    if (na && nb && Number(xa[i]) !== Number(xb[i])) return Number(xa[i]) - Number(xb[i]);
-    if (na !== nb) return na ? -1 : 1;
-    if (xa[i] !== xb[i]) return xa[i] < xb[i] ? -1 : 1;
-  }
-  return 0;
-}
 
 // Where each value of a (valid) JSON text sits, by key path (JSON of the path array): { start, end,
 // key } (key: where its member's key starts), so a value is replaced without reformatting the file.
@@ -394,6 +384,13 @@ function packageEdits(text, version) {
     : [[first.key, first.key, `"version": ${JSON.stringify(version)},${line}`]];
 }
 
+// A detached worktree gets `branch` before the version commit (a branch of that name is left as it is).
+async function ensureBranch(dir, branch) {
+  if (!branch || await git(['symbolic-ref', '-q', 'HEAD'], dir).catch(() => null)) return;
+  const exists = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], dir).catch(() => null);
+  if (!exists) await git(['switch', '-c', branch], dir);
+}
+
 /**
  * #325: before the suites, a release run writes the release's version into the project folder's
  * package.json (`version`, added when missing) and, when present, the root `version` and
@@ -430,10 +427,7 @@ async function writeReleaseVersion({ dir, version, mock = false, branch = null }
   out.files = Object.keys(edits).filter((name) => edits[name].length);
   const change = `package.json ${out.from || '(no version)'} → ${out.to}`;
   if (mock) return { ...out, reason: `Simulation: nothing written; a real run would set ${change} (${out.files.join(', ')}).` };
-  if (branch && !(await git(['symbolic-ref', '-q', 'HEAD'], dir).catch(() => null))) {
-    const exists = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], dir).catch(() => null);
-    if (!exists) await git(['switch', '-c', branch], dir);
-  }
+  await ensureBranch(dir, branch);
   for (const name of out.files) fs.writeFileSync(path.join(dir, name), applyEdits(texts[name], edits[name]));
   try {
     await git(['add', '--', ...out.files], dir);
@@ -445,6 +439,142 @@ async function writeReleaseVersion({ dir, version, mock = false, branch = null }
     throw e;
   }
   return { ...out, written: true, commit: await git(['rev-parse', 'HEAD'], dir), reason: `Set ${change} and committed it.` };
+}
+
+// ---------- products (#46) ----------
+
+/**
+ * The product a release of the checkout `dir` is of: the one asked by its id, or the only one declared;
+ * null when the repository declares none (released as it always was, whatever was asked). Throws, naming the products, when it cannot tell.
+ */
+function productOf(dir, id = '') {
+  if (!dir) return null;
+  const { products, productErrors } = readManifest(dir);
+  if (productErrors.length) throw new Error(`The repository's products cannot be read: ${productErrors.join(' ')} Fix them, then release.`);
+  if (!products.length) return null;
+  const asked = String(id || '').trim();
+  const names = products.map((p) => p.id).join(', ');
+  if (asked && !products.some((p) => p.id === asked)) throw new Error(`The repository declares no product "${asked}": choose one of ${names}.`);
+  if (!asked && products.length > 1) throw new Error(`The repository declares several products (${names}): choose the one to release (the Product input).`);
+  return products.find((p) => !asked || p.id === asked) || null;
+}
+
+/** The product the Releases screen and the roadmap's cut lines release: the one tagged vX.Y.Z, else the first; null without products. */
+const mainProduct = (products) => (products || []).find((p) => ['v', ''].includes(p.tag_prefix)) || products?.[0] || null;
+
+// The semver a release of the product is named by (1.2.0, v1.2.0 or its own tag), or null
+function productSemver(product, name) {
+  const asked = String(name || '').trim();
+  const rest = asked.startsWith(product.tag_prefix) ? asked.slice(product.tag_prefix.length) : asked;
+  return releaseSemver(asked) || (SEMVER.test(rest) ? rest : null);
+}
+
+/** The tag of a product's release (its prefix and the version), or null when the name is not a semver. */
+function productTag(product, name) {
+  const version = productSemver(product, name);
+  return version ? `${product.tag_prefix}${version}` : null;
+}
+
+// The product's last tag below `version`, or null; a pre-release is not the last release of a stable one.
+async function lastProductTag(dir, product, version) {
+  const versions = (await git(['tag', '--list'], dir)).split(/\r?\n/).filter((t) => t.startsWith(product.tag_prefix)).map((t) => t.slice(product.tag_prefix.length));
+  const older = versions.filter((v) => SEMVER.test(v) && compareSemver(v, version) < 0 && (SEMVER.exec(version)[4] || !SEMVER.exec(v)[4]));
+  const last = older.sort(compareSemver).at(-1);
+  return last ? `${product.tag_prefix}${last}` : null;
+}
+
+const productFolders = (product) => [product.folder, ...product.paths];
+
+// The issues the pending changesets (.changeset/<slug>-<issue>.md, or #n in the text) are about, of the
+// product's packages (one that names no package, or of a product without package.json, counts too);
+// null when the repository has no changesets.
+function changesetIssues(dir, product) {
+  const folder = path.join(dir, '.changeset');
+  if (!fs.existsSync(folder)) return null;
+  const own = productFolders(product).map((f) => { try { return JSON.parse(fs.readFileSync(path.join(dir, f, 'package.json'), 'utf8')).name; } catch { return null; } }).filter(Boolean);
+  const found = new Set();
+  for (const file of fs.readdirSync(folder).filter((f) => f.endsWith('.md') && f !== 'README.md')) {
+    const text = fs.readFileSync(path.join(folder, file), 'utf8');
+    const front = /^---\r?\n([\s\S]*?)\r?\n?---/.exec(text)?.[1] || '';
+    const names = [...front.matchAll(/^\s*(['"]?)([^'":\s]+)\1\s*:/gm)].map((m) => m[2]);
+    if (own.length && names.length && !names.some((n) => own.includes(n))) continue;
+    const number = /-(\d+)\.md$/.exec(file);
+    for (const n of [...(number ? [Number(number[1])] : []), ...issuesOf(text)]) found.add(n);
+  }
+  return found;
+}
+
+// What the product's release holds: its last tag (`previous_version`, '' without one), the issues its
+// commits since then close (`issues`), those with no changeset (`missing_changesets`) and the
+// repository's newest commits since that tag (`history`).
+async function sinceLastRelease(dir, product, version) {
+  const previous = await lastProductTag(dir, product, version);
+  const range = previous ? `refs/tags/${previous}..HEAD` : 'HEAD';
+  const commits = await closingCommits(dir, ['--no-merges', range, '--', ...productFolders(product).map((f) => `:(literal)${f}`)]);
+  const issues = [...new Set(commits.flatMap((c) => c.issues))].sort((a, b) => a - b);
+  const covered = changesetIssues(dir, product);
+  return {
+    previous_version: previous || '',
+    issues,
+    missing_changesets: covered ? issues.filter((n) => !covered.has(n)) : [],
+    history: await git(['log', '--oneline', '--no-decorate', '-n', String(HISTORY_LINES), range], dir),
+  };
+}
+
+const untracked = async (dir) => (await git(['ls-files', '-z', '--others', '--exclude-standard'], dir)).split('\0').filter(Boolean);
+
+// Runs the product's version command in the run's worktree and commits every file it changed on
+// `branch`; a command that fails, commits by itself or writes another version leaves the worktree as it was.
+async function commitProductVersion({ dir, product, to, branch, run }) {
+  const dirty = await git(['diff', '--name-only', 'HEAD'], dir);
+  if (dirty) throw new Error(`The run's worktree has uncommitted changes (${dirty.split('\n').slice(0, 5).join(', ')}): the version command of ${product.id} was not run.`);
+  const head = await git(['rev-parse', 'HEAD'], dir);
+  const before = new Set(await untracked(dir));
+  const added = async () => (await untracked(dir)).filter((f) => !before.has(f));
+  try {
+    const r = await run(product.version_command, { cwd: dir });
+    if (r.exit_code !== 0) throw new Error(`The version command of ${product.id} (${product.version_command}) failed (exit code ${r.exit_code}): ${String(r.output || '').trim().slice(-1000)}`);
+    if (await git(['rev-parse', 'HEAD'], dir) !== head) throw new Error(`The version command of ${product.id} (${product.version_command}) made a commit: it must only write the files, the run commits them.`);
+    const wrote = projectVersion(path.join(dir, product.folder))?.version || 'no version';
+    if (wrote !== to) throw new Error(`The release asks for ${product.id} ${to}, but its version command (${product.version_command}) leaves it at ${wrote}: release ${wrote}, or change what the command reads (e.g. the changesets).`);
+    const files = [...(await git(['diff', '--name-only', '-z', 'HEAD'], dir)).split('\0').filter(Boolean), ...(await added())];
+    await ensureBranch(dir, branch);
+    await git(['--literal-pathspecs', 'add', '-A', '--', ...files], dir);
+    await git([...(await identityArgs(dir)), 'commit', '-q', '--no-verify', '-m', `Release ${product.id} ${to}`], dir);
+    return { files, commit: await git(['rev-parse', 'HEAD'], dir) };
+  } catch (e) {
+    await git(['reset', '-q', '--hard', head], dir).catch(() => {});
+    for (const f of await added().catch(() => [])) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+    throw e;
+  }
+}
+
+/**
+ * #46: the version of a product's release, before the suites: its own command writes it and the run
+ * commits what it changed; a product that has the version already is released as it is (no command,
+ * no commit, no changeset asked for). Throws, so the run stops before the suites, when the name is not
+ * a semver, the product has no version file, the version is lower (never a downgrade), its tag is
+ * taken, the command fails or the version it wrote is not the one asked. `run` runs a command (the
+ * machine adapter's runAction); a mock run reads only and says what a real one would do.
+ * @param {{ dir: string, product: any, version: string, mock?: boolean, branch?: string|null, run?: Function }} o
+ */
+async function writeProductVersion({ dir, product, version, mock = false, branch = null, run = null }) {
+  const to = productSemver(product, version);
+  if (!to) throw new Error(`A release of ${product.id} needs a semver version (e.g. 1.2.0): "${version || ''}" is not one.`);
+  const now = projectVersion(path.join(dir, product.folder));
+  if (!now) throw new Error(`The product ${product.id} has no version in ${product.folder} (package.json or pyproject.toml): its release cannot be checked.`);
+  const from = now.version;
+  if (SEMVER.test(from) && compareSemver(to, from) < 0) throw new Error(`The release ${product.id} ${to} is lower than its version ${from}: the version is never downgraded.`);
+  const tag = `${product.tag_prefix}${to}`;
+  const tagged = await git(['rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`], dir).catch(() => null);
+  if (tagged && (from !== to || tagged !== await git(['rev-parse', 'HEAD'], dir))) throw new Error(`The tag ${tag} already names another commit (${tagged.slice(0, 8)}): choose another version of ${product.id}.`);
+  const file = path.posix.join(product.folder, now.file);
+  const out = { product: product.id, tag, tag_prefix: product.tag_prefix, folder: product.folder, written: false, from, to, files: [], commit: null, ...(await sinceLastRelease(dir, product, to)) };
+  if (from === to) return { ...out, missing_changesets: [], change: '', reason: `${product.id} is at ${to} already: released as it is, without a version commit.` };
+  const change = `${file} ${from} → ${to}`;
+  if (mock) return { ...out, files: [file], change, reason: `Simulation: nothing run or written; a real run would set ${change} with ${product.version_command}.` };
+  const done = await commitProductVersion({ dir, product, to, branch, run });
+  return { ...out, ...done, written: true, change, reason: `Set ${change} with ${product.version_command} and committed it.` };
 }
 
 /**
@@ -515,9 +645,12 @@ module.exports = {
   holdCandidate,
   issuesSinceStable,
   lastRelease,
+  mainProduct,
   markReleased,
   mergesSinceStable,
   nextRelease,
+  productOf,
+  productTag,
   promoteRelease,
   // #861: the push of the local base a ship does, for a Local run's push_main (the machine adapter's one
   // way into the domains, scripts/layers.js EXCEPTIONS)
@@ -536,5 +669,6 @@ module.exports = {
   tagName,
   tagRelease,
   testResults,
+  writeProductVersion,
   writeReleaseVersion,
 };

@@ -18,6 +18,7 @@ const nunjucks = require('nunjucks');
 const checkStep = require('../check-step');
 const expectedFiles = require('../expected-files');
 const gateSummary = require('../gate-summary');
+const { projectVersion } = require('../project-version');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
 const testIds = require('../test-ids');
@@ -112,17 +113,14 @@ const gitOut = (dir, args) => {
 };
 // `git log --stat` of a folder's checkout since a base ref (the files and lines each commit changed)
 tpl.addFilter('git_log_stat', (dir, base) => (base ? gitOut(dir, ['log', '--stat', '--no-decorate', '--format=%h %s', '-n', '30', `${base}..HEAD`]) : ''));
-// the repository's last tags, newest first, one per line
-tpl.addFilter('git_tags', (dir, n = 5) => gitOut(dir, ['tag', '--sort=-creatordate', '--list']).split('\n').filter(Boolean).slice(0, Number(n) || 5).join('\n'));
-// the project's own version from its version file (package.json, pyproject.toml), e.g. "package.json: 0.3.0"
-tpl.addFilter('project_version', (dir) => {
-  if (!dir) return '';
-  const read = (name) => { try { return fs.readFileSync(path.join(String(dir), name), 'utf8'); } catch { return ''; } };
-  let version = '';
-  try { version = JSON.parse(read('package.json') || '{}').version || ''; } catch { /* not JSON */ }
-  if (version) return `package.json: ${version}`;
-  const py = /^\s*version\s*=\s*["']([^"']+)["']/m.exec(read('pyproject.toml'));
-  return py ? `pyproject.toml: ${py[1]}` : '';
+// the repository's last tags, newest first, one per line; with a `prefix` (#46), only that product's: the prefix, then a number
+tpl.addFilter('git_tags', (dir, n = 5, /** @type {string | null} */ prefix = null) => gitOut(dir, ['tag', '--sort=-creatordate', '--list']).split('\n').filter(Boolean)
+  .filter((t) => prefix == null || (t.startsWith(prefix) && /^\d/.test(t.slice(prefix.length)))).slice(0, Number(n) || 5).join('\n'));
+// the project's own version from its version file (package.json, pyproject.toml), e.g. "package.json: 0.3.0";
+// with a `folder` (#46), that product's
+tpl.addFilter('project_version', (dir, folder = '') => {
+  const found = dir ? projectVersion(path.join(String(dir), String(folder || ''))) : null;
+  return found ? `${path.posix.join(String(folder || ''), found.file)}: ${found.version}` : '';
 });
 
 // The issues an issue-tracker run created, as its `issues` output (#134): the `file` step's created

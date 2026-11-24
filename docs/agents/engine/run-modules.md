@@ -35,6 +35,7 @@ Which file owns which part of a run: `packages/engine/engine/workflow.js` keeps 
   - `supervision.js`: `superviseFailure` and the supervisor on call (stalls, escalation gates, failed
     actions, exhausted loops, idle agents).
   - `checkout.js`: the run's worktree, dependencies, base worktree, scratch workspace, leftover processes.
+  - `release-steps.js`: `type: release_version` (#325, #46).
   - `machine-steps.js`: `type: screenshots`, `suite`, `test_ids`, `check` (#404), `workflow` (child runs), evidence.
   - `test-requests.js`: ```run-tests requests, the test map, affected tests, leftover test commits, the
     refused test/protected edits prompts.

@@ -127,7 +127,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'fronts/build/views/workflows/workflows.js:workflowCard': 34,
   'packages/ui-kit/workflow-inputs.js:applyHints': 27,
   'packages/engine/service/areas/live-roadmap.js:refill': 35,
-  'packages/engine/service/areas/releases.js:settleRelease': 29,
   'packages/engine/service/areas/resume.js:keptWorkQuestion': 29,
   'packages/engine/service/areas/runs.js:startWorkflowRun': 41,
   'packages/shared/json-schema.js:validateSchema': 39,

@@ -169,6 +169,8 @@
     text('issues', ['visual_baselines']),
     // `type: release_version` (#325): the release's version into the project's package.json
     text('version', ['release_version']),
+    // #46: the product the release is of, when the repository declares some
+    text('product', ['release_version']),
     text('dir', ['release_version']),
     text('branch', ['record_docs', 'release_version']),
     // `type: record_docs` (#702): the work item whose docs record the Code & Build run (default inputs.item)

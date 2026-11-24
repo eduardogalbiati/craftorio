@@ -45,6 +45,15 @@ async function defaultBase(repo) {
 /** The issues a commit message closes: "Closes #12", "Fixes #3, #4" (closing keywords only). */
 const closedIssues = (message) => referencedIssues({ body: message });
 
+/** The commits `git log <args>` lists, newest first, with the issues each message closes: { sha, subject, issues }[]. */
+async function closingCommits(root, args) {
+  const log = await git(['log', '--format=%H%x1f%s%x1f%B%x1e', ...args], root);
+  return log.split('\x1e').map((c) => c.trim()).filter(Boolean).map((c) => {
+    const [sha, subject, message] = c.split('\x1f');
+    return { sha, subject, issues: closedIssues(message) };
+  });
+}
+
 /**
  * What the local <base> has that origin/<base> has not.
  * @param {{ repo: string, base?: string, fetch?: boolean }} o fetch: false reads the last fetch (no network)
@@ -61,11 +70,7 @@ async function localStatus({ repo, base = null, fetch = true }) {
   if (!(await refExists(root, `refs/remotes/origin/${base}`))) return { ...out, error: `origin/${base} not found: nothing to compare the local ${base} with.` };
   if (!compared) return { ...out, error: `Could not compare the local ${base} with origin/${base}.` };
   const range = `refs/remotes/origin/${base}..refs/heads/${base}`;
-  const log = await git(['log', '--format=%H%x1f%s%x1f%B%x1e', range], root);
-  out.commits = log.split('\x1e').map((c) => c.trim()).filter(Boolean).map((c) => {
-    const [sha, subject, message] = c.split('\x1f');
-    return { sha, subject, issues: closedIssues(message) };
-  });
+  out.commits = await closingCommits(root, [range]);
   out.issues = [...new Set(out.commits.flatMap((c) => c.issues))].sort((a, b) => a - b);
   return { ...out, ahead, behind };
 }
@@ -205,6 +210,7 @@ function conflictTask({ base, files = [], commits = [], issues = [] }) {
 
 module.exports = {
   closedIssues,
+  closingCommits,
   conflictTask,
   defaultBase,
   localStatus,

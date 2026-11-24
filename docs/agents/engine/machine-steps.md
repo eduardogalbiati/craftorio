@@ -22,7 +22,15 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   run log, for a name that is not a semver, no package.json, the same or a lower version, a run
   without its own worktree, or a git error: it never fails the run. Output: { status: written |
   unchanged, from, to, files, commit, change: "package.json 0.3.0 → 1.2.0", message }. Simulation:
-  nothing written, `change` says what a real run would set.
+  nothing written, `change` says what a real run would set. **Products** (#46): when the manifest of
+  `dir` declares `products` ([repository-workflows.md](repository-workflows.md)), the step releases the
+  one its `product` template names (empty: the only one; `productOf`): `runProductVersion` (run/release-steps.js) → the machine
+  adapter's `writeProductVersion` (releases.js) runs its `version_command` through the adapter's
+  `runAction` environment and commits every file it changed, or releases it as it is when it has the
+  version. What cannot be released **throws** (the run fails before the suites, the worktree as it was).
+  Output adds `product`, `tag`, `tag_prefix`, `folder`, `issues`, `missing_changesets` (a warn log
+  too), `history` and the product's own `previous_version`. The service records another product's
+  release with `product` (`packages/engine/service/areas/releases.js` `otherRelease`).
   - **Test requests** (#212, `serveTestRequests`): an agent turn that ends with a ```` ```run-tests ````
     block (`parseTestRequest`: test files, or `affected`) has them run by the engine in the agent's
     working folder (log `logs/tests-<step>-<n>.log`), then the agent resumes in the same step with a

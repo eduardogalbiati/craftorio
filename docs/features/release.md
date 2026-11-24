@@ -58,6 +58,41 @@ notes) in `<workspace>/releases/<project>.json` and marks its issues **Released*
 The discovery cards linked to one of those issues (`links.issues`) are marked Released too: their
 `links.release` becomes the release's version, and a card keeps the first release that shipped it.
 
+**Products** (#46). A repository that releases more than one thing declares them in
+`.craftorio/project.yaml`:
+
+```yaml
+products:
+  - id: app                      # what the run's Product input names
+    folder: apps/desktop         # where its package.json (or pyproject.toml) is
+    tag_prefix: v                # its tag: the prefix and the version, v1.2.0
+    version_command: npm run bump-app  # writes the version and the changelog, commits nothing
+    paths: [packages/ui]         # optional: its other folders
+  - id: engine
+    folder: packages/engine
+    tag_prefix: engine-v
+    version_command: npm run bump-engine
+```
+
+A release run then releases one product: its **Product** input (not needed with only one) and its
+**Version** (`1.2.0`, `v1.2.0` or the product's own tag). Before the suites the run calls the product's
+own command, checks that it wrote the version asked and commits every file it changed on the run's
+branch; Ship tags `<tag_prefix><version>` and pushes only that tag. The run stops before the suites,
+with nothing committed or tagged, when no product or an unknown one is chosen (it names the declared
+ones), the products of the manifest have an error, the version is not a semver, is lower than the
+product's or its tag names another commit, the command fails or commits by itself, or it wrote another
+version (both are said). A product already at the version is released as it is, without a command, a
+changeset or a version commit: that is how a first release goes out. The last release is the product's
+own last tag (the review and the fix read the commits since it, or the repository's history without
+one); another product's tag never counts. In a repository with a `.changeset` folder, the merged issues
+that touched the product's folders since then and have no changeset of its packages
+(`.changeset/<slug>-<issue>.md`, or `#<issue>` in its text) are in the run log and in the Ship gate: you
+can ship anyway. The Releases screen and a cut line release the main product, the one tagged `vX.Y.Z`
+(else the first declared); release another one from the Start panel (workflow **Release**, Product and
+Version under Advanced parameters). Its shipped release is recorded under its tag and never counts as
+the main product's last release. A simulation reads the same things and writes, tags and pushes nothing.
+A repository without `products` is released as described above.
+
 **Release candidates and stable releases** (#489). There are two kinds of release. A **candidate**
 (`vX.Y.Z-rc.N`, N counting the merges since the last stable) is recorded for every merge into the
 base, with its run and its issues, and the project's Deploy workflow publishes it as a prerelease,

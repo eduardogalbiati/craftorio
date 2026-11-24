@@ -453,7 +453,7 @@ function composeWorkflowSet({ profile, answers, facts, existing } = {}) {
 /**
  * The manifest of the repository's one (`existing`: { version, requires, workflows }, none: a new
  * one) with the composed entries: they replace the entries of the same name, in their place; the
- * other entries, version and requires stay.
+ * other entries, version and requires stay, as do the repository's products (#46).
  */
 function mergeManifest(existing, entries) {
   const clean = (e) => Object.fromEntries(Object.entries(e).filter(([, v]) => v != null));
@@ -463,6 +463,7 @@ function mergeManifest(existing, entries) {
   return {
     version: existing?.version ?? 1,
     ...(existing?.requires ? { requires: existing.requires } : {}),
+    ...(existing?.products?.length ? { products: existing.products } : {}),
     workflows: [...kept, ...added],
   };
 }

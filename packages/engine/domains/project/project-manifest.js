@@ -17,10 +17,17 @@
 // (packages/engine/domains/triggers/triggers.js validateTriggers). A refused rule is a `triggerErrors`
 // entry (and a `refusedTriggers` one, for the project screen) and is ignored: it never voids the manifest
 // and never enters `errors`; a manifest voided by its errors has no triggers.
+// #46: an optional `products:` list, what the repository releases apart from each other: `{ id, folder,
+// tag_prefix, version_command, paths? }` (folder: where its package.json or pyproject.toml is; tag_prefix:
+// its tag is the prefix and the version; version_command: writes its version and changelog, commits
+// nothing; paths: its other folders). A problem of a product is in `errors` like any other and in
+// `productErrors`: the release run stops on it, never releasing the repository as one without products.
+// The other errors do not void the products: they say nothing about the workflows.
 
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { compareSemver } = require('../releases/semver');
 const { WORKFLOW_CATEGORIES } = require('../workflow/workflow-categories');
 const {
   LEGACY_PROJECT_DIR,
@@ -53,7 +60,6 @@ const fullVersion = (v) => {
 // Whether the app version satisfies a range of space-separated comparators (`>=1.2 <2`, `1.4.0`);
 // null when the range cannot be read.
 function satisfies(appVersion, range) {
-  const { compareSemver } = require('../releases/releases');
   const comparators = String(range).trim().split(/\s+/).filter(Boolean);
   if (!comparators.length) return null;
   const app = fullVersion(appVersion);
@@ -100,8 +106,54 @@ function requiresProblem(appVersion, range) {
 
 // #791: the kinds a manifest may map (packages/shared/default-workflow.js KIND_ENTRIES; a refactor uses the Feature entry)
 const { KIND_ENTRIES, label } = require('@craftorio/shared/default-workflow');
-const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [], triggers: [], triggerErrors: [], refusedTriggers: [] });
+const EMPTY = () => ({ version: null, requires: null, workflows: [], default: null, kinds: {}, errors: [], products: [], productErrors: [], triggers: [], triggerErrors: [], refusedTriggers: [] });
 const { validateTriggers } = require('../triggers/triggers');
+
+// #46: a folder of the repository as a relative path with /, or null when it is outside it
+function repoFolder(v) {
+  const given = str(v)?.replace(/\\/g, '/');
+  if (!given || given.startsWith('/') || /^[a-z]:/i.test(given)) return null;
+  const folder = path.posix.normalize(given).replace(/\/$/, '');
+  return folder.split('/').includes('..') ? null : folder;
+}
+
+// #46: one product -> { id, folder, tag_prefix, version_command, paths } or the reasons it is refused
+function parseProduct(entry, i) {
+  const at = `products[${i}]`;
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return { errors: [`${at}: a product is { id, folder, tag_prefix, version_command, paths? }.`] };
+  const errors = [];
+  const id = str(entry.id);
+  if (!id) errors.push(`${at}: a product needs an id.`);
+  const folder = repoFolder(entry.folder ?? '.');
+  if (!folder) errors.push(`${at}: the product's folder "${entry.folder}" must be a folder of the repository (a relative path).`);
+  const command = str(entry.version_command);
+  if (!command) errors.push(`${at}: a product needs a version_command (it writes the product's version and changelog).`);
+  const prefix = str(entry.tag_prefix) ?? '';
+  if (!/^[\w./@-]*$/.test(prefix) || /^[-./]|\.\.|\/\/|@\{/.test(prefix)) errors.push(`${at}: the product's tag_prefix "${prefix}" cannot start a git tag.`);
+  const paths = entry.paths == null ? [] : [].concat(entry.paths).map(repoFolder);
+  if (paths.includes(null)) errors.push(`${at}: the product's paths must be folders of the repository (relative paths).`);
+  return { errors, product: { id, folder, tag_prefix: prefix, version_command: command, paths } };
+}
+
+// #46: the manifest's products, none when one of them has a problem (added to `errors`)
+function parseProducts(doc, errors) {
+  if (doc.products == null) return [];
+  if (!Array.isArray(doc.products)) {
+    errors.push('products must be a list of { id, folder, tag_prefix, version_command, paths? }.');
+    return [];
+  }
+  const list = [];
+  for (const [i, entry] of doc.products.entries()) {
+    const { errors: refused, product } = parseProduct(entry, i);
+    errors.push(...refused);
+    if (!product) continue;
+    if (product.id && list.some((p) => p.id === product.id)) errors.push(`product "${product.id}" is declared twice.`);
+    const same = list.find((p) => p.tag_prefix === product.tag_prefix);
+    if (same) errors.push(`products "${same.id}" and "${product.id}" have the same tag_prefix "${product.tag_prefix}": their tags would be the same.`);
+    list.push(product);
+  }
+  return errors.length ? [] : list;
+}
 
 // #568: the manifest's triggers, checked against its own workflows' names
 function parseTriggers(doc, list) {
@@ -162,13 +214,15 @@ function parseKinds(doc, list, errors) {
 /**
  * Parses a manifest's text. A manifest with errors declares no workflows, default or kinds: the
  * project runs on the workspace's workflows as without one.
- * @returns {{ version: *, requires: string|null, workflows: object[], default: string|null, kinds: object, errors: string[] }}
+ * @returns {{ version: *, requires: string|null, workflows: object[], default: string|null, kinds: object, errors: string[], products: object[], productErrors: string[] }}
  */
 function parseManifest(text, { appVersion } = {}) {
   const out = EMPTY();
   let doc;
   try { doc = yaml.load(String(text ?? '')); } catch (e) {
     out.errors.push(`${MANIFEST_FILE}: not valid YAML (${e.reason || e.message}).`);
+    // #46: what it declares cannot be read: a release run stops rather than take it as no products
+    if (/^products\s*:/m.test(String(text))) out.productErrors.push(...out.errors);
     return out;
   }
   if (doc == null) return out;
@@ -180,6 +234,9 @@ function parseManifest(text, { appVersion } = {}) {
   out.requires = str(doc.requires);
   const problem = appVersion ? requiresProblem(appVersion, out.requires) : null;
   if (problem) out.errors.push(`${MANIFEST_FILE}: ${problem}`);
+  out.products = parseProducts(doc, out.productErrors);
+  out.productErrors = out.productErrors.map((e) => `${MANIFEST_FILE}: ${e}`);
+  out.errors.push(...out.productErrors);
   if (doc.workflows != null && !Array.isArray(doc.workflows)) {
     out.errors.push(`${MANIFEST_FILE}: workflows must be a list of { name, file?, category? }.`);
     return { ...out, workflows: [] };
@@ -213,7 +270,7 @@ function readManifest(projectDir, opts = {}) {
   if (from === MANIFEST_FILE) return out;
   // T2c: the old folder's file, named as it is in the messages
   const named = (list) => (list || []).map((e) => (e.startsWith(MANIFEST_FILE) ? from + e.slice(MANIFEST_FILE.length) : e));
-  return { ...out, errors: named(out.errors), ...(out.triggerErrors ? { triggerErrors: named(out.triggerErrors) } : {}) };
+  return { ...out, errors: named(out.errors), productErrors: named(out.productErrors), ...(out.triggerErrors ? { triggerErrors: named(out.triggerErrors) } : {}) };
 }
 
 module.exports = {

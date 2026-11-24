@@ -16,6 +16,9 @@
 // `promoteRelease` tags a candidate's commit as the stable release (only the tag is pushed; nothing
 // in simulation); `releaseTrain` is the night's end (packages/engine/service/channels/nightwatch.js): the last
 // candidate is promoted, proposed or held (night.decideReleaseTrain).
+// #46: in a project whose repository declares products, all of it is the main product's (the one tagged
+// vX.Y.Z, releases.mainProduct): the screen and the cut line start its release. Another product's shipped
+// release is recorded apart (`product`, its tag as the version, `otherRelease`).
 
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +28,7 @@ const { loadWorkflow } = require('../../engine/workflow');
 const backlog = require('../../domains/backlog/backlog');
 const { clientError } = require('../common');
 const night = require('../../domains/night/night-watch');
+const { readManifest } = require('../../domains/project/project-manifest');
 const projects = require('../../domains/project/projects');
 const releases = require('../../domains/releases/releases');
 const roadmaps = require('../../domains/roadmap/roadmap');
@@ -52,6 +56,16 @@ module.exports = (ctx) => {
     if (!entry) return null;
     const { items: _i, kind: _k, ...line } = entry;
     return { stage: entry.id, ...line };
+  }
+
+  // #46: the product of a release run when it is not the project's main one (what the release history
+  // is about), or null: `id` is the run's product input, empty for the only product there is.
+  function otherProduct(project, id) {
+    const asked = String(id || '').trim();
+    if (!asked) return null;
+    const { products } = readManifest(project.folder);
+    const main = releases.mainProduct(products);
+    return products.find((p) => p.id === asked && p !== main) || null;
   }
 
   // The next release of a project: what merged locally since the last one, named by the cut line waiting.
@@ -197,6 +211,14 @@ module.exports = (ctx) => {
     return { stations, station: STATION_OF[(run.progress || []).at(-1)?.step] || null };
   }
 
+  // The name of a release run that did not ship: another product's (#46) is named by its tag; started
+  // without a version, an explicit label ("Release (no version)"), never the filter's 'next'.
+  function pendingName(run, other) {
+    const version = String(run.inputs?.version || '').trim();
+    if (other) return releases.productTag(other, version) || `${other.id} ${version || '(no version)'}`;
+    return version || '(no version)';
+  }
+
   // The releases the Roadmap draws (#291): the shipped ones of the history, each with its release run
   // when the history holds one, and the release runs that did not ship since the last release (the
   // newest per version: checking, waiting at Ship, on hold, failed; a simulated one that shipped),
@@ -214,21 +236,24 @@ module.exports = (ctx) => {
     const withRun = (x, run) => (run ? { ...x, runId: run.runId, mock: !!run.mock, startedAt: run.startedAt, durationMs: run.durationMs, runCost: run.costUsd, ...releaseStations(run) } : x);
     const history = releases.readReleases(ws.releases, project.id).releases;
     const shipped = history.map((h) => withRun({ ...h, status: 'shipped' }, releaseRuns.find((r) => (h.runs || []).includes(r.runId))));
-    const last = history.map((h) => String(h.date || '')).sort().at(-1) || '';
+    // #46: each product's last release (the main one's under null)
+    const last = new Map();
+    for (const h of history) if (String(h.date || '') > (last.get(h.product || null) || '')) last.set(h.product || null, String(h.date));
     const versions = new Set(history.map((h) => h.version));
     const STATUS = { success: 'shipped', cancelled: 'held' };
     let next = null;
     const pending = [];
-    for (const run of releaseRuns.filter((r) => String(r.startedAt || '') > last).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))) {
-      // started without a version: an explicit label ("Release (no version)"), never the filter's 'next'
-      const version = String(run.inputs?.version || '').trim() || '(no version)';
+    for (const run of [...releaseRuns].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))) {
+      const other = otherProduct(project, run.inputs?.product);
+      if (String(run.startedAt || '') <= (last.get(other?.id || null) || '')) continue;
+      const version = pendingName(run, other);
       if (versions.has(version)) continue;
       versions.add(version);
       next ??= nextOf(project, list.filter((r) => !isReleaseRun(r)));
       // waiting: at its Ship gate, in this app or in another one (its trail's last step waits)
       const waiting = run.waiting || run.progress?.at(-1)?.status === 'waiting';
       const status = run.status === 'running' ? (waiting ? 'waiting' : 'checking') : STATUS[run.status] || 'failed';
-      pending.push(withRun({ version, status, runs: next.runs.map((r) => r.runId), issues: next.issues, cost: next.cost }, run));
+      pending.push(withRun({ version, status, ...(other ? { product: other.id, runs: [], issues: [], cost: 0 } : { runs: next.runs.map((r) => r.runId), issues: next.issues, cost: next.cost }) }, run));
     }
     // #555: the release entries of the roadmap not started yet, each with its run's estimate (its planned card)
     const planned = (roadmap?.stages || []).filter((s) => isRelease(s) && !s.runId && s.status !== 'shipped' && s.name && !versions.has(s.name))
@@ -250,6 +275,7 @@ module.exports = (ctx) => {
     const local = backlog.readLocal(ws.backlog, project.id);
     const base = list.find((r) => r.localMerge?.base)?.localMerge.base || local?.base || null;
     const name = String(version || '').trim();
+    const { products } = readManifest(project.folder);
     // the default E2E command is an npm script: a project without it has no E2E suite to run (a
     // missing script would read as a red suite and call the developer for nothing)
     // (#735: an empty default command falls back to that npm script)
@@ -260,6 +286,8 @@ module.exports = (ctx) => {
       version: name,
       history: releases.historyText(nextOf(project, list), { runsDir: ws.runs, commits: local?.commits || [] }),
       ...(noE2e ? { e2e_suite: 'skip' } : {}),
+      // #46: the screen and the cut line release the main product
+      ...(products.length > 1 ? { product: releases.mainProduct(products).id } : {}),
     };
     for (const [k, def] of Object.entries(wf.inputs || {})) {
       if (k in inputs) continue;
@@ -319,6 +347,20 @@ module.exports = (ctx) => {
     }
   }
 
+  // #46: the history entry of another product's shipped release: its own issues (the version step's, with
+  // the backlog's titles) and its release run, never what the main product's next release holds.
+  function otherRelease(projectId, runId, summary, product) {
+    const { release } = summary;
+    const titles = new Map((backlog.readBacklog(ctx.ws.backlog, projectId)?.issues || []).map((i) => [i.number, i.title]));
+    const issues = (summary.steps?.version?.output?.issues || []).map((n) => ({ number: n, title: titles.get(n) || '' }));
+    return {
+      product: product.id, version: release.tag, tag: release.tag, date: summary.finished_at || new Date().toISOString(), commit: release.commit, base: release.base,
+      issues, runs: [runId], cost: Math.round((Number(summary.cost_usd) || 0) * 100) / 100,
+      tests: releases.testResults(summary.steps),
+      notes: releases.releaseNotes({ version: release.tag, issues, runs: [{ runId, cost: summary.cost_usd }] }),
+    };
+  }
+
   // What a release run that ended leaves (idempotent: the run's event and the roadmap's dispatcher
   // both call it). A real shipped run is recorded once in the project's history (by its tag), the
   // discovery cards linked to its issues are marked Released (`markCards`) and the cut line it was
@@ -332,32 +374,48 @@ module.exports = (ctx) => {
     const shipped = summary.release && (summary.release.commit || summary.status === 'success') ? summary.release : null;
     const outcome = shipped ? 'shipped' : summary.status === 'cancelled' ? 'held' : 'failed';
     const line = roadmaps.readRoadmap(ws.backlog, projectId).stages.find((s) => isRelease(s) && s.runId === runId);
-    const history = releases.readReleases(ws.releases, projectId);
-    if (shipped && !summary.mock && !history.releases.some((r) => r.tag === shipped.tag)) {
-      const project = projects.readProject(ws.projects, projectId);
-      // the release run itself (it merged a fix) is added below, once, with its own cost
-      const next = nextOf(project, projectRuns(project).filter((r) => r.runId !== runId));
-      const titles = new Map((backlog.readBacklog(ws.backlog, projectId)?.issues || []).map((i) => [i.number, i.title]));
-      const issues = new Map(next.issues.map((i) => [i.number, i]));
-      for (const n of shipped.issues || []) if (!issues.has(n)) issues.set(n, { number: n, title: titles.get(n) || '' });
-      const version = line?.name || String(summary.inputs?.version || '').trim() || shipped.tag;
-      releases.recordRelease(ws.releases, projectId, {
-        version, tag: shipped.tag, date: summary.finished_at || new Date().toISOString(), commit: shipped.commit, base: shipped.base,
-        issues: [...issues.values()].sort((a, b) => a.number - b.number),
-        runs: [...next.runs.map((r) => r.runId), runId],
-        cost: Math.round((next.cost + (Number(summary.cost_usd) || 0)) * 100) / 100,
-        tests: releases.testResults(summary.steps),
-        // the owner's notes; generated ones are written again with the release's own name
-        notes: next.generated ? releases.releaseNotes({ version, issues: [...issues.values()], runs: next.runs }) : next.notes,
-      });
-    }
-    if (shipped && !summary.mock) markCards(projectId, shipped.tag);
+    if (shipped && !summary.mock) recordShipped(projectId, runId, summary, line);
     if (shipped && line && line.status !== 'shipped') {
       roadmaps.setRelease(ws.backlog, projectId, line.id, { status: 'shipped', shippedAt: summary.finished_at || new Date().toISOString() });
     } else if (!shipped && line?.status === 'running') {
       holdLine(projectId, line, outcome, runId);
     }
     return outcome;
+  }
+
+  // A real shipped release in the project's history, once (by its tag), and its discovery cards.
+  function recordShipped(projectId, runId, summary, line) {
+    const { ws } = ctx;
+    const shipped = summary.release;
+    if (!releases.readReleases(ws.releases, projectId).releases.some((r) => r.tag === shipped.tag)) {
+      const project = projects.readProject(ws.projects, projectId);
+      const other = otherProduct(project, summary.steps?.version?.output?.product || summary.inputs?.product);
+      if (other) releases.recordRelease(ws.releases, projectId, otherRelease(projectId, runId, summary, other));
+      else recordMain(project, runId, summary, line);
+    }
+    markCards(projectId, shipped.tag);
+  }
+
+  // The main release: what merged locally since the last one, its release run and the owner's notes.
+  function recordMain(project, runId, summary, line) {
+    const { ws } = ctx;
+    const projectId = project.id;
+    const shipped = summary.release;
+    // the release run itself (it merged a fix) is added below, once, with its own cost
+    const next = nextOf(project, projectRuns(project).filter((r) => r.runId !== runId));
+    const titles = new Map((backlog.readBacklog(ws.backlog, projectId)?.issues || []).map((i) => [i.number, i.title]));
+    const issues = new Map(next.issues.map((i) => [i.number, i]));
+    for (const n of shipped.issues || []) if (!issues.has(n)) issues.set(n, { number: n, title: titles.get(n) || '' });
+    const version = line?.name || String(summary.inputs?.version || '').trim() || shipped.tag;
+    releases.recordRelease(ws.releases, projectId, {
+      version, tag: shipped.tag, date: summary.finished_at || new Date().toISOString(), commit: shipped.commit, base: shipped.base,
+      issues: [...issues.values()].sort((a, b) => a.number - b.number),
+      runs: [...next.runs.map((r) => r.runId), runId],
+      cost: Math.round((next.cost + (Number(summary.cost_usd) || 0)) * 100) / 100,
+      tests: releases.testResults(summary.steps),
+      // the owner's notes; generated ones are written again with the release's own name
+      notes: next.generated ? releases.releaseNotes({ version, issues: [...issues.values()], runs: next.runs }) : next.notes,
+    });
   }
 
   // A release run ended: its outcome is settled (the roadmap goes on, or pauses at the line) and the

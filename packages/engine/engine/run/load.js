@@ -343,7 +343,7 @@ const STEP_CHECKS = resolveChecks('steps[].', [
   askHumanShape,
   // the step types without an agent, then the agent steps (one applies to a step)
   screenshotsFrom, 'folder', 'command', 'timeout', 'scope', 'files', filesWithoutScope, 'expect', expectWithFiles,
-  childWorkflow, 'steps', 'renderer', 'issues', 'version', 'dir', 'branch', 'item', 'stage', 'stage_summary', 'target', 'action', projectMapFrom, fanOutGoal, knownAgents, editAgent,
+  childWorkflow, 'steps', 'renderer', 'issues', 'version', 'product', 'dir', 'branch', 'item', 'stage', 'stage_summary', 'target', 'action', projectMapFrom, fanOutGoal, knownAgents, editAgent,
   'goal.until', 'wait', waitOnLoop, 'wait.probe', 'wait.target', 'wait.output', outputNeedsProbe('output'),
   'wait.infra_output', outputNeedsProbe('infra_output'), 'wait.grace', 'wait.parent',
   'choices', 'full_suite', 'commit_tests', commitTestsSingleAgent, 'base_worktree', baseWorktreeNeedsWorktree,
@@ -565,7 +565,7 @@ function silentEfforts(wf) {
   return out;
 }
 
-// `outputs:` (#134): the run's result contract, { <name>: { type, description, value } }. `value` is a
+// `outputs:` (#134): the run's result contract, { <name>: { type, description, value, default? } }. `value` is a
 // template over the run's context plus `run` ({ issues, local_merge }); a type other than string is
 // rendered as JSON (`| to_json`). Filled when the run finishes (WorkflowRun.computeOutputs).
 const OUTPUT_TYPES = ['string', 'number', 'integer', 'boolean', 'array', 'object'];
@@ -576,6 +576,7 @@ function validateOutputs(outputs) {
     if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new Error(`outputs.${name}: the name must be lower case letters, digits and _.`);
     if (!o || typeof o !== 'object') throw new Error(`outputs.${name} must be { type, description, value }.`);
     if (!OUTPUT_TYPES.includes(o.type || 'string')) throw new Error(`outputs.${name}.type must be one of ${OUTPUT_TYPES.join(', ')}.`);
+    if (o.default !== undefined && (typeof o.default !== 'string' || (o.type || 'string') !== 'string')) throw new Error(`outputs.${name}.default must be a string, of a string output.`);
     if (typeof o.value !== 'string' || !o.value.trim()) throw new Error(`outputs.${name}.value must be a template (e.g. "{{ steps.write.output.document }}").`);
   }
 }

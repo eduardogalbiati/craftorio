@@ -6,7 +6,7 @@ Declared run outputs and `then`: what a finished run hands to the next one, and 
   string, number, integer, boolean, array, object. `value` is a template over the run's context plus
   `run` (`run.issues`, `run.local_merge`); a type other than string is rendered as JSON (`| to_json`) and
   parsed. `computeOutputs` fills them in `finish()`: `workflow.finished.outputs` and `summary.outputs`.
-  Empty or unparsable → `null` (a `log` warn, never a failed run). Filter `filed_issues(analysis)`: the
+  Empty or unparsable → `null` (a `log` warn, never a failed run), or a string output's `default` (#46). Filter `filed_issues(analysis)`: the
   issue tracker's created issues with complexity and grouping advice (`grouping`, `group_with`).
   The visual builder flags `outputs` (it would drop it on save): such a workflow is edited as YAML.
 - Bundled contracts: issue-tracker `issues`; writer-reviewer `document`, `issue`; ai-arena `document`;

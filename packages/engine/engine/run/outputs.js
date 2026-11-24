@@ -161,7 +161,8 @@ function takeHandoff(text) {
 
 const methods = {
   // The declared `outputs:` filled from the run (#134): each value template rendered over the context
-  // plus `run`, parsed as JSON for a type other than string; empty or unparsable → null (logged).
+  // plus `run`, parsed as JSON for a type other than string; empty or unparsable → null (logged), or the
+  // output's own `default` (#46, a string output that is empty rather than missing).
   computeOutputs() {
     const defs = this.wf.outputs;
     if (!defs) return undefined;
@@ -181,7 +182,7 @@ const methods = {
         this.emitEvent('log', { level: 'warn', message: `Output ${name} could not be filled: ${e.message}` });
         value = null;
       }
-      out[name] = value;
+      out[name] = value ?? def.default ?? null;
     }
     return out;
   },

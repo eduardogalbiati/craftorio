@@ -5,7 +5,7 @@
 //     (or nothing labelled) a patch; a leading "v" kept; '1.0.0' when nothing shipped; '' when the
 //     last name is not a version. → { version, bump, counts, reason: { key, values } }
 //   reasonText(reason)                 that reason in the interface language ("Minor: 6 enhancements…")
-//   recentReleases(releases, n = 3)    the last n shipped releases of releases:list, newest first
+//   recentReleases(releases, n = 3)    the last n shipped releases of releases:list, newest first (not another product's, #46)
 //   releaseIssues(stages, at, since)   the issues of a cut line after stage `at`: the ones done since the
 //     last release (`since`, releases:list's next.issues) and the ones planned up to the cut
 (function (root) {
@@ -57,7 +57,7 @@
 
   function recentReleases(releases, n = 3) {
     return (Array.isArray(releases) ? releases : [])
-      .filter((r) => r && (!r.status || r.status === 'shipped'))
+      .filter((r) => r && !r.product && (!r.status || r.status === 'shipped'))
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
       .slice(0, n);
   }

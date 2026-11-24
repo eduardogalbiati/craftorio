@@ -75,6 +75,7 @@ const { methods: checkoutMethods } = require('./run/checkout');
 const { methods: machineStepsMethods } = require('./run/machine-steps');
 const { methods: projectMapStepsMethods } = require('./run/project-map-steps');
 const { methods: refactorProposalsStepsMethods } = require('./run/refactor-proposals-steps');
+const { methods: releaseStepsMethods } = require('./run/release-steps');
 const { methods: testRequestsMethods } = require('./run/test-requests');
 const { methods: resumeMethods, pausedError } = require('./run/resume');
 const { methods: setupMethods } = require('./run/setup');
@@ -83,8 +84,8 @@ const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || nul
 
 // The machine steps whose output is all there is (no worktree processes, no supervisor): type → method.
 // project_map (#372): the project map's facts, validation and save; refactor_proposals (#378): the
-// Refactor proposals workflow's facts, proposals, ranking and filing; release_version (#325): never
-// fails the run, the output says what was written; test_ids (#246): the missing test ids; check
+// Refactor proposals workflow's facts, proposals, ranking and filing; release_version (#325): the
+// output says what was written, only a product's release (#46) fails the run; test_ids (#246): the missing test ids; check
 // (#404): the project's rule checks (its command sweeps what it leaves running); visual_baselines
 // (#696): the missing baselines of the issues' @visual scenarios; docs_check (#757): the docs the
 // issues expect that the diff does not touch; record_docs (#702): a Code & Build run in its work item's docs;
@@ -965,6 +966,7 @@ mixin(
   machineStepsMethods,
   projectMapStepsMethods,
   refactorProposalsStepsMethods,
+  releaseStepsMethods,
   testRequestsMethods,
   resumeMethods,
   setupMethods,

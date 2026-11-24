@@ -4,12 +4,24 @@
 # the workspace (workflows/<name>.yaml there), never here.
 # #790 `default`: the project's default development workflow (a clone takes it). #791 `kinds`: the
 # workflow of each kind of issue; `fix` in Remote mode because `main` is protected (a pull request).
+# #46 `products`: what is released apart, each with its own version, changelog and tag (docs/features/release.md).
 version: 1
 requires: ">=1.1"
 default: ai-development-remote-hero
 kinds:
   feature: { name: ai-development-remote-hero }
   fix: { name: fix, mode: remote }
+products:
+  - id: app
+    folder: apps/desktop
+    tag_prefix: v
+    version_command: node scripts/release-product-version.js app
+    # the rest of its fixed group (.changeset/config.json)
+    paths: [apps/web, fronts/ai, fronts/analyser, fronts/build, fronts/plan, packages/ui-kit]
+  - id: engine
+    folder: packages/engine
+    tag_prefix: engine-v
+    version_command: node scripts/release-product-version.js engine
 workflows:
   - name: backlog-refresh
     category: intake

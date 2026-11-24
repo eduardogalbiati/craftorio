@@ -6,8 +6,7 @@
 // (`runTestIdsStep`, #246), `type: visual_baselines` (`runVisualBaselinesStep`, #696), `type: check` (`runCheckStep`, the project's rule checks, #404), `type: docs_check`
 // (`runDocsCheckStep`, the docs the issues expect against the diff, #757), `type: record_docs`
 // (`runRecordDocsStep`, a Code & Build run in its work item's docs, #702), `type:
-// workflow` child runs (`runChildWorkflows`, #174), `type: release_version` (`runReleaseVersionStep`,
-// #325), `type: push_base` (`runPushBaseStep`, #861), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
+// workflow` child runs (`runChildWorkflows`, #174), `type: push_base` (`runPushBaseStep`, #861), and the evidence a step leaves (`recordEvidence`, `saveScenarios`). #465: a suite, check or
 // screenshots step emits step.log { step_id, path, command } when its command's log starts (its live
 // terminal follows it); a wait for memory or the suite slot is written to that log as it starts.
 // The steps' own logic is packages/engine/engine/suite-step.js, screenshot-step.js, test-ids.js, check-step.js and workflow-step.js;
@@ -34,8 +33,6 @@ const { machineSlotDir } = require('../machine-slot');
 const { runWorkflowStep } = require('../workflow-step');
 const testIds = require('../test-ids');
 const visualBaselines = require('../visual-baselines');
-const { previousTag } = require('../../domains/releases/release-city');
-const { releaseSemver } = require('../../domains/releases/releases');
 const { render } = require('./templates');
 const { parseDuration, renderFileList } = require('./load');
 const { pausedError } = require('./resume');
@@ -69,21 +66,6 @@ function testedTree(dir) {
     return { commit, clean: !!commit && lines.every((l) => l.startsWith('#')) };
   } catch {
     return { commit: null, clean: false };
-  }
-}
-
-// #378: the tag before the release `version` (release.yaml's `previous_version` output, the `since`
-// a refactor-proposals stage reads), as the Release city tab names it (packages/engine/domains/releases/release-city.js
-// previousTag: semver order for a semver name, even before Ship tags it); a name that is not a
-// semver and not tagged yet: the newest tag reachable from HEAD. '' without a git checkout or a tag
-async function previousReleaseTag(dir, version) {
-  if (!dir || !fs.existsSync(dir)) return '';
-  const tag = await previousTag(dir, version);
-  if (tag || releaseSemver(version)) return tag || '';
-  try {
-    return execFileSync('git', ['describe', '--tags', '--abbrev=0', 'HEAD'], { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch {
-    return '';
   }
 }
 
@@ -534,34 +516,6 @@ const methods = {
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     output = await once({ selection: { ...selection, why: `${selection.why}; they passed, so the whole suite runs once more` }, logName: `${step.id}-${st.visits}-full` });
     output.affected = focused;
-    return output;
-  },
-
-  // `type: release_version` (#325, release.yaml before the suites): the release's version written into
-  // the project's package.json and committed on the run's branch (packages/engine/domains/releases/releases.js writeReleaseVersion).
-  // Never fails the run: a name that is not a semver, no package.json, nothing to change or a git
-  // error is said in the output and the log. Only in the run's own worktree (never the owner's
-  // checkout); a simulation writes nothing and says what it would set.
-  async runReleaseVersionStep(step) {
-    const dir = render(String(step.dir ?? '{{ worktree_dir }}'), this.ctx).trim();
-    const version = render(String(step.version ?? ''), this.ctx).trim();
-    const branch = step.branch ? render(String(step.branch), this.ctx).trim() : null;
-    const none = (reason) => ({ written: false, from: null, to: null, files: [], commit: null, reason });
-    let r;
-    let error = false;
-    const simulated = this.machine.simulated;
-    try {
-      r = !simulated && !this.worktree
-        ? none('The run has no worktree of its own: the version is not written in the repository folder.')
-        : await this.machine.writeReleaseVersion({ dir, version, branch });
-    } catch (e) {
-      error = true;
-      r = none(`The version could not be written: ${e.message}`);
-    }
-    // what ships with the release (a simulation: what a real run would write)
-    const change = r.written || (simulated && r.files.length) ?`package.json ${r.from || '(no version)'} → ${r.to}` : '';
-    const output = { kind: 'release_version', status: r.written ? 'written' : 'unchanged', version, ...r, change, previous_version: await previousReleaseTag(dir, version), message: r.reason };
-    this.emitEvent('log', { level: error ? 'warn' : 'info', kind: 'release_version', step_id: step.id, message: `${step.id}: ${r.reason}` });
     return output;
   },
 
