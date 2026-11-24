@@ -15,7 +15,8 @@ run with its title, never only its number.
    edits it in the app, Oracle › Memory).
 2. Read `control/endpoint.json`. If it is missing, or a call says the app is not answering, stop and say so:
    the app is closed, or Settings › Execution › "Allow outside sessions to control this app" is off. Ask
-   the user to open the app. Do not work around it.
+   the user to open the app. Do not work around it. In Codex, "Operation not permitted" is its sandbox, not a closed
+   app: ask the user to allow the call, or to open Codex with `-c sandbox_workspace_write.network_access=true`.
 3. Call `projects:list`, then say in a few lines what is there: projects, runs in progress, gates waiting.
 
 ## Calling the app
@@ -29,8 +30,8 @@ JSON, and `--workspace` with this folder:
 ```
 
 - Windows PowerShell 5.1 removes the quotes inside the JSON: write them as `\"`, or use Git Bash.
-- `--list` prints every channel allowed and its argument. It needs `craftorio-ctl`; `scripts/ctl.js` does not
-  have it. Without it, use the channels below.
+- `--list` prints every channel allowed and its argument, only when `client` is `craftorio-ctl`. With
+  `scripts/ctl.js` it is refused: use the channels below. Never read the app's source to find out.
 - When `client` is `null`: `POST <url>/api/<channel>`, header `Authorization: Bearer <token>`, body
   `{"arg": ...}`.
 - Never show, copy or save the token. Read the endpoint again when a call fails: the token changes every time the
@@ -39,7 +40,7 @@ JSON, and `--workspace` with this folder:
 | To | Channel |
 |---|---|
 | See projects, runs, gates and cost | `projects:list`, `runs:active`, `runs:list`, `runs:events`, `notifications:list`, `usage:get` |
-| Add a project | `projects:create` `{ name, folder }`, or `{ name, repo }` to clone it |
+| Add a project | `projects:create` `{ name, folder }` for a folder that exists, or `{ name, repo }` to clone it |
 | Read the issues | `backlog:sync`, then `backlog:get` |
 | File an issue | project with no remote: `backlog:create-issue`; with a remote: `gh` or `glab`, when the user asks, then `backlog:sync` |
 | Plan | `roadmap:get`, then `roadmap:save` |
@@ -52,12 +53,24 @@ JSON, and `--workspace` with this folder:
 
 - Asked to build, fix or change something in a project: make it an issue, put it on the roadmap, and start it when the
   user says so. Do not write the code yourself.
+- A new project from nothing: better in the app (Projects › Create new project), which makes its Git repository.
+  `projects:create` does not, and a real run needs one: with the user's yes, `git init -b main` in the empty folder and
+  commit a README before the first real run.
+- The first plan of a project (`base` is null when `roadmap:get` has no `updatedAt`):
+
+  ```
+  roadmap:save {"projectId":"my-app","label":"First stage","base":null,"stages":[{"name":"Start","note":"","items":[{"workflow":"feature.yaml","issues":[{"number":1}],"mock":true}]}]}
+  ```
+
+  `workflow` is a `file` of `workflows:list`, with its extension: `feature.yaml` to build or change something,
+  `fix.yaml` for a bug. `"mock": true` makes that item simulated.
 - `roadmap:save` takes the whole `stages` you read, with your change, a `label` that says what changed, and
   `base` (the `updatedAt` you read). Keep the `id` of what stays. Never change an item that has started. On a
   conflict, read again.
 - A stage's items run together: never put two issues that change the same files in one stage.
 - `roadmap:start` may answer with a question (`confirm`): pass it to the user.
-- To try something for free, use a simulated item (`"mock": true`) and say that it is simulated.
+- To try something for free, use simulated items or `roadmap:start` with `"simulated":true` (every item), and say that
+  it is simulated: no code is written.
 
 ## Following a run
 
