@@ -133,7 +133,7 @@
   function agentFields(a, { sources, name = null, sharedWith = [] }) {
     const t = a.templated || {};
     const type = TYPE_OF[a.provider] || ChatModels.typeOf('claude');
-    const models = [...new Set([...(PROVIDERS[type]?.models || []), a.model].filter(Boolean))];
+    const models = ChatModels.modelsWith(type, a.model);
     return `
         <div class="field"><label>${I18n.t('builder.agent')}${name ? ` <span class="muted mono">${esc(name)}</span>` : ''}${a.optional ? ` <span class="badge">${I18n.t('builder.optional_2')}</span>` : ''}</label>
           <div class="seg sm" id="wb-source">${sources.map(([k, l]) => `<button type="button" data-src="${k}" class="${a.source === k ? 'active' : ''}">${l}</button>`).join('')}</div>
