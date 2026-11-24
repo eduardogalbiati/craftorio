@@ -219,3 +219,33 @@ Feature: Releases
     And I confirm the promotion
     Then the promotion is refused with a reason saying the commit has no release candidate
     And no release "1.3.0" is shown as stable
+
+  # #46: a repository that declares more than one product (.craftorio/project.yaml) releases one at a
+  # time, with its own version and its own tag. See fronts/build/features/steps/release-products.steps.js.
+
+  @issue-46
+  Scenario: Releasing the engine from the Start panel offers to ship the engine's tag, not the app's
+    Given the app is open
+    And the project's repository has the products "app" and "engine", both released at "1.0.0"
+    When I start a simulated release of the product "engine" as "1.1.0" from the Start panel
+    Then a gate card waits for my approval
+    And the gate card says the release is tagged "engine-v1.1.0" and not "v1.1.0"
+    And the gate card offers "Ship" and "Hold"
+
+  @issue-46
+  Scenario: The Ship gate lists the merged issues with no changeset, and I can ship anyway
+    Given the app is open
+    And the project's repository has the products "app" and "engine", both released at "1.0.0"
+    And the issue "#12" was merged into the engine with no changeset and the issue "#13" with one
+    When a simulated release run of the product "engine" as "1.1.0" is open
+    Then a gate card waits for my approval
+    And the gate card lists the issue "#12" as having no changeset
+    When I choose "Ship" on the gate card
+    Then the run ends successfully
+
+  @issue-46
+  Scenario: A release of a product the repository does not declare stops before the suites, naming the products
+    Given the app is open
+    And the project's repository has the products "app" and "engine", both released at "1.0.0"
+    When a simulated release run of the product "mobile" as "1.1.0" is open
+    Then the run ends as failed, naming the product "mobile" and the declared products "app" and "engine"
