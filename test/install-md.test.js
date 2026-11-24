@@ -46,6 +46,27 @@ test('INSTALL.md: ends with the handover of the workspace folder, the new sessio
   assert.match(text, /read `<workspace>\/AGENTS\.md` before anything else/);
 });
 
+test('the prompt of the README clones first, so it works on a private repository, and INSTALL.md says why', () => {
+  assert.match(read('README.md'), /Clone https:\/\/github\.com\/eduardogalbiati\/craftorio and install Craftorio following its INSTALL\.md/);
+  assert.match(read(INSTALL), /Clone the repository first/);
+});
+
+test('Codex: the handover and the workspace instructions name what its sandbox needs', () => {
+  for (const file of [INSTALL, ORACLE]) assert.match(read(file), /sandbox_workspace_write\.network_access=true/, file);
+});
+
+test('the app is started detached from the session', () => {
+  const text = read(INSTALL);
+  assert.match(text, /detached from this session/);
+  for (const command of ['setsid nohup npm start', 'nohup npm start', 'Start-Process npm.cmd']) assert.ok(text.includes(command), command);
+});
+
+test('the workspace instructions name bundled workflows, with the extension', () => {
+  const named = [...read(ORACLE).matchAll(/`?([a-z-]+\.yaml)`?/g)].map((m) => m[1]);
+  assert.ok(named.length >= 2);
+  for (const file of named) assert.ok(fs.existsSync(path.join(root, 'workflows', file)), file);
+});
+
 test('README and AGENTS.md lead to INSTALL.md', () => {
   for (const file of ['README.md', 'AGENTS.md']) assert.match(read(file), /\]\(INSTALL\.md\)/, file);
 });
