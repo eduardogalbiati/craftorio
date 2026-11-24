@@ -22,6 +22,7 @@ Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos se
 - O app e o engine são lançados separadamente, de um só repositório com Turborepo e Changesets.
 - Os agentes rodam nos modelos atuais: Fable 5.2, Sonnet 5.5 e Haiku 5.5 (#56).
 - Uma run que abre um pull request espera num monitor do PR em vez de uma etapa de Approve.
+- O primeiro início depois da troca de nome usa o engine deste computador, mesmo que a instalação antiga fosse cliente de um remoto; o endereço e o token continuam salvos, e Configurações › Execução › Engine volta a ele (#64).
 - **Aceite de novo os workflows do repositório**: uma cópia alterada precisa ser aceita na tela Workflows.
 - O onboarding, a primeira issue e o roadmap falam pt-BR (#23, #28, #36).
 

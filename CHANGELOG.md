@@ -22,6 +22,7 @@ Every release of the app, newest first. Items link to their SDLC documents; `#12
 - The app and the engine are released apart, from one repository with Turborepo and Changesets.
 - The agents run on the current models: Fable 5.2, Sonnet 5.5 and Haiku 5.5 (#56).
 - A run that opens a pull request waits in a PR monitor instead of an Approve step.
+- The first start after the rename uses this computer's engine, even when the old install was a client of a remote one; its address and token stay saved, and Settings › Execution › Engine switches back (#64).
 - **Accept your repository workflows again**: a changed copy must be accepted on the Workflows screen.
 - The onboarding, the first issue and the roadmap speak pt-BR (#23, #28, #36).
 
