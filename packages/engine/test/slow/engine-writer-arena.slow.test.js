@@ -213,10 +213,11 @@ test('backlog-refresh: a mock run reaches the scope gate (a decision gate), the 
     const finished = events.find((e) => e.type === 'workflow.finished');
     assert.equal(finished.status, 'success', finished.error);
     const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
-    assert.deepEqual(transitions, ['review>scope', 'scope>end']);
-    const gate = events.find((e) => e.type === 'approval.requested');
+    // what comes before the review (#63: the platform repository) is in backlog-refresh-platform-repo-63-65
+    assert.deepEqual(transitions.slice(-2), ['review>scope', 'scope>end']);
+    const gate =events.find((e) => e.type === 'approval.requested');
     assert.deepEqual(gate.choices.map((c) => c.id), ['apply', 'skip']); // the supervisor never answers this gate
-    const actions = events.filter((e) => e.type === 'action.executed');
+    const actions = events.filter((e) => e.type === 'action.executed' && /--mode (?:safe|scope)/.test(e.command));
     assert.equal(actions.length, 2); // safe mode before the gate, scope mode after Apply
     assert.ok(actions.every((a) => a.skipped), 'mock mode never runs the action');
     // the project is quoted for the platform's shell (shell_quote: "…" on Windows, '…' elsewhere, #769)
@@ -236,8 +237,8 @@ test('backlog-refresh: Skip at the scope gate ends the run without the scope-mod
     const finished = events.find((e) => e.type === 'workflow.finished');
     assert.equal(finished.status, 'success', finished.error);
     const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
-    assert.deepEqual(transitions, ['review>scope', 'scope>end']);
-    const actions = events.filter((e) => e.type === 'action.executed');
+    assert.deepEqual(transitions.slice(-2), ['review>scope', 'scope>end']);
+    const actions = events.filter((e) => e.type === 'action.executed' && /--mode (?:safe|scope)/.test(e.command));
     assert.equal(actions.length, 1); // only the safe-mode action; Skip runs no scope-mode action
     assert.match(actions[0].command, /apply\.js" --platform gl --mode safe/);
   } finally { cleanup(); }

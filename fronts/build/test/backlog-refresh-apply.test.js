@@ -305,10 +305,11 @@ test('apply: a failing cli call is reported as that issue failing; other issues 
   assert.equal(result.results[1].result, 'updated');
 });
 
+// #65: only for an answer that would write (backlog-refresh-local-origin-63-65.test.js has the others)
 test('apply: throws when the answer is about a different repository than the project\'s remote', (t) => {
   const project = gitRepoWithOrigin(t, 'https://github.com/o/r.git');
   const runDir = makeRunDir(t);
-  const file = answerFile(runDir, { repo: 'https://github.com/other/repo', issues: [] });
+  const file = answerFile(runDir, { repo: 'https://github.com/other/repo', issues: [{ number: 5, edits: [{ find: 'a', replace: 'b' }], complexity: 0 }] });
   assert.throws(
     () => apply({ platform: 'gh', mode: 'safe', file, project, cli: () => '' }),
     /The answer is about https:\/\/github\.com\/other\/repo, the project's remote is o\/r/,
