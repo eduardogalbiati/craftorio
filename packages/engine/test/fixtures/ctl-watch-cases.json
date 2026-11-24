@@ -49,6 +49,24 @@
     "runs": [["r1", "#5"]]
   },
   {
+    "name": "an item waiting for its PR's merge at the review gate is at a gate (#807)",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "waiting_merge", "runId": "r1", "waiting": true, "issues": [{ "number": 6 }], "run": { "progress": [{ "step": "pr_review", "status": "waiting" }] } }] }] },
+    "expected": "gate: #6 waits at a human gate: pr_review",
+    "runs": []
+  },
+  {
+    "name": "a paused item is not at a gate, as the roadmap's own rule (roadmap-model.js atGate)",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "paused", "runId": "r1", "issues": [{ "number": 7 }], "run": { "atGate": "Review" } }] }] },
+    "expected": null,
+    "runs": []
+  },
+  {
+    "name": "a planned item is not at a gate, as the roadmap's own rule (roadmap-model.js atGate)",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "planned", "waiting": true, "issues": [{ "number": 8 }] }] }] },
+    "expected": null,
+    "runs": []
+  },
+  {
     "name": "a release's run at its gate",
     "before": { "stages": [] },
     "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "done" }] }, { "id": "rel", "kind": "release", "name": "1.2.0", "status": "running", "runId": "r9", "items": [] }] },

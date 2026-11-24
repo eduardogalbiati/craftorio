@@ -262,6 +262,15 @@ test('#42 endpoint.json of a source checkout without Rust names node and scripts
   assert.equal(JSON.parse(out.stdout).controlChannel, true);
 });
 
+test('#42 endpoint.json written by the desktop app of a checkout names node, not Electron\'s own binary', async (t) => {
+  const { service } = makeService(t);
+  const versions = Object.getOwnPropertyDescriptor(process, 'versions');
+  t.after(() => Object.defineProperty(process, 'versions', versions));
+  Object.defineProperty(process, 'versions', { ...versions, value: { ...process.versions, electron: '40.0.0' } });
+  const endpoint = await openChannel(t, service, { ctlPath: path.join(service.workspace().root, 'not-built', 'craftorio-ctl') });
+  assert.deepEqual(endpoint.client, ['node', CTL_JS]);
+});
+
 // ---- the server ------------------------------------------------------------------------------------------------
 
 const SERVER_TOKEN = 'outside-42-full-control-0123456789';
