@@ -5,6 +5,7 @@ turn is a headless CLI process: Claude Code (`claude -p`), Codex CLI (`codex exe
 (`grok --prompt-file`). A deterministic engine walks the workflow graph; an AI supervisor is called
 only when a step fails, or on demand. Everything is recorded in a local workspace folder. Owner:
 Eduardo Galbiati (`eduardogalbiati/craftorio`, branch `main`).
+Installing the app: [INSTALL.md](INSTALL.md).
 
 ## Hard rules
 

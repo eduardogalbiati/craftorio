@@ -1,5 +1,17 @@
 # Craftorio
 
+## Install with an AI session
+
+Paste this in Claude Code or Codex (you need access to this repository):
+
+```
+Install Craftorio following INSTALL.md of https://github.com/eduardogalbiati/craftorio
+```
+
+It installs the app (the executable, or from the source code: you choose), creates the workspace folder and tells you the last step: open a session in that folder,
+which then works as the **Oracle** and manages the app for you, also from the phone. The steps it follows:
+[INSTALL.md](INSTALL.md).
+
 ### PARA OS BETA USERS
 Seus betinhas, obrigado por participar do beta
 
@@ -14,10 +26,10 @@ O que falta ajustar
 - Monitor (draft)
 
 
-Depois de rodar o app com npm i && npm start
+Instalem colando o prompt acima no Claude ou no Codex (ele pergunta se você quer o executável ou o código; o executável depende de já existir uma release)
+Depois abram uma sessão nova do Claude ou do Codex NA PASTA DO WORKSPACE: ela assume o papel de Oracle
 Importem algum projeto
-E usem uma IA externa (claude, codex) para interagir com o sistema.
-Peça para a sua IA priorizar itens, colocar no backlog, startar o roadmap, analisar performance etc....
+Peça para o Oracle priorizar itens, colocar no backlog, startar o roadmap, analisar performance etc....
 
 Happy coding, qualquer problema podem abrir issues
 
@@ -271,6 +283,8 @@ Both build for the current machine; `npm run package -- --platform darwin|linux|
 picks another target (the macOS signature step needs a Mac).
 
 ## Install
+
+With an AI session: [INSTALL.md](INSTALL.md). By hand, from a release:
 
 Download the file for your system from the latest
 [GitHub Release](https://github.com/eduardogalbiati/craftorio/releases/latest). The
