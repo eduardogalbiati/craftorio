@@ -33,13 +33,28 @@ function instructionsRoot(dir, { runDir, roots }) {
   return null;
 }
 
+const MAX_IMPORT = 1024;
+
+// The text without its code: fenced blocks, and what is between two runs of backticks in one line. No
+// backtracking expression over the text: the repository controls it, and must not slow the app down.
+function withoutCode(text) {
+  let fence = null;
+  const out = [];
+  for (const line of text.split('\n')) {
+    const mark = /^ {0,3}(```|~~~)/.exec(line)?.[1];
+    if (fence) { if (mark === fence) fence = null; continue; }
+    if (mark) { fence = mark; continue; }
+    const parts = line.split(/`+/);
+    // an odd run opens no code: its text stays
+    out.push(parts.filter((_, i) => i % 2 === 0 || i === parts.length - 1).join('`'));
+  }
+  return out.join('\n');
+}
+
 // The `@path` imports of an instructions file, outside code and HTML comments
 function importsOf(text) {
-  const prose = text
-    .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|$(?![\s\S]))/gm, '')
-    .replace(/(`+)[^`\n][^\n]*?\1/g, '')
-    .replace(/<!--[\s\S]*?(?:-->|$)/g, '');
-  return [...prose.matchAll(/(?:^|\s)@((?:[^\s\\]|\\.)+)/g)].map((m) => m[1].replace(/\\ /g, ' '));
+  const prose = withoutCode(text).replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  return [...prose.matchAll(/(?:^|\s)@((?:[^\s\\]|\\.)+)/g)].map((m) => m[1].replace(/\\ /g, ' ')).filter((p) => p.length <= MAX_IMPORT);
 }
 
 /**

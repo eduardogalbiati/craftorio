@@ -30,6 +30,13 @@ test('#45 an import in code or in an HTML comment is text; one in a sentence is 
   assert.deepEqual(composeInstructions(root).files, ['CLAUDE.md', 'docs/a.md', 'docs/b.md']);
 });
 
+test('#45 a hostile file (long runs of backticks, unclosed fences and comments) is scanned in linear time', { timeout: 20000 }, (t) => {
+  const root = repository(t, { 'CLAUDE.md': `${'`'.repeat(300000)}\n${'<!--'.repeat(50000)}-->\n@a.md\n@${'.'.repeat(300000)}x\n${'~~~'.repeat(100000)}`, 'a.md': 'A\n' });
+  assert.deepEqual(composeInstructions(root).files, ['CLAUDE.md']); // the opening run of backticks is an unclosed fence
+  fs.writeFileSync(path.join(root, 'CLAUDE.md'), `x ${'`'.repeat(300000)}\n@a.md\n@${'.'.repeat(300000)}x\n`);
+  assert.deepEqual(composeInstructions(root).files, ['CLAUDE.md', 'a.md']);
+});
+
 test('#45 an absolute import inside the repository is followed; .git, a folder, a binary and a missing file are not', (t) => {
   const root = repository(t, { 'docs/in.md': 'IN\n', '.git/config': 'SECRET\n', 'data.bin': 'a\0b' });
   fs.writeFileSync(path.join(root, 'CLAUDE.md'), `@${path.join(root, 'docs', 'in.md')}\n@.git/config\n@docs\n@data.bin\n@someone\n`);
