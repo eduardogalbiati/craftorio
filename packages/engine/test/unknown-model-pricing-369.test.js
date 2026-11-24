@@ -151,6 +151,26 @@ test('an unrecognized_model turn with no price counts the CLI\'s US$ 0.185271 to
   assert.equal(events.some((e) => e.type === 'step.started' && e.step_id === 'after'), false, 'the next step never starts');
 });
 
+// #56: the new Fable, when the installed Claude Code does not know it and the app has no price for it
+test('#56 an unrecognized_model turn on claude-fable-5-2 with no price records an unknown cost, never 0 and never the CLI\'s figure', { timeout: 60000 }, async (t) => {
+  const events = await runFake(t, { model: 'claude-fable-5-2' });
+  const r = received(events, 'work');
+  assert.ok(r, 'the work step\'s turn was received');
+  if (registry.byId('claude').prices?.['claude-fable-5-2']) {
+    assert.equal(r.cost_source, 'tokens');
+    assert.ok(r.cost_usd > 0, `priced above US$ 0, got ${r.cost_usd}`);
+  } else {
+    assert.deepEqual([r.cost_usd, r.cost_source], [null, 'unknown']);
+  }
+  assert.equal(r.cli_cost_usd, CLI_COST);
+});
+
+test('#56 a run on claude-fable-5-2 stops at its US$ 0.01 limit', { timeout: 60000 }, async (t) => {
+  const events = await runFake(t, { model: 'claude-fable-5-2', maxCost: 0.01 });
+  assert.ok(events.some((e) => e.type === 'limit.exceeded' && e.limit === 'max_total_cost_usd'), 'a limit.exceeded event for max_total_cost_usd');
+  assert.equal(events.some((e) => e.type === 'step.started' && e.step_id === 'after'), false, 'the next step never starts');
+});
+
 test('a known model without the unrecognized_model line keeps the CLI\'s cost exactly', { timeout: 60000 }, async (t) => {
   const events = await runFake(t, { model: 'claude-opus-5-5', unrecognized: false });
   const r = received(events, 'work');

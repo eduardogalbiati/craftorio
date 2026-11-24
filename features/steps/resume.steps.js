@@ -5,7 +5,8 @@
 //
 // What the scenarios expect of the dialog (the dialog named "Resume from step", index.html #resume-modal):
 //   resume-input-developer_model   NEW: a <select> labelled "Developer model", its options the
-//                                  workflow's labels ("Opus 5.5", "Fable 5.1"), at the run's value
+//                                  workflow's labels ("Opus 5.5", "Fable 5.2"), at the run's value
+//                                  (#56: an older one, "Fable 5.1", is kept and named)
 //   resume-input-developer_effort  NEW: the same for "Developer effort" ("Default", "High"…)
 //   resume-limit-note              the limit that stopped the run, now a provider's too ("weekly limit")
 //   the button "Resume from this step" (#btn-resume-yes) starts the new run with the chosen values
@@ -25,7 +26,8 @@ const { FEATURE } = require('../support/workflows');
 const MIN = 6e4;
 const DAY = 864e5;
 // feature.yaml's inputs developer_model and developer_effort: the label the owner reads, its value
-const MODELS = { 'Opus 5.5': 'claude-opus-5-5', 'Fable 5.1': 'claude-fable-5-1' };
+// (Fable 5.1: no longer a choice, #56, what an earlier run saved)
+const MODELS = { 'Opus 5.5': 'claude-opus-5-5', 'Fable 5.2': 'claude-fable-5-2', 'Fable 5.1': 'claude-fable-5-1' };
 const EFFORTS = { Default: 'default', Low: 'low', Medium: 'medium', High: 'high', 'Extra high': 'xhigh' };
 
 const valueOf = (values, label) => {

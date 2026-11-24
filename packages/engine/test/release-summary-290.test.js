@@ -1,6 +1,6 @@
 // Release summary (#290): workflows/release.yaml gets a read-only `review` step ("Release summary")
 // between the last green suite (`unit` with e2e_suite: skip, else `e2e`) and the `ship` gate. A cheap
-// agent (claude-sonnet-5, ephemeral session, 5-minute timeout, no edit/write tools, no web, no
+// agent (claude-sonnet-5-5, ephemeral session, 5-minute timeout, no edit/write tools, no web, no
 // subagents) reads the round-by-round trail, every fix round's output, the suites' results, the fix
 // branch's `git log --stat`, the release version, the project's version file and its last tags,
 // and writes a summary (verdict; Timeline; The fixes; Before you ship; Follow-ups) that leads the Ship
@@ -53,7 +53,7 @@ test('release workflow: a `review` step "Release summary" runs a cheap read-only
   assert.ok(name, 'the review step runs an agent');
   const agent = wf.agents?.[name];
   assert.ok(agent, `the agent ${name} is defined`);
-  assert.equal(agent.model, 'claude-sonnet-5');
+  assert.equal(agent.model, 'claude-sonnet-5-5');
   assert.equal(agent.session, 'ephemeral');
   assert.equal(seconds(review.timeout ?? agent.timeout), 300, `a 5-minute timeout (got ${review.timeout ?? agent.timeout})`);
   const caps = review.capabilities || agent.capabilities || {};

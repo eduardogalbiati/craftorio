@@ -220,7 +220,7 @@ test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_
   assert.match(fs.readdirSync(path.join(__dirname, '..', '..', '..', 'docs', 'agents', 'renderer')).map((f) => fsRead('docs', 'agents', 'renderer', f)).join('\n'), /design-system/);
 });
 
-test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on Fable 5.1 when the run asks, with 3x the turn timeout', (t) => {
+test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on Fable 5.2 when the run asks, with 3x the turn timeout', (t) => {
   const make = (inputs) => {
     const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-model-'));
     t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -231,11 +231,11 @@ test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on F
   const opus = make({});
   assert.equal(opus.wf.agents.developer.model, 'claude-opus-5-5');
   assert.equal(opus.turnTimeout(dev(opus)), 30 * 60e3);
-  const fable = make({ developer_model: 'claude-fable-5-1' });
-  assert.equal(fable.wf.agents.developer.model, 'claude-fable-5-1');
+  const fable = make({ developer_model: 'claude-fable-5-2' });
+  assert.equal(fable.wf.agents.developer.model, 'claude-fable-5-2');
   assert.equal(fable.turnTimeout(dev(fable)), 90 * 60e3);
-  assert.equal(opus.wf.agents.reviewer.model, 'claude-fable-5-1', 'the reviewer runs on Fable 5.1 (owner 2026-11-07)');
-  assert.equal(fable.wf.agents.reviewer.model, 'claude-fable-5-1', 'the reviewer keeps its own model');
+  assert.equal(opus.wf.agents.reviewer.model, 'claude-fable-5-2', 'the reviewer runs on Fable 5.2 (Fable: owner 2026-11-07)');
+  assert.equal(fable.wf.agents.reviewer.model, 'claude-fable-5-2', 'the reviewer keeps its own model');
   assert.equal(loadWorkflow(WORKFLOW).orchestrator.limits.max_total_cost_usd, 120);
 });
 
@@ -250,7 +250,7 @@ test('ai-development-local-hero (#286): an Extra high developer effort doubles t
   assert.equal(timeoutOf({ developer_effort: 'default' }), 30 * 60e3);
   assert.equal(timeoutOf({ developer_effort: 'high' }), 30 * 60e3);
   assert.equal(timeoutOf({ developer_effort: 'xhigh' }), 60 * 60e3);
-  assert.equal(timeoutOf({ developer_effort: 'xhigh', developer_model: 'claude-fable-5-1' }), 180 * 60e3, '3x for Fable 5.1, then 2x for Extra high');
+  assert.equal(timeoutOf({ developer_effort: 'xhigh', developer_model: 'claude-fable-5-2' }), 180 * 60e3, '3x for Fable 5.2, then 2x for Extra high');
 });
 
 test('ai-development-local-hero (#247): Ask for changes at developer_check goes to acceptance_tests; Approve and Stop are unchanged', () => {
