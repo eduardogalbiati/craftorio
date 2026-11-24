@@ -17,7 +17,8 @@ const { fixture, git } = require('./worktree-helpers');
 
 const FAKE = path.join(__dirname, 'fixtures', 'fake-claude-instructions.js').replace(/\\/g, '/');
 
-// { 'path/in/repo': text | { link: target } } committed on the repository's main
+// { 'path/in/repo': text | { link: target } } committed on the repository's main and pushed: a run's
+// worktree starts from origin/main
 function commitFiles(repo, files) {
   for (const [file, content] of Object.entries(files)) {
     const full = path.join(repo, file);
@@ -26,7 +27,9 @@ function commitFiles(repo, files) {
     else fs.symlinkSync(content.link, full);
     git(repo, 'add', '-f', file);
   }
-  if (Object.keys(files).length) git(repo, 'commit', '-q', '-m', 'instructions');
+  if (!Object.keys(files).length) return;
+  git(repo, 'commit', '-q', '-m', 'instructions');
+  git(repo, 'push', '-q', 'origin', 'main');
 }
 
 // The "CLI" is node + a fake that calls no model: the simulation-only guard is lifted for the test

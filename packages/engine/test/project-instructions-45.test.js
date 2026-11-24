@@ -79,12 +79,15 @@ test('#45 providerArgs: the flag only for an isolated Claude agent with a file, 
   }
 });
 
-// One run in a worktree of the pushed base, whose CLAUDE.md imports docs/rules.md
-async function run(t, { agent = '', mock = false } = {}) {
+// One run in a worktree of the local base (or, worktree: false, in the project's folder), whose CLAUDE.md
+// imports docs/rules.md; `onEvent(ev, f)` sees the run's events as they happen.
+async function run(t, { agent = '', mock = false, session = 'ephemeral', steps = 1, worktree = true, inputs = () => ({}), workingDir = '{{ worktree_dir }}', resume = undefined, onEvent = () => {} } = {}) {
   const f = fixture(t, 'canonical');
   fs.mkdirSync(path.join(f.repo, 'docs'));
   commit(f.repo, 'docs/rules.md', 'MARK-RULES\n');
   commit(f.repo, 'CLAUDE.md', 'MARK-CLAUDE\n@docs/rules.md\n');
+  fs.mkdirSync(path.join(f.repo, 'pkg'));
+  commit(f.repo, 'pkg/CLAUDE.md', 'MARK-PKG\n');
   for (const k of ['CRAFTORIO_SIMULATION_ONLY', 'CRAFTORIO_WORKSPACE', 'CRAFTORIO_USER_DATA']) {
     const v = process.env[k];
     delete process.env[k];
@@ -94,19 +97,19 @@ async function run(t, { agent = '', mock = false } = {}) {
   const file = path.join(f.tmp, 'wf.yaml');
   fs.writeFileSync(file, [
     'providers:',
-    `  claude: { type: claude-code, command: node, args: ["${FAKE}", "--record", "${record}", "-p"] }`,
+    `  claude: { type: claude-code, command: node, args: ["${FAKE}", "--record", "${record}", "-p"], resume_args: ["--resume", "{{ session_id }}"] }`,
     'inputs:',
-    '  repo_path: { type: string, required: true }',
-    'orchestrator:',
-    '  worktree: { repo: "{{ inputs.repo_path }}", base: main, remote: false }',
+    '  repo_path: { type: string, default: "" }',
+    '  project_path: { type: string, default: "" }',
+    ...(worktree ? ['orchestrator:', '  worktree: { repo: "{{ inputs.repo_path }}", base: main, remote: false }'] : []),
     'agents:',
-    `  dev: { provider: claude, model: fake, session: ephemeral, working_dir: "{{ worktree_dir }}", capabilities: { tools: [read] }${agent} }`,
+    `  dev: { provider: claude, model: fake, session: ${session}, working_dir: "${workingDir}", capabilities: { tools: [read] }${agent} }`,
     'steps:',
-    '  - { id: work, agent: dev, prompt: "Do it." }',
+    ...Array.from({ length: steps }, (_, i) => `  - { id: work${i + 1}, agent: dev, prompt: "Do it." }`),
   ].join('\n'));
-  const r = new WorkflowRun({ file, inputs: { repo_path: f.repo }, mock, runsDir: path.join(f.tmp, 'runs'), worktreesDir: mock ? undefined : f.worktrees, skillsDirs: [] });
+  const r = new WorkflowRun({ file, inputs: { repo_path: f.repo, ...inputs(f) }, mock, resume, runsDir: path.join(f.tmp, 'runs'), worktreesDir: mock ? undefined : f.worktrees, skillsDirs: [] });
   const events = [];
-  r.on('event', (ev) => events.push(ev));
+  r.on('event', (ev) => { events.push(ev); onEvent(ev, f); });
   await r.start();
   const finished = events.find((e) => e.type === 'workflow.finished');
   assert.equal(finished.status, 'success', finished.error);
@@ -132,4 +135,57 @@ test('#45 a simulated run composes nothing', { timeout: 60000 }, async (t) => {
   const r = await run(t, { mock: true });
   assert.deepEqual(r.said, []);
   assert.equal('instructions' in r.closed.session, false);
+});
+
+test('#45 a session keeps the instructions it started with, on every turn, when the files change in between', { timeout: 60000 }, async (t) => {
+  let changed = 0;
+  const r = await run(t, {
+    session: 'persistent', steps: 2,
+    onEvent: (ev, f) => {
+      if (ev.type !== 'step.finished' || ev.step_id !== 'work1') return;
+      fs.writeFileSync(path.join(f.worktrees, fs.readdirSync(f.worktrees)[0], 'CLAUDE.md'), 'MARK-CHANGED\n');
+      changed++;
+    },
+  });
+  assert.equal(changed, 1);
+  assert.equal(r.calls.length, 2);
+  assert.equal(!!r.calls[1].resumed, true, 'the second step resumes the session');
+  assert.equal(r.calls[1].system, r.calls[0].system);
+  assert.match(r.calls[1].system, /MARK-CLAUDE[\s\S]*MARK-RULES/);
+  assert.equal(r.said.length, 1, 'said once per session');
+});
+
+test('#45 a resumed run that continues the agent\'s conversation passes the instructions again, and says so', { timeout: 60000 }, async (t) => {
+  const r = await run(t, { session: 'persistent', resume: { runId: 'previous', fromStep: 'work1', steps: {}, sessions: { dev: '00000000-0000-4000-8000-000000000001' } } });
+  assert.equal(r.calls[0].resumed, '00000000-0000-4000-8000-000000000001');
+  assert.equal(r.calls[0].system.split('MARK-CLAUDE').length - 1, 1);
+  assert.equal(r.calls[0].stdin.includes('MARK-CLAUDE'), false);
+  assert.deepEqual(r.said.map((e) => e.files), [['CLAUDE.md', 'docs/rules.md']]);
+});
+
+test('#45 a run with no worktree: the instructions of the project folder the agent works in', { timeout: 60000 }, async (t) => {
+  const r = await run(t, { worktree: false, workingDir: '{{ inputs.project_path }}', inputs: (f) => ({ repo_path: '', project_path: f.repo }) });
+  assert.deepEqual(r.said.map((e) => e.files), [['CLAUDE.md', 'docs/rules.md']]);
+  assert.match(r.calls[0].system, /MARK-CLAUDE[\s\S]*MARK-RULES/);
+});
+
+test('#45 a project in a subfolder of its repository: the worktree\'s root instructions, not the folder\'s', { timeout: 60000 }, async (t) => {
+  const r = await run(t, { inputs: (f) => ({ repo_path: path.join(f.repo, 'pkg') }) });
+  assert.equal(path.basename(r.calls[0].cwd), 'pkg', 'the agent works in the subfolder');
+  assert.deepEqual(r.said.map((e) => e.files), [['CLAUDE.md', 'docs/rules.md']]);
+  assert.equal(r.calls[0].system.includes('MARK-PKG'), false);
+});
+
+test('#45 a folder that no project root of the run holds: nothing, and the log says so', { timeout: 60000 }, async (t) => {
+  const r = await run(t, { worktree: false, workingDir: '{{ inputs.project_path }}/..', inputs: (f) => ({ repo_path: '', project_path: f.repo }) });
+  assert.equal(r.calls[0].system, '');
+  assert.deepEqual(r.said.map((e) => [e.files, e.message.includes('none')]), [[[], true]]);
+});
+
+test('#45 a CLAUDE.md that links out of the repository counts as missing: AGENTS.md is used and the link reported', { skip: process.platform === 'win32' && 'symlinks need a privilege on Windows' }, (t) => {
+  const root = repository(t, { 'AGENTS.md': 'AGENTS\n' });
+  fs.writeFileSync(path.join(path.dirname(root), 'secret.md'), 'SECRET\n');
+  fs.symlinkSync('../secret.md', path.join(root, 'CLAUDE.md'));
+  const r = composeInstructions(root);
+  assert.deepEqual([r.files, r.refused, r.text.includes('SECRET')], [['AGENTS.md'], ['CLAUDE.md'], false]);
 });
