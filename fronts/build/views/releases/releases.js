@@ -153,7 +153,8 @@
     }
   }
 
-  function rowHtml(r, k) {
+  // #46: `latest` is the main product's last release; one of another product (`product`) never is
+  function rowHtml(r, latest) {
     const tests = r.tests || {};
     const where = [r.tag && r.tag !== r.version ? t('releases.tag_name', { tag: r.tag }) : '', r.commit ? t('releases.commit_sha', { sha: String(r.commit).slice(0, 8) }) : ''].filter(Boolean).join(' · ');
     return `
@@ -169,8 +170,8 @@
           ${r.tag ? `<button type="button" class="btn sm" data-testid="release-show-map" data-tag="${esc(r.tag)}" title="${t('releases.the_project_city_at_the_previous')}">${t('releases.show_on_the_map')}</button>` : ''}
         </div>
         ${issuesHtml(r.issues)}
-        ${k === 0 || r.rc ? `<div class="rel-head">
-          ${k === 0 ? `<span class="badge rel-pass" data-testid="release-latest" title="${t('releases.latest_tip')}">${t('releases.latest')}</span>` : ''}
+        ${latest || r.rc ? `<div class="rel-head">
+          ${latest ? `<span class="badge rel-pass" data-testid="release-latest" title="${t('releases.latest_tip')}">${t('releases.latest')}</span>` : ''}
           ${r.rc ? `<span class="muted small mono">${esc(t('releases.from_rc', { rc: r.rc }))}</span>` : ''}
         </div>` : ''}
         ${r.notes ? `<details class="rel-notes"><summary class="small muted">${t('releases.notes')}</summary><div class="md md-compact">${markdownHtml(r.notes)}</div></details>` : ''}
@@ -200,8 +201,9 @@
       box.innerHTML = `<div class="empty-state"><b>${t('releases.no_project_yet')}</b><p class="muted">${t('releases.choose_or_create_a_project_in')}</p></div>`;
       return;
     }
+    const latest = d.releases?.find((r) => !r.product);
     const list = d.releases?.length
-      ? d.releases.map(rowHtml).join('')
+      ? d.releases.map((r) => rowHtml(r, r === latest)).join('')
       : `<div class="empty-state"><b>${t('releases.no_release_yet')}</b><p class="muted">${t('releases.draw_a_cut_line_on_the')}</p></div>`;
     box.innerHTML = `${nextHtml(d)}${candidatesHtml(d)}<h2 class="rel-list-title">${t('releases.shipped')}</h2><div class="rel-list" data-testid="releases-list">${list}</div>`;
   }
