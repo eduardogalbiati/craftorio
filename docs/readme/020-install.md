@@ -1,5 +1,7 @@
 ## Install
 
+With an AI session: [INSTALL.md](INSTALL.md). By hand, from a release:
+
 Download the file for your system from the latest
 [GitHub Release](https://github.com/eduardogalbiati/craftorio/releases/latest). The
 builds are not signed yet, so each system warns once before the first start.
