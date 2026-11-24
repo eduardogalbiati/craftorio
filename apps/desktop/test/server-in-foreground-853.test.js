@@ -44,8 +44,10 @@ child.on('exit', (code, signal) => { process.stdout.write('server-exit ' + code 
 `;
 // the same CLI with a server already started in the background before (same command line): it starts
 // the background one, then the foreground one a moment later, and exits when the foreground one ends
+// (detached on Windows: there a Node process takes its attached children with it when it exits; in another folder,
+// so that killing it at the end never leaves the test's own folder held)
 const CLI_TWO_JS = `const { spawn } = require('child_process');
-const bg = spawn(process.execPath, [process.argv[2], 'next', 'dev'], { stdio: 'ignore' });
+const bg = spawn(process.execPath, [process.argv[2], 'next', 'dev'], { stdio: 'ignore', detached: process.platform === 'win32', windowsHide: true, cwd: require('os').tmpdir() });
 process.stdout.write('background ' + bg.pid + '\\n');
 setTimeout(() => {
   const child = spawn(process.execPath, [process.argv[2], 'next', 'dev'], { stdio: 'ignore' });

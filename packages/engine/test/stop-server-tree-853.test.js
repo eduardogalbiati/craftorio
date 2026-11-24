@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { stopServerTree } = require('../engine/processes');
+const { byNewest, listProcesses, stopServerTree } = require('../engine/processes');
 
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -47,4 +47,20 @@ test('protectChildren spares the root\'s direct children; nothing matching stops
   assert.deepEqual((await stopServerTree(cli, 'next dev', { protectChildren: true })).stopped, []);
   assert.deepEqual((await stopServerTree(cli, 'cargo watch')).stopped, []);
   assert.equal(alive(server), true);
+});
+
+test('byNewest: the start time decides, whatever the pids; the pid only when a start is unknown or the same', () => {
+  const first = (list) => [...list].sort(byNewest)[0].pid;
+  assert.equal(first([{ pid: 9000, started: 10 }, { pid: 12, started: 20 }]), 12);
+  assert.equal(first([{ pid: 12, started: 20 }, { pid: 9000, started: 10 }]), 12);
+  assert.equal(first([{ pid: 12, started: 20 }, { pid: 13, started: 20 }]), 13);
+  assert.equal(first([{ pid: 12, started: 20 }, { pid: 13, started: null }]), 13);
+  assert.equal(first([{ pid: 12 }, { pid: 13 }]), 13);
+});
+
+test('listProcesses: a child started later has a later start', { skip: process.platform === 'darwin' && 'no start time on macOS' }, async (t) => {
+  const { cli, server } = await start(t);
+  const procs = await listProcesses();
+  const of = (pid) => procs.find((p) => p.pid === pid);
+  assert.ok(of(cli).started > 0 && of(server).started >= of(cli).started, JSON.stringify([of(cli), of(server)]));
 });

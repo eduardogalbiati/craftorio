@@ -52,7 +52,7 @@ jobs:
               Craftorio-linux-x64.AppImage
               Craftorio-linux-x64.tar.gz
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90   # a hung job must not eat the quota; the Windows `npm test` alone takes ~75 min
+    timeout-minutes: 150   # a hung job must not eat the quota; the Windows `npm test` alone takes ~100 min on 2 CPUs (a private repository)
     defaults:
       run:
         shell: bash   # Git Bash on Windows: the same scripts on every OS

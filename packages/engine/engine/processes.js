@@ -36,13 +36,13 @@ const run = (cmd, args) => new Promise((resolve) => {
 
 // Win32_Process gives the executable path and the command line, not the working directory. UTF-8
 // output: user folders may have non-ASCII names.
-const WIN_LIST = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,ExecutablePath,CommandLine | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.ProcessId,$_.ParentProcessId,$_.ExecutablePath,($_.CommandLine -replace '[\\r\\n]+',' ') }";
+const WIN_LIST = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,CreationDate,ExecutablePath,CommandLine | ForEach-Object { '{0}|{1}|{2}|{3}|{4}' -f $_.ProcessId,$_.ParentProcessId,$(if ($_.CreationDate) { $_.CreationDate.ToFileTimeUtc() }),$_.ExecutablePath,($_.CommandLine -replace '[\\r\\n]+',' ') }";
 
 async function listWindows() {
   const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', WIN_LIST]);
   if (out == null) throw new Error('could not list processes (Get-CimInstance Win32_Process)');
-  return out.split(/\r?\n/).map((l) => l.trim().split('|')).filter((f) => f.length >= 4 && /^\d+$/.test(f[0]))
-    .map(([pid, ppid, exe, ...cmd]) => ({ pid: +pid, ppid: +ppid, exe: exe || null, cmd: cmd.join('|') || null, cwd: null, tty: false }));
+  return out.split(/\r?\n/).map((l) => l.trim().split('|')).filter((f) => f.length >= 5 && /^\d+$/.test(f[0]))
+    .map(([pid, ppid, started, exe, ...cmd]) => ({ pid: +pid, ppid: +ppid, started: +started || null, exe: exe || null, cmd: cmd.join('|') || null, cwd: null, tty: false }));
 }
 
 function listLinux() {
@@ -50,10 +50,10 @@ function listLinux() {
   return fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).map((d) => {
     const stat = read(() => fs.readFileSync(`/proc/${d}/stat`, 'utf8'));
     if (!stat) return null;
-    // after the command name "(...)": state ppid pgrp session tty_nr ...
+    // after the command name "(...)": state ppid pgrp session tty_nr ...; starttime is the 20th
     const f = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
     return {
-      pid: +d, ppid: +f[1], tty: +f[4] !== 0,
+      pid: +d, ppid: +f[1], tty: +f[4] !== 0, started: +f[19] || null,
       exe: read(() => fs.readlinkSync(`/proc/${d}/exe`)), cwd: read(() => fs.readlinkSync(`/proc/${d}/cwd`)),
       cmd: read(() => fs.readFileSync(`/proc/${d}/cmdline`, 'utf8').split('\0').join(' ').trim()) || null,
     };
@@ -81,7 +81,10 @@ async function listMac() {
   return procs;
 }
 
-/** Every process: [{ pid, ppid, exe, cmd, cwd, tty }] (exe/cmd/cwd null when unknown). */
+/**
+ * Every process: [{ pid, ppid, exe, cmd, cwd, tty, started }] (exe/cmd/cwd null when unknown). started: when it
+ * started, a number only to compare with another of the same list (no value on macOS).
+ */
 function listProcesses() {
   if (process.platform === 'win32') return listWindows();
   if (process.platform === 'linux') return Promise.resolve(listLinux());
@@ -203,6 +206,10 @@ async function processTreeCommands(pid) {
   return out;
 }
 
+// Newest first: by start time, else by pid. A pid alone does not say it: Windows gives them in no order and every
+// system reuses them.
+const byNewest = (a, b) => (a.started && b.started ? b.started - a.started : 0) || b.pid - a.pid;
+
 /**
  * #853: stops the tree of one dev server or watcher an agent runs in the foreground: under the agent
  * CLI's `rootPid`, the highest descendant whose command line holds `command` (the Bash tool's shell)
@@ -232,7 +239,7 @@ async function stopServerTree(rootPid, command, { protectChildren = false } = {}
   const wanted = String(command || '').trim();
   const below = subtree(rootPid).filter((p) => !(protectChildren && p.ppid === rootPid));
   // the highest matches (the shell running the command, not the server it started), then the newest
-  // of them (highest pid): the same command may already run in the background, started earlier
+  // of them: the same command may already run in the background, started earlier
   const newestTop = (matches) => {
     const pids = new Set(matches.map((p) => p.pid));
     const byPid = new Map(below.map((p) => [p.pid, p]));
@@ -240,7 +247,7 @@ async function stopServerTree(rootPid, command, { protectChildren = false } = {}
       for (let up = byPid.get(p.ppid); up; up = byPid.get(up.ppid)) if (pids.has(up.pid)) return true;
       return false;
     };
-    return matches.filter((p) => !hasMatchAbove(p)).sort((a, b) => b.pid - a.pid)[0];
+    return matches.filter((p) => !hasMatchAbove(p)).sort(byNewest)[0];
   };
   const top = newestTop(below.filter((p) => wanted && p.cmd?.includes(wanted))) || newestTop(below.filter((p) => isServerCommand(p.cmd)));
   if (!top) return { listed: true, stopped: [] };
@@ -256,6 +263,7 @@ async function stopServerTree(rootPid, command, { protectChildren = false } = {}
 }
 
 module.exports = {
+  byNewest,
   commandMentions,
   listProcesses,
   processTreeCommands,
