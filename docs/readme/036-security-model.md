@@ -22,7 +22,12 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
   paid runs. Keep it like a password.
 - **The control endpoint file is readable by agents.** `<workspace>/control/endpoint.json` holds the
   token of the loopback control channel; the agents run as you and can read it. Its allowlist
-  (`packages/engine/control/allowlist.js`) never resolves a human gate and never changes settings.
+  (`packages/engine/control/allowlist.js`) never resolves a human gate, never changes settings and never
+  accepts a workflow. Besides the roadmap actions, whoever reads the token can import a project
+  (`projects:create`, its Run App command and install settings included), refresh a backlog
+  (`backlog:sync`) and file an issue in the local backlog of a project with no remote
+  (`backlog:create-issue`; with a remote it is refused). `npm run serve` opens the same channel with its own
+  token; the server's is never in that file.
   The control channel is on by default (#32); turn it off in Settings › Execution › *Allow outside
   sessions to control this app*.
 

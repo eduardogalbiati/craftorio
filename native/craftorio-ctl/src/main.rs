@@ -2,13 +2,17 @@
 // scripts/ctl.js, shipped next to the app so an outside session needs neither Node nor a checkout.
 //   craftorio-ctl <channel> [json-argument] [--workspace <dir>]   calls the channel, prints its result
 //   craftorio-ctl --list [--workspace <dir>]                       the allowed channels, argument schemas
+//   craftorio-ctl watch <projectId> [--stall <seconds>] [--max <seconds>] [--workspace <dir>]
+//       waits for the roadmap (#42, watch.rs): a stage change, a gate, a failure, a pause, its end, a stall
 // The workspace is --workspace, else CRAFTORIO_WORKSPACE; the endpoint and its token come from
 // <workspace>/control/endpoint.json (written while Settings › Execution › "Allow outside sessions to
 // control this app" is on). It first checks the app's contract version (GET /api/version).
 // Exit codes: 0 the result printed (pretty JSON); 1 a refused or failed call, or a usage error (the
-// reason on stderr); 2 no endpoint (the switch is off); 3 the app speaks another contract version.
+// reason on stderr); 2 no endpoint (the switch is off); 3 the app speaks another contract version;
+// 4 watch passed its maximum duration with nothing to report.
 
 mod http;
+mod watch;
 
 use serde_json::Value;
 use std::io::{self, Write};
@@ -18,7 +22,7 @@ use std::process::ExitCode;
 /// The contract this client speaks: CONTROL_VERSION in packages/engine/control/index.js.
 const CONTROL_VERSION: &str = "1";
 
-const USAGE: &str = "Usage: craftorio-ctl <channel> [json-argument] [--workspace <dir>]\n       craftorio-ctl --list [--workspace <dir>]";
+const USAGE: &str = "Usage: craftorio-ctl <channel> [json-argument] [--workspace <dir>]\n       craftorio-ctl --list [--workspace <dir>]\n       craftorio-ctl watch <projectId> [--stall <seconds>] [--max <seconds>] [--workspace <dir>]";
 
 struct Failure {
     code: u8,
@@ -37,24 +41,31 @@ struct Args {
     list: bool,
     channel: Option<String>,
     json: Option<String>,
+    stall: String,
+    max: String,
 }
 
 fn parse_args(argv: Vec<String>) -> Result<Args, Failure> {
     let mut workspace = std::env::var("CRAFTORIO_WORKSPACE").unwrap_or_default();
     let mut list = false;
+    let mut stall = watch::DEFAULT_STALL.to_string();
+    let mut max = watch::DEFAULT_MAX.to_string();
     let mut rest = Vec::new();
     let mut it = argv.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--workspace" => workspace = it.next().unwrap_or_default(),
             "--list" => list = true,
+            "--stall" => stall = it.next().unwrap_or_default(),
+            "--max" => max = it.next().unwrap_or_default(),
             "--help" | "-h" => return fail(1, USAGE),
             _ => rest.push(a),
         }
     }
     let mut rest = rest.into_iter();
     let (channel, json) = (rest.next(), rest.next());
-    if !list && channel.is_none() {
+    let watch_nothing = channel.as_deref() == Some("watch") && json.is_none();
+    if !list && (channel.is_none() || watch_nothing) {
         return fail(1, USAGE);
     }
     if workspace.is_empty() {
@@ -68,6 +79,8 @@ fn parse_args(argv: Vec<String>) -> Result<Args, Failure> {
         list,
         channel,
         json,
+        stall,
+        max,
     })
 }
 
@@ -135,6 +148,17 @@ impl Endpoint {
         Ok(parsed.unwrap_or(Value::Null))
     }
 
+    /// What an allowed channel answers (its `result`).
+    fn call_channel(&self, channel: &str, arg: Option<&Value>) -> Result<Value, Failure> {
+        let body = match arg {
+            None => "{}".to_string(),
+            Some(arg) => serde_json::json!({ "arg": arg }).to_string(),
+        };
+        let route = format!("/api/{}", http::encode_component(channel));
+        let answer = self.call(channel, "POST", &route, Some(&body))?;
+        Ok(answer.get("result").cloned().unwrap_or(Value::Null))
+    }
+
     /// The app's contract version must be this client's (exit 3 otherwise).
     fn check_version(&self) -> Result<(), Failure> {
         let mismatch = |found: &str| {
@@ -183,26 +207,31 @@ fn list(endpoint: &Endpoint) -> Result<String, Failure> {
     Ok(out)
 }
 
-fn run(argv: Vec<String>) -> Result<String, Failure> {
+// the exit code and what to print on stdout
+fn run(argv: Vec<String>) -> Result<(u8, String), Failure> {
     let args = parse_args(argv)?;
+    let channel = args.channel.unwrap_or_default();
+    if channel == "watch" && !args.list {
+        let stall = watch::seconds("--stall", &args.stall)?;
+        let max = watch::seconds("--max", &args.max)?;
+        let endpoint = Endpoint::read(&args.workspace)?;
+        return watch::watch(endpoint, args.json.unwrap_or_default(), stall, max);
+    }
     let endpoint = Endpoint::read(&args.workspace)?;
     endpoint.check_version()?;
     if args.list {
-        return list(&endpoint);
+        return list(&endpoint).map(|text| (0, text));
     }
-    let channel = args.channel.unwrap_or_default();
-    let body = match &args.json {
-        None => "{}".to_string(),
+    let arg = match &args.json {
+        None => None,
         Some(text) => match serde_json::from_str::<Value>(text) {
-            Ok(arg) => serde_json::json!({ "arg": arg }).to_string(),
+            Ok(arg) => Some(arg),
             Err(_) => return fail(1, format!("The argument is not valid JSON: {text}")),
         },
     };
-    let route = format!("/api/{}", http::encode_component(&channel));
-    let answer = endpoint.call(&channel, "POST", &route, Some(&body))?;
-    let result = answer.get("result").cloned().unwrap_or(Value::Null);
+    let result = endpoint.call_channel(&channel, arg.as_ref())?;
     serde_json::to_string_pretty(&result)
-        .map(|s| format!("{s}\n"))
+        .map(|s| (0, format!("{s}\n")))
         .or_else(|e| fail(1, format!("{channel}: {e}")))
 }
 
@@ -212,10 +241,10 @@ fn main() -> ExitCode {
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
     match run(argv) {
-        Ok(text) => {
+        Ok((code, text)) => {
             let mut out = io::stdout().lock();
             let _ = out.write_all(text.as_bytes()).and_then(|()| out.flush());
-            ExitCode::SUCCESS
+            ExitCode::from(code)
         }
         Err(f) => {
             let _ = writeln!(io::stderr(), "{}", f.message);
@@ -258,6 +287,20 @@ mod tests {
         );
         assert!(args(&["--list", "--workspace", "w"]).ok().unwrap().list);
         assert_eq!(args(&["--workspace", "w"]).err().unwrap().code, 1);
+    }
+
+    #[test]
+    fn watch_takes_a_project_and_its_times() {
+        let a = args(&["watch", "my-app", "--stall", "5", "--workspace", "w"])
+            .ok()
+            .unwrap();
+        assert_eq!(
+            (a.json.as_deref(), a.stall.as_str(), a.max.as_str()),
+            (Some("my-app"), "5", watch::DEFAULT_MAX)
+        );
+        let f = args(&["watch", "--workspace", "w"]).err().unwrap();
+        assert_eq!(f.code, 1);
+        assert!(f.message.contains("watch <projectId>"), "{}", f.message);
     }
 
     #[test]

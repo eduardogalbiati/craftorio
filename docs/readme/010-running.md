@@ -133,6 +133,11 @@ Tailscale is not running). A proxy in front must send one of these names as `Hos
   `term:exit` and `auth:changed`; the client sends `term:input` / `term:resize` the same way.
 - Requests from another origin are refused. Beyond `127.0.0.1` the traffic is plain HTTP: put the
   server behind a reverse proxy with TLS.
+- Outside sessions on the server's computer use the control channel, not this token: while Settings ›
+  Execution › *Allow outside sessions to control this app* is on (the default), the server opens it on
+  `127.0.0.1` with its own token and allowlist, as the desktop app does, in
+  `<workspace>/control/endpoint.json`, and removes the file when it stops. The full-control token is never
+  written there.
 - The server asks for the same account as the app (sign in from the browser UI; the sign-in page
   opens on the server machine). `CRAFTORIO_AUTH=off` disables it in development.
 

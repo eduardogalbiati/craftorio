@@ -1,0 +1,99 @@
+[
+  {
+    "name": "a running item is nothing to report",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "name": "", "items": [{ "status": "running", "runId": "r1", "issues": [{ "number": 1 }] }] }] },
+    "expected": null,
+    "runs": [["r1", "#1"]]
+  },
+  {
+    "name": "a failed item wins over the pause it caused, its error on one line",
+    "roadmap": { "state": "paused", "error": "#2 failed", "stages": [{ "id": "a", "items": [{ "status": "failed", "runId": "r1", "issues": [{ "number": 2 }, { "number": 3 }], "error": "the tests\n  are red" }] }] },
+    "expected": "failed: #2, #3 failed: the tests are red",
+    "runs": []
+  },
+  {
+    "name": "a failed item without an error of its own says its run's",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "failed", "workflow": "docs.yaml", "issues": [], "run": { "error": "stopped" } }] }] },
+    "expected": "failed: docs.yaml failed: stopped",
+    "runs": []
+  },
+  {
+    "name": "a parked item that failed later is finished",
+    "before": { "stages": [{ "id": "b", "items": [{ "status": "planned" }] }] },
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "failed", "parked": { "gate": "Review" }, "issues": [{ "number": 1 }] }] }, { "id": "b", "items": [{ "status": "planned" }] }] },
+    "expected": null,
+    "runs": []
+  },
+  {
+    "name": "a failed item in a disabled stage is no failure",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "disabled": true, "items": [{ "status": "failed" }] }, { "id": "b", "items": [{ "status": "planned" }] }] },
+    "expected": null,
+    "runs": []
+  },
+  {
+    "name": "an item interrupted at its gate is at the gate, not failed",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "failed", "runId": "r1", "issues": [{ "number": 4 }], "run": { "atGate": "Review" } }] }] },
+    "expected": "gate: #4 waits at a human gate: Review",
+    "runs": []
+  },
+  {
+    "name": "a parked item at its gate is not a waiting gate",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "parked", "waiting": true, "run": { "atGate": "Review" } }, { "status": "running", "runId": "r2" }] }] },
+    "expected": null,
+    "runs": [["r2", "an item"]]
+  },
+  {
+    "name": "a waiting item with no step name",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "running", "runId": "r1", "waiting": true, "issues": [{ "number": 5 }] }] }] },
+    "expected": "gate: #5 waits at a human gate: its gate",
+    "runs": [["r1", "#5"]]
+  },
+  {
+    "name": "a release's run at its gate",
+    "before": { "stages": [] },
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "done" }] }, { "id": "rel", "kind": "release", "name": "1.2.0", "status": "running", "runId": "r9", "items": [] }] },
+    "active": [{ "runId": "other", "gates": [{ "step_id": "x" }] }, { "runId": "r9", "gates": [{ "step_id": "ship" }] }],
+    "expected": "gate: release 1.2.0 waits at a human gate: ship",
+    "runs": [["r9", "release 1.2.0"]]
+  },
+  {
+    "name": "a gate wins over the stage it is in",
+    "before": { "stages": [{ "id": "a", "items": [{ "status": "running" }] }] },
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "done" }] }, { "id": "b", "items": [{ "status": "running", "runId": "r2", "waiting": true, "run": { "atGate": "Plan it", "progress": [{ "step": "work", "status": "done" }, { "step": "plan", "status": "waiting" }] }, "issues": [{ "number": 2 }] }] }] },
+    "expected": "gate: #2 waits at a human gate: plan (Plan it)",
+    "runs": [["r2", "#2"]]
+  },
+  {
+    "name": "paused, with the reason",
+    "roadmap": { "state": "paused", "error": "Stage 1 done", "stages": [{ "id": "a", "items": [{ "status": "planned" }] }] },
+    "expected": "paused: the roadmap is paused: Stage 1 done",
+    "runs": []
+  },
+  {
+    "name": "finished",
+    "roadmap": { "state": "done", "stages": [{ "id": "a", "items": [{ "status": "done" }] }] },
+    "expected": "finished: the roadmap is done",
+    "runs": []
+  },
+  {
+    "name": "the next stage, named, releases not counted",
+    "before": { "stages": [{ "id": "a", "name": "Stage 1", "items": [{ "status": "running" }] }] },
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "name": "Stage 1", "items": [{ "status": "done" }] }, { "id": "rel", "kind": "release", "status": "shipped", "items": [] }, { "id": "b", "name": "The  docs", "items": [{ "status": "running", "runId": "r2", "issues": [{ "number": 2 }] }] }] },
+    "expected": "stage: from stage 1 to stage 2 (The docs)",
+    "runs": [["r2", "#2"]]
+  },
+  {
+    "name": "no open stage left while a release is pending",
+    "before": { "stages": [{ "id": "a", "items": [{ "status": "running" }] }] },
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "skipped" }] }, { "id": "rel", "kind": "release", "name": "2.0.0", "items": [] }] },
+    "expected": "stage: from stage 1 to no open stage",
+    "runs": []
+  },
+  {
+    "name": "a stage added before the current one's place is the same stage by its id",
+    "before": { "stages": [{ "id": "b", "items": [{ "status": "running" }] }] },
+    "roadmap": { "state": "running", "stages": [{ "id": "new", "disabled": true, "items": [{ "status": "planned" }] }, { "id": "b", "items": [{ "status": "running", "runId": "r1", "issues": [{ "number": 1 }] }] }] },
+    "expected": null,
+    "runs": [["r1", "#1"]]
+  }
+]

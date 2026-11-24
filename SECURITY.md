@@ -50,7 +50,12 @@ What the app protects, and what it does not (the security review of 2026-10-22,
 - **The control channel's endpoint file** (`<workspace>/control/endpoint.json`) holds the token of
   the loopback control channel. It is written readable by your user only where the OS honours the
   mode, but the workflow's agents run as you and can read it. What that token allows is limited by
-  the channel's allowlist: it never resolves a human gate and never changes settings.
+  the channel's allowlist: it never resolves a human gate, never changes settings and never accepts a
+  workflow. An accepted risk (#42): a run's agents can call what outside sessions can, so they can also
+  import a project (`projects:create`, its Run App command and install settings included), refresh a
+  backlog (`backlog:sync`) and file an issue in the local backlog of a project with no remote
+  (`backlog:create-issue`; refused with a remote). Every call is in `control/calls.jsonl`. The engine server
+  (`npm run serve`) opens the same channel with its own token; its full-control token is never written there.
 - **Human gates are never crossed by automation**, the supervisor included: only you (desktop UI,
   engine server UI, a paired phone) answer a `human_approval`.
 - **A gate link sent to a phone reveals the gate's text** to whoever holds it; answering also needs

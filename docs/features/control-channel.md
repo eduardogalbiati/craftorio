@@ -11,8 +11,10 @@ same channels its screens use, instead of editing workspace files: an action tak
 (a `roadmap:start` dispatches like the Roadmap screen's button; with a local base behind origin it
 answers `{ confirm, baseCheck }` until `baseChoice` says `update` or `continue`, #805) and an edit
 merges with an open form on the screen (#287). When the switch is on, the app listens on `127.0.0.1` only, on a free
-port, and writes `<workspace>/control/endpoint.json` (`{ "url", "token" }`, a new token on every
-start); off, or the app quitting, closes the port and deletes the file. Only the allowlist below
+port, and writes `<workspace>/control/endpoint.json` (`{ "url", "token", "client" }`, a new token on every
+start); off, or the app quitting, closes the port and deletes the file. `npm run serve` opens the same channel
+on its workspace (#42), with a token of its own (never the server's full-control token), and removes the
+file when it stops. Only the allowlist below
 answers, never across a human gate, and every call is logged to `control/calls.jsonl`. The setting
 shows the port and the file's path.
 
@@ -37,14 +39,30 @@ shows the port and the file's path.
     default lacks (the app's Restore button still restores it).
   - Reads for watching: `notifications:list`, `gates:interrupted`, `nightwatch:state`,
     `nightwatch:report`, `usage:get` (any scope, `machine` included: computed off the main process, #389).
+- From zero to a running roadmap (#42):
+  - `projects:create` `{ name, folder?, repo? }` imports a folder (the repository is its checkout's
+    `origin`) or clones `repo`. It takes the project dialog's fields, the Run App command included.
+  - `backlog:sync` `{ projectId }` reads the issues from the platform (`gh` / `glab`) and fetches the base.
+  - `backlog:create-issue` `{ projectId, title, body?, labels? }` files an issue in the local backlog of a
+    project with no remote (#35). With a remote it is refused: file the issue on the platform with your own
+    `gh` / `glab`, when the user asks, then call `backlog:sync`. Under `CRAFTORIO_SIMULATION_ONLY` no
+    call writes to GitHub or GitLab.
+- **A run's agents can read the token**: they run as your user, so they can call the same channels, these
+  three included. The allowlist is what limits them (SECURITY.md).
 - **Human gates stay closed**: no gate channel is reachable (`approval:resolve`, `gate:*`,
-  `phonegates:*`), any argument `confirmGate` is refused, and settings are read-only from outside.
+  `phonegates:*`), any argument `confirmGate` is refused, settings are read-only from outside and
+  `workflows:accept` is not allowed.
 - Left out on purpose: `run:stop` (at a gate, stopping the run is one of the gate's answers);
   `nightwatch:permissions`, `nightwatch:limits`, `oracle:act` and `oracle:nightWatch` (they change what
   automation may do on its own); `settings:set` (it could turn gates or this channel off).
 - Every call is appended to `<workspace>/control/calls.jsonl` (time, channel, a short summary of
   the arguments, the status, the result's summary or the error).
 - The endpoint is part of the running app: nothing here opens a second engine on the workspace (#112).
+
+Finding the client: `client` in `endpoint.json` (#42) is the command that calls this app, as an argument list
+(run it without a shell and a path with spaces needs no quoting); the channel and its argument come after
+it. It is `["<app>/resources/bin/craftorio-ctl"]` for an installed app, `["node", "<checkout>/scripts/ctl.js"]`
+(Node's own path on the server) for a source checkout without the Rust binary, and `null` when neither exists.
 
 Calling a channel (`POST /api/<channel>`, body `{ "arg": ... }`, answer `{ "result": ... }` or
 `{ "error": "..." }`). With the client shipped next to the app, `craftorio-ctl` (#342, no Node
@@ -60,7 +78,21 @@ craftorio-ctl --list
 `craftorio-ctl --list` prints the allowed channels with their argument schemas (`GET /api/channels`).
 Exit codes: `0` the result printed, `1` a refused or failed call (the reason on stderr), `2` no
 endpoint (the switch is off), `3` the app speaks another contract version (use the client shipped
-with that app). In a development checkout, `scripts/ctl.js` does the same under Node.
+with that app), `4` a `watch` that passed its maximum duration. In a development checkout, `scripts/ctl.js`
+calls a channel and watches under Node (a plain call without an endpoint exits `1` there).
+
+Watching a roadmap (#42), the same in both clients:
+
+```
+craftorio-ctl watch my-app --stall 900 --max 3600
+```
+
+`watch` only reads. It returns, its last line `<reason>: <text>`, at the first of: `failed` (an item failed,
+also when that paused the roadmap), `finished`, `paused`, `gate` (a run waits at a human gate, also one
+that waited already), `stage` (the current stage is not the one of the first reading), `stalled` (no run event
+for `--stall` seconds, 900 by default) (exit `0`); or `timeout` after `--max` seconds (3600 by default, at most a
+week; exit `4`). An unknown project or a refused or failed call exits `1`, no endpoint `2`, another contract
+version `3`.
 
 With `curl` (the URL and the token from `control/endpoint.json`):
 

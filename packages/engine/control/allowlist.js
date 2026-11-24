@@ -15,16 +15,25 @@
 //   bundled default lacks (GUARDS['workflows:restore'] in packages/engine/control/index.js); the app's Restore button is not.
 // - runs:resumeOptions, notifications:list, gates:interrupted, nightwatch:state, nightwatch:report
 //   and usage:get only read.
+// #42 (the owner's decision, 2026-11-24), so a session takes a project from zero to a running roadmap; the agents of
+// a run can read the endpoint's token, so they can call these too (the accepted risk):
+// - projects:create imports a folder or clones a repository; no project is changed or removed.
+// - backlog:sync only reads the platform (gh, glab, a git fetch).
+// - backlog:create-issue writes only the local backlog of a project with no remote (#35): with a remote it is
+//   refused (GUARDS['backlog:create-issue'] in packages/engine/control/index.js), nothing is filed on GitHub or GitLab.
 // Left out on purpose: run:stop (at a gate, stopping the run is one of the gate's answers);
 // nightwatch:permissions, nightwatch:limits, oracle:act and oracle:nightWatch (they change what
 // automation may do on its own); settings:set, approval:*, gate:* and phonegates:* (as above).
 
 const CHANNELS = new Set([
+  'backlog:create-issue',
   'backlog:get',
+  'backlog:sync',
   'gates:interrupted',
   'nightwatch:report',
   'nightwatch:state',
   'notifications:list',
+  'projects:create',
   'projects:list',
   'roadmap:cancel-pause',
   'roadmap:get',

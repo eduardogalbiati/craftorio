@@ -1,19 +1,21 @@
 // The control channel (#336): outside sessions (a terminal, another agent) drive the running app through
 // its own channels instead of editing workspace files. On by default (#32; setting controlChannel,
 // Settings › Execution unticks it, and a saved false stays off). When on, the app listens on 127.0.0.1 only, on a free port, and writes
-// <workspace>/control/endpoint.json { url, token } (a new random token on every start); off, or the
-// app quitting, closes the port and deletes the file.
+// <workspace>/control/endpoint.json { url, token, client } (a new random token on every start); off, or the
+// app quitting, closes the port and deletes the file. The engine server (bin/craftorio-engine.js) opens the same
+// channel (#42), with a token of its own: the server's full-control token is never written there.
 //   POST /api/<channel>   Authorization: Bearer <token>, body { "arg": ... }  ->  as packages/engine/server/index.js
 // Only the channels of packages/engine/control/allowlist.js are answered (others: 403 naming the channel); no
 // argument may cross a human gate (confirmGate), and GUARDS refuse what would remove one (#399:
-// workflows:restore of a copy with a gate its default lacks; #799: runs:resume with changed inputs).
+// workflows:restore of a copy with a gate its default lacks; #799: runs:resume with changed inputs) or file an
+// issue of a project with a remote in its local backlog (#42: backlog:create-issue).
 // Every call is appended to control/calls.jsonl.
 // The calls go to the running app's own service: actions dispatch as from the screen, and no second
 // engine opens the workspace (#112). Two reads for the client (#342), with the token, not logged:
 //   GET /api/version    ->  { version }: CONTROL_VERSION, the client refuses another one (exit 3)
 //   GET /api/channels   ->  { channels: [{ channel, params, schema }] }: the allowlist, argument schemas
 // The client: the craftorio-ctl binary (native/craftorio-ctl, its path in the status as ctlPath);
-// scripts/ctl.js for development.
+// scripts/ctl.js for development. endpoint.json's `client` (#42) is the one to run, as an argument list.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -21,7 +23,9 @@ const http = require('http');
 const path = require('path');
 const workspace = require('../domains/workspace/workspace');
 const { nativeBinaryPath } = require('../domains/machine/native-bin');
+const { readProject } = require('../domains/project/projects');
 const { addedGates, BUNDLED_WORKFLOWS_DIR } = require('../domains/workflow/workflows');
+const { appRoot } = require('../domains/workspace/app-root');
 const { CHANNELS, GATE_ARGS } = require('./allowlist');
 const {
   bearer,
@@ -39,7 +43,11 @@ const SUMMARY_CHARS = 200;
 // Refusals only outside sessions get, per channel (#399): the reason, or null to go on.
 // runs:resume (#799) keeps the inputs the owner gave the run, as supervisor:resume does.
 // workflows:restore never removes a human gate the owner added to a workspace copy.
+// backlog:create-issue (#42) files local issues only: an issue of a project with a remote belongs to its platform.
 const GUARDS = {
+  'backlog:create-issue': (service, arg) => (hasRemote(service, arg?.projectId)
+    ? 'this project has a remote: file the issue on its platform with your own gh or glab (when the user asks), then call backlog:sync. Outside sessions create only the local issues of a project with no remote.'
+    : null),
   'runs:resume': (service, arg) => (arg?.inputs == null ? null : 'inputs is refused: outside sessions never change a run\'s inputs. Change them in the app\'s Resume from step dialog.'),
   'workflows:restore': (service, file) => {
     const ws = service.workspace();
@@ -48,6 +56,21 @@ const GUARDS = {
     return `the copy of ${path.basename(String(file || ''))} has human gates its default lacks (${gates.join(', ')}): a restore would remove them, outside sessions never do. Restore it from the app.`;
   },
 };
+
+// an unknown project has none: the channel itself answers it
+function hasRemote(service, projectId) {
+  const ws = service.workspace();
+  try { return !!ws && !!readProject(ws.projects, path.basename(String(projectId))).repo; } catch { return false; }
+}
+
+// #42: the command that calls this app, as an argument list (no shell: a path with spaces stays whole): craftorio-ctl,
+// else a checkout's scripts/ctl.js under Node (Electron's own binary is no Node: the one on the PATH), else null
+function clientCommand(ctlPath) {
+  if (fs.existsSync(ctlPath)) return [ctlPath];
+  const script = path.join(appRoot(), 'scripts', 'ctl.js');
+  if (!fs.existsSync(script)) return null;
+  return [process.versions.electron ? 'node' : process.execPath, script];
+}
 
 // The version of this HTTP contract (routes, bodies, exit codes the client relies on). Bump it with
 // CONTROL_VERSION in native/craftorio-ctl/src/main.rs when either changes incompatibly.
@@ -164,7 +187,7 @@ function createControlChannel({ service, ctlPath = nativeBinaryPath('craftorio-c
           fs.mkdirSync(controlDir(ws), { recursive: true });
           // readable by this user only where the OS honours the mode (SEC-25); the workflow's agents run
           // as this user and can still read it (SECURITY.md, threat model)
-          fs.writeFileSync(file, `${JSON.stringify({ url, token, pid: process.pid, started: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
+          fs.writeFileSync(file, `${JSON.stringify({ url, token, client: clientCommand(ctlPath), pid: process.pid, started: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
           // the mode only applies to a new file: one left by a crash or an older version keeps its own
           fs.chmodSync(file, 0o600);
         } catch (e) {

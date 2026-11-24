@@ -21,6 +21,9 @@
 // sign-in page opens on this machine) or set CRAFTORIO_AUTH=off. A desktop app on another computer
 // cannot sign this server in (the sign-in page would open here): it uses CRAFTORIO_AUTH=off.
 //
+// Outside sessions on this machine (#42): the control channel (packages/engine/control), as in the desktop app, while
+// its setting is on: its own loopback port, token and allowlist in <workspace>/control/endpoint.json, removed on stop.
+//
 // --host tailscale listens on this computer's Tailscale address only (100.64.0.0/10), not on the
 // local network. Outside 127.0.0.1 the traffic is plain HTTP: put it behind a reverse proxy with TLS
 // (on a tailnet WireGuard already encrypts it; `tailscale serve` adds HTTPS). Any other address
@@ -40,6 +43,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const workspace = require('../domains/workspace/workspace');
+const { createControlChannel } = require('../control');
 const { createService } = require('../service');
 const {
   createServer,
@@ -177,6 +181,14 @@ service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.mes
 setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.message)), 30 * 60 * 1000).unref();
 service.clearPastedImages();
 
+// #42: never given the server's token: the channel makes its own
+const control = createControlChannel({ service });
+const updateControl = () => control.update().then((s) => {
+  if (s.error) console.error(s.error);
+  return s;
+}, (e) => console.error('control channel:', e.message));
+service.events.on('settings:changed', updateControl);
+
 const token = process.env.CRAFTORIO_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');
 // a loopback server answers only the loopback names and these (#541); another address answers any Host
 const loopback = isLoopback(listen.host);
@@ -219,6 +231,8 @@ function printAllowedHosts(names, magic) {
     console.log('  (shown once: the page keeps it in a cookie; clear this line from the shell history and the terminal\'s scrollback if others can read them.)');
     if (loopback) printAllowedHosts(allowedHosts, magic);
     else printRemoteAccess(host, port);
+    const opened = await updateControl();
+    if (opened?.enabled) console.log(`Control channel for outside sessions on this machine: ${opened.file}`);
     if (authOff) console.warn('Sign-in is off: runs do not need an account.');
     else {
       const s = await auth.refresh().catch(() => auth.state());
@@ -227,12 +241,15 @@ function printAllowedHosts(names, magic) {
   });
 })();
 
-const stop = () => {
-  service.shutdown();
-  lock.release();
-  if (!server) process.exit(0);
-  server.close(() => process.exit(0));
+const stop = async () => {
   setTimeout(() => process.exit(0), 3000).unref();
+  service.shutdown();
+  const closed = new Promise((resolve) => { if (server) server.close(resolve); else resolve(); });
+  // #42: the endpoint file goes before the lock: the next engine on this workspace writes its own
+  await control.stop().catch((e) => console.error('control channel:', e.message));
+  lock.release();
+  await closed;
+  process.exit(0);
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

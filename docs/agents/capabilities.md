@@ -301,8 +301,9 @@ A session outside the app (a Claude Code session working as Oracle or Product Ow
 workspace, a terminal) acts on the running app through the control endpoint, never by editing
 workspace files such as `backlog/<project>.roadmap.json`: an edited file races the screens (#287)
 and starts nothing. With Settings › Execution › "Allow outside sessions to control this app" on (the default since #32), the
-app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`); `node scripts/ctl.js
-<channel> [json]` (or `curl` / `Invoke-RestMethod`) calls a channel of `packages/engine/control/allowlist.js`,
+app writes `<workspace>/control/endpoint.json` (`url` on 127.0.0.1, `token`, `client`: the command that calls the app, as an argument
+list, #42; `npm run serve` opens the same channel); `node scripts/ctl.js
+<channel> [json]` (`watch <projectId>` waits for a roadmap; or `curl` / `Invoke-RestMethod`) calls a channel of `packages/engine/control/allowlist.js`,
 and each call is logged in `control/calls.jsonl`. The allowlist never holds a channel that answers,
 skips or bypasses a human gate, nor `settings:set`; `confirmGate` is refused on any channel and
 `inputs` on `runs:resume` (`packages/engine/control/index.js`, docs/features/control-channel.md). The file is written with mode 0600, but
