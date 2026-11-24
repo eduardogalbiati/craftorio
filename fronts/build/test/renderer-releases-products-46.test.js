@@ -19,13 +19,25 @@ const DATA = {
   run: null,
 };
 
-test('#46 the Latest badge is on the app\'s last release, not on a newer engine one', async () => {
-  const app = loadApp({ api: { listReleases: async () => DATA } });
+// the Releases screen with these releases: how many rows it lists, and the tags of the rows with the badge
+async function shown(releases) {
+  const app = loadApp({ api: { listReleases: async () => ({ ...DATA, releases }) } });
   await app.boot();
   app.run("showView('releases')");
   await app.settle(20);
   const rows = H.findAll(String(app.el('#rel-body').innerHTML || ''), (e) => e.attrs['data-testid'] === 'release-row');
-  assert.equal(rows.length, 3);
   const latest = rows.filter((r) => r.outer.includes('data-testid="release-latest"')).map((r) => ['engine-v1.1.0', 'v1.0.0', 'v0.9.0'].find((v) => text(r.outer).includes(v)));
-  assert.deepEqual(latest, ['v1.0.0']);
+  return { rows: rows.length, latest };
+}
+
+test('#46 the Latest badge is on the app\'s last release, not on a newer engine one', async () => {
+  assert.deepEqual(await shown(DATA.releases), { rows: 3, latest: ['v1.0.0'] });
+});
+
+test('#46 a project with releases of the engine only lists them, none with the Latest badge', async () => {
+  assert.deepEqual(await shown([DATA.releases[0]]), { rows: 1, latest: [] });
+});
+
+test('#46 a project of one product keeps the Latest badge on its newest release', async () => {
+  assert.deepEqual(await shown(DATA.releases.slice(1)), { rows: 2, latest: ['v1.0.0'] });
 });
