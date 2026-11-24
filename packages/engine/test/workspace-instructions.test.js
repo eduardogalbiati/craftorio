@@ -30,10 +30,10 @@ function tmpDir(t, prefix) {
 // A workspace folder; open() opens it as a new start of the app
 function appWorkspace(t) {
   process.env.CRAFTORIO_SIMULATION_ONLY = '1';
+  let service = null;
+  t.after(() => service?.shutdown()); // before the folders' removal: Windows removes no folder still in use
   const cliHome = tmpDir(t, 'ws-instructions-home-');
   const dir = tmpDir(t, 'ws-instructions-');
-  let service = null;
-  t.after(() => service?.shutdown());
   return {
     dir,
     file: path.join(dir, 'AGENTS.md'),
