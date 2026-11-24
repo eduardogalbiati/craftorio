@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { root, liveState, replayState, recordedRun } = require('../run-state-606');
+const { root, readLog, liveState, replayState, recordedRun } = require('../run-state-606');
 const { repoFromTemplate } = require('../helpers/git-fixture');
 
 const bundled = (name) => path.join(root, 'workflows', name);
@@ -53,6 +53,10 @@ test('test-batch: the replay of its mock run gives the in-memory state', async (
 });
 
 test('e2e-release: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('release.yaml'), inputs: { task: 'Release check', repo_path: root }, mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } } });
+  // #46: this repository declares two products (a release of it names one, else the run stops at
+  // `version`); the template repository declares none
+  const run = await recordedRun(t, { file: bundled('release.yaml'), inputs: { task: 'Release check', repo_path: repoFromTemplate(t) }, mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } } });
+  const visited = readLog(run.runDir).events.filter((ev) => ev.type === 'step.finished').map((ev) => ev.step_id);
+  assert.deepEqual(visited, ['version', 'unit', 'e2e', 'fix', 'unit', 'e2e', 'review', 'ship']);
   assertReplayMatches(run);
 });

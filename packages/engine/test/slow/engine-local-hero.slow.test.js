@@ -8,12 +8,14 @@ const evidence = require('../../domains/evidence/evidence');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root } = require('../engine-helpers');
+const { repoFromTemplate } = require('../helpers/git-fixture');
 
-test('release workflow: a simulated E2E suite fails once, the developer fixes it, both suites pass again, the review writes the summary and the run ships', { timeout: 60000 }, async () => {
+test('release workflow: a simulated E2E suite fails once, the developer fixes it, both suites pass again, the review writes the summary and the run ships', { timeout: 60000 }, async (t) => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'release.yaml'),
-    inputs: { task: 'Release check', repo_path: root },
+    // #46: this repository declares two products (a release of it names one); the template declares none
+    inputs: { task: 'Release check', repo_path: repoFromTemplate(t) },
     mock: true, runsDir,
     mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } },
   });
