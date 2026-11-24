@@ -4,8 +4,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { CHANNELS } = require('../packages/engine/control/allowlist');
+const { fileStore, resolveWorkspace } = require('../packages/engine/domains/workspace/workspace');
+const { decideMode, readConnection } = require('../apps/desktop/host/engine-connection');
+const { migrateLegacyUserData } = require('../apps/desktop/host/legacy-user-data');
 
 const root = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8').replace(/\r\n/g, '\n');
@@ -36,6 +40,56 @@ test('INSTALL.md: offers the executable and the source, and checks the download 
   const text = read(INSTALL);
   const order = ['## 1. Choose how to install', '## 3A. Get the app', 'SHA256SUMS', '## 3B. Get the code', '## 5. Open the app'].map((s) => text.indexOf(s));
   assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), order.join(', '));
+});
+
+const section = (from, to) => { const text = read(INSTALL); return text.slice(text.indexOf(from), text.indexOf(to)); };
+const tempDir = (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-install-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+};
+
+test('INSTALL.md: a workspace that exists is never opened without asking, and a clean start is offered first', () => {
+  const text = section('## 4. The workspace', '## 5. Open the app');
+  assert.match(text, /\*\*One exists\*\*: \*\*ask\*\*, always/);
+  assert.ok(text.indexOf('Start clean') > 0 && text.indexOf('Keep it') > text.indexOf('Start clean'));
+  assert.match(text, /Never delete, move or empty the old workspace/);
+});
+
+test('INSTALL.md: the clean start it describes wins over an older install\'s workspace', (t) => {
+  const home = tempDir(t);
+  const [clean, old] = ['clean', 'old'].map((d) => path.join(home, d));
+  for (const d of [clean, old, path.join(home, 'multiagent-workspace')]) fs.mkdirSync(d);
+  const [file, legacy] = ['.craftorio.json', '.multiagent-orchestrator.json'].map((f) => path.join(home, f));
+  fs.writeFileSync(legacy, JSON.stringify({ workspace: old }));
+  const where = () => resolveWorkspace({ store: fileStore(file, legacy), env: {}, home, tmp: home }).dir;
+  assert.equal(where(), old, 'without it, the older install\'s workspace is opened');
+  const [, json] = section('## 4. The workspace', '## 5. Open the app').match(/`(\{ "workspace": [^`]+\})` to `~\/\.craftorio\.json`/);
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(json), workspace: clean }));
+  assert.equal(where(), clean);
+});
+
+test('INSTALL.md: the engine file it describes keeps this computer, and the older install\'s data out', (t) => {
+  const dir = tempDir(t);
+  const [userData, legacy] = ['craftorio', 'multiagent-orchestrator'].map((d) => path.join(dir, d));
+  for (const d of [userData, legacy]) fs.mkdirSync(d);
+  fs.writeFileSync(path.join(legacy, 'engine-connection.json'), JSON.stringify({ mode: 'remote', address: 'https://engine.example:8443' }));
+  fs.writeFileSync(path.join(legacy, 'account.bin'), 'x');
+  const text = section('## 5. Open the app', '## 6. Check that the app answers');
+  for (const name of ['engine-connection.json', 'multiagent-orchestrator']) assert.ok(text.includes(name), name);
+  const file = path.join(userData, 'engine-connection.json');
+  fs.writeFileSync(file, text.match(/`(\{ "mode": [^`]+\})`/)[1]);
+  assert.equal(migrateLegacyUserData({ userData }), null);
+  assert.equal(fs.existsSync(path.join(userData, 'account.bin')), false);
+  assert.deepEqual(decideMode({ connection: readConnection(file) }), { mode: 'local' });
+});
+
+test('INSTALL.md: the labels of the app it names exist', () => {
+  const en = JSON.parse(read('packages/shared/i18n/en.json'));
+  const text = read(INSTALL);
+  for (const key of ['connection.use_local', 'settings.general.workspace', 'settings.general.change', 'settings.execution.control']) {
+    assert.ok(text.replace(/\s+/g, ' ').includes(en[key]), `${key}: ${en[key]}`);
+  }
 });
 
 test('INSTALL.md: ends with the handover of the workspace folder, the new session first', () => {
