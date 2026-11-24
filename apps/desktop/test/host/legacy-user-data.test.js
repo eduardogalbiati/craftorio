@@ -1,12 +1,13 @@
 // T3: the desktop app's user data folder from before the rename to Craftorio is copied to the new
 // folder on the first launch (caches and locks left out), never over a folder that exists, never
-// for a throwaway folder; main.js calls it before the single-instance lock creates the new folder.
+// for a throwaway folder, its engine connection on this computer; main.js calls it before the single-instance lock creates the new folder.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { migrateLegacyUserData } = require('../../host/legacy-user-data');
+const { decideMode, readConnection } = require('../../host/engine-connection');
 
 function appData(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-appdata-'));
@@ -26,7 +27,7 @@ test('T3 the first launch copies the old folder to the new one, without the cach
   const { old, now } = appData(t);
   const logs = [];
   assert.equal(migrateLegacyUserData({ userData: now, log: (m) => logs.push(m) }), old);
-  assert.equal(fs.readFileSync(path.join(now, 'engine-connection.json'), 'utf8'), '{"mode":"remote"}');
+  assert.equal(readConnection(path.join(now, 'engine-connection.json')).mode, 'local');
   assert.equal(fs.existsSync(path.join(now, 'account.bin')), true);
   assert.equal(fs.existsSync(path.join(now, 'speech-models', 'model.bin')), true);
   assert.equal(fs.existsSync(path.join(now, 'Cache')), false);
@@ -41,8 +42,48 @@ test('T3 the folder Electron created before main.js (Chromium\'s files only) sti
   fs.writeFileSync(path.join(now, 'DIPS'), 'new');
   fs.writeFileSync(path.join(old, 'DIPS'), 'old');
   assert.equal(migrateLegacyUserData({ userData: now }), old);
-  assert.equal(fs.readFileSync(path.join(now, 'engine-connection.json'), 'utf8'), '{"mode":"remote"}');
+  assert.equal(readConnection(path.join(now, 'engine-connection.json')).mode, 'local');
   assert.equal(fs.readFileSync(path.join(now, 'DIPS'), 'utf8'), 'new', 'a file the new folder has is kept');
+});
+
+test('a remote engine of the old install: this computer runs it, the address and the token are kept, the old file is left as it was', (t) => {
+  const { old, now } = appData(t);
+  const saved = JSON.stringify({ mode: 'remote', address: 'https://engine.example:8443', insecure: true, token: { encrypted: 'YWJj' } });
+  fs.writeFileSync(path.join(old, 'engine-connection.json'), saved);
+  const logs = [];
+  assert.equal(migrateLegacyUserData({ userData: now, log: (m) => logs.push(m) }), old);
+  const file = path.join(now, 'engine-connection.json');
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { ...JSON.parse(saved), mode: 'local' });
+  const connection = readConnection(file, { decrypt: (b) => b.toString('utf8') });
+  assert.deepEqual(connection, { mode: 'local', address: 'https://engine.example:8443', token: 'abc', insecure: true });
+  assert.deepEqual(decideMode({ connection }), { mode: 'local' });
+  assert.equal(fs.readFileSync(path.join(old, 'engine-connection.json'), 'utf8'), saved);
+  assert.match(logs.join('\n'), /this computer runs it now/);
+  assert.doesNotMatch(logs.join('\n'), /engine\.example|YWJj/, 'neither the address nor the token is logged');
+});
+
+test('a local, missing or unreadable engine connection of the old install: this computer, as it was', (t) => {
+  for (const text of ['{"mode":"local","address":"https://engine.example:8443"}', null, '{"mode":"remote"', 'null']) {
+    const { old, now } = appData(t);
+    const from = path.join(old, 'engine-connection.json');
+    if (text === null) fs.rmSync(from); else fs.writeFileSync(from, text);
+    const logs = [];
+    assert.equal(migrateLegacyUserData({ userData: now, log: (m) => logs.push(m) }), old, String(text));
+    const file = path.join(now, 'engine-connection.json');
+    assert.deepEqual(decideMode({ connection: readConnection(file) }), { mode: 'local' }, String(text));
+    if (text?.startsWith('{"mode":"local"')) assert.equal(fs.readFileSync(file, 'utf8'), text);
+    assert.equal(fs.existsSync(path.join(now, 'account.bin')), true, 'the rest is copied');
+    assert.doesNotMatch(logs.join('\n'), /remote engine/);
+  }
+});
+
+test('a copy that fails leaves no remote engine behind', (t) => {
+  const { now } = appData(t);
+  t.mock.method(fs, 'cpSync', () => { throw new Error('disk full'); });
+  const logs = [];
+  assert.equal(migrateLegacyUserData({ userData: now, log: (m) => logs.push(m) }), null);
+  assert.equal(fs.existsSync(path.join(now, 'engine-connection.json')), false);
+  assert.match(logs.join('\n'), /disk full/);
 });
 
 test('T3 a new folder with one of the app\'s own files is never touched, and no old folder means nothing to do', (t) => {
