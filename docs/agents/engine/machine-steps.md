@@ -122,7 +122,9 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
 - A **check step** (`type: check`, no agent, no model call, #404; `runCheckStep` →
   `packages/engine/engine/check-step.js`): the project's rule checks in the run's checkout, `command` (a
   template; empty: `npm run check` when the project's package.json has a `check` script) through the
-  suite's `runCommand`, `timeout` optional (default 10m), the log in `logs/check-<visit>.log`. It runs
+  suite's `runCommand`, `timeout` optional (default 10m), the log in `logs/check-<visit>.log`. `dir` (a
+  template, #63) runs it in another folder, for a workflow without a worktree (backlog-refresh's
+  `repository` step); the processes of that folder are never swept. It runs
   in a mock run too (a local, free check, like the test id step). Output `{ kind: 'check', status:
   pass | fail | skipped, command, findings, message, round }`: `findings` are the command's last 40
   lines, `skipped` when there is no checkout or no command. ai-development-local-hero runs it as

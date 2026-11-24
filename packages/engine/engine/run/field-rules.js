@@ -171,7 +171,8 @@
     text('version', ['release_version']),
     // #46: the product the release is of, when the repository declares some
     text('product', ['release_version']),
-    text('dir', ['release_version']),
+    // `type: check` (#63): the folder it runs in (default the run's checkout); release_version: the repository
+    text('dir', ['check', 'release_version']),
     text('branch', ['record_docs', 'release_version']),
     // `type: record_docs` (#702): the work item whose docs record the Code & Build run (default inputs.item)
     text('item', ['record_docs']),

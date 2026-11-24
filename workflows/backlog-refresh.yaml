@@ -1,14 +1,19 @@
 # =============================================================================
 # Workflow: Backlog Refresh
 # -----------------------------------------------------------------------------
-#   review ──► apply safe fixes ──► scope decisions (you) ──► apply closes ──► end
-#                                     (only when there are proposals)
+#   repository ──► review ──► apply safe fixes ──► scope decisions (you) ──► apply closes ──► end
+#        │                                           (only when there are proposals)
+#        └── no GitHub/GitLab remote ──► no_platform_repo (no agent ran) ──► end (failed)
 #
 # Issues are written against the code of the day they were filed; after a few merges their paths,
 # lines and task lists drift. This workflow reviews every open issue (or the ones you list)
 # against the base branch as it is now. The Backlog suggests running it when the last refresh is
 # older than the interval of Settings › General › Backlog and the base branch got merges since.
 #
+# 0. repository: no model. The skill's apply.js --mode repo finds the GitHub/GitLab repository: the
+#             clone's origin, or the origin of the local folder it was cloned from (#63). The review
+#             gets it in its prompt and copies it into `repo` (#65); apply.js resolves it again, so
+#             the answer never chooses it.
 # 1. review:  the refresher (read-only: git and gh/glab to read, exploration sub-agents in
 #             batches, backlog-refresh-<platform> skill) compares each issue with the code and the
 #             changes since `since`, and answers per issue: current / update / partly_done / done /
@@ -45,7 +50,7 @@ inputs:
     label: "Project folder"
     type: string
     required: true
-    description: Local clone of the repository whose open issues are refreshed (read-only). Needs a GitHub or GitLab remote (origin).
+    description: Local clone of the repository whose open issues are refreshed (read-only). Needs a GitHub or GitLab remote (origin), or an origin that is a local folder with one.
   # the Start panel's free-text field (the first text input); the other inputs come prefilled from
   # the Backlog's banner (Refresh now)
   focus:
@@ -132,12 +137,41 @@ agents:
 
 groups:
   - name: Review
-    steps: [review]
+    steps: [repository, no_platform_repo, review]
   - name: Apply
     steps: [scope, apply_failed]
 
 # -----------------------------------------------------------------------------
 steps:
+
+  # #63/#65: the platform repository, before any model call. `dir`: this workflow has no worktree. A
+  # folder that does not exist (simulated runs) is `skipped` and goes on.
+  - id: repository
+    display: Find the repository
+    type: check
+    dir: "{{ inputs.project_path }}"
+    command: "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode repo --project {{ inputs.project_path | shell_quote }}"
+    timeout: 2m
+    transitions:
+      - when: "output.status == 'fail'"
+        goto: no_platform_repo
+      - when: "true"
+        goto: review
+
+  # A decision gate (no supervisor turn): it only says why the run stops.
+  - id: no_platform_repo
+    display: No platform repository
+    type: human_approval
+    message: |
+      The backlog refresh stops here, before any model call: the GitHub/GitLab repository of {{ inputs.project_path }} could not be found.
+
+      {{ (steps.repository.output.findings | join('\n')) or steps.repository.output.message }}
+    choices:
+      - { id: done, label: "End the run" }
+    transitions:
+      - when: "true"
+        goto: end
+        status: failed
 
   - id: review
     agent: refresher
@@ -158,7 +192,9 @@ steps:
       Score each issue you review with the clarity-score rubric, asking nobody: in `report`, list
       the ones below 85% as "needs grilling", each with its `clarity: <n>%` and its gaps as open
       questions. The score never becomes an edit of the issue.
-      Answer with `repo`, `base`, `since`, `reviewed`, `issues`, `scope` and `report`.
+      {% if steps.repository.output.status == 'pass' %}The repository is `{{ steps.repository.output.findings | last }}`: copy it exactly into `repo`, never a name taken from
+      a folder, and give it as `--repo` to every {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} command (the clone's origin may be a local folder).
+      {% endif %}Answer with `repo`, `base`, `since`, `reviewed`, `issues`, `scope` and `report`.
     output_schema:
       type: object
       required: [repo, base, since, reviewed, issues, scope, report]

@@ -8,13 +8,15 @@ used_by: "backlog-refresh (refresher)"
 
 # Backlog refresh: GitLab (glab CLI)
 
-Follow the shared **backlog-refresh** skill. On GitLab, read with `glab` only (one command per call):
+Follow the shared **backlog-refresh** skill. On GitLab, read with `glab` only (one command per call),
+always with `--repo <repository>`, the URL your prompt names (the clone's origin may be a local folder,
+where `glab` finds no project):
 
 - Open issues with their description and `updated_at`:
-  `glab issue list --opened --per-page 100 --output json` (the body is `description`)
-- One issue: `glab issue view <iid> --output json`
-- Closed issues and merged MRs: `glab issue list --closed --per-page 100 --output json` and
-  `glab mr list --merged --per-page 100 --output json`, filtered on `closed_at` / `merged_at`
+  `glab issue list --repo <repository> --opened --per-page 100 --output json` (the body is `description`)
+- One issue: `glab issue view <iid> --repo <repository> --output json`
+- Closed issues and merged MRs: `glab issue list --repo <repository> --closed --per-page 100 --output json` and
+  `glab mr list --repo <repository> --merged --per-page 100 --output json`, filtered on `closed_at` / `merged_at`
   for the window since `since`.
 
 Issue numbers are the project's `iid`. `updated_at` in your answer is the issue's `updated_at`

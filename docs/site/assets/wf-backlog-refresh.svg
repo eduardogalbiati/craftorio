@@ -4,9 +4,15 @@
 <rect x="60" y="24" width="700" height="98" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
 <text x="76" y="47" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">REVIEW</text>
 <text x="744" y="47" fill="#4ade80" font-size="13" font-weight="700" text-anchor="end">→ end</text>
-<rect x="76" y="58" width="95" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
-<text x="123.5" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">review</text>
-<text x="123.5" y="96" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">refresher</text>
+<rect x="76" y="58" width="114" height="48" rx="8" fill="#1b1f29" stroke="#4ade80" stroke-opacity="0.8"/>
+<text x="133" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">repository</text>
+<text x="133" y="96" fill="#4ade80" font-size="12.5" font-weight="400" text-anchor="middle">no agent</text>
+<rect x="200" y="58" width="163.2" height="48" rx="8" fill="#1b1f29" stroke="#facc15" stroke-opacity="0.8"/>
+<text x="281.6" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">no_platform_repo</text>
+<text x="281.6" y="96" fill="#facc15" font-size="12.5" font-weight="400" text-anchor="middle">you</text>
+<rect x="373.2" y="58" width="95" height="48" rx="8" fill="#1b1f29" stroke="#c084fc" stroke-opacity="0.8"/>
+<text x="420.7" y="78" fill="#e6e8ee" font-size="14" font-weight="600" text-anchor="middle" font-family="Cascadia Code, Consolas, SF Mono, Menlo, monospace">review</text>
+<text x="420.7" y="96" fill="#c084fc" font-size="12.5" font-weight="400" text-anchor="middle">refresher</text>
 <line x1="410" y1="125" x2="410" y2="159" stroke="#8a91a3" stroke-width="2" marker-end="url(#a-g)"/>
 <rect x="60" y="162" width="700" height="98" rx="10" fill="#151820" stroke="#262b37" stroke-opacity="1"/>
 <text x="76" y="185" fill="#8a91a3" font-size="12.5" font-weight="700" text-anchor="start" letter-spacing="1.2">APPLY</text>
@@ -28,5 +34,5 @@
 <text x="394" y="339" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">child runs</text>
 <rect x="486" y="328" width="12" height="12" rx="3" fill="#fb923c"/>
 <text x="504" y="339" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">back to an earlier stage</text>
-<text x="60" y="364" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">3 steps · 1 agents · gates: 2</text>
+<text x="60" y="364" fill="#8a91a3" font-size="13" font-weight="400" text-anchor="start">5 steps · 1 agents · gates: 3</text>
 </svg>

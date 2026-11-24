@@ -1,7 +1,7 @@
 // The project's rule checks after a developer's commit (#404, `type: check`, run by
 // packages/engine/engine/run/machine-steps.js runCheckStep): the step's `command` (the workflow's
 // `check_command` input), or `npm run check` when the project's package.json has a `check` script;
-// none: the step is skipped. The command runs in the run's checkout through the suite's runCommand
+// none: the step is skipped. The command runs in the run's checkout (or the step's `dir`, #63) through the suite's runCommand
 // (packages/engine/engine/suite-step.js: a shell, the whole output into a log, nothing left running), in a mock
 // run too: like the test-id check, it is the project's own local, free and fast check. The output
 // carries the command's last lines as the findings, never a fix.

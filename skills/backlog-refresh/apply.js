@@ -5,7 +5,10 @@
 //
 //   node apply.js --platform gh|gl --mode safe  --file <run_dir>/refresh.json --project <repo path> [--run-id <id>]
 //   node apply.js --platform gh|gl --mode scope --file <run_dir>/refresh.json --project <repo path> [--run-id <id>]
+//   node apply.js --platform gh|gl --mode repo  --project <repo path>
 //
+// repo:  prints the repository the other modes write to (owner/name, or the GitLab project's URL: the
+//        value gh/glab take as --repo) and applies nothing; the workflow runs it before the review.
 // safe:  per issue, the `edits` ({ find, replace }, each `find` must appear exactly once in the
 //        current body) and the refresh `note` (appended after a <!-- backlog-refresh --> marker,
 //        replacing an older note), plus the `complexity:<n>` label. An issue edited on the platform
@@ -13,12 +16,17 @@
 //        skipped whole and reported. GitHub and GitLab keep every earlier version of the body.
 // scope: closes the `close_done` / `close_obsolete` / `close_duplicate` proposals with a comment;
 //        `rewrite` proposals are only reported. Run only after the owner's Apply at the scope gate.
-// The repository comes from the project's `origin` remote, never from the answer. Writes
-// applied-<mode>.json next to the answer, prints a summary, and exits 1 only when a CLI call failed.
+// The repository comes from the project's `origin` remote, never from the answer; an origin that is
+// the person's own folder on this machine (a project created from a local folder) is followed one hop,
+// to that folder's own origin (#63; the layout of the engine's localOrigin, worktree.js). An answer
+// about another repository is refused whole, unless it has nothing to write (#65). Writes
+// applied-<mode>.json next to the answer, prints a summary, and exits 1 only when a CLI call failed
+// (2: nothing applied).
 // BACKLOG_REFRESH_FAKE_CLI=<script.js>: tests run a fake gh/glab (node <script> <cmd> <args>).
 
 const fs = require('fs');
 const path = require('path');
+const { fileURLToPath } = require('url');
 const { execFileSync } = require('child_process');
 
 const MARKER = '<!-- backlog-refresh -->';
@@ -47,13 +55,51 @@ function parseRemote(platform, remote) {
   return { host, project };
 }
 
+const git = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+const notOnPlatform = (why) => new Error(`The project is not on GitHub/GitLab: ${why}.`);
+
+/** The URL of dir's `origin`; no such remote is a project on no platform. */
+function originOf(dir) {
+  try { return git(dir, 'remote', 'get-url', 'origin'); } catch (e) {
+    if (/No such remote/i.test(String(e.stderr))) throw notOnPlatform(`${dir} has no origin remote`);
+    throw e;
+  }
+}
+
+/** The folder of a remote URL that is on this machine (file:// or a path, as in localOrigin), else null. */
+function localFolder(url, from) {
+  if (/^file:\/\//i.test(url)) {
+    try { return fileURLToPath(url); } catch { throw notOnPlatform(`its origin is ${url}`); }
+  }
+  return path.isAbsolute(url) || url.startsWith('.') ? path.resolve(from, url) : null;
+}
+
+/** { host, project } of the project's platform repository: its origin, or the origin of the local folder it was cloned from (#63). */
+function resolveRepo(platform, project) {
+  const origin = originOf(project);
+  const folder = localFolder(origin, project);
+  if (!folder) return parseRemote(platform, origin);
+  if (git(folder, 'rev-parse', '--is-bare-repository') !== 'false') throw notOnPlatform(`its origin is a bare repository on this machine (${folder})`);
+  const behind = originOf(folder);
+  if (localFolder(behind, folder)) throw notOnPlatform(`it comes from ${folder}, whose own origin is on this machine too (${behind})`);
+  return parseRemote(platform, behind);
+}
+
+/** The repository as gh/glab take it in --repo: a GitLab project needs its host. */
+const repoArg = (platform, target) => (platform === 'gl' ? `https://${target.host}/${target.project}` : target.project);
+
+const editsOf = (item) => (Array.isArray(item.edits) ? item.edits : []);
+const complexityOf = (item) => Number(item.complexity) || 0;
+/** Whether an issue's entry changes the issue: a note alone (a `current` issue) changes nothing. */
+const writes = (item) => editsOf(item).length > 0 || complexityOf(item) !== 0;
+
 const norm = (s) => String(s ?? '').replace(/\r\n/g, '\n');
 const count = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);
 
 /** The issue operations of one platform, on top of cli(cmd, args). */
 function platformApi(platform, target, cli) {
+  const repo = repoArg(platform, target);
   if (platform === 'gl') {
-    const repo = `https://${target.host}/${target.project}`;
     return {
       view(n) {
         const j = JSON.parse(cli('glab', ['issue', 'view', String(n), '--repo', repo, '--output', 'json']));
@@ -76,7 +122,6 @@ function platformApi(platform, target, cli) {
       },
     };
   }
-  const repo = target.project;
   return {
     view(n) {
       const j = JSON.parse(cli('gh', ['issue', 'view', String(n), '--repo', repo, '--json', 'body,updatedAt,state,labels']));
@@ -118,10 +163,11 @@ function refreshBody(current, edits, note, stamp) {
 function apply({ platform, mode, file, project, runId = '', cli = defaultCli, today = new Date().toISOString().slice(0, 10) }) {
   if (!['gh', 'gl'].includes(platform)) throw new Error('--platform takes gh or gl');
   if (!['safe', 'scope'].includes(mode)) throw new Error('--mode takes safe or scope');
-  const remote = execFileSync('git', ['-C', project, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim();
-  const target = parseRemote(platform, remote);
+  const target = resolveRepo(platform, project);
   const answer = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (answer.repo && !target.project.toLowerCase().endsWith(String(answer.repo).toLowerCase().replace(/^https?:\/\/[^/]+\//, ''))) {
+  // the whole answer, whatever the mode: a wrong repository is refused before the scope gate
+  const wouldWrite = (answer.issues || []).some(writes) || (answer.scope || []).length > 0;
+  if (wouldWrite && answer.repo && !target.project.toLowerCase().endsWith(String(answer.repo).toLowerCase().replace(/^https?:\/\/[^/]+\//, ''))) {
     throw new Error(`The answer is about ${answer.repo}, the project's remote is ${target.project}: nothing applied.`);
   }
   const api = platformApi(platform, target, cli);
@@ -131,10 +177,9 @@ function apply({ platform, mode, file, project, runId = '', cli = defaultCli, to
 
   function applySafe(item) {
     const n = item.number;
-    const edits = Array.isArray(item.edits) ? item.edits : [];
-    const complexity = Number(item.complexity) || 0;
-    // a note alone (a `current` issue) changes nothing
-    if (!edits.length && !complexity) return;
+    if (!writes(item)) return;
+    const edits = editsOf(item);
+    const complexity = complexityOf(item);
     const cur = api.view(n);
     if (!cur.open) return results.push({ number: n, result: 'skipped', reason: 'not open any more' });
     if (item.updated_at && cur.updatedAt !== item.updated_at) {
@@ -198,14 +243,20 @@ function parseArgs(argv) {
     if (v === undefined) throw new Error(`${argv[i - 1]} needs a value`);
     a[k] = v;
   }
-  for (const k of ['platform', 'mode', 'file', 'project']) if (!a[k]) throw new Error(`missing --${k}`);
+  for (const k of ['platform', 'mode', 'file', 'project']) if (!a[k] && !(k === 'file' && a.mode === 'repo')) throw new Error(`missing --${k}`);
   return a;
 }
 
 if (require.main === module) {
   let r;
   try {
-    r = apply(parseArgs(process.argv.slice(2)));
+    const args = parseArgs(process.argv.slice(2));
+    if (args.mode === 'repo') {
+      if (!['gh', 'gl'].includes(args.platform)) throw new Error('--platform takes gh or gl');
+      console.log(repoArg(args.platform, resolveRepo(args.platform, args.project)));
+      process.exit(0);
+    }
+    r = apply(args);
   } catch (e) {
     console.error(`apply: ${(e.stderr || e.message || String(e)).toString().trim()}`);
     process.exit(2);
@@ -218,4 +269,11 @@ if (require.main === module) {
   process.exit(by('failed').length ? 1 : 0);
 }
 
-module.exports = { apply, MARKER, parseArgs, parseRemote, refreshBody };
+module.exports = {
+  MARKER,
+  apply,
+  parseArgs,
+  parseRemote,
+  refreshBody,
+  resolveRepo,
+};

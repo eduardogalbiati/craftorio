@@ -76,7 +76,7 @@ The owner sees them at a gate; the closes are applied only when they approve.
 
 ## 5. Answer
 
-`repo` (owner/name, or the GitLab project path), `base`, `since`, `reviewed` (how many issues),
+`repo` (the repository your prompt names, copied exactly; never guessed from a folder name), `base`, `since`, `reviewed` (how many issues),
 `issues` (one entry per open issue reviewed, `current` ones included, with `updated_at` exactly as
 the platform gave it), `scope` and `report` (Markdown for the owner: counts per verdict, the issues
 changed and why, the scope proposals, what you could not decide). The report is in the AI agents
