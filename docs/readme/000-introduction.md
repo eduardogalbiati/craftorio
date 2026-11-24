@@ -1,6 +1,6 @@
 # Craftorio
 
-## Install with an AI session
+## Set it up with an AI session
 
 Paste this in Claude Code or Codex (you need access to this repository):
 
