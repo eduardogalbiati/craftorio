@@ -7,6 +7,9 @@ accept a workflow, a trust prompt or a system's security warning: those are the 
 
 A step already done is not done again: look first, then say what you found.
 
+Not reading this from a clone? Clone the repository first: while it is private, a web page or the GitHub CLI answers
+"404" to someone whose Git has access. The clone is only to read this guide; B may use it as its code.
+
 ## 1. Choose how to install
 
 **Ask** which one, unless the user already said it:
@@ -98,14 +101,18 @@ one instead. For another place, create nothing: the app asks at its first start,
 
 ## 5. Open the app
 
-Start it in the background:
+Start it **detached from this session**, or it closes when the session ends:
 
 | | Command |
 |---|---|
 | A, Windows (PowerShell) | `Start-Process "<folder>\Craftorio.exe"` |
 | A, macOS | `open /Applications/Craftorio.app` |
-| A, Linux | `"<folder>/Craftorio-linux-x64.AppImage"` |
-| B | `npm start`, in the code's folder |
+| A, Linux | `setsid nohup "<folder>/Craftorio-linux-x64.AppImage" > /tmp/craftorio.log 2>&1 < /dev/null &` |
+| B, Windows (PowerShell) | `Start-Process npm.cmd -ArgumentList start -WorkingDirectory "<code folder>" -WindowStyle Hidden` |
+| B, macOS | `cd "<code folder>" && nohup npm start > /tmp/craftorio.log 2>&1 < /dev/null &` |
+| B, Linux | `cd "<code folder>" && setsid nohup npm start > /tmp/craftorio.log 2>&1 < /dev/null &` |
+
+The first `npm start` downloads Electron and takes longer. A warning about WebGL or DBus does not stop the app.
 
 Tell the user what is theirs, on the screen:
 
@@ -119,7 +126,8 @@ Tell the user what is theirs, on the screen:
 ## 6. Check that the app answers
 
 Wait for `<workspace>/control/endpoint.json` (up to 2 minutes, more while the user is at a warning). Its `client` is the
-command that calls the app, as a list of arguments, for A and for B. Make one read call with it:
+command that calls the app, as a list of arguments, for A and for B. In Codex, a call refused with "Operation not
+permitted" is its sandbox, not the app: ask the user to allow it. Make one read call with it:
 
 ```
 <client...> projects:list --workspace "<workspace>"
@@ -144,7 +152,7 @@ the CLI and the system they are using:
 > **Or add the folder** `<workspace>` **to this session**, and tell me when it is done. I then read its `AGENTS.md`
 > and continue as the Oracle here.
 >
-> From the phone: turn on Remote Control in the session opened in that folder.
+> From the phone: open the session in that folder with Remote Control (Claude Code only).
 
 For the new session:
 
@@ -153,7 +161,11 @@ For the new session:
 | Claude desktop app | a new Code session, with `<workspace>` as its folder |
 | Claude Code in a terminal | `cd "<workspace>"`, then `claude` |
 | Claude Code, also from the phone | `cd "<workspace>"`, then `claude --remote-control` |
-| Codex in a terminal | `codex --cd "<workspace>"` |
+| Codex in a terminal | `codex --cd "<workspace>" -c sandbox_workspace_write.network_access=true` |
+
+Codex's sandbox blocks the network by default, the app on this computer included: without that option the Oracle cannot
+call the app, or the user is asked to allow each call. Say so. It opens the network to the commands Codex runs in that
+session, so it is the user's choice.
 
 To add the folder to this session: in Claude Code the user types `/add-dir <workspace>`; if you have a tool that asks the
 user for a folder, use it. Codex takes it only when it starts (`--add-dir`): recommend the new session.

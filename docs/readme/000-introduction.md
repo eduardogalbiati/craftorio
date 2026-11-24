@@ -5,7 +5,7 @@
 Paste this in Claude Code or Codex (you need access to this repository):
 
 ```
-Install Craftorio following INSTALL.md of https://github.com/eduardogalbiati/craftorio
+Clone https://github.com/eduardogalbiati/craftorio and install Craftorio following its INSTALL.md
 ```
 
 It installs the app (the executable, or from the source code: you choose), creates the workspace folder and tells you the last step: open a session in that folder,
