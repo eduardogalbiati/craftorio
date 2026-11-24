@@ -34,9 +34,25 @@ process.stdin.on('end', () => {
   if (sources.includes('project')) { load('settings.json'); native = read(path.join(process.cwd(), 'CLAUDE.md')); }
   if (sources.includes('local')) load('settings.local.json');
 
+  // #43: the instruction files the CLI loads by itself (`loaded`, as measured with 2.1.316): with the
+  // `project` source, those of its folder and of every folder above, but the ones --settings names in
+  // claudeMdExcludes; one CLAUDE.md among them leaves every AGENTS.md out
+  const slash = (p) => p.replace(/\\/g, '/');
+  const given = after('--settings');
+  const settings = given ? JSON.parse(given.trim().startsWith('{') ? given : read(given)) : {};
+  const excluded = (settings.claudeMdExcludes || []).map(slash);
+  const found = [];
+  for (let dir = process.cwd(); ; dir = path.dirname(dir)) {
+    found.push(...['CLAUDE.md', 'AGENTS.md'].map((name) => path.join(dir, name)));
+    if (path.dirname(dir) === dir) break;
+  }
+  const kept = sources.includes('project') ? found.filter((f) => fs.existsSync(f) && !excluded.includes(slash(f))) : [];
+  const claude = kept.filter((f) => path.basename(f) === 'CLAUDE.md');
+  const loaded = claude.length ? claude : kept;
+
   const record = after('--record');
   const resumed = after('--resume');
-  if (record) fs.appendFileSync(record, `${JSON.stringify({ argv, cwd: process.cwd(), resumed, stdin, system: system.join('\n'), native, sources, allow })}\n`);
+  if (record) fs.appendFileSync(record, `${JSON.stringify({ argv, cwd: process.cwd(), resumed, stdin, system: system.join('\n'), native, sources, allow, settings, loaded })}\n`);
 
   const out = (ev) => process.stdout.write(`${JSON.stringify(ev)}\n`);
   const sid = resumed || '00000000-0000-4000-8000-000000000045';

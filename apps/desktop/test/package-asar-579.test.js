@@ -59,5 +59,6 @@ test('the asar keeps the page, the kit, the fronts\' screens and Home cards, the
     '/node_modules/@craftorio/shared/i18n.js',
     '/generated/project-city.js',
     '/workflows/software-development.yaml',
+    '/workspace-instructions/AGENTS.workspace.md',
   ]) assert.equal(ignored(p), false, `${p} is shipped`);
 });
