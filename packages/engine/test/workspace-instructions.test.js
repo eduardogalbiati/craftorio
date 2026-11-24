@@ -211,6 +211,18 @@ test('#43 an update never changes the AGENTS.md the user had before the first on
   }
 });
 
+test('#43 an update leaves the link the user put in place of the copy, and its target, even with the copy\'s bytes', { timeout: 120000, skip: process.platform === 'win32' && 'symlinks need a privilege on Windows' }, (t) => {
+  const ws = versionedWorkspace(t);
+  const target = path.join(tmpDir(t, 'ws-instructions-outside-'), 'mine.md');
+  ws.openWith('version 1\n');
+  fs.renameSync(ws.file, target);
+  fs.symlinkSync(target, ws.file);
+  ws.openWith('version 1\n');
+  ws.openWith('version 2\n');
+  assert.equal(fs.lstatSync(ws.file).isSymbolicLink(), true);
+  assert.equal(same(target, 'version 1\n'), 'same');
+});
+
 // ---- runs unaffected -----------------------------------------------------------------------------
 
 // One run of a Claude agent on a repository holding `files`, in a workspace that has AGENTS.md.
@@ -253,7 +265,7 @@ async function runIn(t, files, { agent = '', steps = 1, session = 'ephemeral', w
   const finished = events.find((e) => e.type === 'workflow.finished');
   assert.equal(finished.status, 'success', finished.error);
   const calls = fs.readFileSync(record, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  return { calls, root: fs.realpathSync.native(f.tmp) };
+  return { calls, events, root: fs.realpathSync.native(f.tmp) };
 }
 
 // the files the CLI loaded by itself inside the workspace, by their place: 'workspace/AGENTS.md', 'cwd/AGENTS.md'
@@ -300,6 +312,13 @@ test('#43 isolation: false: the arguments exclude the workspace\'s own files alo
   assert.ok(excludes.includes(slash(path.join(root, 'AGENTS.md'))), excludes.join(', '));
   assert.deepEqual(excludes.filter((e) => ![slash(path.join(root, 'AGENTS.md')), slash(path.join(root, 'CLAUDE.md'))].includes(e)), []);
   assert.deepEqual(sources, ['user', 'project', 'local']);
+});
+
+test('#43 isolation: false: a workflow\'s own --settings is the only one, and the log warns once that the file may load', { timeout: 60000 }, async (t) => {
+  const { calls, events } = await runIn(t, { 'AGENTS.md': 'MARK-REPO\n' }, { agent: ', isolation: false, cli_args: ["--settings", "{}"]', steps: 2 });
+  assert.deepEqual(calls.map((c) => [c.argv.filter((a) => a === '--settings').length, c.settings]), [[1, {}], [1, {}]]);
+  const warnings = events.filter((e) => e.type === 'log' && e.level === 'warn' && /claudeMdExcludes/.test(e.message));
+  assert.deepEqual(warnings.map((e) => e.agent), ['dev']);
 });
 
 test('#43 an isolated agent starts with its repository\'s instructions and none of the workspace\'s', { timeout: 60000 }, async (t) => {
