@@ -67,6 +67,19 @@
     "runs": []
   },
   {
+    "name": "a parked item that failed later is not at a gate, its run interrupted at one",
+    "before": { "stages": [{ "id": "b", "items": [{ "status": "planned" }] }] },
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "failed", "runId": "r1", "parked": { "gate": "Review" }, "issues": [{ "number": 9 }], "run": { "atGate": "Review" } }] }, { "id": "b", "items": [{ "status": "planned" }] }] },
+    "expected": null,
+    "runs": []
+  },
+  {
+    "name": "a failed item with no run is failed, not at a gate",
+    "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "failed", "issues": [{ "number": 10 }], "error": "could not start", "run": { "atGate": "Review" } }] }] },
+    "expected": "failed: #10 failed: could not start",
+    "runs": []
+  },
+  {
     "name": "a release's run at its gate",
     "before": { "stages": [] },
     "roadmap": { "state": "running", "stages": [{ "id": "a", "items": [{ "status": "done" }] }, { "id": "rel", "kind": "release", "name": "1.2.0", "status": "running", "runId": "r9", "items": [] }] },
