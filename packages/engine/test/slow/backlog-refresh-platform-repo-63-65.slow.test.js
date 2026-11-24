@@ -36,14 +36,15 @@ function localProject(t, { remote, as = 'path' }) {
   return { tmp, clone };
 }
 
-// A fake gh: every call is recorded in gh-calls.jsonl, `view` answers an open issue
+// A fake gh/glab: every call is recorded in gh-calls.jsonl, `view` answers an open issue
 function fakeGh(dir) {
   const file = path.join(dir, 'fake-gh.js');
   fs.writeFileSync(file, [
     "const fs = require('fs');",
     'const args = process.argv.slice(3);',
     `fs.appendFileSync(${JSON.stringify(path.join(dir, 'gh-calls.jsonl'))}, JSON.stringify(args) + '\\n');`,
-    "console.log(args[1] === 'view' ? JSON.stringify({ body: 'before old after', updatedAt: '', state: 'OPEN', labels: [] }) : '');",
+    "const issue = process.argv[2] === 'glab' ? { description: 'before old after', updated_at: '', state: 'opened', labels: [] } : { body: 'before old after', updatedAt: '', state: 'OPEN', labels: [] };",
+    "console.log(args[1] === 'view' ? JSON.stringify(issue) : '');",
   ].join('\n'));
   return file;
 }
@@ -78,6 +79,7 @@ async function refresh(t, { tmp, clone }, { answer = null, platform = 'gh' } = {
   const calls = path.join(tmp, 'gh-calls.jsonl');
   return {
     events, finished, gates, turns,
+    repository: run.ctx.steps.repository?.output,
     prompt: turns.filter((e) => e.step_id === 'review').map((e) => e.prompt).join('\n'),
     ghCalls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [],
     applied: ['safe', 'scope'].filter((m) => fs.existsSync(path.join(run.runDir, `applied-${m}.json`))),
@@ -170,4 +172,52 @@ test('#63 backlog-refresh: a project with no origin at all runs no agent turn ei
   assert.equal(r.turns.length, 0);
   assert.notEqual(r.finished.status, 'success');
   assert.match(said(r), /\b(?:not|no)\b.{0,80}(?:GitHub\/GitLab|GitHub or GitLab)/i);
+});
+
+test('#65 backlog-refresh: on GitLab the prompt names the project URL and glab, and an answer echoing that URL is applied on it', { timeout: 60000 }, async (t) => {
+  const url = 'https://gitlab.example.com/group/sub/finance-app';
+  const p = localProject(t, { remote: 'git@gitlab.example.com:group/sub/finance-app.git' });
+  const r = await refresh(t, p, {
+    platform: 'gl',
+    answer: (prompt) => ({
+      ...EMPTY, reviewed: 1, repo: /https:\/\/[\w./-]*finance-app/.exec(prompt)?.[0] || 'no repository in the prompt',
+      issues: [{ number: 5, updated_at: '', edits: [{ find: 'old', replace: 'new' }], complexity: 0, note: '' }],
+    }),
+  });
+  assert.ok(r.prompt.includes(`\`${url}\``), 'the prompt names the project with its host');
+  assert.match(r.prompt, /`--repo` to every glab command/);
+  assert.equal(r.finished.status, 'success', r.finished.error);
+  assert.deepEqual(r.ghCalls.map((c) => [c[1], c[2], c[c.indexOf('--repo') + 1]]), [['view', '5', url], ['update', '5', url]]);
+});
+
+// [what the project's origin is, the platform of the run, what the gate says]
+for (const [name, setup, platform, message] of [
+  ['a local folder that is gone', (p) => git(p.clone, 'remote', 'set-url', 'origin', path.join(p.tmp, 'gone')), 'gh', /cannot change to .*gone/],
+  ['a local folder that is not a git repository', (p) => {
+    fs.mkdirSync(path.join(p.tmp, 'plain'));
+    git(p.clone, 'remote', 'set-url', 'origin', path.join(p.tmp, 'plain'));
+  }, 'gh', /not a git repository/],
+  ['an origin on GitLab, in a GitHub run', (p) => git(p.clone, 'remote', 'set-url', 'origin', 'git@gitlab.example.com:group/finance-app.git'), 'gh', /not a GitHub remote: git@gitlab\.example\.com/],
+]) {
+  test(`#63 backlog-refresh: ${name} stops at no_platform_repo with the reason, no agent turn`, { timeout: 60000 }, async (t) => {
+    const p = localProject(t, { remote: null });
+    setup(p);
+    const r = await refresh(t, p, { platform });
+    assert.equal(r.turns.length, 0);
+    assert.deepEqual(r.gates.map((g) => g.step_id), ['no_platform_repo']);
+    assert.equal(r.gates[0].message.includes(p.clone), true, 'the gate names the project');
+    assert.match(r.gates[0].message, message);
+    assert.doesNotMatch(r.gates[0].message, /\n\s+at /, 'no stack trace');
+    assert.equal(r.finished.status, 'failed');
+    assert.deepEqual(r.ghCalls, []);
+  });
+}
+
+test('#63 backlog-refresh: a project folder that does not exist skips the repository step; the review runs, its prompt names no repository', { timeout: 60000 }, async (t) => {
+  const p = localProject(t, { remote: null });
+  const r = await refresh(t, { tmp: p.tmp, clone: path.join(p.tmp, 'repos', 'missing') });
+  assert.equal(r.repository?.status, 'skipped');
+  assert.equal(r.gates.some((g) => g.step_id === 'no_platform_repo'), false);
+  assert.notEqual(r.prompt, '');
+  assert.doesNotMatch(r.prompt, /The repository is/);
 });
