@@ -133,6 +133,7 @@ async function release(f, { inputs = {}, mock = false, mockSequences = undefined
 }
 
 const why = (r) => `status ${r.status}, steps ${r.started.join(' > ')}, error ${r.finished?.error}`;
+const gateSaid = (r, id) => r.gates.filter((g) => g.step_id === id).map((g) => g.message).join('\n');
 const times = (r, id) => r.started.filter((s) => s === id).length;
 // refs and files of both repositories, to prove that a run left them alone
 const snapshot = (f) => JSON.stringify([
@@ -264,6 +265,32 @@ test('#46 Try again after a Ship that pushed the base and not the tag repeats no
   assert.equal(f.originRef('engine-v1.1.0'), partial.main);
   assert.equal(git(f.origin, 'log', '--format=%H', 'main', '--', 'engine/CHANGELOG.md').split('\n').length, 1, 'one version commit');
   assert.deepEqual([times(r, 'version'), times(r, 'unit')], [1, 1]);
+});
+
+test('#46 a tag of the product that only origin has, on another commit: Ship refuses it and pushes nothing', LIMIT, async (t) => {
+  const f = twoProducts(t);
+  git(f.repo, 'tag', 'engine-v1.1.0', 'v1.0.0');
+  f.push('engine-v1.1.0');
+  git(f.repo, 'tag', '-d', 'engine-v1.1.0');
+  const before = git(f.origin, 'for-each-ref');
+  const r = await release(f, { inputs: { product: 'engine', version: '1.1.0' } });
+  assert.equal(r.status, 'failed', why(r));
+  assert.match(gateSaid(r, 'ship_failed'), /engine-v1\.1\.0 already names another commit/);
+  assert.equal(git(f.origin, 'for-each-ref'), before, 'origin is untouched');
+});
+
+test('#46 a product that is the whole repository (folder: .) is released with its issues since its last tag', LIMIT, async (t) => {
+  const f = project(t, { ...manifest(product('solo', '.', 'v')), 'bump.js': BUMP, 'package.json': json({ name: 'solo', version: '1.0.0' }), '.changeset/README.txt': 'pending changes\n' });
+  git(f.repo, 'tag', 'v1.0.0');
+  f.commit('Covered work\n\nCloses #4651', { 'src/a.js': '1\n', '.changeset/covered-4651.md': changeset('solo') });
+  f.commit('Forgotten work\n\nCloses #4652', { 'src/b.js': '1\n' });
+  f.push('v1.0.0');
+  const r = await release(f, { inputs: { version: '1.1.0' } });
+  assert.equal(r.status, 'success', why(r));
+  assert.deepEqual(f.originTags().sort(), ['v1.0.0', 'v1.1.0']);
+  assert.equal(JSON.parse(f.originFile('package.json')).version, '1.1.0');
+  assert.match(gateSaid(r, 'ship'), /#4652\b/);
+  assert.doesNotMatch(gateSaid(r, 'ship'), /#4651\b/);
 });
 
 // ---------- since the last release ----------
