@@ -31,6 +31,6 @@ normal retries. With no entry left, the run fails with the provider's message. A
 skips a step or a gate.
 
 **Limits that follow the model** (#262). Declare them once per model, in a workflow
-(`models: { claude-fable-5-1: { timeout_factor: 3 } }`) or in Settings › Agents & CLIs › Limits per
+(`models: { claude-fable-5-2: { timeout_factor: 3 } }`) or in Settings › Agents & CLIs › Limits per
 model. An agent on that model gets its turn timeout multiplied by the factor. A run with an agent on
 it may spend up to the model's `max_total_cost_usd` when that is above the workflow's cost limit.

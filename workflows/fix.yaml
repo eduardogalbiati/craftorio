@@ -135,7 +135,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # #630: the local <base> in Local mode (no fetch), the fetched origin/<base> in Remote mode
   # #738: Fork + PR syncs the fork's <base> with upstream's first (or starts at origin/<parent_branch>)
   worktree:
@@ -183,7 +183,7 @@ agents:
       REVIEW.md (repository root) when it exists and apply its rules (#633).
   verifier:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     effort: medium
     session: persistent
     capabilities: { tools: [*toolchains, read], web: false }
@@ -191,7 +191,7 @@ agents:
       You are the verifier. You check, with one command and its observed result, that the bug is gone.
   ci_pusher:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: handoff
     capabilities: { tools: [read, *vcs], web: false }
     skills: ["ci-pipeline-{{ inputs.git_platform }}"]

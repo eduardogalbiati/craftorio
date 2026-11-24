@@ -417,7 +417,7 @@ acceptance tests → red check → Warm Up → develop → code review → suite
 | Acceptance tests | Test Writer (Opus 5.5) | The issue's tests from its criteria, not from the implementation, on the run's branch; with `test_order: e2e_first`, its E2E scenarios too. It gets the project's code → tests map (`test_map: true`). A task with nothing testable goes straight to develop | `unit-test-writer-<language>`, `e2e-test-writer-<language>` |
 | Red check | (no agent) | Runs exactly those files once (`expect: red`). A test already green is reported to the developer; a file that cannot run goes back to the test writer once. The existing tests related to them come from the code → tests graph | |
 | Warm Up | Mapper (the developer's model) | Before the first develop turn only, maps per issue the files and lines to change, the conventions and the tests to run (#301, #304), and the existing helpers to reuse, shown to develop and to the reviewer (#758); a failed Warm Up goes on without a map | `code-mapping` |
-| Develop | Developer (Opus 5.5 or Fable 5.1) | Implements until the acceptance tests pass; the engine refuses a turn that changes one (`protect_files`), while the developer may add its own internal tests. Before handing over it self-reviews its diff: the reuse pass and the issue's tasks one by one, each with its files or in `left_out` (#756) | `long-commands`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log`, `developer-self-review` (with `reuse-pass`) |
+| Develop | Developer (Opus 5.5 or Fable 5.2) | Implements until the acceptance tests pass; the engine refuses a turn that changes one (`protect_files`), while the developer may add its own internal tests. Before handing over it self-reviews its diff: the reuse pass and the issue's tasks one by one, each with its files or in `left_out` (#756) | `long-commands`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log`, `developer-self-review` (with `reuse-pass`) |
 | Code review | Code Review (Opus 5.5) | The diff on correctness, spec, standards and reuse; with `review: multi_model`, a second independent reviewer on another model in parallel | `code-review` (with `reuse-pass`, the same text as the developer's) |
 | Suite | (no agent) | `scope: affected`: the test files the change reaches each round, then the whole suite once when they pass | |
 | Build, evidence, verify | Builder, Evidence, Verifier | Build and dependency audit; what shows the change working (screenshots, requests, CLI output); the claims proven on the base and on the branch | `build-audit-<language>`, `implementation-evidence`, `claim-verification` |
@@ -1487,7 +1487,7 @@ The engine is deterministic (same graph, same gates, auditable); an AI **supervi
 ```yaml
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   supervisor:
     enabled: true
     max_interventions: 2   # per step (max_total: 6 per run)
@@ -1984,7 +1984,7 @@ normal retries. With no entry left, the run fails with the provider's message. A
 skips a step or a gate.
 
 **Limits that follow the model** (#262). Declare them once per model, in a workflow
-(`models: { claude-fable-5-1: { timeout_factor: 3 } }`) or in Settings › Agents & CLIs › Limits per
+(`models: { claude-fable-5-2: { timeout_factor: 3 } }`) or in Settings › Agents & CLIs › Limits per
 model. An agent on that model gets its turn timeout multiplied by the factor. A run with an agent on
 it may spend up to the model's `max_total_cost_usd` when that is above the workflow's cost limit.
 

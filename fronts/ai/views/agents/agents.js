@@ -37,7 +37,7 @@
     [ORACLE]: 'its model, its effort and how it looks',
   };
   const MODEL_HINT = {
-    [PRODUCT_OWNER]: 'What this changes: the model of every plan answer, Add to roadmap proposal and live roadmap refill (registering an issue uses claude-sonnet-5). A larger model reads more of the code and costs more per answer.',
+    [PRODUCT_OWNER]: 'What this changes: the model of every plan answer, Add to roadmap proposal and live roadmap refill (registering an issue uses claude-sonnet-5-5). A larger model reads more of the code and costs more per answer.',
     [ORACLE]: 'What this changes: the model of every Oracle answer. A larger model costs more per answer.',
   };
   const EFFORT_HINT = 'What this changes: how long it thinks before answering. Higher weighs dependencies and conflicts more carefully, and is slower and costs more.';

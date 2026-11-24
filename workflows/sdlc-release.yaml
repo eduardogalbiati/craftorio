@@ -63,7 +63,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   worktree:
     repo: "{{ inputs.project_path }}"
     base: "{{ inputs.base_branch }}"
@@ -79,7 +79,7 @@ orchestrator:
 agents:
   recorder:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, write, edit, bash:git], web: false }
     skills: [plan-writing]

@@ -118,7 +118,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: origin/<base> is fetched only to compare);
   # dependencies linked from the shared cache (#198)
   worktree:
@@ -209,7 +209,7 @@ agents:
   builder:
     color: "#E6C229"
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, *toolchains], web: false }
     skills: ["build-audit-{{ inputs.language }}"]

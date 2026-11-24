@@ -4,7 +4,10 @@
 // fronts/build/views/backlog/backlog-po-options.js). `project`: the project's run defaults.
 // - blank(v): nothing, or a blank string; what an item saved counts as not saved then;
 // - fits(def, v): the value is in the input's enum (a `multiple` input: each of its comma-separated
-//   values), compared as text, so a YAML number or boolean and its word are one value;
+//   values) or a keptOption, compared as text, so a YAML number or boolean and its word are one value;
+// - keptOption(def, v): #56: a value the enum no longer offers but `options` still names (an earlier model):
+//   never a choice to pick, but what an owner saved as it still fits; not for a `multiple` input;
+// - choices(def, v): the enum, and `v` after it when it is such a kept value;
 // - sameValue(a, b): one value: a list and its comma-separated text, a boolean and its word;
 // - projectValue(k, def, project): the project's value of an input, when it has one the input takes
 //   (release.yaml's own names take theirs: unit_command ← test_command, e2e_suite ← e2e_tests);
@@ -31,8 +34,15 @@
   function fits(def, v) {
     if (!Array.isArray(def?.enum)) return true;
     const known = def.enum.map(String);
-    return (def.multiple ? String(v).split(',') : [v]).every((x) => known.includes(String(x).trim()));
+    return keptOption(def, v) || (def.multiple ? String(v).split(',') : [v]).every((x) => known.includes(String(x).trim()));
   }
+
+  function keptOption(def, v) {
+    if (!Array.isArray(def?.enum) || def.multiple || !def.options || typeof def.options !== 'object') return false;
+    return Object.prototype.hasOwnProperty.call(def.options, String(v)) && !def.enum.map(String).includes(String(v));
+  }
+
+  const choices = (def, v) => (keptOption(def, v) ? [...def.enum, v] : def.enum);
 
   function projectValue(k, def, project) {
     const v = Object.prototype.hasOwnProperty.call(project || {}, k) ? project[k] : ALIASES[k]?.(project || {});
@@ -81,8 +91,10 @@
 
   const api = {
     blank,
+    choices,
     chosen,
     fits,
+    keptOption,
     projectValue,
     resolveRunInputs,
     sameValue,

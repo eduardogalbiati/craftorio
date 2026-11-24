@@ -417,7 +417,7 @@ function supervisorConfig(runDir, workflowsDir) {
 }
 // Claude Code's workflow definition (its adapter's), without effort or resume arguments
 const DEFAULT_PROVIDER = (({ type, command, args, skill_args }) => ({ type, command, args, skill_args }))(registry.byId('claude').definition);
-const DEFAULT_MODEL = 'claude-sonnet-5';
+const DEFAULT_MODEL = 'claude-sonnet-5-5';
 
 
 /**

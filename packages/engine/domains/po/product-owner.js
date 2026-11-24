@@ -883,7 +883,7 @@ function previousExchanges(messages) {
 
 // ---- registering an issue (#117) ---------------------------------------------------------------------
 // The issue tracker's code analyzer (workflows/issue-tracker.yaml): cheaper than the planner's model.
-const ISSUE_AGENT = { model: 'claude-sonnet-5', effort: 'medium' };
+const ISSUE_AGENT = { model: 'claude-sonnet-5-5', effort: 'medium' };
 const MAX_QUESTIONS = 2;
 const MAX_ATTACHMENT = 10 * 1024 * 1024;
 const CLOSED_TITLES = 300;

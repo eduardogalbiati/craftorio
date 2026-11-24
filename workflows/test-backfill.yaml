@@ -131,7 +131,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: origin/<base> is fetched only to compare);
   # dependencies linked from the shared cache (#198)
   worktree:
@@ -152,7 +152,7 @@ orchestrator:
 agents:
   test_writer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
     skills:

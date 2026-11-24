@@ -99,7 +99,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # Called when a step fails (e.g. an answer that does not match its schema); never at the gates.
   supervisor:
     enabled: true
@@ -113,7 +113,7 @@ orchestrator:
 agents:
   refresher:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     effort: high
     session: ephemeral
     # read-only is a convention (capabilities.md): git and gh/glab only to read

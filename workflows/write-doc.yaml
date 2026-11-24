@@ -261,7 +261,7 @@ agents:
   # #651: an accepted plan's steps become the issues the Code & Build workflows take
   issue_filer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: ephemeral
     capabilities: *read_vcs
     skills: ["issue-creator-{{ inputs.git_platform }}"]

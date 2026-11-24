@@ -119,7 +119,7 @@ const methods = {
 
   // An agent's `timeout` for one turn (default 30m). A template is rendered with the run's context,
   // so the budget can grow with the run, e.g. with the number of issues of a grouped run (#101).
-  // Times its model's timeout_factor (#262, `models`: e.g. 3x for Fable 5.1's slower turns), then
+  // Times its model's timeout_factor (#262, `models`: e.g. 3x for Fable 5.2's slower turns), then
   // tonight's turn factor (#337, effectiveLimits().turns), read when the turn starts.
   turnTimeout(agent) {
     const v = typeof agent.timeout === 'string' && agent.timeout.includes('{{') ? render(agent.timeout, this.ctx).trim() : agent.timeout;

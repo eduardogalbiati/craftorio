@@ -13,6 +13,7 @@ const { checkAttachments, storeAttachments } = require('../providers');
 const { resolveSkill } = require('../../domains/agents/skills');
 const { displayName } = require('@craftorio/shared/display-name');
 const DefaultWorkflow = require('@craftorio/shared/default-workflow');
+const { keptOption } = require('@craftorio/shared/run-inputs');
 const { inputsRead, render } = require('./templates');
 const { MACHINE_STEP_TYPES, toBoolean } = require('./load');
 
@@ -57,7 +58,7 @@ const methods = {
         const items = [...new Set(String(v).split(',').map((x) => x.trim()).filter(Boolean))];
         if (!items.length || items.some((x) => !def.enum.includes(x))) throw new Error(`Input "${k}" must be one or more of ${def.enum.join(', ')}, comma-separated`);
         v = items.join(',');
-      } else if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
+      } else if (def.enum && v !== undefined && !def.enum.includes(v) && !keptOption(def, v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
       if (def.type === 'run') v = this.resolveRunInput(k, v);
       // a list typed in a form arrives as text: one item per line or comma
       if (def.type === 'array' && typeof v === 'string') v = v.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);

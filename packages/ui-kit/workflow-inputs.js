@@ -5,7 +5,8 @@
 // - the control follows the input: a yes/no (`type: boolean`, or an enum of "false"/"true") is a
 //   switch; an enum with `multiple: true` (#340, language "js,rust") a row of toggles (role group /
 //   checkbox, the value comma-separated, the first chosen first, at least one kept on); an enum of
-//   up to 5 short values is a row of pills (.seg); a longer enum a select; a
+//   up to 5 short values is a row of pills (.seg); a longer enum a select (both show a saved value the
+//   enum no longer offers but `options` names, #56); a
 //   number a short box; a `*branch` input a text box with the project's local branches; text a box;
 // - `show_if` ("mode == 'validated'"; `inputs.` optional, ==, !=, and, or, not, parentheses): the
 //   field is hidden while it is false. A hidden input keeps its value (read() still returns it);
@@ -167,7 +168,7 @@
       const flag = def.type === 'boolean' ? 'bool' : 'text';
       control = `<label class="switch"><input type="checkbox" role="switch" ${ctl} data-wi-flag="${flag}" aria-labelledby="${esc(id)}-label"${truthy(val) ? ' checked' : ''}${af} /><span></span></label>`;
     } else if (k === 'pills') {
-      control = `<span class="seg wi-pills" role="radiogroup" aria-labelledby="${esc(id)}-label">${def.enum.map((o, n) => {
+      control = `<span class="seg wi-pills" role="radiogroup" aria-labelledby="${esc(id)}-label">${choices(def, val).map((o, n) => {
         const on = String(o) === String(val);
         return `<button type="button" role="radio" data-wi-pill="${esc(o)}" class="${on ? 'active' : ''}" aria-checked="${on}" title="${esc(optionLabel(def, o))}"${af && n === 0 ? ' autofocus' : ''}>${esc(optionLabel(def, o))}</button>`;
       }).join('')}</span><input type="hidden" ${ctl} value="${esc(val)}" />`;
@@ -179,7 +180,7 @@
         return `<button type="button" role="checkbox" data-wi-pill="${esc(o)}" class="${on ? 'active' : ''}" aria-checked="${on}" title="${esc(optionLabel(def, o))}"${af && n === 0 ? ' autofocus' : ''}>${esc(optionLabel(def, o))}</button>`;
       }).join('')}</span><input type="hidden" ${ctl} data-wi-multi="1" value="${esc(chosen.join(','))}" />`;
     } else if (k === 'select') {
-      control = `<select ${ctl}${af}>${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(val) ? ' selected' : ''}>${esc(optionLabel(def, o))}</option>`).join('')}</select>`;
+      control = `<select ${ctl}${af}>${choices(def, val).map((o) => `<option value="${esc(o)}"${String(o) === String(val) ? ' selected' : ''}>${esc(optionLabel(def, o))}</option>`).join('')}</select>`;
     } else if (k === 'run') {
       control = `<input type="text" ${ctl} class="mono wi-compact" value="${esc(val)}" placeholder="${t('workflow_inputs.latest')}" spellcheck="false"${af} />`;
     } else if (k === 'number') {
@@ -333,7 +334,7 @@
     if (!wf || wf.error || !I18n?.translated || !(bundled || namesKeys(wf))) return wf;
     const name = snake(wf.file || wf.name);
     const tr = (own, key, suffix) => (key ? I18n.translated(String(key), own) : bundled ? I18n.translated(`workflow_texts.${name}_${snake(suffix)}`, own) : own);
-    const options = (key, def) => Object.fromEntries((def.enum || Object.keys(def.options || {})).map((v) => [v, tr(optionLabel(def, v), def.options_key && `${def.options_key}_${snake(v)}`, `${key}_opt_${v}`)]));
+    const options = (key, def) => Object.fromEntries([...new Set([...(def.enum || []).map(String), ...Object.keys(def.options || {})])].map((v) => [v, tr(optionLabel(def, v), def.options_key && `${def.options_key}_${snake(v)}`, `${key}_opt_${v}`)]));
     return {
       ...wf,
       description: bundled ? I18n.translated(`projects.workflows_desc_${name}`, wf.description || '') : wf.description,
@@ -354,6 +355,7 @@
   const SOURCES = { project: 'workflow_inputs.from_project', roadmap: 'workflow_inputs.from_item', typed: 'workflow_inputs.from_item', workflow: 'workflow_inputs.from_workflow' };
   const sourceText = (source) => (SOURCES[source] ? t(SOURCES[source]) : '');
   const runInputs = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/run-inputs') : root.RunInputs);
+  const choices = (def, v) => runInputs()?.choices(def, v) ?? def.enum; // a page without RunInputs: the enum alone
   const shownDefault = (...a) => runInputs().shownDefault(...a);
   const sameValue = (...a) => runInputs().sameValue(...a);
 
@@ -431,7 +433,7 @@
   function applyProjectDefault(rootEl, field, el, k, def, defaults, keep) {
     if (!defaults || typeof defaults !== 'object' || !Object.prototype.hasOwnProperty.call(defaults, k)) return;
     const v = defaults[k];
-    if (v == null || (Array.isArray(def?.enum) && !def.enum.map(String).includes(String(v)))) return;
+    if (v == null || (Array.isArray(def?.enum) && !def.enum.map(String).includes(String(v)) && !runInputs()?.keptOption(def, v))) return;
     // a list in a one-line box: comma-separated (a text input drops line breaks; the engine splits on both)
     const value = Array.isArray(v) ? v.join(',') : v;
     if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, value, { touched: false });

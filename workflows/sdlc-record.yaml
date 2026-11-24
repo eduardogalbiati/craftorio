@@ -84,7 +84,7 @@ providers:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   worktree:
     repo: "{{ inputs.project_path }}"
     base: "{{ inputs.base_branch }}"

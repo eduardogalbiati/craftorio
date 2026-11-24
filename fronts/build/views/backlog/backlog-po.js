@@ -630,7 +630,7 @@
     const simulated = devMode();
     const issueMode = po.mode === 'issue';
     // registering an issue uses the issue tracker's cheaper analysis model (ISSUE_AGENT in packages/engine/domains/po/product-owner.js)
-    const model = issueMode ? 'claude-sonnet-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
+    const model = issueMode ? 'claude-sonnet-5-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
     // #235: what the drawer plans for, the project by its name
     $p('#po-for').textContent = !po.projectId ? t('backlog_po.choose_a_project_in_the_backlog')
       : issueMode ? t('backlog_po.registering_an_issue_for_value', { value: projectName() }) : t('backlog_po.planning_for_value', { value: projectName() });

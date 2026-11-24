@@ -176,7 +176,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: origin/<base> is fetched only to compare);
   # dependencies linked from the shared cache (#198)
   worktree:
@@ -223,7 +223,7 @@ agents:
   # one turn (no retry, no supervisor), a fresh session, everything it needs in its prompt.
   reviewer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: ephemeral
     timeout: 5m
     retry: { max_attempts: 1 }
@@ -237,7 +237,7 @@ agents:
   # #630: watches the release CI after Ship (release_ci); reads only
   ci_pusher:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: handoff
     capabilities: { tools: [read, bash:git, bash:gh, bash:glab], web: false, subagents: false }
     system_prompt: |

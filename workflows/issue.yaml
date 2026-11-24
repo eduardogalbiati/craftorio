@@ -148,7 +148,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # Called when a step fails (e.g. an answer that does not match its schema); it never answers
   # the review gate.
   supervisor:
@@ -163,7 +163,7 @@ orchestrator:
 agents:
   code_analyzer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     effort: medium
     session: ephemeral
     capabilities: *read_vcs
@@ -194,7 +194,7 @@ agents:
 
   issue_filer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     effort: low
     session: ephemeral
     capabilities: *vcs_only

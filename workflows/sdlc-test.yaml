@@ -106,7 +106,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   worktree:
     repo: "{{ inputs.project_path }}"
     base: "{{ inputs.base_branch }}"
@@ -124,7 +124,7 @@ agents:
   ui_reviewer:
     color: "#C77DFF"
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, bash:git], web: false }
     skills: [ui-conventions, design-system]
@@ -137,7 +137,7 @@ agents:
   # the summary of the gates for the code owner (read only; record_docs writes test.md)
   summarizer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: ephemeral
     capabilities: { tools: [read], web: false }
     system_prompt: |
@@ -146,7 +146,7 @@ agents:
   # a rejected Test stage's findings, as fix issues
   issue_filer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: ephemeral
     capabilities: { tools: [read, bash:gh, bash:glab], web: false }
     skills: ["issue-creator-{{ inputs.git_platform }}"]

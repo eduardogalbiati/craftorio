@@ -224,7 +224,7 @@
     short: 'Claude',
     robot: 'claude',
     modelPrefixes: [/^claude-/],
-    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5', 'claude-haiku-4-5'],
+    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-2', 'claude-haiku-5-5'],
     prices: PRICES,
     definition: DEFINITION,
     resumeArgs: (id) => DEFINITION.resume_args.map((a) => a.replace('{{ session_id }}', id)),

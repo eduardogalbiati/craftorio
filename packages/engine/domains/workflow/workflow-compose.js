@@ -77,7 +77,7 @@ const PROVIDERS = { claude: registry.byId('claude').definition };
 // the profile's fields the owner may override with an answer of the same name
 const PROFILE_FIELDS = ['checkCommand', 'ci', 'e2eCommand', 'languages', 'mode', 'release', 'testCommand', 'tests'];
 const STRONG_MODEL = 'claude-opus-5-5';
-const FAST_MODEL = 'claude-sonnet-5';
+const FAST_MODEL = 'claude-sonnet-5-5';
 
 const HEADER = '# Composed by the ways-of-working interview (Projects > Ways of working, #487) from the\n'
   + '# repository\'s history and the owner\'s answers. Edit it by hand or in the Builder; commit it to use it.\n';

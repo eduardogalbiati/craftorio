@@ -10,7 +10,7 @@ const { gitRepo, writeEvents } = require('../helpers');
 // Finished (not simulated) runs over the last 30 days with Claude, Codex and Grok sessions, so the
 // Analytics screen has tokens per day, provider, model and project (mock runs are left out of it).
 function demoAnalyticsRuns(ws, projectId) {
-  const models = { claude: ['claude-opus-5-5', 'claude-sonnet-5'], codex: ['gpt-6-luna'], grok: ['grok-5-build'] };
+  const models = { claude: ['claude-opus-5-5', 'claude-sonnet-5-5'], codex: ['gpt-6-luna'], grok: ['grok-5-build'] };
   const statuses = ['success', 'success', 'success', 'failed', 'success', 'cancelled'];
   for (let i = 0; i < 18; i++) {
     const started = new Date(Date.now() - (i * 1.6 + 0.3) * 864e5);

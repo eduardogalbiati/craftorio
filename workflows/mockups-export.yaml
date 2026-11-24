@@ -121,7 +121,7 @@ defaults:
 
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   worktree:
     repo: "{{ inputs.project_path }}"
     base: "{{ inputs.base_branch }}"
@@ -139,7 +139,7 @@ orchestrator:
 agents:
   developer:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     effort: low
     session: persistent
     capabilities: { tools: [bash:git, bash:node, edit, read, write], web: false }
@@ -151,7 +151,7 @@ agents:
       change the mockup folder, never write outside design/mockups/, and never push.
   ci_pusher:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: handoff
     capabilities: { tools: [read, *vcs], web: false }
     skills: ["ci-pipeline-{{ inputs.git_platform }}"]

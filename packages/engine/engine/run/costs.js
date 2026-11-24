@@ -62,7 +62,7 @@ const methods = {
   },
 
   // The day cost limit: orchestrator.limits.max_total_cost_usd, lifted to the largest
-  // max_total_cost_usd of the models its agents run on now (#262: e.g. a developer on Fable 5.1).
+  // max_total_cost_usd of the models its agents run on now (#262: e.g. a developer on Fable 5.2).
   // A workflow without a cost limit stays without one.
   dayTotalCost() {
     const base = Number(this.wf.orchestrator?.limits?.max_total_cost_usd) || 0;

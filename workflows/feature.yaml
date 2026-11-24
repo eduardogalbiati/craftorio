@@ -285,10 +285,11 @@ inputs:
     label: "Developer model"
     group: Developer
     type: string
-    enum: [claude-opus-5-5, claude-fable-5-1]
+    enum: [claude-opus-5-5, claude-fable-5-2]
     default: claude-opus-5-5
-    options: { claude-opus-5-5: "Opus 5.5", claude-fable-5-1: "Fable 5.1" }
-    description: "The model of the developer agent. Fable 5.1 is the most capable (about 2.5x the price per token of Opus 5.5, and slower turns: the turn timeout is 3x). The reviewer (Fable 5.1) and the test writer keep their own models."
+    # #56: Fable 5.1 is no longer offered; its name stays so a value saved on it still runs and reads
+    options: { claude-opus-5-5: "Opus 5.5", claude-fable-5-2: "Fable 5.2", claude-fable-5-1: "Fable 5.1" }
+    description: "The model of the developer agent. Fable 5.2 is the most capable (Fable 5.1 cost about 2.5x the price per token of Opus 5.5; turns are slower: the turn timeout is 3x). The reviewer (Fable 5.2) and the test writer keep their own models."
   # #286: the developer's reasoning effort per run; `default` passes no --effort (the CLI's own
   # default for the model, the behaviour before #286); xhigh doubles the turn timeout
   developer_effort:
@@ -444,15 +445,16 @@ defaults:
     initial_delay: 10s
 
 # #262: limits that follow the model an agent runs on (the Developer model input, or any agent's
-# model chosen for one run in the Start drawer's Agents): Fable 5.1 turns are slower, 3x the turn
+# model chosen for one run in the Start drawer's Agents): Fable turns are slower, 3x the turn
 # timeout (owner 2026-10-04: its first run needed more than 1.5x on a 3-issue change)
 models:
-  claude-fable-5-1: { timeout_factor: 3 }
+  claude-fable-5-1: { timeout_factor: 3 } # a run saved on it (#56)
+  claude-fable-5-2: { timeout_factor: 3 }
 
 # v1: the graph is run by the app's deterministic engine (packages/engine/engine).
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the LOCAL <base> in Local
   # mode (remote false: no fetch), at the fetched origin/<base> in Remote mode (#630: the PR starts
   # from what the remote has). Removed when the run succeeds (in Local mode its branch is deleted
@@ -561,8 +563,8 @@ agents:
     color: "#A06BFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
     # owner 2026-10-03: Opus 5.5 (Sonnet 5.5 cost $1.64/M tokens in real runs vs Opus 5.5 $0.61/M);
-    # owner 2026-11-07: Fable 5.1 for every run (its turns get 3x the timeout from `models`)
-    model: claude-fable-5-1
+    # owner 2026-11-07: Fable for every run, 5.2 since #56 (its turns get 3x the timeout from `models`)
+    model: claude-fable-5-2
     effort: high
     session: persistent
     capabilities: { tools: [read, bash:git], web: false }
@@ -591,7 +593,7 @@ agents:
   # #630: Remote mode pushes the branch, opens the PR/MR and watches its CI (fragments/pr-pipeline.yaml)
   ci_pusher:
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: handoff
     capabilities: { tools: [read, *vcs], web: false }
     skills: ["ci-pipeline-{{ inputs.git_platform }}"]
@@ -606,7 +608,7 @@ agents:
     color: "#C77DFF"
     provider: claude
     # cost: it looks at a few screenshots and a CSS diff (like evidence)
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, *toolchains], web: false }
     skills: [ui-conventions, design-system]
@@ -683,7 +685,7 @@ agents:
   builder:
     color: "#E6C229" # #224: its role's colour in the run chat and the runs list
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, *toolchains], web: false }
     skills: ["build-audit-{{ inputs.language }}"]
@@ -697,7 +699,7 @@ agents:
   verifier:
     color: "#2FBF71" # #224: its role's colour in the run chat and the runs list
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     capabilities: { tools: [read, *toolchains], web: false }
     skills: [claim-verification]
@@ -709,7 +711,7 @@ agents:
   evidence:
     color: "#1FC2D6" # #224: its role's colour in the run chat and the runs list
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: ephemeral
     capabilities: { tools: [read, *toolchains], web: false }
     # #151: it collects evidence only; the visual review is the ui_reviewer's, in code_review
@@ -724,7 +726,7 @@ agents:
   healer:
     color: "#F0569B" # #224: its role's colour in the run chat and the runs list
     provider: claude
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5
     session: persistent
     # screenshots: false: it reads traces and accessibility snapshots, never captures screenshots
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true, screenshots: false }

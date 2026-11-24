@@ -147,8 +147,8 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false, prOpen = false } = {
     { name: 'Merge', steps: ['resolve_merge', 'merge_blocked'] },
   ];
   const AGENT = {
-    develop: ['developer', 'claude-opus-5-5'], code_review: ['reviewer', 'claude-sonnet-5-5'], test: ['test_writer', 'claude-sonnet-5'],
-    build: ['builder', 'claude-sonnet-5'], evidence: ['evidence', 'claude-sonnet-5'], verify_change: ['verifier', 'claude-sonnet-5'],
+    develop: ['developer', 'claude-opus-5-5'], code_review: ['reviewer', 'claude-sonnet-5-5'], test: ['test_writer', 'claude-sonnet-5-5'],
+    build: ['builder', 'claude-sonnet-5-5'], evidence: ['evidence', 'claude-sonnet-5-5'], verify_change: ['verifier', 'claude-sonnet-5-5'],
   };
   const TYPE = { developer_check: 'human_approval', developer_screenshots: 'screenshots', suite: 'suite', human_review: 'human_approval' };
   // [step, minutes]: the usual path of a run that merged

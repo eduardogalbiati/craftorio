@@ -67,9 +67,9 @@ function demoPoConversation(ws, projectId, po = null) {
   if (split.tasks?.[0]) split.tasks[0] = { ...split.tasks[0], text: `**Recovery inbox per workspace**: list the runs left behind with \`events.jsonl\` and their branches, offer Resume or Discard, and link [the storage doc](https://example.com/storage) from the empty state; ${split.tasks[0].text}` };
   const messages = [
     { ts: at(0), role: 'user', mode: 'issue', text: 'export the report as pdf', attachments: [shot] },
-    { ts: at(20), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.04, text: 'One question before I draft it:', issue: { reply: 'One question before I draft it:', questions: ['Should the PDF replace the Markdown export, or sit next to it?'], draft: null, duplicates: [], existingIssue: null, addition: '', assumptions: [] } },
+    { ts: at(20), role: 'po', mode: 'issue', model: 'claude-sonnet-5-5', costUsd: 0.04, text: 'One question before I draft it:', issue: { reply: 'One question before I draft it:', questions: ['Should the PDF replace the Markdown export, or sit next to it?'], draft: null, duplicates: [], existingIssue: null, addition: '', assumptions: [] } },
     { ts: at(40), role: 'user', mode: 'issue', text: 'Next to it, same layout as the Markdown report.' },
-    { ts: at(70), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.11, text: 'Drafted below. **#12** builds the report this exports: run them together.', issue: {
+    { ts: at(70), role: 'po', mode: 'issue', model: 'claude-sonnet-5-5', costUsd: 0.11, text: 'Drafted below. **#12** builds the report this exports: run them together.', issue: {
       reply: 'Drafted below.', questions: [],
       draft: { title: 'Export the run report as a PDF next to the Markdown export, keeping the same layout', body, labels: ['enhancement', 'impact:3', 'complexity:2', 'area:renderer'], related: [12], epic: '#13', epicTitle: 'Run reports' },
       duplicates: [{ number: 12, title: 'Export a run report as Markdown', state: 'open', relation: 'overlaps', reason: 'Same report and menu.' }],

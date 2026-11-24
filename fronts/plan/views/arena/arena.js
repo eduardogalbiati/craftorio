@@ -20,7 +20,7 @@
   const contender = (model) => ({ provider: typeOf(model), model, effort: 'high' });
   // The workflow's defaults (contender_1 … contender_4; the 5th slot is off).
   const DEFAULTS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6-luna', 'grok-4.7'].map(contender);
-  const EXTRA = contender('claude-haiku-4-5');
+  const EXTRA = contender('claude-haiku-5-5');
   // Simulation scenarios (developer mode), as the engine's mockSequences.
   const SCENARIOS = {
     happy: { label: 'The verifier passes the first synthesis', seq: {} },
@@ -37,6 +37,8 @@
   };
   if (setup.contenders.length < MIN) setup.contenders = DEFAULTS.map((c) => ({ ...c }));
 
+  // the CLI's models, and the saved one when it is no longer offered (#56)
+  const modelsFor = (c) => [...new Set([...PROVIDERS[c.provider].models, c.model].filter(Boolean))];
   // A model id's CLI when the run does not say it (e.g. runs of older ai-arena versions).
   const providerOfModel = (m = '') => (PROVIDERS[typeOf(m)] ? typeOf(m) : '');
 
@@ -79,7 +81,7 @@
         <div class="ar-card-head"><span class="duo-robot" data-slot-robot="${i}"></span></div>
         <div class="ar-card-title">${t('arena.contender')} ${i + 1}</div>
         <div class="field"><label>${t('arena.provider')}</label><select data-field="provider">${Object.entries(PROVIDERS).map(([k, p]) => `<option value="${k}"${k === c.provider ? ' selected' : ''}>${p.label}</option>`).join('')}</select></div>
-        <div class="field"><label>${t('arena.model')}</label><select data-field="model">${PROVIDERS[c.provider].models.map((m) => `<option${m === c.model ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
+        <div class="field"><label>${t('arena.model')}</label><select data-field="model">${modelsFor(c).map((m) => `<option${m === c.model ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
         <div class="field"><label>${t('arena.effort')}</label><div class="seg duo-effort">${EFFORTS.map((e) => `<button type="button" data-effort="${e}" class="${e === c.effort ? 'active' : ''}">${e}</button>`).join('')}</div></div>
       </div>`).join('') + (n < MAX ? `<button type="button" class="ar-add" id="arena-add"><b>+</b>${t('arena.add_a_model')}</button>` : '');
     setup.contenders.forEach((c, i) => {

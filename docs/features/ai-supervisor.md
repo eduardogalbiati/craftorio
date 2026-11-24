@@ -11,7 +11,7 @@ The engine is deterministic (same graph, same gates, auditable); an AI **supervi
 ```yaml
 orchestrator:
   provider: claude
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
   supervisor:
     enabled: true
     max_interventions: 2   # per step (max_total: 6 per run)
