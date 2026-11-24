@@ -2,13 +2,25 @@
 // (--workflow, --pipeline, --then, --input), its gates approved as they come but the one of --stop-at,
 // where it captures, with demo screenshots (not with --no-demo-shots) and a scratch workspace (#201).
 // `live`: no finished run is recorded, the default --wait is longer, --stop-at and --input apply.
+// --workflow backlog-refresh.yaml: the project is a clone of a local folder with no remote (#63), so
+// --stop-at no_platform_repo shows the gate that stops the run before the review.
 
 const fs = require('fs');
 const path = require('path');
-const { demoEvidence, writeDemoPackage } = require('../helpers');
+const { demoEvidence, gitRepo, writeDemoPackage } = require('../helpers');
 
-function seed({ project }) {
+// #63: the project's folder as a clone whose `origin` is a local folder that is on no platform
+function demoLocalOrigin(ws, folder) {
+  const source = path.join(ws.root, 'my-projects', 'demo-app');
+  gitRepo(source)(['init', '-q', '-b', 'main']);
+  const git = gitRepo(folder);
+  git(['init', '-q', '-b', 'main']);
+  git(['remote', 'add', 'origin', source]);
+}
+
+function seed({ args, project, ws }) {
   writeDemoPackage(project.folder);
+  if (args.workflow === 'backlog-refresh.yaml') demoLocalOrigin(ws, project.folder);
 }
 
 async function open(page) {
@@ -21,7 +33,8 @@ async function open(page) {
     openDrawer(); // #412: Start left the top bar
     await new Promise((r) => setTimeout(r, 500));
     document.querySelector('#project-select').value = ${JSON.stringify(project.id)};
-    document.querySelector('#in-task').value = 'Add a /health endpoint';
+    // the workflow's main field: in-task, or another one (backlog-refresh's focus)
+    document.querySelector('#inputs-form [data-testid="start-main-input"]').value = 'Add a /health endpoint';
     for (const [k, val] of Object.entries(${JSON.stringify(args.inputs)})) {
       const el = document.getElementById('in-' + k);
       if (!el) throw new Error('the workflow has no input ' + k);
