@@ -6,17 +6,30 @@ source: CHANGELOG.md (English)
 
 Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos seus documentos do SDLC; `#123` leva à issue.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-24
 
-> No main, esperando a próxima release.
+> A primeira release com o nome Craftorio. As versões recomeçam; as releases abaixo são do Multiagent Orchestrator, o mesmo app.
 
 ### Added
-- Um ícone novo para o app: um hub regendo cinco agentes (#624).
-- O onboarding do primeiro projeto, escrito como documentos do AI-native SDLC ([first-project-onboarding](docs/work/first-project-onboarding/), #635).
+- **Craftorio**: o novo nome do app, dos pacotes e das variáveis. O que uma instalação antiga deixou (workspace, configurações, conta) continua sendo encontrado.
+- **Instalação por um prompt**: uma sessão de IA instala o app e o workspace, pelo [INSTALL.md](INSTALL.md) (#44).
+- **O Oracle no workspace**: uma sessão do Claude Code ou do Codex aberta na pasta do workspace gerencia o app, pelo canal de controle (#32, #42, #43).
+- Um projeto sem remoto tem um backlog local (#25, #35).
+- Uma run de release escolhe o produto, o app ou o engine (#46).
+- O onboarding do primeiro projeto, escrito como documentos do AI-native SDLC ([first-project-onboarding](docs/work/first-project-onboarding/)).
 
 ### Changed
-- Uma run que abre um pull request agora espera num monitor do PR em vez de uma etapa de Approve: o card mostra CI, review, conflitos, comentários sem resposta e o que bloqueia o merge, na run e no Roadmap, e a run termina sozinha quando o pull request é mergeado (ou falha quando é fechado). Uma run no monitor não conta no limite de runs simultâneas (#809).
-- **Aceite de novo os workflows do repositório**: `feature`, `fix` e `ai-development-remote-hero` mudaram (`pr_review` virou `pr_monitor`), então as cópias de um repositório precisam ser aceitas de novo na tela Workflows (#809).
+- O app e o engine são lançados separadamente, de um só repositório com Turborepo e Changesets.
+- Os agentes rodam nos modelos atuais: Fable 5.2, Sonnet 5.5 e Haiku 5.5 (#56).
+- Uma run que abre um pull request espera num monitor do PR em vez de uma etapa de Approve.
+- **Aceite de novo os workflows do repositório**: uma cópia alterada precisa ser aceita na tela Workflows.
+- O onboarding, a primeira issue e o roadmap falam pt-BR (#23, #28, #36).
+
+### Fixed
+- Os agentes de run do Claude voltam a carregar o CLAUDE.md / AGENTS.md do repositório (#45).
+- Uma dependência faltando na primeira run para uma vez num gate, em vez de mandar o desenvolvedor de volta (#30).
+- Uma run simulada não mostra gasto (#31).
+- A gaveta do Product Owner não leva o texto não enviado de outro projeto (#26); Iniciar abre no workflow padrão do projeto (#27).
 
 ## [1.4.0] - 2026-10-26
 
@@ -72,7 +85,7 @@ Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos se
 - Visão 3D do run: um run como um andar de passos e agentes, ao vivo e em replay, claro ou escuro.
 - Um passo de revisão escreve o resumo da release mostrado no gate Ship (#290).
 
-## [1.0.0] - 2026-10-05
+## [orchestrator-1.0.0] - 2026-10-05
 
 > A primeira release estável.
 

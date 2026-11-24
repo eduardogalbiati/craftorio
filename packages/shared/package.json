@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/shared",
-  "version": "1.5.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Pure modules both the engine and the UI use: each works with require and as a browser <script>, and requires nothing of the app.",
   "license": "MIT",
