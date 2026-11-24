@@ -248,6 +248,15 @@ test('#735 applyHints: two UI folders of the project fill the box comma-separate
   assert.equal(controls.ui_folders.value, 'web/,admin/src/');
 });
 
+test('#56 applyHints: a project value the enum no longer offers but the options still name is kept', async (t) => {
+  t.after(() => { delete global.api; });
+  const { root, controls } = makeFakeRoot(['model']);
+  controls.model.value = 'm-new';
+  global.api = { projectInputHints: async () => ({ runDefaults: { model: 'm-old' } }) };
+  await WorkflowInputs.applyHints(root, { model: { enum: ['m-new'], options: { 'm-new': 'New 2', 'm-old': 'Old 1' } } }, 'proj-56-kept');
+  assert.equal(controls.model.value, 'm-old');
+});
+
 test('#735 applyHints: a project value outside the input\'s options is ignored', async (t) => {
   t.after(() => { delete global.api; });
   const { root, controls } = makeFakeRoot(['mode']);

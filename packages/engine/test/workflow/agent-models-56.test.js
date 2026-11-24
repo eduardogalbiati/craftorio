@@ -164,6 +164,10 @@ for (const file of [FEATURE, LOCAL_HERO, REMOTE_HERO]) {
     assert.equal(build(t, file, { developer_model: OLD_FABLE }).wf.agents.developer.model, OLD_FABLE);
   });
 
+  test(`#56 ${name}: a developer saved on Fable 5.1 keeps its longer turn timeout`, (t) => {
+    assert.equal(developerTimeout(build(t, file, { developer_model: OLD_FABLE })), 90 * 60e3);
+  });
+
   test(`#56 ${name}: a developer model that is no model is refused`, (t) => {
     assert.throws(() => build(t, file, { developer_model: 'no-such-model' }), /Input "developer_model" must be one of/);
   });

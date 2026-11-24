@@ -13,7 +13,7 @@
 //   run's cost limit is the largest max_total_cost_usd among orchestrator.limits and the models its
 //   agents run on.
 // - ai-development-local-hero: the developer's model is chosen through the override (its
-//   `developer_model` input may stay or go); a Fable 5.1 developer still gets a longer turn timeout.
+//   `developer_model` input may stay or go); a Fable 5.2 developer still gets a longer turn timeout.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

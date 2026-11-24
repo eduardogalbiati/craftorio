@@ -21,6 +21,11 @@ test('#56 choices: the enum, and the kept value after it only when it is the sav
   assert.deepEqual([choices(MODEL, 'old'), choices(MODEL, 'new'), choices(MODEL, 'other')], [['new', 'old'], ['new'], ['new']]);
 });
 
+test('#56 a multiple input takes only its enum: an option it no longer offers does not fit and is not a choice', () => {
+  const many = { ...MODEL, multiple: true };
+  assert.deepEqual([fits(many, 'new,old'), fits(many, 'old'), choices(many, 'old')], [false, false, ['new']]);
+});
+
 test('#56 a project value that is a kept option still fits', () => {
   assert.deepEqual([fits(MODEL, 'old'), fits(MODEL, 'other'), projectValue('model', MODEL, { model: 'old' })], [true, false, 'old']);
 });
