@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/engine",
-  "version": "1.5.0",
+  "version": "1.0.0",
   "private": true,
   "description": "The workflow engine, the service (its channels and areas), the HTTP/WebSocket server, the control channel and the backend domain modules; runs under Electron's main process or as the craftorio-engine server.",
   "license": "MIT",

@@ -6,7 +6,7 @@
 # workflow of each kind of issue; `fix` in Remote mode because `main` is protected (a pull request).
 # #46 `products`: what is released apart, each with its own version, changelog and tag (docs/features/release.md).
 version: 1
-requires: ">=1.1"
+requires: ">=1.0"
 default: ai-development-remote-hero
 kinds:
   feature: { name: ai-development-remote-hero }

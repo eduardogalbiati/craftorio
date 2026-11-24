@@ -6,17 +6,30 @@ translation: CHANGELOG.pt-BR.md
 
 Every release of the app, newest first. Items link to their SDLC documents; `#123` links to the issue.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-24
 
-> On main, waiting for the next release.
+> The first release under the name Craftorio. Versions start again; the releases below are of the Multiagent Orchestrator, the same app.
 
 ### Added
-- A new app icon: a hub conducting five agents (#624).
-- First project onboarding, written as AI-native SDLC documents ([first-project-onboarding](docs/work/first-project-onboarding/), #635).
+- **Craftorio**: the new name of the app, its packages and its variables. What an older install left (workspace, settings, account) is still found.
+- **Install from one prompt**: an AI session installs the app and the workspace, from [INSTALL.md](INSTALL.md) (#44).
+- **The Oracle in the workspace**: a Claude Code or Codex session opened in the workspace folder manages the app, through its control channel (#32, #42, #43).
+- A project with no remote gets a local backlog (#25, #35).
+- A release run chooses its product, the app or the engine (#46).
+- First project onboarding, written as AI-native SDLC documents ([first-project-onboarding](docs/work/first-project-onboarding/)).
 
 ### Changed
-- A run that opens a pull request now waits in a PR monitor instead of an Approve step: its card shows CI, review, conflicts, unanswered comments and what blocks the merge, on the run and on the Roadmap, and the run ends by itself when the pull request merges (or fails when it is closed). A run in the monitor does not count against the concurrent run limit (#809).
-- **Accept your repository workflows again**: `feature`, `fix` and `ai-development-remote-hero` changed (`pr_review` became `pr_monitor`), so a repository's copies must be accepted again on the Workflows screen (#809).
+- The app and the engine are released apart, from one repository with Turborepo and Changesets.
+- The agents run on the current models: Fable 5.2, Sonnet 5.5 and Haiku 5.5 (#56).
+- A run that opens a pull request waits in a PR monitor instead of an Approve step.
+- **Accept your repository workflows again**: a changed copy must be accepted on the Workflows screen.
+- The onboarding, the first issue and the roadmap speak pt-BR (#23, #28, #36).
+
+### Fixed
+- Run agents on Claude load the repository's CLAUDE.md / AGENTS.md again (#45).
+- A missing dependency in a first run stops once at a gate instead of sending the developer back (#30).
+- A simulated run shows no spend (#31).
+- The Product Owner drawer does not carry another project's unsent text (#26); Start opens on the project's default workflow (#27).
 
 ## [1.4.0] - 2026-10-26
 
@@ -72,7 +85,7 @@ Every release of the app, newest first. Items link to their SDLC documents; `#12
 - Run 3D view: a workflow run as a floor of steps and agents, live and in replay, dark or light.
 - A review step writes the release summary shown at the Ship gate (#290).
 
-## [1.0.0] - 2026-10-05
+## [orchestrator-1.0.0] - 2026-10-05
 
 > The first stable release.
 
