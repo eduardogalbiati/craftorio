@@ -102,10 +102,11 @@ async function callChannel(endpoint, channel, arg) {
 const list = (x) => (Array.isArray(x) ? x : []);
 const oneLine = (text) => String(text || '').split(/\s+/).filter(Boolean).join(' ');
 const isRelease = (entry) => entry.kind === 'release';
-// the rules of packages/shared/roadmap-model.js (isFinished, isOpen, currentStage), which this file cannot load
+// the rules of packages/shared/roadmap-model.js (isFinished, isOpen, currentStage, atGate), which this file cannot load
 const isFinished = (x) => ['done', 'parked', 'skipped'].includes(x.status) || (x.status === 'failed' && !!x.parked);
 const isOpen = (stage) => !isRelease(stage) && !stage.disabled && list(stage.items).some((x) => !isFinished(x));
-const atGate = (x) => !isFinished(x) && (!!x.waiting || !!x.run?.atGate);
+// a finished item (parked, then failed) is never reported: the roadmap moved past it
+const atGate = (x) => !isFinished(x) && ((['running', 'waiting_merge'].includes(x.status) && !!x.waiting) || (x.status === 'failed' && !!x.runId && !!x.run?.atGate));
 
 // how an item is named: its issues, else its workflow
 function itemLabel(x) {

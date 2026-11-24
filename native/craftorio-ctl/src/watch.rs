@@ -170,7 +170,7 @@ fn is_release(entry: &Value) -> bool {
     text(entry, "kind") == "release"
 }
 
-// the rules of packages/shared/roadmap-model.js (isFinished, isOpen, currentStage)
+// the rules of packages/shared/roadmap-model.js (isFinished, isOpen, currentStage, atGate)
 fn is_finished(item: &Value) -> bool {
     match text(item, "status") {
         "done" | "parked" | "skipped" => true,
@@ -185,9 +185,14 @@ fn is_open(stage: &Value) -> bool {
         && elements(stage.get("items")).iter().any(|x| !is_finished(x))
 }
 
+// a finished item (parked, then failed) is never reported: the roadmap moved past it
 fn at_gate(item: &Value) -> bool {
     let run_at_gate = item.get("run").is_some_and(|r| truthy(r, "atGate"));
-    !is_finished(item) && (truthy(item, "waiting") || run_at_gate)
+    match text(item, "status") {
+        "running" | "waiting_merge" => truthy(item, "waiting"),
+        "failed" => !is_finished(item) && truthy(item, "runId") && run_at_gate,
+        _ => false,
+    }
 }
 
 /// How an item is named: its issues, else its workflow.
