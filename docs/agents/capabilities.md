@@ -39,7 +39,7 @@ them in `~/.cargo/bin`) on the PATH the app starts with; nothing else is install
 
 | | Claude Code | Codex CLI | Grok Build |
 |---|---|---|---|
-| Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources ''` (no settings file at all: neither the user's plugins, hooks and permission rules nor the checkout's `.claude/settings*.json`, #468), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
+| Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources ''` (no settings file at all: neither the user's plugins, hooks and permission rules nor the checkout's `.claude/settings*.json`, #468; no instructions file either, so the engine passes the repository's with `--append-system-prompt-file`, #45), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
 | Tools | `--tools` (only these built-ins are offered: fewer definitions in context) + `--allowedTools` (`Bash(git:*)` per `bash:git`) | `-s read-only`, or `workspace-write` when `edit`/`write` | read-only sets: `--tools read_file,list_dir,grep[,web_search,web_fetch]` |
 | Writes | `--permission-mode acceptEdits` with `edit`/`write` | workspace-write sandbox (no network for commands) | not restricted (`--always-approve`) |
 | Commands | allowlist per command (`Bash(npm:*)`), plus the same with the `AGENT_ENV` prefix and the shell utilities (below); `--add-dir <run_dir>/evidence`, `<run_dir>/logs` and `<run_dir>/scratch` | **not enforceable** (the sandbox limits writes, not which command runs) | not restricted |
@@ -63,10 +63,33 @@ test files back (see `edits_tests` in [engine/agents-and-steps.md](engine/agents
 not tried against a real Claude CLI yet (real calls cost money): if one is refused, the engine
 check still holds.
 
-**Project instructions (#331)**: the engine passes no instructions file of its own; each CLI loads
-the repository's from the worktree it runs in. This repository keeps them in `AGENTS.md`, and
-`CLAUDE.md` is the import line `@AGENTS.md`. Codex CLI reads `AGENTS.md` (git root down to its
-working directory). Claude Code reads `CLAUDE.md` and follows the import. Grok Build, per its
+**Project instructions (#331, #45)**: an agent of a run starts with the repository's instructions,
+from the worktree it runs in. This repository keeps them in `AGENTS.md`, and `CLAUDE.md` is the
+import line `@AGENTS.md`. Codex CLI reads `AGENTS.md` by itself (git root down to its working
+directory). An isolated Claude Code loads neither `CLAUDE.md` nor `AGENTS.md`: `--setting-sources ''`
+drops them with the settings (found in #45: none loaded from 2026-10-25 to 2026-11-24), so the engine
+composes them (`packages/engine/engine/project-instructions.js`) and passes the file
+`<run_dir>/instructions/<session>.md` with `--append-system-prompt-file` (the adapter's
+`instructionsFlags`):
+- **What**: the root's `CLAUDE.md` with its `@path` imports (from the importing file, five hops, each
+  file once, not in code or HTML comments), or `AGENTS.md` when there is no `CLAUDE.md`. Every file is
+  checked by its real path: an import or a link that leaves the repository (or enters `.git`) is not
+  followed, and the log names it. Nothing above the root is searched (the workspace's `AGENTS.md`, #43).
+- **Where**: the root is the run's worktree; without one, the run's `worktree_dir`, `project_path` or
+  `repo_path` that holds the agent's folder (as given: a subfolder of a repository is its own root).
+  An agent in the run folder (the run's supervisor) gets none. Neither do the Oracle, the supervisor
+  chat and the Product Owner (they call `providerArgs` without the file), a simulated run, and
+  `isolation: false` (that CLI loads its own).
+- **When**: composed once per session and passed on every turn, the same text. Claude Code keeps the
+  system prompt of a conversation's first request and sends it again on resume (`claude --help`,
+  2.1.316, `--system-prompt-snapshot`), so a resumed turn does not load it twice, and a conversation
+  started before #45 may go without it until it is compacted. The CLI's own sub-agents are not covered.
+- **Seen**: one `log` `kind: instructions` per session (`session_id`, `files`, `refused`; "none" and
+  why when empty), and `instructions` in the session's record: what the engine passed.
+- An agent or provider whose own arguments have `--append-system-prompt[-file]` keeps only that one
+  (the log warns). The flag was checked in `claude --help` and with a fake CLI, not with a real call.
+
+Grok Build, per its
 README (`~/.grok/README.md`, section "AGENTS.md", 1.0.41), reads `Agents.md`, `Claude.md`,
 `AGENT.md` and `AGENTS.md` in every folder from the git root down to its working directory (10,000
 characters per file): it gets `AGENTS.md` too, plus the one-line `CLAUDE.md`, which it does not
@@ -84,17 +107,21 @@ which a live "cli-new" terminal shows to the user.
 
 **Nested instructions files (#572)**: `packages/engine/`, `packages/ui-kit/`, each `fronts/<id>/`
 and `scripts/` carry an `AGENTS.md` (the engine also a `CLAUDE.md` with `@AGENTS.md`). Codex reads
-the nested `AGENTS.md` by its convention. Claude loads a folder's `CLAUDE.md` when it reads a file
-in that folder; `.claude/rules/*.md` is project configuration, which `--setting-sources ''` may drop,
-so it is not used. Manual check (a real-model call, not automated): start an isolated agent on this
-repo (`npm run run -- --file ai-arena.yaml --task "Read packages/engine/engine/workflow.js and quote the
-first rule your instructions give for that folder"`) and look in its session stream for the
-nested file's "simulation" rule. Not yet run: the files also work as plain text an agent can be
-pointed to, so nothing depends on the result.
+the nested `AGENTS.md` by its convention. **An isolated Claude agent does not get them**: a folder's
+`CLAUDE.md` / `AGENTS.md` is not loaded when it reads a file there. Checked on 2026-11-24 (#45, no
+model call) in the CLI transcripts of this repository's run worktrees (`~/.claude/projects`,
+2026-11-02 to 2026-11-24, Claude Code 2.1.316, `--setting-sources ''`): of 1,217 transcripts (165 of
+them sub-agents'), 562 read or edited a file under `packages/engine/`, and none holds a line of
+`packages/engine/AGENTS.md` (there since 2026-10-26) outside tool calls, tool results and assistant
+messages; 7 hold it in a tool result (the agent opened the file). The engine composes the root's
+files only (#45), so the root `AGENTS.md` names the folders that carry their own. `.claude/rules/*.md`
+is project configuration and is not used.
 
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
-tokens with the user's setup → 22.0k isolated with the developer's capabilities**.
+tokens with the user's setup → 22.0k isolated with the developer's capabilities**. That was before
+#468 dropped the instructions files; the first request without them and with #45's copy was not
+measured.
 
 **Which account a CLI runs on (#312)**: each adapter names the variable of its config folder
 (`configDirEnv` in `packages/shared/providers/<id>.js`: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`, Grok

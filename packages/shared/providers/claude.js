@@ -23,7 +23,7 @@
   const SUBAGENT_TOOLS = ['Agent', 'Task'];
 
   // The isolation and capability flags of one turn (capabilities.providerArgs; `lib`: its helpers).
-  function isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env }, lib) {
+  function isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile = null }, lib) {
     const args = [];
     if (isolated) {
       // no settings source at all: neither the user's (plugins, hooks, permission rules) nor the
@@ -32,6 +32,9 @@
       // (the engine injects the workflow's skills), no auto-memory
       args.push('--strict-mcp-config', '--no-chrome', '--setting-sources', '', '--disable-slash-commands',
         '--settings', JSON.stringify({ autoMemoryEnabled: false }));
+      // #45: with no settings source the CLI loads no CLAUDE.md either: the engine's copy of the
+      // repository's, on every turn (the flag holds for one process; a resumed one does not add it twice)
+      if (instructionsFile) args.push('--append-system-prompt-file', instructionsFile);
     }
     if (caps && Object.keys(mcp).length) args.push('--mcp-config', JSON.stringify({ mcpServers: mcp }));
     if (!caps) return { args, notes: [] };
@@ -222,6 +225,9 @@
     // attached images: read with its Read tool, their folders given with --add-dir
     imageInput: 'read',
     isolationArgs,
+    // #45: isolated, it loads no instructions file by itself: the engine passes the repository's
+    // (isolationArgs' instructionsFile), unless the workflow's own args hold one of these flags
+    instructionsFlags: ['--append-system-prompt', '--append-system-prompt-file'],
     // deny rules (test paths, `npm ci` on the shared cache) are refused by the CLI itself
     enforcesDenyRules: true,
     // --max-turns: the agent's max_requests is enforced per turn (#302)

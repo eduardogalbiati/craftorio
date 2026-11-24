@@ -23,8 +23,9 @@ versioned, reviewed, tested, and written in full by the team that owns the agent
   (#327).
 - **Nothing else may inject a prompt.** Isolated Claude agents load no settings file
   (`--setting-sources ''`, #468, SEC-3 in `decisions.md`), so a repository's `.claude/settings*.json`
-  cannot add hooks or prompts behind the workflow's back; a project `CLAUDE.md` asking for another
-  chat language cannot break the JSON answer (`OUTPUT_LANGUAGE`, #94).
+  cannot add hooks or prompts behind the workflow's back; the repository's `CLAUDE.md` / `AGENTS.md`
+  reach them only as the file the engine composes and logs (#45), and one asking for another chat
+  language cannot break the JSON answer (`OUTPUT_LANGUAGE`, #94).
 - **Prompts are tested.** The mock provider runs every bundled workflow end to end in `npm test`
   (`docs/agents/testing.md`), so a renamed output field or a broken template fails a test, not a
   night run.

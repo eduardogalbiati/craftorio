@@ -21,6 +21,7 @@ const CHECKED = [
   'packages/engine/domains/run/run-costs.js',
   'packages/engine/domains/usage/cost-estimate.js',
   'packages/engine/engine/expected-files.js',
+  'packages/engine/engine/project-instructions.js',
   'packages/engine/engine/run/accounts.js',
   'packages/engine/engine/run/checkout.js',
   'packages/engine/engine/run/costs.js',

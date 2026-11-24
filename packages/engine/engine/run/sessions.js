@@ -4,8 +4,8 @@
 // builds one turn and `agentTurn` runs it in the agent's session (modes persistent / ephemeral /
 // handoff, `max_context` and `fresh_after_idle` rotation, the test-file and protected-file guards,
 // cuts by `max_requests` #302), the handoff notes (`saveHandoff`, `requestHandoffNote`,
-// `continueAfterCut`; `takeHandoff` reads one, packages/engine/engine/run/outputs.js) and the skills a prompt
-// includes (`loadSkills`). The provider call itself is packages/engine/engine/run/turns.js.
+// `continueAfterCut`; `takeHandoff` reads one, packages/engine/engine/run/outputs.js), the skills a prompt
+// includes (`loadSkills`) and the repository's instructions a session starts with (`sessionInstructions`, #45). The provider call itself is packages/engine/engine/run/turns.js.
 
 'use strict';
 
@@ -19,6 +19,10 @@ const {
 } = require('../../domains/usage/usage');
 const capabilities = require('../capabilities');
 const evidence = require('../../domains/evidence/evidence');
+const {
+  composeInstructions,
+  instructionsRoot,
+} = require('../project-instructions');
 const testPaths = require('../test-paths');
 const { bundledDir } = require('../../domains/workspace/app-root');
 const chain = require('@craftorio/shared/chain-model');
@@ -139,6 +143,8 @@ const methods = {
       ...(s.fallbackFrom ? { fallback_from: s.fallbackFrom } : {}),
       // #312: the name of the provider account the session runs on (Settings' accounts)
       ...(s.account ? { account: s.account } : {}),
+      // #45: the instruction files of the repository the engine gave it (sessionInstructions)
+      ...(s.instructions ? { instructions: [...s.instructions.files] } : {}),
       ...this.cacheState(s),
     };
   },
@@ -298,6 +304,37 @@ const methods = {
     return Language.agentsLanguage({ language: this.languageSetting() });
   },
 
+  // #45: the file with the repository's instructions for an isolated session whose CLI loads none by
+  // itself (Claude Code), or null. Composed once per session, so its turns all get the same text;
+  // the session's record and a log line say which files it holds ("none" too: losing them is seen).
+  // ownArgs: the workflow's own arguments; an appended system prompt there is the CLI's only one.
+  // A simulation reads no repository.
+  sessionInstructions(session, agent, { providerType, isolated, ownArgs }) {
+    const flags = registry.byType(providerType)?.instructionsFlags;
+    if (!flags || !isolated || this.machine.simulated) return null;
+    if (session.instructions === undefined) {
+      const own = ownArgs.find((a) => flags.includes(String(a).split('=')[0]));
+      const inputs = this.ctx.inputs || {};
+      const root = own ? null : instructionsRoot(this.workingDir(agent), {
+        runDir: this.runDir, roots: [this.worktree?.dir, this.ctx.worktree_dir, inputs.project_path, inputs.repo_path],
+      });
+      const { files, text, refused } = root ? composeInstructions(root) : { files: [], text: '', refused: [] };
+      let file = null;
+      if (files.length) {
+        file = path.join(this.runDir, 'instructions', `${session.id}.md`);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, text);
+      }
+      session.instructions = { files, file };
+      const none = own ? `none: the workflow's own arguments have ${own}` : root ? `none: no CLAUDE.md or AGENTS.md of the repository in ${root}` : 'none: the agent works in no repository';
+      this.emitEvent('log', {
+        level: own || refused.length ? 'warn' : 'info', kind: 'instructions', agent: session.agent, session_id: session.id, files, refused,
+        message: `[${session.agent}] ${session.id} project instructions: ${files.join(', ') || none}${refused.length ? ` · not followed, outside the repository: ${refused.join('; ')}` : ''}`,
+      });
+    }
+    return session.instructions.file;
+  },
+
   // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
   // cannot open images still gets their paths, with one warning per step and agent.
   async agentTurn(agentName, prompt, turnOpts = {}) {
@@ -404,7 +441,10 @@ const methods = {
     const isolated = agent.isolation !== false;
     const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
     const denyCommands = depsLinked ? capabilities.DEPS_DENIED_COMMANDS : [];
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv });
+    // cli_args may be keyed by provider when the provider is picked at run time
+    const cliArgs = Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || [];
+    const instructionsFile = this.sessionInstructions(session, agent, { providerType, isolated, ownArgs: [...cliArgs, ...(provider?.args || [])] });
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv, instructionsFile });
     // #302: only a CLI with a request limit per turn can stop a turn after n requests (claude --max-turns)
     const enforced = budget && !!registry.byType(providerType)?.requestLimit;
     if (budget && providerType && !enforced) notes.push(`max_requests (${budget}) not enforceable: ${providerType} has no request limit per turn`);
@@ -420,8 +460,6 @@ const methods = {
     // outside the working_dir (e.g. claude --add-dir <folder>), and to the folders it `reads` (#300). Every turn.
     const skillDirs = [...new Set([...agentSkills, ...stepSkills].flatMap((sk) => [sk.path, ...(sk.reads || []).map((r) => r.path)]))];
     const skillArgs = skillDirs.flatMap((dir) => (provider?.skill_args || []).map((a) => render(a, { skill_dir: dir })));
-    // cli_args may be keyed by provider when the provider is picked at run time
-    const cliArgs = Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || [];
     const baseArgs = capabilities.dedupeFlags([...capArgs, ...cliArgs, ...skillArgs], provider?.args || []);
     // a --max-turns of the provider or cli_args wins over the budget
     const ownLimit = [...baseArgs, ...(provider?.args || [])].includes('--max-turns');

@@ -44,6 +44,7 @@
  * @property {string} [simulates]
  * @property {{ from: string, reason: string }} [fallback_from]
  * @property {string} [account] the provider account's name (#312; never its folder)
+ * @property {string[]} [instructions] the repository's instruction files the engine gave it (#45; empty: none found)
  * @property {string | null} [last_turn_at] the cache state (#320): not on the orchestrator's session
  * @property {number | null} [context_tokens]
  * @property {number | null} [start_context_tokens]

@@ -13,6 +13,9 @@ Session modes (persistent, ephemeral, handoff), handoff notes, context and reque
   `handoff.saved` (with the `note`).
 - A fresh session of an agent that already has a note (handoff mode, a rotation, or a resumed run)
   gets `<system>…</system>`, then `<handoff_note>…</handoff_note>`, then the prompt.
+- **The repository's instructions** (#45, `sessionInstructions`): an isolated Claude session of an
+  agent in a repository gets `runs/<id>/instructions/<session>.md` on every turn; its record lists
+  the files (`instructions`), with a `log` `kind: instructions` (capabilities.md, Project instructions).
 - **The Language line** (#327, #328): `agentTurn` adds one `[Language]` line to every turn, for
   every CLI (`languageLine` in `packages/shared/language.js`, from the WorkflowRun `language` option,
   read at each turn: a change in Settings › Language applies from the next turn). It names the AI
