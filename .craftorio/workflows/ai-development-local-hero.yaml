@@ -671,11 +671,11 @@ agents:
 
 groups:
   - name: Develop
-    steps: [warm_up, develop,testid_check, baseline_check, requirements_left_out, issue_not_done, developer_screenshots, secret_scan, developer_check]
+    steps: [warm_up, develop,testid_check, baseline_check, requirements_left_out, issue_not_done, developer_screenshots, secret_scan, secret_found, secret_scan_error, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, suite, e2e, heal, secret_found, secret_scan_error, test_failed, build, build_failed, evidence, verify_change, verify_failed]
+    steps: [test, suite, e2e, heal, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked]
 
@@ -1371,8 +1371,9 @@ steps:
       - when: "output.status == 'fail'"
         goto: secret_found
       # passed or skipped: where the round was going (vars.after_scan, set by each route to the scan: gate,
-      # review, or ui_review right after its screenshots), also after one of the scan's own gates
-      - when: "vars.after_scan == 'gate'"
+      # review, or ui_review right after its screenshots), also after one of the scan's own gates. The mode is named
+      # again for the pipeline's stations: they find the mode's gate by it (workflowStations)
+      - when: "inputs.mode == 'validated' and vars.after_scan == 'gate'"
         goto: developer_check
         set: &secrets_scanned { secret_returns: "0" }
       - when: "true"

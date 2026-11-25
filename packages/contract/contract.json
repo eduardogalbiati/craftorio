@@ -1,5 +1,5 @@
 {
- "hash": "85bd9fb597df",
+ "hash": "bdc4bd7a2020",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -3703,7 +3703,7 @@
       "id": {
        "type": "string",
        "maxLength": 40,
-       "description": "The CLI: claude, codex, grok, gh, glab or git."
+       "description": "The CLI: claude, codex, grok, gh, glab, git or gitleaks."
       },
       "action": {
        "type": "string",

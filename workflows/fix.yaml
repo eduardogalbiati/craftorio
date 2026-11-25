@@ -416,11 +416,11 @@ steps:
 
 groups:
   - name: Develop
-    steps: [reproduce, develop, rule_check, secret_scan]
+    steps: [reproduce, develop, rule_check, secret_scan, secret_found, secret_scan_error]
   - name: Review
     steps: [code_review]
   - name: Validate
-    steps: [suite, check_failed, check_environment, secret_found, secret_scan_error, verify_change, validate, verify_failed]
+    steps: [suite, check_failed, check_environment, verify_change, validate, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_monitor]
 

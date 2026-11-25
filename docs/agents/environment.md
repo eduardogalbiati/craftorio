@@ -36,10 +36,9 @@ the workspace folder.
   `scripts/ctl.js`). `test/session/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
   binaries in release on their first run, like `craftorio-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
-  `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional, `gitleaks` optional (#49, the secret scan of
-  a run's commits; never installed by a run). Inside runs the engine refreshes PATH
-  (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).
-  A shell opened outside the app may still lack it on PATH.
+  `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional, `gitleaks` optional (#49, a run's secret
+  scan; a run never installs it). Inside runs the engine refreshes PATH (`refreshWindowsPath`), so agents
+  call bare `gh`/`glab` (see [capabilities.md](capabilities.md)). A shell opened outside the app may still lack it on PATH.
 - macOS and Linux (#316): `resolveCommand` (`packages/engine/engine/providers.js`) returns the absolute path
   of an executable file on PATH or in the known folders (`~/.local/bin`, `~/.grok/bin`,
   `~/.npm-global/bin`, the `~/.npmrc` prefix, `/opt/homebrew/bin`, `/usr/local/bin`), else `null`
