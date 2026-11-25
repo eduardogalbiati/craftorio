@@ -198,7 +198,7 @@ function writerReviewer() {
 }
 
 // ---------- wf-<name>: a bundled workflow's stages, steps and the transitions between stages ----------
-const NO_MODEL = new Set(['suite', 'check', 'test_ids', 'screenshots', 'project_map', 'refactor_proposals', 'release_version']);
+const NO_MODEL = new Set(['suite', 'check', 'test_ids', 'screenshots', 'project_map', 'refactor_proposals', 'release_version', 'secret_scan']);
 function stepKind(step, fragments) {
   const body = step.fragment ? (fragments[step.fragment] || {})[step.id] || {} : {};
   const type = step.type || body.type;

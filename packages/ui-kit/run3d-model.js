@@ -53,6 +53,8 @@
     if (o.kind === 'suite' || o.kind === 'test_ids') return ['pass', 'not_run'].includes(o.status) ? 'done' : 'failed'; // #71: a project with no tests
     // #404: the rule checks, skipped when the project has none
     if (o.kind === 'check') return o.status === 'fail' ? 'failed' : 'done';
+    // #49: a finding, or a gitleaks that failed
+    if (o.kind === 'secret_scan') return ['fail', 'error'].includes(o.status) ? 'failed' : 'done';
     if (o.results) return Object.values(o.results).some((r) => r && r.verdict && r.verdict !== 'approved') ? 'changes' : 'done';
     if (o.verdict) return o.verdict === 'not_verified' ? 'failed' : 'done';
     if (o.tests_status) return o.tests_status === 'pass' ? 'done' : 'failed';
