@@ -35,8 +35,9 @@ const { createServer } = require('../../server');
 // promote, compare, variants, flows, export and attach; #836: mockups:freeze, mockups:crops, mockups:review
 // and mockups:recreate; #837: mockups:storybook, mockups:export-repo, mockups:figma-import and mockups:live-link;
 // #568: triggers:status; #30: onboarding:install-deps; #35: backlog:create-issue, backlog:update-issue,
-// backlog:close-issue and backlog:file-local for the local backlog of a project with no remote).
-const MAIN_CONTRACT = '23685fd36e2c';
+// backlog:close-issue and backlog:file-local for the local backlog of a project with no remote;
+// #74: architecture:estimate takes `others`).
+const MAIN_CONTRACT = '85bd9fb597df';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;
