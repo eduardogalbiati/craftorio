@@ -14,11 +14,15 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
-const { Given, Then } = require('../../../../features/steps/fixtures');
+const { Given, When, Then } = require('../../../../features/steps/fixtures');
 
 const LOAD_TIMEOUT = 30000;
 const MIN = 6e4;
 const WORKFLOW = 'ai-development-local-hero';
+const ORCHESTRATOR = {
+  id: 'orchestrator', agent: 'orchestrator', provider: 'engine', model: 'engine', effort: null, parent_id: null, step_id: null, turns: 0,
+  tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, cost_usd: 0, status: 'success', provider_session_id: null, cwd: null,
+};
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // A finished simulated AI Development run of the demo project, two days back (the run list reads the
@@ -33,7 +37,9 @@ function writeRun(run) {
   const at = (m) => new Date(run.start + m * MIN).toISOString();
   const end = run.turns.length * 10 + 1;
   const events = [
-    { ts: at(0), type: 'workflow.started', workflow: WORKFLOW, file: `${WORKFLOW}.yaml`, project_id: run.projectId, mock: true, inputs: { task: run.task }, steps: run.turns.map((t) => ({ id: t.step, type: 'agent', agent: t.session.agent })) },
+    { ts: at(0), type: 'workflow.started', workflow: WORKFLOW, file: `${WORKFLOW}.yaml`, project_id: run.projectId, mock: !run.real, inputs: { task: run.task }, steps: run.turns.map((t) => ({ id: t.step, type: 'agent', agent: t.session.agent })) },
+    // #72: the engine's own session, whose card on the Run screen carries the run's total cost
+    ...(run.real ? [{ ts: at(0), type: 'session.opened', session_id: ORCHESTRATOR.id, session: { ...ORCHESTRATOR, status: 'running' } }] : []),
     ...run.turns.flatMap((t, i) => {
       const from = at(i * 10 + 1);
       const to = at(i * 10 + 10);
@@ -51,7 +57,8 @@ function writeRun(run) {
   fs.mkdirSync(run.dir, { recursive: true });
   fs.writeFileSync(path.join(run.dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
   fs.writeFileSync(path.join(run.dir, 'summary.json'), JSON.stringify({
-    run_id: run.runId, workflow: WORKFLOW, project_id: run.projectId, mock: true, inputs: { task: run.task }, status: 'success', started_at: at(0), finished_at: at(end), duration_ms: end * MIN, sessions: run.turns.map((t) => t.session),
+    run_id: run.runId, workflow: WORKFLOW, project_id: run.projectId, mock: !run.real, inputs: { task: run.task }, status: 'success', started_at: at(0), finished_at: at(end), duration_ms: end * MIN,
+    sessions: [...(run.real ? [ORCHESTRATOR] : []), ...run.turns.map((t) => t.session)],
   }, null, 2));
 }
 
@@ -125,4 +132,85 @@ Then('the cost of the run\'s {string} session has no estimate mark', async ({ e2
   await expect(cost(e2e.window, agent)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(note(e2e.window, agent)).toHaveCount(0);
   await expect(cost(e2e.window, agent)).not.toContainText(/estimated from tokens|no price/i);
+});
+
+// ---- #72: a run's total never counts an unknown cost as zero, and is the same on every screen -----------
+// A real run for the app (mock: false: Usage leaves simulated runs out), only read back from its files;
+// nothing is started. NEW data-testids:
+//   run-list-cost     the cost of a run's row in Workflows › Runs (with its mark)
+//   run-total-cost    also the total cost on the Run screen's orchestrator card (the list's total row has it)
+//   usage-run-cost    the cost cell of a row of Usage › Recent runs; the row: usage-run, data-run="<run id>"
+//   usage-month-cost  the month cost of a CLI's card on Usage (.usage-card[data-provider])
+// A total that includes an unknown cost says so in its visible text: "at least" or "≈".
+const MARK = /≈|at least/i;
+const CENT = 0.005;
+
+Given('the demo project has a finished real run {string}', async ({ e2e }, suffix) => {
+  const start = Date.now() - 45 * MIN;
+  const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-101500-${suffix}`;
+  e2e.costRun = {
+    runId, start, real: true, projectId: e2e.project.id, task: `A real run with Claude turns and their costs (${suffix})`,
+    dir: path.join(e2e.scratch, 'workspace', 'runs', runId), turns: [],
+  };
+  writeRun(e2e.costRun);
+});
+
+// where the run's total shows
+const runRow = (page, runId) => page.locator(`[data-testid="run-list-row"][data-run="${runId}"]`).filter({ visible: true }).first();
+const PLACES = {
+  'the run list': (page, runId) => runRow(page, runId).getByTestId('run-list-cost'),
+  'the run\'s sessions table': (page, runId) => runRow(page, runId).getByTestId('run-total-cost'),
+  'the Run screen': (page) => page.locator('[data-testid="run-session-card"][data-agent="orchestrator"]').filter({ visible: true }).getByTestId('run-total-cost'),
+  Usage: (page, runId) => page.locator(`[data-testid="usage-run"][data-run="${runId}"]`).filter({ visible: true }).getByTestId('usage-run-cost'),
+};
+function place(e2e, name) {
+  if (!PLACES[name]) throw new Error(`no cost place "${name}" (known: ${Object.keys(PLACES).join(', ')})`);
+  return PLACES[name](e2e.window, seeded(e2e).runId).first();
+}
+// the US$ amount of a text ("≈ $1.17", "at least $0.9300"), NaN without one
+const amountOf = (text) => Number((/\$\s*([\d,]+(?:\.\d+)?)/.exec(text) || [])[1]?.replace(/,/g, '') ?? NaN);
+
+Then('the run\'s total cost in {string} is marked as incomplete or approximate', async ({ e2e }, name) => {
+  const el = place(e2e, name);
+  await expect(el).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(el).toContainText(MARK, { timeout: LOAD_TIMEOUT });
+});
+
+When('I note the run\'s total cost in {string}', async ({ e2e }, name) => {
+  const el = place(e2e, name);
+  await expect(el).toContainText(/\$\s*\d/, { timeout: LOAD_TIMEOUT });
+  e2e.notedCost = amountOf(await el.innerText());
+});
+
+Then('the run\'s total cost in {string} is the noted one', async ({ e2e }, name) => {
+  expect(e2e.notedCost, 'a run total was noted before').toBeGreaterThan(0);
+  const el = place(e2e, name);
+  await expect(el).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(async () => Math.abs(amountOf(await el.innerText()) - e2e.notedCost), { timeout: LOAD_TIMEOUT }).toBeLessThan(CENT);
+});
+
+// Usage's month cost of Claude Code, the provider of every direct call
+const monthCost = (page) => page.locator('.usage-card[data-provider="claude"]').filter({ visible: true }).getByTestId('usage-month-cost');
+
+When('I note the month cost of Claude Code in Usage', async ({ e2e }) => {
+  await expect(monthCost(e2e.window)).toContainText(/\$\s*\d/, { timeout: LOAD_TIMEOUT });
+  e2e.notedMonth = amountOf(await monthCost(e2e.window).innerText());
+});
+
+// <workspace>/backlog/product-owner.usage.jsonl: one line per real call (product-owner.js recordUsage)
+When('a Product Owner call costs {float}', async ({ e2e }, usd) => {
+  const dir = path.join(e2e.scratch, 'workspace', 'backlog');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(path.join(dir, 'product-owner.usage.jsonl'), `${JSON.stringify({
+    ts: new Date().toISOString(), agent: 'product-owner', projectId: e2e.project.id, provider: 'claude', model: 'claude-opus-5-5',
+    tokens: { input: 900, output: 400, cache_read: 0, cache_write: 0 }, costUsd: usd, sessionId: 'po-issue-72', session: 'fresh', startReason: 'one-shot',
+  })}\n`);
+});
+
+Then('the month cost of Claude Code in Usage grew by {float}', async ({ e2e }, usd) => {
+  const before = e2e.notedMonth;
+  expect(before, 'the month cost was noted before').toBeGreaterThanOrEqual(0);
+  await expect(monthCost(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // the card may round each total to the cent: one cent of tolerance
+  await expect.poll(async () => Math.abs(amountOf(await monthCost(e2e.window).innerText()) - before - usd), { timeout: LOAD_TIMEOUT }).toBeLessThan(0.011);
 });

@@ -276,6 +276,51 @@ Feature: Runs and gates
     Then the cost of the run's "developer" session does not show "2.84"
     And the cost of the run's "developer" session is marked "no price for claude-haiku-5-5" because "Claude Code 2.3.1 does not know claude-haiku-5-5"
 
+  # ---- #72: a run's total never counts an unknown cost as zero ------------------------------------
+  # Real runs for the app (mock: false), only read back from their files; "at least" or "≈" marks a
+  # total that includes an unknown cost. The amount itself is not pinned, only that it is one amount.
+
+  @issue-72
+  Scenario: A run with a turn of unknown cost marks its total, in the run list and on the Run screen
+    Given the app is open
+    And the demo project has a finished real run "unk00072"
+    And its "developer" turn ran on the known model "claude-opus-5-5" at 0.93
+    And its "reviewer" turn ran on "claude-unknown-9", a model Claude Code "2.1.316" does not know and has no price for, while the CLI said 0.24
+    When I open "Runs" in the sidebar
+    And I search the runs for "unk00072"
+    Then the run's total cost in "the run list" is marked as incomplete or approximate
+    When I open the row of the run "unk00072" in the list
+    Then the cost of the run's "reviewer" session is marked "no price for claude-unknown-9" because "Claude Code 2.1.316 does not know claude-unknown-9"
+    And the cost of the run's "developer" session has no estimate mark
+    And the run's total cost in "the run's sessions table" is marked as incomplete or approximate
+    When I view the run "unk00072" from the list
+    Then the run's total cost in "the Run screen" is marked as incomplete or approximate
+
+  @issue-72
+  Scenario: The run list, the Run screen and Usage give the same cost for a run with a turn of unknown cost
+    Given the app is open
+    And the demo project has a finished real run "one00072"
+    And its "developer" turn ran on the known model "claude-opus-5-5" at 0.93
+    And its "reviewer" turn ran on "claude-unknown-9", a model Claude Code "2.1.316" does not know and has no price for, while the CLI said 0.24
+    When I open "Runs" in the sidebar
+    And I search the runs for "one00072"
+    And I note the run's total cost in "the run list"
+    And I view the run "one00072" from the list
+    Then the run's total cost in "the Run screen" is the noted one
+    When I open "Usage" in the sidebar
+    Then the run's total cost in "Usage" is the noted one
+    And the run's total cost in "Usage" is marked as incomplete or approximate
+
+  @issue-72
+  Scenario: A Product Owner call is in Usage's month cost
+    Given the app is open
+    When I open "Usage" in the sidebar
+    And I note the month cost of Claude Code in Usage
+    And a Product Owner call costs 0.37
+    And I reload the app
+    And I open "Usage" in the sidebar
+    Then the month cost of Claude Code in Usage grew by 0.37
+
   # ---- #368: pause a run after the current agent turn, resume from there ----------------------------
   # The simulated turns are slowed down here (a turn of about 15 to 30 s) so the pause lands while an
   # agent works; the agent finishes its turn, then the run ends with the status "paused".
