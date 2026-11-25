@@ -1532,9 +1532,13 @@ steps:
         status: failed
       - when: "choice == 'rescan'"
         goto: secret_scan
+      # a gate answered by its first choice must not loop forever (as check_environment)
       - when: "true"
         goto: develop
         set: { secret_returns: "0" }
+        max_visits: 3
+        on_exhausted: end
+        status: failed
 
   - id: secret_scan_error
     fragment: secret-scan-pipeline
