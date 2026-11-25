@@ -28,3 +28,12 @@ to the build and the merge without the gate. A failure in the change always open
 reaches the build without a green suite (the policy, or your Continue at the gate) shows a **Not
 tested green** badge on the Run screen and in its chat, `tested: "not green"` with the failures in
 its `summary.json`, and its build and verification prompts get the failures.
+
+A project with no tests (#71): no test command is found and the project has no test file, so there is
+nothing to run. The suite ends **not run: the project has no tests** and the run goes on without
+`test_failed` (Feature) or `verify_failed` (Fix), with `tested: "no tests"` in its `summary.json`. The
+Run screen, its chat, the roadmap item, the pull request's text and the base check say **Not tested:
+the project has no tests**, never Not tested green. The input **A project with no tests**
+(`no_tests`) set to *Ask* keeps the gate. A project that has test files and no known command always
+asks: set `test_command`. When the supervisor on call answers a gate itself, the Run screen and the
+chat say so, with the answer; it is told the gate's own recommendation and says why when it differs.

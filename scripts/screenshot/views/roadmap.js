@@ -206,13 +206,14 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false, prOpen = false } = {
   }));
   const now = Date.now();
   // a run that merged, `k` times the usual path's time and cost
-  const merged = (start, k, runId) => {
+  const merged = (start, k, runId, extra = {}) => {
     const steps = PATH.map(([s, m]) => [s, Math.round(m * k)]);
     const { lines, end } = events(start, steps, null);
     // #614: merged into the local main, so the pipeline's Merge station reads done
     write(runId, [...lines, ev(end, 'workflow.finished', { status: 'success' })], {
       status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps), sessions: sessionsOf(steps, k),
       local_merge: { branch: `feat/${runId.slice(-8)}`, base: 'main', commit: runId.replace(/\D/g, '').padEnd(40, 'a') },
+      ...extra,
     });
     return runId;
   };
@@ -237,7 +238,8 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false, prOpen = false } = {
   const stamp = (m) => new Date(now - m * min).toISOString().slice(0, 10).replace(/-/g, '');
   // #215: tonight's two runs that already merged: one cheaper and faster than estimated (green),
   // one far over (red)
-  const better = merged(now - 300 * min, 0.6, `${stamp(300)}-190000-run00009`);
+  // #71: the first one's project had no tests (its card says so)
+  const better = merged(now - 300 * min, 0.6, `${stamp(300)}-190000-run00009`, { tested: 'no tests', tested_failures: [] });
   const worse = merged(now - 420 * min, 1.8, `${stamp(420)}-170000-run00012`);
   const running = `${stamp(52)}-230500-run00016`;
   const waiting = `${stamp(95)}-221500-run00015`;

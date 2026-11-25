@@ -217,7 +217,8 @@ const methods = {
     const retryStep = steps.includes(prev) ? prev : null;
     // answers: what the supervisor may recommend to the person (#213), the gate's buttons
     const answers = step.choices ? step.choices.map((c) => c.id) : ['approve', 'reject'];
-    const gate = { message: render(step.message, this.ctx).trim(), routes, answers, transitions, decision };
+    // recommend (#71): the gate's own advice, so the supervisor agrees with it or says why not
+    const gate = { message: render(step.message, this.ctx).trim(), recommend: this.gateText(step, step.recommend), routes, answers, transitions, decision };
     const actions = decision ? supervisor.ESCALATION_ACTIONS.filter((a) => a !== 'route') : supervisor.ESCALATION_ACTIONS;
     const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions });
     if (!d) return null;

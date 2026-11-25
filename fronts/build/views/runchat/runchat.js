@@ -189,7 +189,7 @@
   // and timeout, the counts, the first failures, why it waits; the tail of its log one click away
   // (api.runLogTail, followed while it runs) and the whole log in a log terminal (termAction, #465)
   const ORCH_PILL = { running: 'pill-running', waiting: 'pill-warn', passed: 'pill-success', failed: 'pill-failed' };
-  const orchState = (s) => ({ running: t('runchat.orch_running'), waiting: t('runchat.orch_waiting'), passed: t('runchat.orch_passed'), failed: t('runchat.orch_failed') })[s] || esc(s);
+  const orchState = (s) => ({ running: t('runchat.orch_running'), waiting: t('runchat.orch_waiting'), passed: t('runchat.orch_passed'), failed: t('runchat.orch_failed'), not_run: t('runchat.orch_not_run') })[s] || esc(s);
   const orchLive = (it) => it.state === 'running' || it.state === 'waiting';
   // a step still open in a run nobody runs any more (#288) stopped at its last event
   const orchElapsed = (it) => (it.finishedAt ? it.durationMs ?? Date.parse(it.finishedAt) - Date.parse(it.startedAt)
@@ -242,8 +242,12 @@
   }
 
   // #396: the end's pill of a run that went on without a green suite (the event's summary, else its row's `tested`)
-  const testedPill = (it) => ((it.tested || chat.tested) === 'not green'
-    ? ` <span class="pill pill-warn" data-testid="runchat-tested" title="${t('runchat.the_run_reached_the_build_without')}">${t('runchat.not_tested_green')}</span>` : '');
+  // (#71: or with nothing to test, a neutral pill)
+  const TESTED = {
+    'no tests': () => ` <span class="pill" data-testid="runchat-tested" title="${esc(t('runchat.no_tests_tip'))}">${t('runchat.no_tests')}</span>`,
+    'not green': () => ` <span class="pill pill-warn" data-testid="runchat-tested" title="${t('runchat.the_run_reached_the_build_without')}">${t('runchat.not_tested_green')}</span>`,
+  };
+  const testedPill = (it) => TESTED[it.tested || chat.tested]?.() || '';
 
   const SUP_WHAT = { retry:'Asked for a new attempt.', fix_output: 'Fixed the answer so the run can continue.', ask_human: 'Needs you: see the gate below.', fail: 'Could not recover this step.' };
   // the run's first message: its workflow, task, inputs, the run it resumes and its issues
@@ -255,6 +259,14 @@
       ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : `<p class="muted small">${t('runchat.no_task')}</p>`}
       ${inputs.length ? `<details class="rc-more"><summary>${t('runchat.inputs')}</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
       </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>${t('runchat.resumed_from_run_id_at', { run_id: esc(it.resumedFrom.run_id) })} <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
+  }
+
+  // a supervisor's decision; #71: the answer it gave a gate by itself
+  function supervisorHtml(it) {
+    return `<div class="duo-msg supervisor" data-item="${it.id}">${avatar({ agent: 'supervisor' })}<div class="duo-bubble">
+      <div class="duo-meta"><b>${t('runchat.supervisor')}</b>${stepTag(it.stepId)}<span class="tag">${esc(it.action)}${it.goto ? ` → ${esc(it.goto)}` : ''}${it.causeClass ? ` · ${esc(it.causeClass)}` : ''}</span><span class="time">${clock(it.ts)}</span></div>
+      <p class="duo-msg-text">${esc(it.explanation)}</p>${it.instruction ? `<p class="duo-msg-text">${esc(it.instruction)}</p>` : ''}
+      ${it.answered ? `<p class="muted small" data-testid="runchat-gate-answered">${esc(t('runchat.supervisor_answered_gate', { answer: it.answered }))}</p>` : ''}${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
   }
 
   function itemHtml(it) {
@@ -272,10 +284,7 @@
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? t('runchat.you') : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
-      case 'supervisor': return `<div class="duo-msg supervisor" data-item="${it.id}">${avatar({ agent: 'supervisor' })}<div class="duo-bubble">
-        <div class="duo-meta"><b>${t('runchat.supervisor')}</b>${stepTag(it.stepId)}<span class="tag">${esc(it.action)}${it.goto ? ` → ${esc(it.goto)}` : ''}${it.causeClass ? ` · ${esc(it.causeClass)}` : ''}</span><span class="time">${clock(it.ts)}</span></div>
-        <p class="duo-msg-text">${esc(it.explanation)}</p>${it.instruction ? `<p class="duo-msg-text">${esc(it.instruction)}</p>` : ''}
-        ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
+      case 'supervisor': return supervisorHtml(it);
       case 'end': {
         const ok = it.status === 'success';
         const tested = testedPill(it);

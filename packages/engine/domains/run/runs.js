@@ -144,7 +144,7 @@ const firstText = (inputs) => {
 // The issues recorded in an upgraded workflow.started / summary.json; null when there are none.
 const issuesOf = (rec) => (rec?.issues?.length ? rec.issues : null);
 
-// #396: { tested: 'not green' when the run went on without a green suite, testedFailures: [{ step,
+// #396: { tested: 'not green' when the run went on without a green suite ('no tests', #71: the project has none), testedFailures: [{ step,
 // test, file, class, class_reason }] of the red suite steps } (null: tested green, or no suite)
 const testedOf = (summary) => ({ tested: summary?.tested || null, testedFailures: summary?.tested_failures || null });
 

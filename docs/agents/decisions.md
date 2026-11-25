@@ -197,6 +197,9 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   agent: with the policy on it does not open for failures outside the change; the supervisor, the
   Oracle and the Night watch never change the input of a run in progress. A timed-out round is
   checked like a failure (the files still running rerun alone, on the branch and on the base).
+  #71: a project with no test command and no test file is not a failure: feature and fix go on,
+  reported as not tested because the project has no tests (input `no_tests: continue | ask`, default
+  `continue`); test files with no known command still open the gate.
   Why: a flaky or hanging test the change never touched held the roadmap for hours at the gate (#386).
   #395: the roadmap can move on past an item or a stage without answering its human
   gate ("Move on": the item is `parked`, which counts as finished for its stage, and the next stage

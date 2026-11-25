@@ -14,6 +14,7 @@
 // snapshot (a change the agent reverted, or a file that was already dirty and stayed so, is fine).
 // A merge-conflict resolution is not a change either (#380): a file that only combines the branch's
 // and the base's versions (`combinesBothSides`), or a conflict still left to resolve (unmerged).
+// `folderHasTests` (#71): whether a project has any test file (the suite step, the base check).
 
 const fs = require('fs');
 const path = require('path');
@@ -52,6 +53,16 @@ const localChanges = async (root, { relative = false, timeout } = {}) => [...new
   ...lines(await git([...G, 'diff', '--name-only', ...(relative ? ['--relative'] : []), 'HEAD'], root, { timeout })),
   ...lines(await git([...G, 'ls-files', '--others', '--exclude-standard'], root, { timeout })),
 ])];
+
+// #71: whether a file list (an array, or git ls-files' text) has a test file
+const hasTestFiles = (files, patterns) => [files].flat().flatMap(lines).some(testMatcher(patterns));
+
+// #71: whether the folder has a test file, committed or new (ignored ones out); null: git cannot list it
+async function folderHasTests(dir, patterns) {
+  try {
+    return hasTestFiles(await git([...G, 'ls-files', '--cached', '--others', '--exclude-standard'], dir), patterns);
+  } catch { return null; }
+}
 
 // file → blob id of its content in the working tree (null when it does not exist)
 async function workingBlobs(root, files) {
@@ -218,7 +229,9 @@ async function combinesBothSides(root, head, bases, file) {
 module.exports = {
   changedTestFiles,
   existingRefs,
+  folderHasTests,
   globToRegExp,
+  hasTestFiles,
   localChanges,
   snapshot,
   testMatcher,

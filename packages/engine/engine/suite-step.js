@@ -38,7 +38,7 @@
 // change) and `class_reason` from the import graph (affected-tests.js classifyFailures, changedFiles();
 // without changedFiles, no class); `in_change` / `outside_change` count them, for a workflow's policy
 // on a suite red only outside the change.
-// Output: { kind: 'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms,
+// Output: { kind: 'suite', status: pass | fail | blocked | not_run (#71, suite-no-command.js), round, command, log, exit_code, duration_ms,
 // timed_out, timeout_ms, running, alone, failures, preexisting, preexisting_failures, base_check,
 // in_change, outside_change, reason, message }. `blocked`: the suite could not run (no worktree, no
 // command found, the command not found, or #400 the shell refused the command line: the log's last
@@ -49,7 +49,7 @@
 // default pass) is pass | fail | preexisting (only the run's pre-existing failures fail: a pass) |
 // base (the failures fail on the simulated base too: a pass) | mixed (2 failures, one on the base:
 // a fail with 1 failure) | outside (#396: a failure in test/simulated-outside.test.js, outside the
-// change, passing on the simulated base: a fail) | blocked, and a simulated log is written. A
+// change, passing on the simulated base: a fail) | blocked | not_run, and a simulated log is written. A
 // simulated failure is in the change, except those of test/simulated-outside.test.js.
 // `isFullSuiteCommand` tells the engine an agent started the whole suite itself (a warn, #177).
 // Affected tests (#212): with `files`, only those test files run (`scope: files`, the step's
@@ -83,6 +83,7 @@ const {
 } = require('./suite-command-line');
 const { saveCoverage } = require('../domains/evidence/coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
+const { suiteWithoutCommand } = require('./suite-no-command'); // #71
 const { excusedOnBase } = require('./suite-last-green');
 const {
   processTreeCommands,
@@ -764,7 +765,7 @@ function writeLogHeader(logFile, out, { mock, childEnv, timeoutWhy, baseCommit, 
 // (base-health-store confirmedFailures); as a list, a failure that fails on the base too is pre-existing
 // only when it is listed there, else it counts as the run's own. null: every one is pre-existing (#211).
 // lastGreenBase (#736): async () => { dir, commit }, the base's last green commit: a failure red there too stays pre-existing.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, lastGreenBase = null, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests, stepId = null }) {
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, lastGreenBase = null, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null, testWorkers = null, sweep = true, platform = process.platform, baseCommit = null, slot = null, onLog = null, logPrefix = '', passthrough = [], confirmedOnBase = null, wholeTests, stepId = null, testsPaths = undefined }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -777,14 +778,14 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const classes = out.in_change != null ? ` (${[out.in_change ? `${out.in_change} ${IN_CHANGE}` : '', out.outside_change ? `${out.outside_change} ${OUTSIDE_CHANGE}` : ''].filter(Boolean).join(', ')})` : '';
     out.message = out.status === 'pass' ? `${what()} passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
       : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${classes}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
-        : `The suite could not run: ${out.reason}`;
+        : out.status === 'not_run' ? `The suite was not run: ${out.reason}.` : `The suite could not run: ${out.reason}`;
     return out;
   };
   out.command = String(command || '').trim() || (mock ? 'npm test' : detectTestCommand(cwd));
   if (!mock) {
     if (!runDir) out.reason = 'the run has no folder';
     else if (!cwd || !fs.existsSync(cwd)) out.reason = 'the run has no worktree to test';
-    else if (!out.command) out.reason = 'no test command: set the workflow\'s test_command input (none found in package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)';
+    else if (!out.command) Object.assign(out, await suiteWithoutCommand(cwd, testsPaths));
     if (out.reason) return finish();
   }
   const hist = history?.file && history.project ? { file: history.file, key: `${history.project}\n${out.command}` } : null;
@@ -818,6 +819,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const t0 = Date.now();
   let text = '';
   if (mock) {
+    if (mockResult === 'not_run') { Object.assign(out, { status: 'not_run', reason: 'the project has no tests' }); return finish(); }
     if (mockResult === 'blocked') { out.reason = '(simulated) the test command was not found'; return finish(); }
     await e2eSuiteDelay(stepId, signal);
     const r = mockSuite(mockResult, preexisting);

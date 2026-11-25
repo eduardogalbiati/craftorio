@@ -28,7 +28,9 @@ orchestrator:
     "Resume from <step>" at the step it names instead of Retry, and still waits for the person;
   - `fail`: fall back to `on_error`, or end the run.
   It shows up as a `supervisor` session, and its decisions in the orchestrator log
-  (`supervisor.decision` events).
+  (`supervisor.decision` events). A gate the supervisor on call answered itself (#71) says so on the
+  Run screen and in the run's chat, with the answer; it knows the gate's own recommendation and says
+  why when it advises another answer.
 - **When a transition's action fails** (a merge, a deploy command, or the engine's check right
   before a merge), on a transition with `on_error` and `recover: [steps]`: the supervisor gets the
   error and the PR/MR state and either sends the run back to one of those steps with an instruction

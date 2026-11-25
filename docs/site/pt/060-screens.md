@@ -112,4 +112,6 @@ O workspace, as CLIs e suas contas, preferências de execução, idioma, entrada
 
 A primeira abertura de um workspace: o estado das CLIs, o modo simulação, os workflows que este computador consegue rodar, um primeiro projeto.
 
+Um projeto novo só com o README não tem testes, e tudo bem: a primeira run não para por isso. A suíte fica registrada como não executada porque o projeto não tem testes, e a run, o item do roadmap, o pull request e a checagem da base dizem **Não testado: o projeto não tem testes**. Para ser perguntado, escolha *Perguntar* em *Projeto sem testes* ao iniciar a run. Quando o projeto já tem arquivos de teste, uma run que não encontra o comando para rodá-los pede o comando de teste a você.
+
 ![Setup](../assets/screens/setup.jpg "Setup")

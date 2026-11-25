@@ -88,6 +88,7 @@ module.exports = (ctx) => {
         status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate, atGate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
+        tested: r.tested || null, // #71: 'no tests' / 'not green' (#396)
         // #614: the commit the run merged (the card's Merge station is done with it); #797: or its PR did
         mergedCommit: r.localMerge?.commit || r.outputs?.merged_commit || x.mergedCommit || null,
       };
@@ -113,7 +114,7 @@ module.exports = (ctx) => {
           const mode = x.status === 'waiting_merge' ? { effectiveMode: itemMode(projectId, x) } : {};
           // #702: the work item (docs/work/<item>/) and its plan's status, for Start Test on a built plan
           const sdlc = sdlcOf(folder, x);
-          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn, ...mode, ...(sdlc ? { sdlc } : {}) };
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}), ...(run?.tested ? { tested: run.tested } : {}), ...(earlier.length ? { runHistory: earlier } : {}), ...stackedOn, ...mode, ...(sdlc ? { sdlc } : {}) };
         }),
       })),
     }, list, { issues: known, prices });

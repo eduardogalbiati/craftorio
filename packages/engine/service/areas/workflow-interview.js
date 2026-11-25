@@ -36,6 +36,7 @@ const { checkCommand } = require('../../engine/check-step');
 const { detectLanguage } = require('../../domains/project/project-inputs');
 const { detectE2eCommand, projectFacts } = require('../../domains/project/project-run-defaults');
 const { detectTestCommand } = require('../../engine/suite-step');
+const { hasTestFiles } = require('../../engine/test-paths');
 const { firstBuild } = require('@craftorio/shared/default-workflow');
 const { loadWorkflow } = require('../../engine/workflow');
 const {
@@ -44,7 +45,6 @@ const {
   readManifest,
 } = require('../../domains/project/project-manifest');
 const { inProjectDir } = require('@craftorio/shared/project-dir');
-const { TESTS_PATHS, globMatcher } = require('@craftorio/shared/globs');
 const { clientError } = require('../common');
 
 const SEED_ID = 'ways-of-working';
@@ -96,10 +96,6 @@ function landingOf({ merges, mergers, straight, root, personOf }) {
     - (mergedBy.has(personOf.get(str(root))) ? 1 : 0);
   return { mode: own >= merges ? 'local' : 'remote', ownerStraightCommits: Math.max(0, own) };
 }
-
-// #844: any tracked file a test pattern matches (packages/shared/globs.js TESTS_PATHS)
-const TEST_FILE = TESTS_PATHS.map(globMatcher);
-const hasTestFiles = (files) => String(files || '').split('\n').some((f) => f && TEST_FILE.some((m) => m.test(f)));
 
 // The profile of a simulated analysis: what git and the project's files tell without a model; no release style.
 // #781: onGit({ commits, merges, tags, authors }) once git answered, before the files are read

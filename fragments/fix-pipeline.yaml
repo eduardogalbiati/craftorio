@@ -43,7 +43,7 @@ steps:
       {% endif %}{% else %}Back on your fix:
       {% if steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
       {% for f in steps.code_review.output.findings %}- {{ f }}
-      {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status != 'pass' %}The test suite failed: {{ steps.suite.output.message }}
+      {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status not in ['pass', 'not_run'] %}The test suite failed: {{ steps.suite.output.message }}
       {% endif %}{% if steps.e2e.output and steps.e2e.output.status != 'pass' %}The E2E suite failed: {{ steps.e2e.output.message }}
       {% endif %}{% if steps.verify_change.output and steps.verify_change.output.verdict == 'not_verified' %}The verifier could not confirm the fix: {{ steps.verify_change.output.evidence }}
       {% endif %}Fix it.{% endif %}

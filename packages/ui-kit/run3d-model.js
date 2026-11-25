@@ -49,7 +49,7 @@
   /** How a step ended, from its output: done, failed or changes (a reviewer asked for changes). */
   function outcome(o) {
     if (!o || typeof o !== 'object') return 'done';
-    if (o.kind === 'suite' || o.kind === 'test_ids') return o.status === 'pass' ? 'done' : 'failed';
+    if (o.kind === 'suite' || o.kind === 'test_ids') return ['pass', 'not_run'].includes(o.status) ? 'done' : 'failed'; // #71: a project with no tests
     // #404: the rule checks, skipped when the project has none
     if (o.kind === 'check') return o.status === 'fail' ? 'failed' : 'done';
     if (o.results) return Object.values(o.results).some((r) => r && r.verdict && r.verdict !== 'approved') ? 'changes' : 'done';
@@ -64,6 +64,7 @@
   function noteOf(o) {
     if (!o || typeof o !== 'object') return one(o);
     if (o.kind === 'suite') {
+      if (o.status === 'not_run') return String(o.message || 'not run');
       const counts = o.passed == null && o.failed == null ? `${o.status || 'ran'}${(o.failures || []).length ? `, ${o.failures.length} failure(s)` : ''}` : `${o.passed ?? 0} passed, ${o.failed ?? 0} failed`;
       return `${counts} (${o.scope || 'suite'}): ${o.command || ''}`;
     }

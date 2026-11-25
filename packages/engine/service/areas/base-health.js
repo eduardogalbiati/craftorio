@@ -11,7 +11,8 @@
 // or failed check is a notice. #598: the check's checkout gets its dependencies before the suite (the
 // shared cache, else the project's own install, both in the check's log); a check that could not run
 // (`error`: the install failed, no test command, the runner crashed) is one engine log line naming the
-// reason and the log, and a "Base check could not run" notice, never an issue or a fix item. The fix item runs the project's default development workflow
+// reason and the log, and a "Base check could not run" notice, never an issue or a fix item; #71: with no
+// test file either it ends `no_tests`, without a notice. The fix item runs the project's default development workflow
 // (#413; #790: projects.projectDefaultWorkflow, the project's own, its manifest's or its first build
 // workflow, read each time, never a setting). A simulated run
 // never reaches here; the check itself runs the suite in simulation, never pushes.
@@ -46,6 +47,7 @@ const {
   takesFileList,
   TEST_FILES_ENV,
 } = require('../../engine/suite-command-line');
+const { folderHasTests } = require('../../engine/test-paths');
 
 module.exports = (ctx) => {
   // projectId -> the merge whose check a release deferred (the latest one: it checks the newest tip)
@@ -139,8 +141,10 @@ module.exports = (ctx) => {
     announce(project.id, { status: 'running', message: null, holder: null, commit: commit || null, log: logFile, startedAt: new Date().toISOString(), endedAt: null, failures: null, error: null });
     const command = detectTestCommand(cwd);
     if (!command) {
-      fs.appendFileSync(logFile, 'no test command found\n');
-      return { failures: [], log: '', error: 'no test command found' };
+      // #71: no test file either: nothing to run, not a failure
+      const noTests = await folderHasTests(cwd) === false;
+      fs.appendFileSync(logFile, noTests ? 'not run: the project has no tests\n' : 'no test command found\n');
+      return { failures: [], log: '', ...(noTests ? { noTests } : { error: 'no test command found' }) };
     }
     const depsError = await depsFor(project, { cwd, env, logFile });
     if (depsError) return { failures: [], log: '', error: depsError };

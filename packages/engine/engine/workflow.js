@@ -144,7 +144,8 @@ const testedFailures = (steps) => Object.entries(steps)
   .filter(([, s]) => s?.output?.kind === 'suite' && s.output.status === 'fail')
   .flatMap(([id, s]) => (s.output.failures || []).map((f) => ({ step: id, test: f.test, file: f.file || '', class: f.class || null, class_reason: f.class_reason || null })));
 // #396: summary.json's { tested, tested_failures } of a run that went on without a green suite (a
-// transition's `set: { tested: "not green" }`: the owner's policy or Continue at the gate), else {}
+// transition's `set: { tested: "not green" }`: the owner's policy or Continue at the gate; #71 "no tests":
+// the project has none), else {}
 const testedSummary = (ctx) => (ctx.vars?.tested ? { tested: ctx.vars.tested, tested_failures: testedFailures(ctx.steps) } : {});
 // the gates the supervisor on call tries first: an escalation, or one an exhausted loop leads to;
 // never a human_edit gate (#647), which only the person ends

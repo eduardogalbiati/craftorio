@@ -25,7 +25,7 @@
 //   re-run") and kept as a flaky sighting. A second round that throws or errors counts as red.
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
 // Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck, flaky }: #598,
-// lastCheck { commit, at, status green | red | error } is the last check that reached the base's
+// lastCheck { commit, at, status green | red | error | no_tests } is the last check that reached the base's
 // checkout, lastGreen the last green one, #613 flaky the sightings { test, file, commit, at }; a check
 // stopped before it, waiting for the slot or on a folder that is not a repository, records nothing); the logs and
 // issue bodies next to it, in <project id>/ (the store itself: packages/engine/engine/base-health-store.js, so
@@ -271,7 +271,7 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
 
 /**
  * The base check: the suite on a clean checkout of the local base tip; a red test files its issue
- * and, with onRed 'fix', a fix item. → { status: green | red | deferred | skipped | error, commit, issues, fixItem }
+ * and, with onRed 'fix', a fix item. → { status: green | red | deferred | skipped | error | no_tests (#71), commit, issues, fixItem }
  * #749: `skipped` (with `reason`, `commit` the tip) when the tip is the store's lastGreen commit or
  * the commits since it touch only files no test reads (UNTESTED); never for trigger 'not-green'.
  * `onStart` is called once the check holds the suite slot, or is about to skip (the service
@@ -285,7 +285,7 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
  * @param {string} ws the workspace root
  * @param {{ projectId: string, repo: string, base: string, platform?: string, ghRepo?: string,
  *   trigger?: string, onRed?: string, releaseHoldsBase?: () => boolean,
- *   runSuite: ({ cwd, env, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
+ *   runSuite: ({ cwd, env, commit }) => Promise<{ failures: object[], log?: string, error?: string, noTests?: boolean }>,
  *   rerunFiles?: ({ cwd, env, files, commit }) => Promise<{ failures: object[], log?: string, error?: string }>,
  *   slot?: { dir?: string, holder?: string, onWait?: Function, pollMs?: number },
  *   liveRunForIssues?: (issues: object[]) => object|null, load?: () => string[], onStart?: () => void,
@@ -368,6 +368,12 @@ function runBaseCheck(ws, opts) {
           checked('error');
           writeStore(ws, projectId, store);
           return { status: 'error', error: result.error, commit: info.commit, issues: [], fixItem: null };
+        }
+        // #71: the project has no tests: nothing was tested, so not green (lastGreen stays)
+        if (result?.noTests) {
+          checked('no_tests');
+          writeStore(ws, projectId, store);
+          return { status: 'no_tests', commit: info.commit, issues: [], fixItem: null };
         }
         // green: the known failures are fixed (their entries keep the issue, should the test go red again)
         checked('green');

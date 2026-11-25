@@ -5,7 +5,7 @@
 // tell; readLight: that state read with its key and mark; baseCheckHtml / baseCheckTerm: the "Base check since HH:MM · <commit>" line in the
 // roadmap header's activity band (#750) and its read-only log terminal ("View terminal", term-dock.js termAction);
 // statsHtml: the header's numbers band (#750) from RoadmapSummary.stats; activityHtml: its activity band (the base check, the
-// pause note, the known base failures, a done roadmap's disabled stages left out).
+// pause note, the known base failures, a done roadmap's disabled stages left out); testedHtml: an item's "no tests" badge (#71).
 // Uses app.js globals (esc, t).
 (() => {
   // the list drawn again with its item rows kept: when the same items are in the same stages and
@@ -77,8 +77,8 @@
         error: lr.error,
         stages: r.stages.map((s) => {
           const merged = s.items.map((x) => {
-            const { run, status, runId, runs, waiting, actualUsd, pr } = items.get(x.id);
-            return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd } : {}), ...(run ? { run: { ...x.run, ...run } } : {}), ...(pr ? { pr } : {}) };
+            const { run, status, runId, runs, waiting, actualUsd, pr, tested } = items.get(x.id);
+            return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd } : {}), ...(run ? { run: { ...x.run, ...run } } : {}), ...(pr ? { pr } : {}), ...(tested ? { tested } : {}) };
           });
           // #615: a live run's new cost moves the stage's total (its items' actualUsd summed)
           const actualUsd = window.RoadmapModel.stageActualUsd(merged) ?? s.actualUsd;
@@ -116,10 +116,14 @@
       : esc(c.status === 'waiting' ? t('backlog_roadmap.base_check_waiting')
         : c.status === 'green' ? t('backlog_roadmap.base_check_green', { commit })
           : c.status === 'red' ? t('backlog_roadmap.base_check_red', { count: c.failures ?? 0, commit })
-            : t('backlog_roadmap.base_check_failed', { error: c.error || '' }));
+            : c.status === 'no_tests' ? t('backlog_roadmap.base_check_no_tests', { commit }) // #71
+              : t('backlog_roadmap.base_check_failed', { error: c.error || '' }));
     const msg = termMsg?.key === `${c.commit}:${c.startedAt}` ? termMsg : null;
     return `<div class="rm-base-check rm-head-line small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="${busy ? 'rm-spin' : 'rm-head-mark'}" aria-hidden="true"></span><b>${t('backlog_roadmap.base_check')}</b> <span class="muted" title="${esc(c.commit || '')}">${text}</span><span class="spacer"></span><span class="muted${msg?.error ? ' error' : ''}" data-term-msg data-check="${esc(`${c.commit}:${c.startedAt}`)}">${esc(msg?.text || '')}</span><button class="btn sm ghost" type="button" data-term="base-check" title="${esc(t('backlog_roadmap.follow_the_base_check_log'))}">${t('backlog_roadmap.view_terminal')}</button></div>`;
   }
+  // #71: an item whose run tested nothing because the project has no tests
+  const testedHtml = (x) => (x.tested === 'no tests'
+    ? `<span class="badge" data-testid="roadmap-item-tested" title="${esc(t('backlog_roadmap.item_no_tests_tip'))}">${esc(t('backlog_roadmap.item_no_tests'))}</span>` : '');
   // #750: the header's numbers band (rm-head-stats) from RoadmapSummary.stats: four columns (Stages, Left, Forecast, Spent), each a
   // muted label, the value and a muted detail; "—" for an unknown value, the column always there. `minutes`: the view's time
   // format; `money`: the view's money format (the interface's locale, I18n.formatCost)
@@ -137,14 +141,14 @@
       col(t('backlog_roadmap.stat_spent'), s.spent ? money(s.spent.usd) : '—', t('backlog_roadmap.stat_so_far'), s.spent?.since ? t('backlog_roadmap.summary_spent_tip', { date: String(s.spent.since).slice(0, 10) }) : ''),
     ].join('')}</div>`;
   }
-  // #750: band 3 (rm-head-activity), only while a task runs or a warning shows ('' with nothing): the base check (a green one a
+  // #750: band 3 (rm-head-activity), only while a task runs or a warning shows ('' with nothing): the base check (a green one, or one with no tests, a
   // minute after it ended, since the engine keeps its last state; red or failed stays as a warning), then the amber lines: a pause
   // not from a failure (budget cap with its buttons, a stage run alone that ended, a release on hold; a failure is the error
   // alert, #270), the base's known failures (`failures`, the view's #405 list) and a done roadmap's open disabled stages (`offOpen`)
   const GREEN_CHECK_MS = 60 * 1000;
   function activityHtml(r, data, { clock, pausedByFailure, failures, offOpen }) {
     const bc = data?.baseCheck;
-    const check = bc?.status === 'green' && !(Date.now() - Date.parse(bc.endedAt || '') < GREEN_CHECK_MS) ? null : bc;
+    const check = ['green', 'no_tests'].includes(bc?.status) && !(Date.now() - Date.parse(bc.endedAt || '') < GREEN_CHECK_MS) ? null : bc;
     const night = r.budget?.period === 'night';
     const note = r.error && !pausedByFailure ? `<div class="${r.state === 'paused' ? 'warn-text' : 'error'} small rm-head-line">${esc(r.error)}${r.state === 'paused' && r.budget ? `<span class="spacer"></span><button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(t(night ? 'backlog_roadmap.budget_raise_night_tip' : 'backlog_roadmap.budget_raise_day_tip'))}">${t(night ? 'backlog_roadmap.raise_for_tonight' : 'backlog_roadmap.raise_for_today')}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(t(night ? 'backlog_roadmap.budget_ignored_night_tip' : 'backlog_roadmap.budget_ignored_day_tip'))}">${t('backlog_roadmap.resume_anyway')}</button>` : ''}</div>` : '';
     const leftOut = r.state === 'done' && offOpen ? `<div class="small muted rm-head-line" data-testid="roadmap-left-out">${t('backlog_roadmap.done_disabled_stages_left_out', { count: offOpen })}</div>` : '';
@@ -169,5 +173,6 @@
     patch,
     readLight,
     statsHtml,
+    testedHtml,
   };
 })();

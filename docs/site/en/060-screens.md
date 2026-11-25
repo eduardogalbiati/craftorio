@@ -112,4 +112,6 @@ The workspace, the CLIs and their accounts, execution preferences, language, voi
 
 The first run of a workspace: the CLIs' status, simulation mode, the workflows this computer can run, a first project.
 
+A new project with only a README has no tests, and that is fine: its first run does not stop for it. The suite is recorded as not run because the project has no tests, and the run, the roadmap item, the pull request and the base check say **Not tested: the project has no tests**. To be asked instead, set *A project with no tests* to *Ask* when you start the run. Once the project has test files, a run that finds no command to run them asks you for the test command.
+
 ![Setup](../assets/screens/setup.jpg "Setup")

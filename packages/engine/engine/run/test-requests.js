@@ -158,14 +158,14 @@ const methods = {
       env: { ...process.env, ...capabilities.agentEnv() }, passthrough: this.envPassthrough(), testWorkers: this.workers?.testWorkers, preexisting: this.preexisting, signal: this.abort.signal,
       base: () => this.suiteBase(), lastGreenBase: () => this.suiteLastGreenBase(root), baseCacheDir: path.join(root, 'cache', 'base-tests'),
       confirmedOnBase: this.confirmedOnBase(root),
-      files, selection: { mode: 'affected', files, reasons, why },
+      files, selection: { mode: 'affected', files, reasons, why }, testsPaths: this.wf?.tests_paths,
       log: (level, message) => this.emitEvent('log', { level, message }),
       // #390: what the tests leave running in the run's own worktree is stopped (never in a folder it does not own)
       sweep: !!this.worktree?.dir,
     }).catch((e) => ({ status: 'blocked', reason: e.message, failures: [], preexisting: [] }));
     if (output.log) this.emitEvent('file.saved', { step_id: stepId || null, path: path.join(this.runDir, output.log) });
     this.suiteRuns.requests = (this.suiteRuns.requests || 0) + 1;
-    if (output.status === 'blocked') return `The orchestrator could not run the tests: ${output.reason}`;
+    if (['blocked', 'not_run'].includes(output.status)) return `The orchestrator could not run the tests: ${output.reason}`;
     const lines = [
       `The orchestrator ran ${files.length} test file(s) for you (\`${output.command}\`): ${output.status === 'pass' ? 'they passed' : 'they failed'}.`,
       `Passed: ${output.passed ?? '?'}, failed: ${output.failed ?? '?'}${output.timed_out ? ' (timed out)' : ''}. Log: ${path.join(this.runDir, output.log)} (read only the lines you need).`,

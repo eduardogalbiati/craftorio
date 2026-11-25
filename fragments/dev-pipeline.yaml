@@ -18,7 +18,7 @@ steps:
       {% endif %}{% else %}Back on your change:
       {% if steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
       {% for f in steps.code_review.output.findings %}- {{ f }}
-      {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status != 'pass' %}The test suite failed: {{ steps.suite.output.message }}
+      {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status not in ['pass', 'not_run'] %}The test suite failed: {{ steps.suite.output.message }}
       {% endif %}{% if steps.e2e.output and steps.e2e.output.status != 'pass' %}The E2E suite failed: {{ steps.e2e.output.message }}
       {% endif %}{% if steps.verify_change.output and steps.verify_change.output.verdict == 'not_verified' %}The verifier could not confirm the change: {{ steps.verify_change.output.evidence }}
       {% endif %}{% if steps.validate.output and steps.validate.output.feedback %}The owner's note: {{ steps.validate.output.feedback }}
@@ -97,8 +97,13 @@ steps:
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     display: Verification failed
+    # #71: a suite that could not run, or had nothing to run, is not a failed round of fixes
+    recommend: "{% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}reject: fix what kept the suite from running ({{ steps.suite.output.reason | one_line(160) }}), then resume the run.{% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}approve: the project has no tests, so there is nothing to run.{% endif %}"
     message: |
-      The change still does not pass its checks after the rounds of fixes.
+      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run, so the change is not tested: {{ steps.suite.output.reason }}
+      {% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}The project has no tests, so nothing was tested (the input `no_tests: ask` asks you before the run goes on).
+      {% else %}The change still does not pass its checks after the rounds of fixes.
+      {% endif %}
       {% if steps.verify_change.output %}Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}{% endif %}
       {% if steps.suite.output %}Tests: {{ steps.suite.output.message }}{% endif %}

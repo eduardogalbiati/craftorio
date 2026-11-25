@@ -72,6 +72,7 @@
     'linked',
     'local',
     'none',
+    'not_run',
     'ok',
     'pass',
     'passed',
@@ -95,7 +96,7 @@
     const o = ev.output || {};
     const failed = !!ev.error || (o.status != null && !ENDED_WELL.includes(o.status));
     Object.assign(it, {
-      state: failed ? 'failed' : 'passed', finishedAt: ev.ts || null, durationMs: ev.duration_ms ?? o.duration_ms ?? null,
+      state: failed ? 'failed' : o.status === 'not_run' ? 'not_run' : 'passed', finishedAt: ev.ts || null, durationMs: ev.duration_ms ?? o.duration_ms ?? null,
       round: o.round ?? it.round, log: logRel(o.log) || it.log, command: o.command || it.command, waitingReason: null,
       counts: machineCounts(o, it.counts), failures: machineFailures(o),
       scope: o.scope || it.scope, why: o.selection?.why ? firstLine(o.selection.why, it.step) : it.why,
@@ -410,6 +411,8 @@
         // on call (#41): the action only the person can take goes with it
         explanation: `${ev.record || ev.explanation || ''}${ev.user_action ? `\nAction only you can take: ${ev.user_action}` : ''}`,
         instruction: String(ev.instruction || ''), causeClass: ev.cause_class || null,
+        // #71: the answer the supervisor on call gave a gate nobody was asked at
+        answered: ev.kind === 'escalation' && ev.action === 'route' ? String(ev.route ?? '') : null,
       });
     },
 
@@ -538,7 +541,7 @@
       // #795: a step the run ended in (stopped, interrupted) gets no step.finished
       for (const it of this.machine.values()) { Object.assign(it, { state: ev.status === 'success' ? 'passed' : 'failed', finishedAt: ev.ts || null, waitingReason: null }); this.touch(it); }
       this.machine.clear();
-      // tested (#396): 'not green' when the run went on without a green suite
+      // tested (#396): 'not green' when the run went on without a green suite; 'no tests' (#71)
       this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0, tested: s.tested || null });
     },
   };

@@ -39,6 +39,8 @@ steps:
       {% if delegate_result %}The developer fixed a previous failure and pushed: {{ delegate_result.text }}
       Check CI for that new commit, not an older run.
       {% endif %}
+      {% if vars.tested == 'no tests' %}Nothing was tested in this run: the project has no tests (#71). Say so in the PR/MR body ("Not tested: the project has no tests"); never write that the tests failed or passed.
+      {% endif %}
       {% if inputs.mode == 'fork' %}Fork + PR: `origin` is the owner's fork, `upstream` the original repository (no push access to it).
       {% if inputs.parent_pr %}This branch builds on the earlier pull request {{ inputs.parent_pr }} (its parent branch: `{{ inputs.parent_branch }}`).
       0. Check whether it merged (`gh pr view {{ inputs.parent_pr }} --json state`, `glab mr view` on GitLab).
@@ -132,6 +134,8 @@ steps:
     prompt: |
       Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}The developer resolved the conflict and pushed: {{ delegate_result.text }}
+      {% endif %}
+      {% if vars.tested == 'no tests' %}Nothing was tested in this run: the project has no tests (#71). Say so in the PR/MR body ("Not tested: the project has no tests"); never write that the tests failed or passed.
       {% endif %}
       {% if inputs.mode == 'fork' %}Fork + PR: `origin` is the owner's fork, `upstream` the original repository (no push access to it).
       {% if inputs.parent_pr %}This branch builds on the earlier pull request {{ inputs.parent_pr }} (its parent branch: `{{ inputs.parent_branch }}`).

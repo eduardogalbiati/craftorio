@@ -210,11 +210,16 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs, language }) {
   ].filter(Boolean).join('\n');
 }
 
+// #71: the gate's own recommendation, so the supervisor agrees with it or says why not
+const gateAdvice = (gate) => (gate.recommend
+  ? `\n\nThe gate's own recommendation: ${clip(gate.recommend, 500)}\nWhen you advise or choose another answer, say in \`recommendation\` and in \`explanation\` why the gate's does not fit this run.` : '');
+
 /**
  * Prompt for the supervisor on call (engine-side): the run would stop to ask the person about a
  * problem (an escalation gate) or the engine detected a stall (`signals`). It tries to solve it first.
  * history: [{ step, visits, output }] of the steps the run went through.
  * gate.decision: a decision gate reached because a loop ran out (no `route`: only the person answers it).
+ * gate.recommend: the gate's own recommendation to the person (#71), '' when it has none.
  * running: the step is still running (a slow step): wait, interrupt its turn, or ask the person.
  */
 function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits, running, language }) {
@@ -232,7 +237,7 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
   return [
     intro,
     wf.metadata?.description ? `Workflow: ${wf.metadata.description}` : '',
-    gate ? `\n## What the gate would ask the person\n${clip(gate.message, 4000)}\n\nThe gate's answers and where they lead:\n${gate.transitions || '(none)'}` : '',
+    gate ? `\n## What the gate would ask the person\n${clip(gate.message, 4000)}${gateAdvice(gate)}\n\nThe gate's answers and where they lead:\n${gate.transitions || '(none)'}` : '',
     signals?.length ? `\n## Stall signals (deterministic, from the engine)\n${signals.map((s) => `- ${s.step || step.id}: ${s.kind}: ${s.detail}`).join('\n')}` : '',
     history?.length ? `\n## Step history (visits and latest output)\n${history.map((h) => `- ${h.step} (${h.visits} visit${h.visits === 1 ? '' : 's'}): ${clip(JSON.stringify(h.output), 500)}`).join('\n')}` : '',
     previous?.length ? `\n## Your previous interventions here\n${previous.map((p, i) => `${i + 1}. ${p.action}: ${p.explanation}`).join('\n')}` : '',

@@ -109,6 +109,14 @@ inputs:
     default: ""
     label: Test command
     description: "The project's whole-suite command (e.g. npm test, cargo test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+  # #71: the owner's policy for a project with no test command and no test file
+  no_tests:
+    type: string
+    enum: [continue, ask]
+    default: continue
+    label: A project with no tests
+    options: { continue: Continue, ask: Ask }
+    description: "When the project has no test command and no test file. Continue: the run goes on, reported as not tested because the project has no tests. Ask: the verify_failed gate waits for you. A project with test files and no known command always asks."
 
 providers:
   claude:
@@ -228,6 +236,13 @@ steps:
     transitions:
       - when: "output.status == 'pass'"
         goto: verify_change
+        set: { tested: "" }
+      # #71: a project with no tests is not a failure (no_tests: ask keeps the gate)
+      - when: "output.status == 'not_run' and inputs.no_tests != 'ask'"
+        goto: verify_change
+        set: { tested: "no tests" }
+      - when: "output.status == 'not_run'"
+        goto: verify_failed
       - when: "output.status == 'blocked'"
         goto: verify_failed
       - when: "true"
@@ -265,12 +280,15 @@ steps:
   - id: verify_failed
     fragment: dev-pipeline
     transitions:
+      # #71: no_tests: ask and your Approve: nothing was tested, the project has no tests
       - when: "approved and inputs.mode != 'local'"
         goto: ci
+        set: { tested: "{{ 'no tests' if steps.suite.output and steps.suite.output.status == 'not_run' else vars.tested or '' }}" }
       - when: "approved"
         merge: local
         goto: push_main
         on_error: resolve_merge
+        set: { tested: "{{ 'no tests' if steps.suite.output and steps.suite.output.status == 'not_run' else vars.tested or '' }}" }
       - when: "rejected"
         goto: end
         status: failed
@@ -324,4 +342,4 @@ outputs:
   evidence:
     type: object
     description: "The run's evidence (suite, e2e, screenshots, axe) for the post-flow's test.md row; a fix runs no E2E, screenshots or axe."
-    value: "{% set so = steps.suite.output or {} %}{% set ev = { 'suite': { 'status': so.status or 'not run', 'passed': so.passed, 'failed': so.failed }, 'e2e': 'not run', 'screenshots': [], 'screenshots_reason': 'the fix workflow takes no screenshots', 'axe': [] } %}{{ ev | to_json }}"
+    value: "{% set so = steps.suite.output or {} %}{% set ev = { 'suite': { 'status': ('not run' if so.status == 'not_run' else so.status) or 'not run', 'passed': so.passed, 'failed': so.failed }, 'e2e': 'not run', 'screenshots': [], 'screenshots_reason': 'the fix workflow takes no screenshots', 'axe': [] } %}{{ ev | to_json }}"

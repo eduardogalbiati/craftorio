@@ -829,7 +829,9 @@ function pruneRuns() {
 // The supervisor's decision on a step: the orchestrator's line; returns its toast's effect (shown while live).
 function onSupervisorDecision(v, ev) {
   const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
-  orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
+  // #71: it answered the gate itself, so nobody was asked
+  const what = ev.kind === 'escalation' && ev.action === 'route' ? t('app.supervisor_answered_gate', { step: ev.step_id, answer: ev.route }) : `supervisor → ${ev.action}${target}`;
+  orch(ev, `◆ ${what}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
   const params = { step: ev.step_id, run: runLabel(v.run), action: SUP_ACTIONS[ev.action] || ev.action };
   return { toast: [liveRuns().length > 1 ? t('app.supervisor_on_step_of_run', params) : t('app.supervisor_on_step', params), ev.explanation, ev.run_id] };
 }

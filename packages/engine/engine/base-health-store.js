@@ -1,6 +1,6 @@
 // The base-health store (#405): the tests known to fail on a project's base, one file per project,
 // <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck: the last base
-// check's { commit, at, status }, #598, flaky: the tests red in the base check's whole suite and green
+// check's { commit, at, status }, #598 (status no_tests: the project has none, #71), flaky: the tests red in the base check's whole suite and green
 // on its re-run, { test, file, commit, at }, #613 }). Each failure is keyed
 // by file + test: first_seen, last_seen, the runs that saw it, its issue. Here so the engine can
 // record a run's pre-existing failures (recordSightings, packages/engine/engine/machine-actions.js) without the

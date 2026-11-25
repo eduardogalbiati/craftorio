@@ -594,7 +594,7 @@
     const differs = !!end && !!def?.ending && def.ending !== end; // #195: the badge stands out and its title says so
     const endBadge = end ? `<span class="badge rm-wf${differs ? ' rm-wf-push' : ''}" data-testid="roadmap-item-ending" data-ending="${end}" title="${esc(`${full}. ${t(ENDING[end][1])}${differs ? ` ${t(ENDING[def.ending][2], { file: def.file })}` : ''}`)}">${end === 'local' ? '' : '<span aria-hidden="true">⇡ </span>'}${t(ENDING[end][0])}</span>` : '';
     const sim = RoadmapModel.isSimulated(x) ? `<span class="badge p-mock">${t('backlog_roadmap.simulated')}</span>` : '';
-    const meta = `${endBadge}${sim}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
+    const meta = `${endBadge}${sim}${window.BacklogLive?.testedHtml(x) ?? ''}${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}${costStepHtml(x)}${WorkflowInputs.inputPills(wfOf(x) || null, x.inputs, { skip: ['mode'] })}`;
     return `
         <div class="rm-workflow" data-testid="roadmap-workflow">
           <div class="rm-wf-config">

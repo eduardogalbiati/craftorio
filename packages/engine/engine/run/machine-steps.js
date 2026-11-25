@@ -28,6 +28,7 @@ const {
 } = require('../record-docs-step');
 const scenarios = require('../scenarios');
 const suiteStep = require('../suite-step');
+const { routedStatus } = require('../suite-no-command'); // #71
 const { changedFiles, selectionLines } = require('../affected-tests');
 const { machineSlotDir } = require('../machine-slot');
 const { runWorkflowStep } = require('../workflow-step');
@@ -319,6 +320,7 @@ const methods = {
           testWorkers: this.workers?.testWorkers,
           mockResult,
           preexisting: this.preexisting,
+          testsPaths: this.wf?.tests_paths,
           signal: this.abort.signal,
           timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
           history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
@@ -381,7 +383,9 @@ const methods = {
       output.base_commit = sync.base_commit;
       if (sync.note) output.message = `${output.message} ${sync.note}`;
     }
-    if (output.status !== 'blocked' && output.scope !== 'files' && !output.whole_run) this.suiteRuns.engine++;
+    output = routedStatus(output, step);
+    const ran = !['blocked', 'not_run'].includes(output.status);
+    if (ran && output.scope !== 'files' && !output.whole_run) this.suiteRuns.engine++;
     if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
     // the files that failed come back in the next round's affected set
     for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
@@ -391,7 +395,7 @@ const methods = {
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
     if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
-    this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    this.emitEvent('log', { level: ['pass', 'not_run'].includes(output.status) ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
     return output;
   },
 
@@ -690,7 +694,7 @@ const methods = {
   // affected_tests (+ affected_reasons), status broken | pass (| blocked), and a message for the
   // next prompt that names the already-green files.
   redCheckOutput(output, files, mockResult) {
-    if (output.status === 'blocked') return output;
+    if (['blocked', 'not_run'].includes(output.status)) return output;
     const check = this.machine.redCheck(output, files, { mockResult });
     let related = { files: [], reasons: {}, why: '' };
     if (files.length) {

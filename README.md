@@ -466,6 +466,7 @@ Local mode:
 - **E2E scenarios** (#143): the test writer writes end-to-end BDD scenarios only when the issue has user-visible behaviour, at most 3 per issue, and runs only the run's ones by their issue tag (`@issue-<n>`); the full E2E suite belongs to the release workflow.
 - **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) in both modes. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
 - **Suite red outside the change** (#396, input `suite_red_outside_change`): *Ask* (default) = a red suite opens `test_failed` as before; *Continue* = a suite whose failures are all outside the change goes on to the build and the merge, the run marked **Not tested green** (Run screen, chat, `summary.json` `tested`). A failure in the change still opens the gate.
+- **A project with no tests** (#71, input `no_tests`, Feature and Fix): *Continue* (default) = with no test command and no test file the suite is not run and the run goes on, marked **Not tested: the project has no tests**; *Ask* = the gate waits for you. Test files with no known command always ask for `test_command`.
 - **Validation**: the input `validation: auto | validated` (the old `mode: auto | validated`, #630). In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.
 - **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
 - **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch. Until then the Backlog shows them in **Merged locally** (a "not pushed" badge), not in Done: Done means closed on GitHub/GitLab.
@@ -819,6 +820,15 @@ to the build and the merge without the gate. A failure in the change always open
 reaches the build without a green suite (the policy, or your Continue at the gate) shows a **Not
 tested green** badge on the Run screen and in its chat, `tested: "not green"` with the failures in
 its `summary.json`, and its build and verification prompts get the failures.
+
+A project with no tests (#71): no test command is found and the project has no test file, so there is
+nothing to run. The suite ends **not run: the project has no tests** and the run goes on without
+`test_failed` (Feature) or `verify_failed` (Fix), with `tested: "no tests"` in its `summary.json`. The
+Run screen, its chat, the roadmap item, the pull request's text and the base check say **Not tested:
+the project has no tests**, never Not tested green. The input **A project with no tests**
+(`no_tests`) set to *Ask* keeps the gate. A project that has test files and no known command always
+asks: set `test_command`. When the supervisor on call answers a gate itself, the Run screen and the
+chat say so, with the answer; it is told the gate's own recommendation and says why when it differs.
 
 **Merge conflicts at the approval.** With several runs at once, a PR/MR that was clean when checked
 can conflict by the time you approve it. The engine checks the PR/MR itself (`gh pr view` /
@@ -1525,7 +1535,9 @@ orchestrator:
     "Resume from <step>" at the step it names instead of Retry, and still waits for the person;
   - `fail`: fall back to `on_error`, or end the run.
   It shows up as a `supervisor` session, and its decisions in the orchestrator log
-  (`supervisor.decision` events).
+  (`supervisor.decision` events). A gate the supervisor on call answered itself (#71) says so on the
+  Run screen and in the run's chat, with the answer; it knows the gate's own recommendation and says
+  why when it advises another answer.
 - **When a transition's action fails** (a merge, a deploy command, or the engine's check right
   before a merge), on a transition with `on_error` and `recover: [steps]`: the supervisor gets the
   error and the PR/MR state and either sends the run back to one of those steps with an instruction

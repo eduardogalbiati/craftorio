@@ -46,10 +46,11 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   when it serves the project (a workspaces monorepo included, #599), else the project's own install
   (`npm ci --no-audit --no-fund` for npm), its time and output in the check's log
   (`worktrees/base-check-<project>-suite.log`). A check that could not run (`status: 'error'`: the
-  install failed, no test command, the runner crashed) writes one engine log line with the reason and
+  install failed, test files but no test command, the runner crashed; a project with no test file
+  either ends `no_tests`, #71, no notice) writes one engine log line with the reason and
   the log file and notifies "Base check could not run: <reason>", with no issue and no fix item
   (nothing is known about the tests). The store records the last check as
-  `lastCheck: { commit, at, status }` (`green`, `red`, `error`); `lastGreen` stays the last green
+  `lastCheck: { commit, at, status }` (`green`, `red`, `error`, `no_tests`); `lastGreen` stays the last green
   commit. Two rounds (#613, widening #527's timing-only re-run): when the whole suite has failures,
   a second round runs only the failed tests' files, one command (the list file of #553/#597 when
   they do not fit the command line), in the same base checkout while the check still holds the
@@ -89,7 +90,10 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   in the change), and the output counts `in_change` / `outside_change`. AI Development (local hero)
   routes `output.in_change == 0` with the input `suite_red_outside_change: continue` to the build (or
   e2e) without `test_failed`, with `set: { tested: "not green" }` (so does Continue at the gate);
-  `summary.json` then has `tested` and `tested_failures`. Filter `suite_failures`
+  `summary.json` then has `tested` and `tested_failures`. #71 (`suite-no-command.js`): with no command
+  and no test file (`tests_paths`) the status is `not_run`, routed on by feature and fix with
+  `set: { tested: "no tests" }` unless `no_tests: ask`; a step whose transitions do not name `not_run`
+  gets it as `blocked`. Filter `suite_failures`
   (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test (with
   its class), for a prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
   (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
