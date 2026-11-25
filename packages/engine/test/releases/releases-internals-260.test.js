@@ -266,11 +266,13 @@ test('release.yaml: its suites never wave a failure through as failing on the ba
   const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', '..', 'workflows', 'release.yaml'));
   const suites = wf.steps.filter((s) => s.type === 'suite');
   assert.deepEqual(suites.map((s) => [s.id, s.base_check]), [['unit', false], ['e2e', false]]);
-  // #290: after a fix the green unit suite goes to the release summary first, else straight to ship
+  // #49: the green unit suite goes to the secret scan, which leads to the release summary after a fix (#290), else to ship
   const unit = suites[0];
-  const skip = unit.transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when) && t.goto === 'ship');
-  assert.ok(skip, 'a green unit suite with e2e_suite skip goes to ship');
-  assert.ok(unit.transitions.filter((t) => /inputs\.e2e_suite == 'skip'/.test(t.when)).every((t) => ['review', 'ship'].includes(t.goto)));
+  const skip = unit.transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when) && t.goto === 'secret_scan');
+  assert.ok(skip, 'a green unit suite with e2e_suite skip goes to the secret scan');
+  assert.ok(unit.transitions.filter((t) => /inputs\.e2e_suite == 'skip'/.test(t.when)).every((t) => t.goto === 'secret_scan'));
+  const scan = wf.steps.find((s) => s.id === 'secret_scan');
+  assert.deepEqual(scan.transitions.slice(-2).map((t) => t.goto), ['review', 'ship'], 'the scan leads to the summary or to ship');
   assert.ok(unit.transitions.indexOf(skip) < unit.transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
 });
 

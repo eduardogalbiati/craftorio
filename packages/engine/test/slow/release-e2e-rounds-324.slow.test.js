@@ -72,7 +72,7 @@ const nextAfter = (started, stepId, n) => {
   return undefined;
 };
 
-test('release (mock): round 1 runs the whole E2E suite; after a fix, round 2 runs only the failed files, then the whole suite, then review (#324)', { timeout: 120000 }, async (t) => {
+test('release (mock): round 1 runs the whole E2E suite; after a fix, round 2 runs only the failed files, then the whole suite, then the secret scan and the review (#324, #49)', { timeout: 120000 }, async (t) => {
   const { started, outputs } = await runRelease(t, { mockSequences: { suite: { unit: ['pass'], e2e: ['fail', 'pass'] } } });
   const e2e = outputs('e2e');
   assert.equal(e2e.length, 2, `two E2E rounds (steps: ${started.join(', ')})`);
@@ -88,7 +88,8 @@ test('release (mock): round 1 runs the whole E2E suite; after a fix, round 2 run
   assert.ok(r2.affected, 'round 2 records its focused run');
   assert.deepEqual([...(r2.affected.files || [])].sort(), failed, 'the focused run ran the files that failed in round 1');
   assert.match(JSON.stringify(r2.selection || {}), /failed in round 1/, 'the selection says why');
-  assert.equal(nextAfter(started, 'e2e', 2), 'review', `a green whole run leads to review (steps: ${started.join(', ')})`);
+  assert.equal(nextAfter(started, 'e2e', 2), 'secret_scan', `a green whole run leads to the secret scan (steps: ${started.join(', ')})`);
+  assert.equal(nextAfter(started, 'secret_scan', 1), 'review', `then to review (steps: ${started.join(', ')})`);
 });
 
 test('release (mock): after a focused-then-whole E2E round, the Ship gate reports the whole E2E suite green (#324)', { timeout: 120000 }, async (t) => {
@@ -123,7 +124,8 @@ test('release (mock): an E2E command that cannot be filtered runs the whole suit
   assert.equal(r2.status, 'pass');
   assert.match(String(r2.command || ''), /^make e2e$/, 'the command ran unfiltered');
   assert.match(JSON.stringify(r2), /cannot/i, 'the output says the command could not be filtered');
-  assert.equal(nextAfter(started, 'e2e', 2), 'review');
+  assert.equal(nextAfter(started, 'e2e', 2), 'secret_scan'); // #49
+  assert.equal(nextAfter(started, 'secret_scan', 1), 'review');
 });
 
 test('release (mock): an empty E2E command runs npm run test:e2e, focused on the failed files in round 2 (#735, #760)', { timeout: 120000 }, async (t) => {

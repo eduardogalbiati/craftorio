@@ -7,6 +7,7 @@ const { WorkflowRun } = require('../engine/workflow');
 const { commitRange } = require('../engine/secret-scan');
 const { evalExpr, render } = require('../engine/run/templates');
 const { renderResultSummary } = require('../domains/evidence/result-summary');
+const { workflowStations } = require('@craftorio/shared/run-progress-model');
 
 plainGit();
 const FOUND = { kind: 'secret_scan', status: 'fail', findings: [{ rule: RULE, file: 'src/a.txt', line: 3, commit: 'abcdef1234567890' }], message: 'm' };
@@ -82,6 +83,19 @@ for (const name of ['feature', 'local hero', 'remote hero']) {
       for (const previous of ['secret_scan', 'secret_found']) assert.equal(on(previous, language), 1, `${previous} (${language})`);
       for (const previous of ['', 'warm_up', 'developer_check', 'code_review', 'suite']) assert.equal(on(previous, language), 0, `${previous || 'first step'} (${language})`);
     }
+  });
+}
+
+// the roadmap card's pipeline (#282): the scan's steps and gates move no station and keep the owner's gate
+for (const name of ['feature', 'fix', 'local hero', 'remote hero']) {
+  test(`#49 ${name}: the pipeline's stations keep their order, the Validated gate right after Develop`, () => {
+    const wf = load(name);
+    const names = (mode) => workflowStations({ steps: wf.steps, groups: wf.groups, mode }).map((st) => (st.gate ? `gate ${st.name}` : st.name));
+    const groups = wf.groups.map((g) => g.name);
+    assert.deepEqual(names(null).filter((n) => groups.includes(n)), groups);
+    if (name === 'fix') return; // no Validated mode
+    const list = names('validated');
+    assert.equal(list[list.indexOf('Develop') + 1], 'gate developer_check', list.join(' > '));
   });
 }
 

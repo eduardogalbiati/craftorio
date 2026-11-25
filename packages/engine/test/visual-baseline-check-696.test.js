@@ -263,6 +263,7 @@ function walkAfterDevelop(t, { baselineOutput, vars = {} }) {
     develop,
     testid_check: { kind: 'test_ids', status: 'pass', missing: [] },
     baseline_check: baselineOutput,
+    secret_scan: { kind: 'secret_scan', status: 'pass', findings: [], message: 'No secret found.' }, // #49
   };
   const steps = {
     acceptance_tests: { output: { e2e_scope: 'scenarios', e2e_files: ['features/docs.feature', 'features/steps/docs.steps.js'] } },
@@ -284,7 +285,8 @@ function walkAfterDevelop(t, { baselineOutput, vars = {} }) {
     const [next, s] = route(wf, at, ctx(outputs[at], previous));
     path_.push(next);
     set = s;
-    if (!['testid_check', 'baseline_check'].includes(next)) break;
+    vars = { ...vars, ...s };
+    if (!['testid_check', 'baseline_check', 'secret_scan'].includes(next)) break;
     steps[next] = { output: outputs[next] };
     previous = at;
     at = next;

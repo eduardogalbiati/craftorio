@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
+const { WorkflowRun, evalExpr, loadWorkflow } = require('../engine/workflow');
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 
 const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'release.yaml');
@@ -63,12 +63,21 @@ test('release workflow: a `review` step "Release summary" runs a cheap read-only
   assert.equal(caps.subagents, false);
 });
 
-test('release workflow: the last green suite leads to `review` and every transition of `review` leads to `ship` (#290)', () => {
+test('release workflow: the last green suite leads through the secret scan (#49) to `review` and every transition of `review` leads to `ship` (#290)', () => {
   const wf = load();
   const review = reviewOf(wf);
   const passOf = (id) => (stepById(wf, id).transitions || []).filter((t) => /pass/.test(String(t.when)));
-  assert.ok(passOf('e2e').some((t) => t.goto === 'review'), 'a green e2e suite can go to review');
-  assert.ok(passOf('unit').some((t) => /skip/.test(String(t.when)) && t.goto === 'review'), 'a green unit suite with e2e_suite skip can go to review');
+  assert.deepEqual(passOf('e2e').map((t) => t.goto), ['secret_scan'], 'a green e2e suite goes to the secret scan');
+  assert.deepEqual(passOf('unit').filter((t) => /skip/.test(String(t.when))).map((t) => t.goto), ['secret_scan'], 'a green unit suite with e2e_suite skip goes to the secret scan');
+  // the scan passed or skipped: the release summary after a fix or a second round of a suite, else straight to ship
+  const afterScan = (output, visits) => stepById(wf, 'secret_scan').transitions.find((t) => evalExpr(String(t.when), { output, vars: {}, steps: visits })).goto;
+  const one = { unit: { visits: 1 }, e2e: { visits: 1 }, fix: { visits: 0 } };
+  for (const output of [{ status: 'pass' }, { status: 'skipped' }]) {
+    assert.equal(afterScan(output, one), 'ship', 'one green round of each suite');
+    for (const id of ['unit', 'e2e']) assert.equal(afterScan(output, { ...one, [id]: { visits: 2 } }), 'review', `a second round of ${id}`);
+    assert.equal(afterScan(output, { ...one, fix: { visits: 1 } }), 'review', 'a fix');
+    assert.equal(afterScan(output, { unit: { visits: 1 }, fix: { visits: 0 } }), 'ship', 'no E2E suite');
+  }
   const transitions = review.transitions || [];
   assert.ok(transitions.length > 0, 'review has transitions');
   assert.deepEqual([...new Set(transitions.map((t) => t.goto))], ['ship'], 'every transition of review goes to ship');
