@@ -54,4 +54,24 @@ for (const file of WORKFLOWS) {
     const prompt = developPrompt(file, checkout(t, { lint: 'x', typecheck: 'y' }), '');
     assert.equal(/npm run lint\b[^\n]*npm run typecheck\b/.test(prompt), true, 'the prompt does not name the found commands');
   });
+
+  // the sentence costs prompt budget (#418): only the runs it applies to carry it
+  const both = { lint: 'x', typecheck: 'y' };
+  for (const [when, scripts, command, told] of [
+    ['with the project\'s tools found', both, '', true],
+    ['with the tools found and a blank command', both, '   ', true],
+    ['with the tools found and no command input', both, undefined, true],
+    ['with nothing found', {}, '', false],
+    ['with a check script', { ...both, check: 'z' }, '', false],
+    ['with a given command', both, 'make lint', false],
+    ['with a given command and spaces around it', both, '  make lint  ', false],
+    ['with the checks turned off', both, 'off', false],
+  ]) {
+    test(`#50 ${name}: ${when} the developer is ${told ? 'told' : 'not told'} that only what the change added goes back`, (t) => {
+      const flat = developPrompt(file, checkout(t, scripts), command).replace(/\s+/g, ' ');
+      assert.equal(flat.includes('the project\'s own linter and type checker'), told, 'the tools sentence');
+      assert.equal(/only what your change added goes back/.test(flat), told, 'the base findings sentence');
+      assert.equal(flat.includes('Your turn ends at green acceptance tests'), true, 'the paragraph after it stays');
+    });
+  }
 }
