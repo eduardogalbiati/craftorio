@@ -2311,10 +2311,11 @@ steps:
   - id: test_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
-    # the run's failures, the pre-existing ones as a count (#211)
+    # the run's failures, the pre-existing ones as a count (#211). A run resumed at this gate has no
+    # previous_step (#71): a suite that did not run is told by the other steps that lead here
     summary: |
-      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run: {{ steps.suite.output.reason | one_line(160) }}
-      {% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}The suite was not run: the project has no tests.
+      {% if steps.suite.output.status == 'blocked' and previous_step not in ['test', 'e2e', 'heal'] %}The project's test suite could not run: {{ steps.suite.output.reason | one_line(160) }}
+      {% elif steps.suite.output.status == 'not_run' and previous_step not in ['test', 'e2e', 'heal'] %}The suite was not run: the project has no tests.
       {% elif previous_step == 'suite' %}The test suite still fails after {{ steps.suite.visits }} round(s): {{ steps.suite.output.failures | length }} failing test(s) of this run.
       {{ steps.suite.output | suite_lines }}
       {% elif previous_step == 'heal' %}The E2E healer could not run the scenarios: {{ steps.heal.output.summary | one_line(160) }}
@@ -2324,16 +2325,16 @@ steps:
       {% else %}Tests still fail after 3 rounds of fixes.
       - ✖ {{ steps.test.output.failure_report | one_line(120) }}
       {% endif %}
-    recommend: "{% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}stop: set the workflow's test_command input, then resume the run.{% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}only the owner answers (they set no_tests to ask). The project has no tests, so nothing was tested.{% else %}stop: the change is not tested green; look at the failures, then resume the run.{% endif %}"
+    recommend: "{% if steps.suite.output.status == 'blocked' and previous_step not in ['test', 'e2e', 'heal'] %}stop: set the workflow's test_command input, then resume the run.{% elif steps.suite.output.status == 'not_run' and previous_step not in ['test', 'e2e', 'heal'] %}only the owner answers (they set no_tests to ask). The project has no tests, so nothing was tested.{% else %}stop: the change is not tested green; look at the failures, then resume the run.{% endif %}"
     # named choices (#223), like build_failed: the same two answers as an Approve / Reject gate
     choices:
-      - { id: continue, label: "Continue to the build anyway", help: "The build and the verification run; the change is reported as {% if previous_step == 'suite' and steps.suite.output.status == 'not_run' %}not tested: the project has no tests{% else %}not tested green{% endif %}." }
+      - { id: continue, label: "Continue to the build anyway", help: "The build and the verification run; the change is reported as {% if steps.suite.output.status == 'not_run' and previous_step not in ['test', 'e2e', 'heal'] %}not tested: the project has no tests{% else %}not tested green{% endif %}." }
       - { id: stop,     label: "Stop the run", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     message: |
-      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
+      {% if steps.suite.output.status == 'blocked' and previous_step not in ['test', 'e2e', 'heal'] %}The project's test suite could not run:
       {{ steps.suite.output.reason }}
       Set the workflow's `test_command` input (e.g. npm test) when the project's files do not give it.
-      {% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}The suite was not run: the project has no tests, so nothing was tested (the input `no_tests: ask` asks you before the run goes on).
+      {% elif steps.suite.output.status == 'not_run' and previous_step not in ['test', 'e2e', 'heal'] %}The suite was not run: the project has no tests, so nothing was tested (the input `no_tests: ask` asks you before the run goes on).
       {% elif previous_step == 'suite' %}The project's test suite still fails after {{ steps.suite.visits }} round(s):
       {{ steps.suite.output | suite_failures }}
       {% elif previous_step == 'heal' or previous_step == 'e2e' %}The issue's E2E scenarios (and the @smoke journeys) are not green after {{ steps.heal.visits or 0 }} healing round(s):
@@ -2343,10 +2344,10 @@ steps:
       {{ steps.test.output.failure_report }}
       {% endif %}
       {{ tests_plan }}
-      Continue to the build anyway: the change is reported as {% if previous_step == 'suite' and steps.suite.output.status == 'not_run' %}not tested: the project has no tests{% else %}not tested green{% endif %}. Stop the run: the run ends as failed (its branch keeps the work to resume it).
+      Continue to the build anyway: the change is reported as {% if steps.suite.output.status == 'not_run' and previous_step not in ['test', 'e2e', 'heal'] %}not tested: the project has no tests{% else %}not tested green{% endif %}. Stop the run: the run ends as failed (its branch keeps the work to resume it).
     transitions:
       # #71: with nothing to run (no_tests: ask), never "not tested green"
-      - when: "choice == 'continue' and steps.suite.output.status == 'not_run'"
+      - when: "choice == 'continue' and steps.suite.output.status == 'not_run' and previous_step not in ['test', 'e2e', 'heal']"
         goto: build
         set: { tested: "no tests" }
       # #396: recorded in summary.json `tested` and told to the build and verify prompts
