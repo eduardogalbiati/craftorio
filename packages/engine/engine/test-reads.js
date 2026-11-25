@@ -9,6 +9,14 @@
 // folder, an environment variable, a path outside the repository) is left out. A read path matches
 // a file at it or under it (a listed folder). The text is the code without its comments
 // (withoutComments of source-text.js).
+// Globs (the suite's selection gap: a test reading `workflows/<name>.yaml` for each name of a list was
+// never selected when one of them changed): a template literal with an unknown part names the files it
+// may be (`path.join(ROOT, 'workflows', `${name}.yaml`)` → `workflows/*.yaml`); a non-literal last
+// argument after at least one literal folder names that folder's files (`path.join(ROOT, 'packages',
+// 'shared', f)` → `packages/shared/*`; a spread `...parts` names everything under it). A helper's body is
+// read as any code, so a helper reading `workflows/${name}.yaml` reads `workflows/*.yaml` whatever its
+// calls pass (a call with a literal still names its own file). A read always keeps a literal segment:
+// `path.join(ROOT, f)`, `path.join(__dirname, dir)` and `read(name)` over `path.join(ROOT, rel)` read nothing.
 // Used by the affected-test selection (affected-tests.js: a test is selected when a path it reads
 // changes) and by `npm run check`'s rule that tests never read live documents (scripts/test-fixture-rule.js).
 
@@ -23,6 +31,8 @@ const LITERAL = /^(['"`])([^'"`\\$]*)\1$/;
 const TEMPLATE = /^`([^`\\]*)`$/;
 const JOIN = /^path\.(?:join|resolve)\s*\(/;
 const ANY = '**';
+// one path segment, or the unknown part of one (`*.yaml`)
+const STAR = '*';
 // a helper's parameter while its reads are resolved: replaced by each call's argument
 const PARAM = '\u0000';
 
@@ -91,7 +101,21 @@ function textOf(expr, scope) {
   return parts.every((p) => typeof p === 'string') ? parts.join('') : null;
 }
 
-// An expression → the repository-relative path (or pattern with `**`) it names, or null.
+// A template literal with unknown parts → its text with each unknown part as STAR, or null when it is
+// no template or keeps no literal text (`${a}${b}`).
+function globOf(expr, scope) {
+  const tpl = TEMPLATE.exec(expr);
+  if (!tpl) return null;
+  const s = tpl[1]
+    .replace(/\$\{([^}]*)\}/g, (_, inner) => (scope.literals.has(inner.trim()) ? scope.literals.get(inner.trim()) : STAR))
+    .replace(/\*+/g, STAR);
+  return /[^*/]/.test(s) ? s : null;
+}
+
+// A segment that names something itself: not a glob, not only dots.
+const literalSegment = (s) => !!s && !s.includes(STAR) && !/^\.+$/.test(s);
+
+// An expression → the repository-relative path (or pattern with `**` and `*`) it names, or null.
 // scope: { dir: the test's folder, paths: constant → path, literals: constant → string }
 function resolve(expr, scope) {
   const lit = LITERAL.exec(expr);
@@ -101,21 +125,32 @@ function resolve(expr, scope) {
   if (scope.literals.has(expr)) return scope.literals.get(expr);
   const join = JOIN.exec(expr);
   if (!join) {
-    const s = textOf(expr, scope);
+    const s = textOf(expr, scope) ?? globOf(expr, scope);
     return s === null || path.posix.isAbsolute(s) ? null : s;
   }
   const list = inside(expr, join[0].length - 1);
-  if (list === null) return null;
+  return list === null ? null : joined(list, scope);
+}
+
+// The arguments of a `path.join` / `path.resolve` → the path or pattern they name, or null.
+function joined(list, scope) {
   const [first, ...rest] = splitArgs(list);
   const base = first ? resolve(first, scope) : null;
   if (base === null) return null;
   const parts = base ? [base] : [];
-  for (const arg of rest) {
+  // whether an argument after the base names a folder or a file itself: a glob for the last one needs it
+  let named = false;
+  for (const [i, arg] of rest.entries()) {
     const m = LITERAL.exec(arg);
-    const s = m ? m[2] : (scope.literals.get(arg) ?? textOf(arg, scope));
-    if (typeof s === 'string') parts.push(s);
-    else if (JOIN.test(arg)) return null;
-    else if (parts[parts.length - 1] !== ANY) parts.push(ANY);
+    const s = m ? m[2] : (scope.literals.get(arg) ?? textOf(arg, scope) ?? globOf(arg, scope));
+    if (typeof s === 'string') {
+      parts.push(s);
+      if (s.split('/').some(literalSegment)) named = true;
+    } else if (JOIN.test(arg)) return null;
+    else if (i === rest.length - 1 && named && parts[parts.length - 1] !== ANY) {
+      // the last argument unknown: the folder's files (a spread: everything under the folder)
+      if (!arg.startsWith('...')) parts.push(STAR);
+    } else if (parts[parts.length - 1] !== ANY) parts.push(ANY);
   }
   if (parts[parts.length - 1] === ANY) return null;
   return parts.length ? path.posix.normalize(parts.join('/')) : '';
@@ -136,8 +171,8 @@ function stringMask(text) {
   return mask;
 }
 
-// A resolved path inside the repository, naming more than its root.
-const usable = (p) => !!p && p !== '.' && !p.startsWith('..') && !/\*\*\/\.\./.test(p);
+// A resolved path inside the repository, naming more than its root; a glob keeps a literal segment.
+const usable = (p) => !!p && p !== '.' && !p.startsWith('..') && !/\*\*\/\.\./.test(p) && p.split('/').some(literalSegment);
 
 // The reads of `text` (code) in `scope` → [{ path, index }]; a path may hold PARAM.
 function directReads(text, scope, offset = 0) {
@@ -209,10 +244,15 @@ function readsOf(file, text) {
     .sort((a, b) => a.index - b.index);
 }
 
-// A read path → a RegExp matching a file at it or under it (`**` = any folders).
+// A read path → a RegExp matching a file at it or under it (`**` = any folders; `*` in a segment = any
+// text but `/`). A last segment with `*` names files, not folders: `packages/shared/*` does not reach
+// `packages/shared/i18n/en.json`.
 function readPattern(p) {
-  const body = p.split('/').map((seg) => (seg === ANY ? '(?:[^/]+/)*' : `${escapeRegExp(seg)}/`)).join('').replace(/\/$/, '');
-  return new RegExp(`^${body}(?:/|$)`);
+  const segs = p.split('/');
+  const seg = (s) => (s === ANY ? '(?:[^/]+/)*' : `${escapeRegExp(s).split('\\*').join('[^/]*')}/`);
+  const body = segs.map(seg).join('').replace(/\/$/, '');
+  const last = segs[segs.length - 1];
+  return new RegExp(`^${body}${last !== ANY && last.includes(STAR) ? '$' : '(?:/|$)'}`);
 }
 
 module.exports = {
