@@ -69,7 +69,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const I18n = require('@craftorio/shared/i18n');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
 const { childEnv: allowlistedEnv } = require('./child-env');
@@ -85,7 +84,7 @@ const {
 } = require('./suite-command-line');
 const { saveCoverage } = require('../domains/evidence/coverage-summary');
 const { suiteSlotRun } = require('./suite-slot');
-const { suiteWithoutCommand } = require('./suite-no-command'); // #71
+const { noTests, notRunMessage, suiteWithoutCommand } = require('./suite-no-command'); // #71
 const { excusedOnBase } = require('./suite-last-green');
 const {
   processTreeCommands,
@@ -781,7 +780,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const classes = out.in_change != null ? ` (${[out.in_change ? `${out.in_change} ${IN_CHANGE}` : '', out.outside_change ? `${out.outside_change} ${OUTSIDE_CHANGE}` : ''].filter(Boolean).join(', ')})` : '';
     out.message = out.status === 'pass' ? `${what()} passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
       : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${classes}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
-        : out.status === 'not_run' ? I18n.t('engine.suite_not_run', { reason: out.reason }) : I18n.t('engine.suite_could_not_run', { reason: out.reason });
+        : notRunMessage(out);
     return out;
   };
   out.command = String(command || '').trim() || (mock ? 'npm test' : detectTestCommand(cwd));
@@ -822,7 +821,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   const t0 = Date.now();
   let text = '';
   if (mock) {
-    if (mockResult === 'not_run') { Object.assign(out, { status: 'not_run', reason: I18n.t('engine.suite_no_tests') }); return finish(); }
+    if (mockResult === 'not_run') { Object.assign(out, noTests()); return finish(); }
     if (mockResult === 'blocked') { out.reason = '(simulated) the test command was not found'; return finish(); }
     await e2eSuiteDelay(stepId, signal);
     const r = mockSuite(mockResult, preexisting);

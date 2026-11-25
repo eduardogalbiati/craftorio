@@ -3,18 +3,26 @@
 // files with no command (or a folder git cannot list) stay `blocked`: test_command is what is missing.
 // Only a step whose transitions name `not_run` gets that status (`routedStatus`): any other workflow
 // (the owner's copies, a composed one, release) keeps routing it as `blocked`.
-// The reasons read in the interface language (#70): the gates show them.
+// The reasons, and the message of a suite that did not run, read in the interface language (#70): the
+// gates show them.
 
 const I18n = require('@craftorio/shared/i18n');
 const { folderHasTests } = require('./test-paths');
 
 const LOOKED_IN = 'package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml';
 
+const noTests = () => ({ status: 'not_run', reason: I18n.t('engine.suite_no_tests') });
+
+// the message of a round that ran no suite (`not_run` or `blocked`)
+function notRunMessage({ status, reason }) {
+  return I18n.t(status === 'not_run' ? 'engine.suite_not_run' : 'engine.suite_could_not_run', { reason });
+}
+
 // cwd: the folder the suite would run in; patterns: the workflow's tests_paths (default TESTS_PATHS).
 // log: null, nothing ran, so the round wrote no log file
 async function suiteWithoutCommand(cwd, patterns) {
   const tests = await folderHasTests(cwd, patterns);
-  if (tests === false) return { status: 'not_run', reason: I18n.t('engine.suite_no_tests'), log: null };
+  if (tests === false) return { ...noTests(), log: null };
   return { status: 'blocked', reason: I18n.t(tests ? 'engine.suite_no_command_tests' : 'engine.suite_no_command_none_found', { files: LOOKED_IN }), log: null };
 }
 
@@ -22,10 +30,12 @@ async function suiteWithoutCommand(cwd, patterns) {
 function routedStatus(output, step) {
   if (output.status !== 'not_run' || (step.transitions || []).some((t) => /\bnot_run\b/.test(String(t.when || '')))) return output;
   const reason = I18n.t('engine.suite_no_command_reason', { reason: output.reason });
-  return { ...output, status: 'blocked', reason, message: I18n.t('engine.suite_could_not_run', { reason }) };
+  return { ...output, status: 'blocked', reason, message: notRunMessage({ status: 'blocked', reason }) };
 }
 
 module.exports = {
+  noTests,
+  notRunMessage,
   routedStatus,
   suiteWithoutCommand,
 };
