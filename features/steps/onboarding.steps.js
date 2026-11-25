@@ -1034,6 +1034,8 @@ When("I note the wizard's size", async ({ e2e }) => {
 
 Then('the wizard has the size I noted', async ({ e2e }) => {
   if (!e2e.wizardSize) throw new Error('no size noted: use "I note the wizard\'s size" first');
+  // the panel is drawn again on each step change: wait for it before measuring
+  await expect(panel(e2e.window)).toBeVisible();
   const box = await panel(e2e.window).boundingBox();
   expect(box, 'the wizard panel is on screen').not.toBeNull();
   expect(Math.abs(box.width - e2e.wizardSize.width), `the width ${box.width} vs ${e2e.wizardSize.width}`).toBeLessThanOrEqual(SIZE_TOLERANCE);
