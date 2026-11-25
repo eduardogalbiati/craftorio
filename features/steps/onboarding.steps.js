@@ -1783,3 +1783,58 @@ Then('the Next steps card still lists the screenshots step', async ({ e2e }) => 
   await expect(entry).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(entry).not.toContainText(NO_INTERFACE);
 });
+
+// ---- #74: what the import's analyses cost, before they run and in the review ---------------------------------
+// Acceptance tests, written before the code (features/onboarding.feature, @issue-74). What the screens expose
+// (the renderer's contract for these steps):
+// - step 3's profile row gets data-part="profile" (as the paid rows have their data-part); its amount, like
+//   theirs, is in the row: the estimate before the analysis, never "free" when the Oracle may complete the
+//   profile; wizard-cost-total sums both;
+// - data-testid="wizard-review-costs"       NEW: the review's costs, one data-part="<job>" per analysis that ran
+//   (profile, projectMap) with its amount; absent when the analyses were skipped;
+// - data-testid="wizard-review-cost-total"  NEW: inside it, the total.
+//
+// E2E HOOK THE DEVELOPER MUST ADD (it does not exist yet), read by the simulated onboarding
+// (packages/engine/service/areas/project-onboarding.js, only when CRAFTORIO_SIMULATION_ONLY=1):
+// - CRAFTORIO_E2E_ONBOARDING_COSTS=<JSON {"profile":0.42,"projectMap":0.74}>: the simulated analyses act as paid
+//   ones, with no model call: the profile is one the Oracle completes once the analysis starts (not before),
+//   these amounts are both rows' estimates before anything runs, and what each records as its cost when it
+//   ends (jobs.<job>.costUsd).
+
+// "$0.42" / "US$ 0,42": the space of a currency may be a no-break one, and no digit follows
+const amountText = (amount) => new RegExp(`${escapeRe(amount).replace(/\s+/g, '\\s*')}(?!\\d)`);
+const reviewCosts = (page) => review(page).getByTestId('wizard-review-costs');
+const reviewCost = (page, words) => reviewCosts(page).locator(`[data-part="${jobId(words)}"]`);
+
+Given('the app is open where the {string} analysis costs {float} and the {string} analysis {float}', async ({ e2e }, a, costA, b, costB) => {
+  await e2e.open({ env: { CRAFTORIO_E2E_ONBOARDING_COSTS: JSON.stringify({ [jobId(a)]: costA, [jobId(b)]: costB }) } });
+});
+
+Then("the wizard's {string} analysis shows the amount {string}", async ({ e2e }, words, amount) => {
+  const row = jobRow(e2e.window, words);
+  await expect(row).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(row).toContainText(amountText(amount), { timeout: LOAD_TIMEOUT });
+});
+
+Then("the wizard's {string} analysis does not say {string}", async ({ e2e }, words, text) => {
+  const row = jobRow(e2e.window, words);
+  await expect(row).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(row).not.toContainText(text);
+});
+
+Then("the wizard's estimated total is {string}", async ({ e2e }, amount) => {
+  await expect(wizard(e2e.window).getByTestId('wizard-cost-total')).toHaveText(amountText(amount), { timeout: LOAD_TIMEOUT });
+});
+
+Then('the review says the {string} analysis cost {string}', async ({ e2e }, words, amount) => {
+  await expect(reviewCost(e2e.window, words)).toContainText(amountText(amount), { timeout: ANALYSIS_TIMEOUT });
+});
+
+Then('the review says the analyses cost {string} in total', async ({ e2e }, amount) => {
+  await expect(reviewCosts(e2e.window).getByTestId('wizard-review-cost-total')).toContainText(amountText(amount), { timeout: ANALYSIS_TIMEOUT });
+});
+
+Then('the review shows no analysis cost', async ({ e2e }) => {
+  await expect(review(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(reviewCosts(e2e.window)).toHaveCount(0);
+});

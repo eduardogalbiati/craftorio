@@ -913,3 +913,62 @@ Feature: Bring a project in with a guided wizard
     And I open the project "code-22" from the Projects screen
     Then the project's Workflows block shows exactly the card "feature"
     And the workflow card "feature" does not say "Tests first"
+
+  # #74: an import says what its analyses may cost before they run (the ways of working profile too, when the Oracle
+  # may complete it) and what they cost in the review. No model is called: the simulated analyses act as paid ones
+  # with these amounts (the E2E hook described in onboarding.steps.js).
+  @issue-74
+  Scenario: The analysis step shows each estimate before anything runs, and the review what each analysis cost
+    Given the app is open where the "ways of working" analysis costs 0.42 and the "project map" analysis 0.74
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "costs-74"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard's "ways of working" analysis shows the amount "$0.42"
+    And the wizard's "ways of working" analysis does not say "free"
+    And the wizard's "project map" analysis shows the amount "$0.74"
+    And the wizard's estimated total is "$1.16"
+    When I start the analysis in the wizard
+    Then the progress tray shows the project "costs-74" as analyzed
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review says the "ways of working" analysis cost "$0.42"
+    And the review says the "project map" analysis cost "$0.74"
+    And the review says the analyses cost "$1.16" in total
+
+  @issue-74
+  Scenario: Skipping the analysis reaches a review with no cost, the profile's Oracle turn included
+    Given the app is open where the "ways of working" analysis costs 0.42 and the "project map" analysis 0.74
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "skip-74"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard's "ways of working" analysis shows the amount "$0.42"
+    When I skip the analysis for later
+    Then the wizard is on its "review" step
+    And the review says "The analyses were skipped: you can start them later."
+    And the review shows no analysis cost
+
+  @issue-74
+  Scenario: In Português (Brasil), the profile is not "grátis" when the Oracle may complete it, and the review says the total
+    Given the app is open where the "ways of working" analysis costs 0.42 and the "project map" analysis 0.74
+    And a local git repository with some code is ready to import
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "custos-74"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    And the wizard's "ways of working" analysis shows the amount "US$ 0,42"
+    And the wizard's "ways of working" analysis does not say "grátis"
+    When I start the analysis in the wizard
+    Then the progress tray shows the project "custos-74" as analyzed
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review says the analyses cost "US$ 1,16" in total
