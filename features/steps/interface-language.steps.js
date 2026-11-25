@@ -370,3 +370,58 @@ When('I open the Assign dialog for the backlog issue {string}', async ({ e2e }, 
   await page.getByRole('button', { name: await shownLabel(page, 'Assign workflow…', { prefix: true }) }).filter({ visible: true }).first().click();
   await expect(assignDialogPart(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
+
+// ---- #70: from a first idea to a real run in the interface language --------------------------------
+// Steps of features/70-ptbr-first-run-path.feature, with the same "shows none of these English texts:" rule
+// as #28 above on three more parts, all existing: the Descoberta card's panel (data-testid=
+// "discovery-card-detail"), the commit dialog ("discovery-commit-dialog") and the app's confirm dialog
+// ("confirm-modal"). The card, its interview and the commit dialog are opened by
+// fronts/plan/features/steps/discovery.steps.js. Resume goes through the roadmap bar as
+// fronts/build/features/steps/backlog.steps.js does, each label (Simulated, Resume, Start anyway) read
+// from the shown language's catalog.
+
+const discoveryCardPart = (page) => page.getByTestId('discovery-card-detail');
+const commitDialogPart = (page) => page.getByTestId('discovery-commit-dialog');
+const confirmDialogPart = (page) => page.getByTestId('confirm-modal');
+
+Then('the card\'s panel shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(discoveryCardPart(e2e.window), table, 'the Descoberta card\'s panel');
+});
+
+Then('the commit dialog shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(commitDialogPart(e2e.window), table, 'the commit dialog');
+});
+
+Then('the confirm dialog shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(confirmDialogPart(e2e.window), table, 'the confirm dialog');
+});
+
+// the push choice (#195) comes first on the demo roadmap: "Start anyway" goes on to the confirm
+When('I press Resume on the roadmap with Simulated off, in the interface language', async ({ e2e }) => {
+  const page = e2e.window;
+  const bar = page.getByTestId('roadmap-bar');
+  const menu = page.getByTestId('roadmap-menu');
+  if (!await menu.isVisible()) await bar.getByTestId('roadmap-menu-button').click();
+  const simulated = menu.getByRole('menuitemcheckbox', { name: await shownLabel(page, 'Simulated') });
+  if ((await simulated.getAttribute('aria-checked')) !== 'false') await simulated.click();
+  await expect(simulated).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await bar.getByRole('button', { name: await shownLabel(page, 'Resume') }).click();
+  const dialog = confirmDialogPart(page);
+  await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const anyway = dialog.getByRole('button', { name: await shownLabel(page, 'Start anyway') });
+  if (await anyway.isVisible()) await anyway.click();
+});
+
+// the wording is the catalog's: the question names the cost ("dinheiro", "custam", "gastam"…)
+Then('the confirm dialog warns that real runs spend money, in Portuguese', async ({ e2e }) => {
+  const dialog = confirmDialogPart(e2e.window);
+  await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(dialog).toContainText(/dinheiro|cust[ao]|gast[ao]/i, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the confirm dialog offers {string} and {string}', async ({ e2e }, yes, no) => {
+  const dialog = confirmDialogPart(e2e.window);
+  for (const name of [yes, no]) await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
+});

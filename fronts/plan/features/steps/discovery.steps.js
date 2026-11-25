@@ -324,6 +324,46 @@ When('I choose {string} in the card\'s panel', async ({ e2e }, action) => {
   await openCommitDialog(e2e.window);
 });
 
+// #70: the same button in whichever language the interface is (its testid only), and the dialog's text
+When('I open the commit dialog from the card\'s panel', async ({ e2e }) => {
+  const button = cardDetail(e2e.window).getByTestId('discovery-commit');
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(commitDialog(e2e.window)).toBeVisible();
+});
+
+Then('the commit dialog mentions {string}', async ({ e2e }, text) => {
+  await expect(commitDialog(e2e.window)).toContainText(new RegExp(escapeRe(text), 'i'));
+});
+
+// #70: a card with no score of its own (the rubric's score and gaps, in the interface language of the
+// moment) that was moved once, through the app's service; `colTitle` is the column's English title
+Given('the idea {string} was captured on the Discovery board and moved to {string}', async ({ e2e }, title, colTitle) => {
+  const res = await e2e.window.evaluate(async ({ projectId, title, column }) => {
+    try {
+      const card = await window.api.createDiscoveryCard(projectId, title, '', 'idea');
+      await window.api.moveDiscoveryCard(projectId, card.id, column);
+      return { id: card.id };
+    } catch (e) {
+      return { thrown: String(e?.message || e) };
+    }
+  }, { projectId: e2e.project.id, title, column: columnKey(colTitle) });
+  expect(res?.thrown, `the card "${title}" could not be recorded`).toBeFalsy();
+});
+
+When('I start the interview from the card\'s panel', async ({ e2e }) => {
+  const detail = cardDetail(e2e.window);
+  await detail.getByTestId('card-grill-me').click();
+  await expect(detail.getByTestId('grill-interview')).toBeVisible();
+});
+
+Then('the card\'s panel lists missing points, asks a question and shows a version of its history', async ({ e2e }) => {
+  const detail = cardDetail(e2e.window);
+  await expect(detail.getByTestId('clarity-missing').getByRole('listitem').first()).toBeVisible();
+  await expect(detail.getByTestId('grill-interview')).toBeVisible();
+  await expect(detail.getByTestId('card-version').first()).toBeVisible();
+});
+
 Then('the commit dialog lists the proposed issues', async ({ e2e }) => {
   const dialog = commitDialog(e2e.window);
   await expect(dialog).toHaveRole('dialog');
