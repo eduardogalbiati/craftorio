@@ -140,7 +140,7 @@ test('an issue that cannot be archived has its Archive action disabled, with the
 });
 
 test('a fourth state chip Archived; Closed shows the other closed issues (the chips filter through issueState)', () => {
-  const filters = /const FILTERS = \[[^\n]*\];/.exec(src)?.[0] || '';
+  const filters = /const FILTERS = \[[\s\S]*?\];/.exec(src)?.[0] || '';
   assert.match(filters, /'open'/);
   assert.equal(en['backlog.filter_open'], 'Open');
   assert.match(filters, /'closed'/);
