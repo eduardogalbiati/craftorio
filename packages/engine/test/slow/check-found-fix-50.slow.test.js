@@ -54,7 +54,11 @@ test('#50 fix: a rule check that fails sends the developer back once with the fi
   await run.start();
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
   const prompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').map((e) => String(e.prompt || ''));
-  assert.deepEqual(transitions.slice(1, 5), [`develop>${check}`, `${check}>develop`, `develop>${check}`, `${check}>code_review`]);
+  assert.equal(transitions.includes(`${check}>develop`), true, transitions.join(', '));
+  // #49: the secret scan (no agent) may run before or after the check
+  const scan = loadWorkflow(WORKFLOW).steps.find((s) => s.type === 'secret_scan')?.id;
+  const started = events.filter((e) => e.type === 'step.started' && e.step_id !== scan).map((e) => e.step_id);
+  assert.deepEqual(started.slice(1, 6), ['develop', check, 'develop', check, 'code_review']);
   assert.equal(prompts[1]?.includes('zz-rule-50'), true, 'the second develop turn has the finding');
   assert.equal(events.find((e) => e.type === 'workflow.finished')?.status, 'success');
 });

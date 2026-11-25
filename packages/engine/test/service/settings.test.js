@@ -29,7 +29,7 @@ function loadSettingsArea(resolveCommand) {
 test('envDetails: a tool not found in PATH carries an install command/hint, for every CLI including gh, glab and git', async () => {
   const area = loadSettingsArea(() => null);
   const tools = await area.envDetails();
-  assert.deepEqual(tools.map((t) => t.id), ['claude', 'codex', 'grok', 'gh', 'glab', 'git']);
+  assert.deepEqual(tools.map((t) => t.id), ['claude', 'codex', 'grok', 'gh', 'glab', 'git', 'gitleaks']);
   for (const t of tools) {
     assert.equal(t.path, null);
     assert.equal(t.connected, false);

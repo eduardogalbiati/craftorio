@@ -29,9 +29,11 @@ const CLIS = [
   ['GitLab CLI', 'glab'],
   ['Git', 'git'],
 ];
+// #49: gitleaks, an optional tool with a row of its own (setup-cli-gitleaks), not one of the CLIs above
+const TOOLS = [...CLIS, ['Gitleaks', 'gitleaks']];
 const cliId = (name) => {
-  const found = CLIS.find(([n]) => n === name);
-  if (!found) throw new Error(`unknown CLI "${name}" (one of ${CLIS.map(([n]) => n).join(', ')})`);
+  const found = TOOLS.find(([n]) => n === name);
+  if (!found) throw new Error(`unknown CLI "${name}" (one of ${TOOLS.map(([n]) => n).join(', ')})`);
   return found[1];
 };
 const stepSlug = (name) => name.toLowerCase().replace(/\s+/g, '-');
@@ -96,6 +98,25 @@ Then('the Setup lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI
 
 Then('the Setup marks {string} as required', async ({ e2e }, name) => {
   await expect(cliRow(e2e.window, name)).toContainText('Required');
+});
+
+// #49: a tool no run needs: "Optional: <what it is for>", never "Required"
+Then('the Setup marks {string} as optional', async ({ e2e }, name) => {
+  const row = cliRow(e2e.window, name);
+  await expect(row).toContainText(/Optional:/);
+  await expect(row).not.toContainText('Required');
+});
+
+Then('the Setup reads {string} for {string}', async ({ e2e }, status, name) => {
+  await expect(cliRow(e2e.window, name)).toContainText(status, { timeout: 45000 });
+});
+
+// the platform's command, or the hint of one without a one-line installer: both name the program (the
+// row's own name is "Gitleaks"), and ▶ Install is there
+Then('the Setup shows how to install {string}', async ({ e2e }, name) => {
+  const row = cliRow(e2e.window, name);
+  await expect(row.getByRole('button', { name: /Install/ })).toBeVisible({ timeout: 45000 });
+  await expect(row).toContainText(cliId(name));
 });
 
 When('I skip the Setup and confirm', async ({ e2e }) => {

@@ -35,9 +35,11 @@ const CLIS = [
   ['GitLab CLI', 'glab'],
   ['Git', 'git'],
 ];
+// #49: an optional tool with a row of its own, not one of the CLIs above
+const TOOLS = [...CLIS, ['Gitleaks', 'gitleaks']];
 const cliId = (name) => {
-  const found = CLIS.find(([n]) => n === name);
-  if (!found) throw new Error(`unknown CLI "${name}" (one of ${CLIS.map(([n]) => n).join(', ')})`);
+  const found = TOOLS.find(([n]) => n === name);
+  if (!found) throw new Error(`unknown CLI "${name}" (one of ${TOOLS.map(([n]) => n).join(', ')})`);
   return found[1];
 };
 const STATUS = /Ready|Not signed in|Not installed|Checking…/;
@@ -50,6 +52,11 @@ const cliWarning = (page) => wizard(page).getByTestId('wizard-cli-warning');
 
 Given('the app is open on a machine without the {string}', async ({ e2e }, name) => {
   await e2e.open({ env: { CRAFTORIO_E2E_CLI_MISSING: cliId(name) } });
+});
+
+// #49: a first start (as setup.steps.js "the app is open on a new workspace") on such a machine
+Given('the app is open on a new workspace of a machine without {string}', async ({ e2e }, name) => {
+  await e2e.open({ empty: true, env: { CRAFTORIO_E2E_CLI_MISSING: cliId(name) } });
 });
 
 Then('Agents & CLIs lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI and Git, each with a status', async ({ e2e }) => {

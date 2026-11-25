@@ -39,6 +39,14 @@ function take(step, scope) {
   return { goto: null, status: null, vars: scope.vars, transition: null };
 }
 
+// #49: where a transition leads past the secret scan (no agent), which may come before or after the check
+const CLEAN = { kind: 'secret_scan', status: 'pass', findings: [], message: 'No secret found.', round: 1 };
+function past(wf, r, scope) {
+  const scan = wf.steps.find((s) => s.type === 'secret_scan');
+  if (!scan || r.goto !== scan.id) return r;
+  return take(scan, { ...scope, vars: r.vars, output: CLEAN, steps: { ...scope.steps, [scan.id]: { output: CLEAN, visits: 1 } } });
+}
+
 const FINDING = 'src/a.js:2:1: error: unused-var-50';
 const CAUSE = 'as dependências do projeto não estão instaladas: rode npm ci em /repos/widgets';
 const rules = { kind: 'check', status: 'fail', failure_kind: 'rules', cause: `\`npm run lint\` exited with code 1: ${FINDING}`, command: 'npm run lint', findings: [FINDING], message: `\`npm run lint\` exited with code 1:\n${FINDING}`, exit_code: 1, round: 1 };
@@ -70,14 +78,14 @@ for (const { name, developer, next } of TARGETS) {
   });
 
   test(`#50 ${name}: the developer's committed turn goes to the check`, () => {
-    const { check, stepOf, turn, scope } = load();
-    assert.equal(take(stepOf(developer), { ...scope(turn), output: turn }).goto, check.id);
+    const { wf, check, stepOf, turn, scope } = load();
+    const s = { ...scope(turn), output: turn };
+    assert.equal(past(wf, take(stepOf(developer), s), s).goto, check.id);
   });
 
   test(`#50 ${name}: a check that passes or is skipped goes on to ${next}`, () => {
-    const { check, scope } = load();
-    assert.equal(take(check, scope(passed)).goto, next);
-    assert.equal(take(check, scope(skipped)).goto, next);
+    const { wf, check, scope } = load();
+    for (const output of [passed, skipped]) assert.equal(past(wf, take(check, scope(output)), scope(output)).goto, next);
   });
 
   test(`#50 ${name}: a rule failure goes back to the developer twice, then to check_failed`, () => {
@@ -126,12 +134,13 @@ for (const { name, developer, next } of TARGETS) {
   });
 
   test(`#50 ${name}: check_failed shows the cause; Continue goes on to ${next}, Stop ends the run failed`, () => {
-    const { gate, scope } = load();
+    const { wf, gate, scope } = load();
     const g = gate('check_failed');
     const s = scope(rules, {});
     assert.equal(render(String(g.summary || ''), s).includes(FINDING), true);
     assert.deepEqual((g.choices || []).map((c) => c.id).sort(), ['continue', 'stop']);
-    assert.equal(take(g, { ...s, choice: 'continue' }).goto, next);
+    const going = { ...s, choice: 'continue' };
+    assert.equal(past(wf, take(g, going), going).goto, next);
     const stop = take(g, { ...s, choice: 'stop' });
     assert.deepEqual([stop.goto, stop.status], ['end', 'failed']);
   });

@@ -103,6 +103,11 @@ Then('the gate card does not offer {string}', async ({ e2e }, name) => {
   await expect(gateChoice(e2e.window, name)).toHaveCount(0);
 });
 
+// #49: anywhere in the card, its collapsed Details (the gate's message) included
+Then('the gate card says {string}', async ({ e2e }, words) => {
+  await expect(gateCard(e2e.window)).toContainText(new RegExp(escapeRe(words), 'i'), { timeout: LOAD_TIMEOUT });
+});
+
 // the run chat (open) shows Develop once and the rule checks once: no "Develop · visit 2", no second
 // "Rule checks" visit before the gate
 Then('the developer was not sent back to fix the rule checks', async ({ e2e }) => {

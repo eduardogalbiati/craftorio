@@ -56,6 +56,17 @@ test('installCommands: whisper-cli only has a one-line installer on macOS with H
   assert.equal(installCommands('linux')['whisper-cli'], null);
 });
 
+// #49 (acceptance test, written before the code): gitleaks, optional, for the secret scan
+test('installHint (#49): gitleaks has a hint on every platform, a one-line installer on Windows and on macOS with Homebrew', () => {
+  assert.match(String(installCommand('gitleaks', 'win32')), /^winget install .*gitleaks/i);
+  assert.equal(installCommand('gitleaks', 'darwin', WITH_BREW), 'brew install gitleaks');
+  for (const [platform, opts] of [['linux', {}], ['darwin', NO_BREW]]) {
+    const hint = String(installHint('gitleaks', platform, opts) || '');
+    assert.match(hint, /gitleaks/i, platform);
+    assert.doesNotMatch(hint, /\bbrew install\b/, platform);
+  }
+});
+
 test('installCommands: the Windows and macOS commands for the same tool differ (winget vs brew, one PowerShell/curl installer)', () => {
   const win = installCommands('win32');
   const mac = installCommands('darwin', WITH_BREW);

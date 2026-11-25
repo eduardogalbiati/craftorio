@@ -37,6 +37,13 @@ test('toolRequirement: Claude Code and Git are required, the others optional wit
   assert.equal(toolRequirement('glab'), 'Optional: Backlog sync and pull requests');
 });
 
+// #49 (acceptance test, written before the code)
+test('toolRequirement: gitleaks is optional, for the secret scan', () => {
+  const { toolRequirement, toolName } = load();
+  assert.match(toolRequirement('gitleaks'), /^Optional: .*secret/i);
+  assert.match(toolName('gitleaks'), /^gitleaks$/i);
+});
+
 test('requirementBadges: Needs Codex for a workflow with Codex, Needs GitHub or GitLab CLI for forge', () => {
   const { requirementBadges } = load();
   assert.ok(requirementBadges({ clis: ['claude', 'codex', 'git'], forge: false }).includes('Needs Codex'));
