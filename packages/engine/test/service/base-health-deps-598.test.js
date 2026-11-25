@@ -153,6 +153,10 @@ test('#598 a project the cache refuses (a file: dependency) gets the project\'s 
 
 test('#598 a check that could not run (no test command) is announced: one engine log line with the reason and the log file, a notification, no issue and no fix item', async (t) => {
   const repo = gitRepo(t);
+  // #71: the project has a test file, so a missing command is an error (with none, the check ends no_tests)
+  fs.mkdirSync(path.join(repo.dir, 'test'));
+  fs.writeFileSync(path.join(repo.dir, 'test', 'app.test.js'), "require('node:test');\n");
+  for (const args of [['add', '.'], ['commit', '-q', '-m', 'a test file']]) execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: repo.dir, stdio: 'pipe' });
   const { ws, project, notices, area } = await setup(t, repo.dir);
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo.dir }).toString().trim();
   const { result: r, lines } = await captureLog(() => area.afterBaseMerge(run(project), { base: 'main' }));

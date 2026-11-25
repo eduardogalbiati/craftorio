@@ -353,9 +353,11 @@ test('runSuite: no worktree (cwd missing) -> blocked, never spawns the command',
   assert.equal(called, false);
 });
 
-test('runSuite: no command found -> blocked', async (t) => {
+test('runSuite: no command found, with test files -> blocked', async (t) => {
   const runDir = tmp(t);
-  const cwd = tmp(t); // empty: detectTestCommand finds nothing
+  const cwd = tmp(t); // no manifest: detectTestCommand finds nothing
+  // #71: with no test file either, the suite is not run (suite-no-tests-71.test.js)
+  fs.writeFileSync(path.join(cwd, 'app.test.js'), "require('node:test');\n");
   const out = await runSuite({ command: '', cwd, runDir, round: 1 });
   assert.equal(out.status, 'blocked');
   assert.match(out.reason, /no test command/);

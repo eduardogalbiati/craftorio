@@ -342,6 +342,42 @@ Feature: Runs and gates
     And I view the run "sui00304" from the list
     Then the run shows no "Not tested green" pill
 
+  # ---- #71: a project with no tests ------------------------------------------------------------------
+  # A simulated suite never looks at the project, so the runs are seeded finished: "not00071" went on from
+  # a suite that was not run (the project has no tests); in "sup00071" the supervisor on call answered
+  # the test_failed gate. The policy input "A project with no tests" (Continue | Ask) defaults to Continue.
+
+  @issue-71
+  Scenario: A run on a project with no tests says nothing was tested, never that the tests failed
+    Given the app is open
+    And the demo project has a finished AI Development run "not00071" whose suite was not run because the project has no tests
+    When I open "Runs" in the sidebar
+    And I search the runs for "not00071"
+    And I view the run "not00071" from the list
+    Then the run shows a "no tests" pill
+    And the run's pill does not say "Not tested green"
+    When I switch the run to its chat
+    Then the run chat's summary says "no tests"
+
+  @issue-71
+  Scenario: A run whose gate the supervisor answered says so in its chat
+    Given the app is open
+    And the demo project has a finished AI Development run "sup00071" whose test gate the supervisor answered with "continue"
+    When I open "Runs" in the sidebar
+    And I search the runs for "sup00071"
+    And I view the run "sup00071" from the list
+    And I switch the run to its chat
+    Then the run chat says the supervisor answered the gate with "continue"
+
+  @issue-71
+  Scenario: The Start panel of Feature goes on with a project with no tests by default, and can ask instead
+    Given the app is open
+    When I open the Start panel
+    And I choose the workflow "feature" in the Start panel
+    Then the field "A project with no tests" offers "Continue"
+    And the field "A project with no tests" offers "Ask"
+    And "Continue" is selected for "A project with no tests"
+
   # ---- #465: a deterministic step's live terminal ----------------------------------------------------
   # A deterministic step (suite, check, e2e) has no agent session, so no session buttons: its card on
   # the Run screen offers "Live terminal" (an embedded, read-only tab in the terminal dock that shows

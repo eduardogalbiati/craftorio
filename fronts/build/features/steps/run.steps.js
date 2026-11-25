@@ -631,6 +631,52 @@ Then('the run chat\'s summary says {string}', async ({ e2e }, text) => {
   await expect(line).toContainText(text);
 });
 
+// ---- #71: a project with no tests -----------------------------------------------------------------
+// The suite of such a run ends `not_run` and the run records `tested: "no tests"`: the same pills as
+// #396 (run-tested-pill, runchat-tested) say the project has no tests. The answer of the supervisor on
+// call at a gate (supervisor.decision, action `route`) shows in the run chat as data-testid
+// "runchat-gate-answered" (NEW): "The supervisor answered …" with the answer.
+const NOT_RUN_SUITE = {
+  kind: 'suite', status: 'not_run', round: 1, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, passed: null, failed: null, failures: [], preexisting: [],
+  reason: 'the project has no tests', message: 'The suite was not run: the project has no tests.',
+};
+Given('the demo project has a finished AI Development run {string} whose suite was not run because the project has no tests', async ({ e2e }, suffix) => {
+  seedAiDevRun(e2e, suffix, `A run on a project with no tests (${suffix})`, (at) => [
+    ...agentTurn(at, 1, 20, 'develop', 'developer', 'Done.'),
+    { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 19 * 6e4, output: { summary: 'Implemented the task.' } },
+    { ts: at(21), type: 'step.started', step_id: 'suite', step_type: 'suite', visit: 1 },
+    { ts: at(21), type: 'step.finished', step_id: 'suite', duration_ms: 1000, output: NOT_RUN_SUITE },
+    { ts: at(21), type: 'step.transition', from: 'suite', to: 'build' },
+    { ts: at(22), type: 'step.started', step_id: 'build', step_type: 'build', visit: 1 },
+    { ts: at(25), type: 'step.finished', step_id: 'build', duration_ms: 3 * 6e4, output: { status: 'pass', message: 'The build passed.' } },
+  ], {}, { tested: 'no tests', tested_failures: [] });
+});
+
+Then('the run\'s pill does not say {string}', async ({ e2e }, text) => {
+  await expect(visibleTestId(e2e.window, 'run-tested-pill')).not.toContainText(text);
+});
+
+Given('the demo project has a finished AI Development run {string} whose test gate the supervisor answered with {string}', async ({ e2e }, suffix, answer) => {
+  seedAiDevRun(e2e, suffix, `A run whose gate the supervisor answered (${suffix})`, (at) => [
+    ...agentTurn(at, 1, 20, 'develop', 'developer', 'Done.'),
+    { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 19 * 6e4, output: { summary: 'Implemented the task.' } },
+    { ts: at(21), type: 'step.started', step_id: 'test_failed', step_type: 'human_approval', visit: 1 },
+    { ts: at(21), type: 'supervisor.started', step_id: 'test_failed', kind: 'escalation', error: '' },
+    { ts: at(22), type: 'supervisor.decision', step_id: 'test_failed', kind: 'escalation', action: 'route', route: answer, explanation: 'The change is a README; a retry would fail the same way.' },
+    { ts: at(22), type: 'step.finished', step_id: 'test_failed', duration_ms: 6e4, output: { choice: answer, by: 'supervisor' } },
+    { ts: at(22), type: 'step.transition', from: 'test_failed', to: 'build' },
+    { ts: at(23), type: 'step.started', step_id: 'build', step_type: 'build', visit: 1 },
+    { ts: at(25), type: 'step.finished', step_id: 'build', duration_ms: 2 * 6e4, output: { status: 'pass', message: 'The build passed.' } },
+  ]);
+});
+
+Then('the run chat says the supervisor answered the gate with {string}', async ({ e2e }, answer) => {
+  const line = visibleTestId(e2e.window, 'runchat-gate-answered');
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toContainText(/supervisor answered/i);
+  await expect(line).toContainText(new RegExp(escRe(answer), 'i'));
+});
+
 // ---- #465: a deterministic step's live terminal ---------------------------------------------------
 // What the screen exposes:
 // - data-testid="run-step-card" (NEW): the card of a step on the Run screen's Details, holding the
