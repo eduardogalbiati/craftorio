@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { gateBrief } = require('../engine/gate-summary');
 const { routedStatus, suiteWithoutCommand } = require('../engine/suite-no-command');
 const { runSuite } = require('../engine/suite-step');
 const { loadWorkflow, evalExpr, render } = require('../engine/workflow');
@@ -66,15 +67,42 @@ test('#71 feature: Continue at test_failed kept by no_tests ask records no tests
   assert.deepEqual([tr.goto, tr.set], ['build', { tested: 'no tests' }]);
 });
 
-test('#71 fix: Approve at verify_failed records no tests, and keeps what was recorded otherwise', () => {
+test('#71 fix: Approve at verify_failed goes to the verification when nothing ran, and lands the change otherwise', () => {
   const gate = workflow('fix').steps.find((s) => s.id === 'verify_failed');
-  const at = (mode, status, tested) => {
-    const ctx = { approved: true, rejected: false, inputs: { mode }, vars: { tested }, steps: { suite: { output: { status } } }, output: {} };
-    return render(gate.transitions.find((x) => evalExpr(x.when, ctx)).set.tested, ctx).trim();
+  const at = (mode, status, previous_step) => {
+    const ctx = { approved: true, rejected: false, previous_step, inputs: { mode }, vars: { tested: '' }, steps: { suite: { output: status ? { status } : undefined } }, output: {} };
+    const tr = gate.transitions.find((x) => evalExpr(x.when, ctx));
+    return [tr.goto, render(tr.set.tested, ctx).trim()];
   };
-  for (const mode of ['local', 'remote']) {
-    assert.equal(at(mode, 'not_run', ''), 'no tests');
-    assert.equal(at(mode, 'fail', ''), '');
+  for (const [mode, land] of [['local', 'push_main'], ['remote', 'ci'], ['fork', 'ci']]) {
+    assert.deepEqual(at(mode, 'not_run', 'suite'), ['verify_change', 'no tests']);
+    // a gate the run resumed at: never past the verification either
+    assert.deepEqual(at(mode, 'not_run', 'verify_failed'), ['verify_change', 'no tests']);
+    // the verifier or the reviewer had its rounds: the Approve lands it
+    assert.deepEqual(at(mode, 'not_run', 'verify_change'), [land, 'no tests']);
+    assert.deepEqual(at(mode, 'not_run', 'code_review'), [land, 'no tests']);
+    assert.deepEqual(at(mode, 'fail', 'suite'), [land, '']);
+    assert.deepEqual(at(mode, null, 'code_review'), [land, '']);
+  }
+});
+
+test('#71 no_tests ask: the gate recommends no answer, so the supervisor leaves it to the owner', () => {
+  for (const [name, id, answers] of [['feature', 'test_failed', ['continue', 'stop']], ['fix', 'verify_failed', ['approve', 'reject']]]) {
+    const gate = workflow(name).steps.find((s) => s.id === id);
+    const recommend = render(gate.recommend, { previous_step: 'suite', inputs: {}, vars: {}, steps: { suite: { output: { status: 'not_run' } } } });
+    assert.match(recommend, /only the owner answers.*no_tests.*no tests/);
+    const { recommendation } = gateBrief({ recommend, answers: answers.map((a) => ({ id: a, label: a })) });
+    assert.equal(recommendation.answer, null);
+    assert.doesNotMatch(recommendation.reason, /…$/, 'not cut');
+  }
+});
+
+test('#71 a suite with no command names no log: none was written', async (t) => {
+  for (const [files, status] of [[{}, 'not_run'], [{ 'a.test.js': '' }, 'blocked']]) {
+    const runDir = folder(t, {}, { git: false });
+    const out = await runSuite({ command: '', cwd: folder(t, files), runDir, round: 1 });
+    assert.deepEqual([out.status, out.log], [status, null]);
+    assert.ok(!fs.existsSync(path.join(runDir, 'logs')));
   }
 });
 
@@ -82,7 +110,8 @@ test('#71 fix: verify_failed recommends what its case calls for', () => {
   const gate = workflow('fix').steps.find((s) => s.id === 'verify_failed');
   const say = (key, output) => render(gate[key], { previous_step: 'suite', inputs: {}, vars: {}, steps: { suite: { output } } });
   assert.match(say('recommend', { status: 'blocked', reason: 'no test command: set the workflow\'s test_command input' }), /^reject: .*test_command/);
-  assert.match(say('recommend', { status: 'not_run' }), /^approve: the project has no tests/);
+  assert.match(say('message', { status: 'not_run', message: 'm' }), /Approve to go on to the verification;/);
+  assert.match(say('message', { status: 'fail', message: 'm' }), /Approve to let it land anyway;/);
   assert.equal(say('recommend', { status: 'fail' }).trim(), '');
   assert.match(say('message', { status: 'fail', message: 'm' }), /after the rounds of fixes/);
 });

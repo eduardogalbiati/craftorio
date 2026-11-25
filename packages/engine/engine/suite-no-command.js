@@ -7,13 +7,16 @@
 const { folderHasTests } = require('./test-paths');
 
 const NO_COMMAND = 'no test command: set the workflow\'s test_command input';
-const LOOKED_IN = 'none found in package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml';
+const LOOKED_IN = 'package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml';
+const TESTS_NO_COMMAND = `${NO_COMMAND} (the project has test files, but no command was found in ${LOOKED_IN})`;
+const NONE_FOUND = `${NO_COMMAND} (none found in ${LOOKED_IN})`;
 
-// cwd: the folder the suite would run in; patterns: the workflow's tests_paths (default TESTS_PATHS)
+// cwd: the folder the suite would run in; patterns: the workflow's tests_paths (default TESTS_PATHS).
+// log: null, nothing ran, so the round wrote no log file
 async function suiteWithoutCommand(cwd, patterns) {
   const tests = await folderHasTests(cwd, patterns);
-  if (tests === false) return { status: 'not_run', reason: 'the project has no tests' };
-  return { status: 'blocked', reason: `${NO_COMMAND} (${tests ? 'the project has test files, but no command was ' : ''}${tests ? LOOKED_IN.replace('none ', '') : LOOKED_IN})` };
+  if (tests === false) return { status: 'not_run', reason: 'the project has no tests', log: null };
+  return { status: 'blocked', reason: tests ? TESTS_NO_COMMAND : NONE_FOUND, log: null };
 }
 
 // the round's output as the step's transitions can route it

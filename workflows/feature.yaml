@@ -2324,7 +2324,7 @@ steps:
       {% else %}Tests still fail after 3 rounds of fixes.
       - ✖ {{ steps.test.output.failure_report | one_line(120) }}
       {% endif %}
-    recommend: "{% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}stop: set the workflow's test_command input, then resume the run.{% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}continue: the project has no tests, so there is nothing to run.{% else %}stop: the change is not tested green; look at the failures, then resume the run.{% endif %}"
+    recommend: "{% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}stop: set the workflow's test_command input, then resume the run.{% elif previous_step == 'suite' and steps.suite.output.status == 'not_run' %}only the owner answers (they set no_tests to ask). The project has no tests, so nothing was tested.{% else %}stop: the change is not tested green; look at the failures, then resume the run.{% endif %}"
     # named choices (#223), like build_failed: the same two answers as an Approve / Reject gate
     choices:
       - { id: continue, label: "Continue to the build anyway", help: "The build and the verification run; the change is reported as {% if previous_step == 'suite' and steps.suite.output.status == 'not_run' %}not tested: the project has no tests{% else %}not tested green{% endif %}." }
