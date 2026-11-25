@@ -11,7 +11,7 @@
 //                            agent-chat-messages, agent-chat-message)
 // The window is found among the app's windows (e2e.app.windows()) by its rail, after the click or the
 // shortcut, and kept on the scenario's fixture as e2e.agentsWindow. The fixture closes the app, and
-// every window with it, after the scenario (fixtures.js): nothing to close here.
+// every window with it, after the scenario (fixtures.js): a scenario closes it only to check what that leaves (#76).
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');
@@ -124,6 +124,15 @@ Then('the Agents window\'s conversation answers', async ({ e2e }) => {
   expect(answer, `a known agent in the pane (${id})`).toBeTruthy();
   await expect(chat.getByTestId('agent-chat-messages')).toContainText(answer, { timeout: LOAD_TIMEOUT });
   await expect(chat.getByTestId('agent-chat-send')).toBeEnabled({ timeout: LOAD_TIMEOUT });
+});
+
+// #76: closed as its title bar's X does (the window's own close), and gone from the app's windows
+When('I close the Agents window', async ({ e2e }) => {
+  const win = agentsWindow(e2e);
+  const native = await e2e.app.browserWindow(win);
+  await native.evaluate((w) => w.close());
+  await expect.poll(() => e2e.app.windows().includes(win), { timeout: LOAD_TIMEOUT, message: 'the Agents window closed' }).toBe(false);
+  e2e.agentsWindow = null;
 });
 
 // modelled on "the board looks like the baseline" (backlog.steps.js): the whole second window

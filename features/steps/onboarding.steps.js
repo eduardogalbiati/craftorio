@@ -1786,6 +1786,18 @@ Then('the Next steps card still lists the screenshots step', async ({ e2e }) => 
   await expect(entry).not.toContainText(NO_INTERFACE);
 });
 
+// #75: no screenshots step at all (a disabled one is not enough), once the card has drawn what it reads and after
+// the settle time (the kind may be read after the card's first drawing)
+Then('the Next steps card has no screenshots step', async ({ e2e }) => {
+  const card = nextSteps(e2e.window);
+  await expect(card).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(card.getByTestId('next-step-po-issue')).toBeVisible();
+  await expect(card.getByTestId('next-step-screenshots')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await e2e.window.waitForTimeout(START_PANEL_SETTLE);
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('next-step-screenshots')).toHaveCount(0);
+});
+
 // ---- #74: what the import's analyses cost, before they run and in the review ---------------------------------
 // Acceptance tests, written before the code (features/onboarding.feature, @issue-74). What the screens expose
 // (the renderer's contract for these steps):

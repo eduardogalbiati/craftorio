@@ -381,6 +381,16 @@ When('I close the interview', async ({ e2e }) => {
   await expect(visible(e2e.window.getByTestId('ways-of-working-drawer'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 });
 
+// #75: "Edit profile" (once the interview shows a profile), its "Kind of project" field, Save; the form closes
+When('I change the project\'s kind to {string} in the interview\'s profile', async ({ e2e }, label) => {
+  const page = e2e.window;
+  await interviewPart(page, 'ways-of-working-edit-profile').click();
+  const form = interviewPart(page, 'ways-of-working-profile-edit');
+  await form.getByRole('combobox', { name: 'Kind of project', exact: true }).selectOption({ label });
+  await form.getByTestId('ways-of-working-profile-save').click();
+  await expect(visible(interview(page).getByTestId('ways-of-working-profile-edit'))).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
 When('I cancel the interview', async ({ e2e }) => {
   await interviewPart(e2e.window, 'ways-of-working-cancel').click();
 });

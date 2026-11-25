@@ -4,7 +4,7 @@
 // header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
 // (#276: Execution's Memory guard group), the failed app update banner (#279), the Pipelines tab's
 // cards (fronts/build/features/pipelines.feature, #378), the window kept on the app's page (#466), Settings ›
-// About's warning when the app was started without Chromium's sandbox (#476).
+// About's warning when the app was started without Chromium's sandbox (#476), the app's log (#76).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button
 // (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
@@ -439,6 +439,41 @@ Then('Settings shows no sandbox warning', async ({ e2e }) => {
   // the About tab has drawn (its app version shows) before the warning's absence counts
   await expect(e2e.window.getByText('App version', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(sandboxWarning(e2e.window)).toHaveCount(0);
+});
+
+// ---- the app's log (#76) ------------------------------------------------------------------------------
+// The main process's warnings and errors since before the app loaded, and its listeners of run:event
+// (global.craftorioE2E, features/support/electron-main.js).
+
+const logOf = async (e2e) => {
+  const log = await e2e.app.evaluate(() => ({ warnings: global.craftorioE2E?.warnings, errors: global.craftorioE2E?.errors }));
+  expect(Array.isArray(log.warnings) && Array.isArray(log.errors), 'the log is recorded').toBe(true);
+  return log;
+};
+const runListeners = async (e2e) => {
+  const n = await e2e.app.evaluate(() => global.craftorioE2E?.runEventListeners?.());
+  expect(n, 'the listeners of run:event').toBeGreaterThan(0);
+  return n;
+};
+
+Then("the app's log has no listener leak warning", async ({ e2e }) => {
+  const { warnings } = await logOf(e2e);
+  expect(warnings.filter((w) => w.name === 'MaxListenersExceededWarning')).toEqual([]);
+});
+
+// channel: the one whose handler would have failed ("Error occurred in handler for '<channel>': …")
+Then("the app's log has no error from {string}", async ({ e2e }, channel) => {
+  const { errors } = await logOf(e2e);
+  expect(errors.filter((text) => text.includes(`'${channel}'`))).toEqual([]);
+});
+
+When('I note how many listeners follow the runs', async ({ e2e }) => {
+  e2e.runListeners = await runListeners(e2e);
+});
+
+Then('as many listeners follow the runs as I noted', async ({ e2e }) => {
+  expect(e2e.runListeners, 'noted in this scenario').toBeTruthy();
+  expect(await runListeners(e2e)).toBe(e2e.runListeners);
 });
 
 // ---- no Supervisor in the header (#264)---------------------------------------------------------------

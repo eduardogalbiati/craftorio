@@ -62,3 +62,11 @@ Feature: The app opens
     Then the window refuses the dropped file
     And the app is still on its own page
     And the sidebar offers "Backlog"
+
+  # #76: starting the app warned of a listener leak (more than 10 listeners of run:event, one per part of the app
+  # that follows the runs). The log is recorded by features/support/electron-main.js.
+  @issue-76
+  Scenario: Starting the app writes no listener leak warning in its log
+    Given the app is open
+    Then the sidebar offers "Home"
+    And the app's log has no listener leak warning

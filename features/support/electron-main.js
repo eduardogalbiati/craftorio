@@ -13,7 +13,12 @@
 // - the locale is en-US, so the interface is English until a scenario chooses another (#329);
 // - the service's base-health area (packages/engine/service/areas/base-health.js) is kept in
 //   global.craftorioE2E.baseHealth when the service loads it, so a step can start the base check a
-//   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527);
+//   real run's local merge starts (afterBaseMerge): a simulated run never reaches it (#527); with it,
+//   global.craftorioE2E.runEventListeners() counts the service's listeners of run:event (#76);
+// - the main process's log is recorded from before the app loads (#76): global.craftorioE2E.warnings, each
+//   process warning as { name, type, message } (a listener leak is a MaxListenersExceededWarning), and
+//   global.craftorioE2E.errors, the text of each console.error (still written), which is how Electron says a
+//   channel's handler failed ("Error occurred in handler for '<channel>': …");
 // - with CRAFTORIO_E2E_PR_FILE (a file name in the launch's scratch folder, which does not exist
 //   before the launch), a run's PR is read from that JSON file on each call, at the service's
 //   host.readPrJson: gh's answer, or { fail: message } for a read that fails. Sync then reaches the
@@ -24,8 +29,20 @@
 
 const fs = require('fs');
 const path = require('path');
+const { format } = require('util');
 const { app, ipcMain, nativeTheme } = require('electron');
 const { shiftClock } = require('./fixed-clock');
+
+// #76: the log's warnings and errors, recorded before anything of the app is loaded
+const warnings = [];
+const errors = [];
+global.craftorioE2E = { ...(global.craftorioE2E || {}), warnings, errors };
+process.on('warning', (w) => warnings.push({ name: w.name, type: w.type, message: w.message }));
+const writeError = console.error.bind(console);
+console.error = (...args) => {
+  errors.push(format(...args));
+  writeError(...args);
+};
 
 if (process.env.CRAFTORIO_E2E_NOW) shiftClock(Number(process.env.CRAFTORIO_E2E_NOW));
 // the helpers only: scripts/screenshot.js runs its own capture in an Electron main process otherwise
@@ -62,7 +79,7 @@ const baseHealthArea = require.resolve(path.join(__dirname, '..', '..', 'package
 const makeBaseHealth = require(baseHealthArea);
 require.cache[baseHealthArea].exports = (ctx) => {
   const area = makeBaseHealth(ctx);
-  global.craftorioE2E = { ...(global.craftorioE2E || {}), baseHealth: area };
+  global.craftorioE2E = { ...(global.craftorioE2E || {}), baseHealth: area, runEventListeners: () => ctx.events.listenerCount('run:event') };
   return area;
 };
 

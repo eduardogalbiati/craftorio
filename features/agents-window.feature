@@ -25,6 +25,20 @@ Feature: The Agents window
     And the "Product Owner" chat answers
     And the Agents window's conversation answers
 
+  # #76: the listeners of run:event are the app's own, made once at its start: a window or a screen that opens adds
+  # none (features/support/electron-main.js counts them).
+  @issue-76
+  Scenario: Opening and closing the Agents window, then a project's page, leaves no run listener behind
+    Given the app is open
+    When I open "Projects" in the sidebar
+    And I note how many listeners follow the runs
+    And I open the Agents window with Ctrl+Shift+A
+    Then the Agents window opens
+    When I close the Agents window
+    And I open the project "demo-app" from the Projects screen
+    Then the project page of "demo-app" is open
+    And as many listeners follow the runs as I noted
+
   # The Agents window on the Oracle, in both themes (features/__screenshots__, created on purpose with
   # npm run test:e2e:update -- --grep @visual); the window has the suite's fixed size
   @issue-263 @visual

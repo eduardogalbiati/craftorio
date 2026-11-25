@@ -914,6 +914,75 @@ Feature: Bring a project in with a guided wizard
     Then the project's Workflows block shows exactly the card "feature"
     And the workflow card "feature" does not say "Tests first"
 
+  # #75: the screenshots step is not offered to a project with no interface: one the analysis detected as backend
+  # (the sample repository has no UI), one with no code yet, or one kept as backend. Left out, not shown disabled
+  # (#22 accepted both).
+  @issue-75
+  Scenario: An imported repository detected as backend sees no screenshots step
+    Given the app is open
+    And a local git repository with some code is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "detected-75"
+    And I go to the next step of the wizard
+    And I start the analysis in the wizard
+    Then the progress tray shows the project "detected-75" as analyzed
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review's Project type opens on "backend", marked as detected
+    When I finish the wizard
+    Then the project page of "detected-75" is open
+    And the project page shows the Next steps card
+    And the Next steps card has no screenshots step
+
+  @issue-75
+  Scenario: A new project with no code yet sees no screenshots step
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    And I name the new project "empty-75"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project page of "empty-75" is open
+    And the project page shows the Next steps card
+    And the Next steps card has no screenshots step
+
+  # the type picked later wins, and the card follows it with no reload of the app. Edit profile shows once the
+  # interview's analysis ran (simulated: no model call).
+  @issue-75
+  Scenario: A backend project changed to frontend in Ways of working is offered the screenshots step again
+    Given the app is open
+    And the workspace has a just-onboarded "backend" project "kind-75" with no idea in its Inbox
+    When I open "Projects" in the sidebar
+    And I open the project "kind-75" from the Projects screen
+    Then the project page shows the Next steps card
+    And the Next steps card has no screenshots step
+    When I open the Ways of working interview
+    And I start the interview's analysis
+    And I change the project's kind to "Frontend" in the interview's profile
+    Then the toast says "Saved the project's run defaults"
+    When I close the interview
+    Then the Next steps card still lists the screenshots step
+
+  # #76: creating a project without a repository wrote an error in the log (the wizard asked for the workflows
+  # manifest with neither a URL nor a folder). The log is recorded by features/support/electron-main.js.
+  @issue-76
+  Scenario: Creating a project without a repository writes no error in the app's log
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    And I name the new project "quiet-76"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    When I finish the wizard
+    Then the project page of "quiet-76" is open
+    And the app's log has no error from "projects:manifest"
+
   # #74: an import says what its analyses may cost before they run (the ways of working profile too, when the Oracle
   # may complete it) and what they cost in the review. No model is called: the simulated analyses act as paid ones
   # with these amounts (the E2E hook described in onboarding.steps.js).
