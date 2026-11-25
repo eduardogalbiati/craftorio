@@ -168,3 +168,19 @@ test('#421 no cut lines: no split by release', () => {
   const out = summarize({ stages: [stage('s0', [item('a', 'planned', est(1, 10))])], releases: [] });
   assert.equal((out.releases || []).length, 0);
 });
+
+test('#72 spent: marked when a finished or running item\'s cost includes an unknown one; a simulated item or known costs never', () => {
+  const spent = (...items) => summarize({ stages: [stage('s1', items)], releases: [] }).spent;
+  const known = item('a', 'done', null, { actualUsd: 0.93 });
+  assert.equal(spent(known, item('b', 'running', null, { actualUsd: 0.24, actualApprox: true })).approx, true);
+  assert.equal(!!spent(known).approx, false);
+  assert.equal(!!spent(known, item('b', 'done', null, { actualUsd: 0.24, actualApprox: true, mock: true })).approx, false);
+});
+
+test('#72 a stage is marked when one of its items that ran is, a simulated one left out', () => {
+  const { stageActualApprox } = require('../roadmap-model');
+  assert.equal(stageActualApprox([{ actualUsd: 1 }, { actualUsd: 0.24, actualApprox: true }]), true);
+  assert.equal(stageActualApprox([{ actualUsd: 1 }, { actualUsd: 0.24, actualApprox: true, mock: true }]), false);
+  assert.equal(stageActualApprox([{ actualUsd: 1 }]), false);
+  assert.equal(stageActualApprox(null), false);
+});

@@ -312,6 +312,17 @@ test('runWorkflowStep: workflow.child_finished carries the child\'s cost_usd', a
   assert.equal(finishedEv.data.cost_usd, 1.234567);
 });
 
+test('#72 runWorkflowStep: workflow.child_finished carries the mark of a child whose cost includes an unknown one, only then', async () => {
+  const finishedWith = async (result) => {
+    const events = [];
+    const startChild = async () => ({ runId: 'r1', finished: Promise.resolve({ status: 'success', outputs: {}, ...result }), stop: () => {} });
+    await runWorkflowStep({ step: { id: 's', workflow: 'c.yaml' }, scope: {}, render, startChild, emit: (type, data) => events.push({ type, data }), parent: parent0 });
+    return events.find((e) => e.type === 'workflow.child_finished').data;
+  };
+  assert.equal((await finishedWith({ cost_usd: 1.17, cost_approx: true })).cost_approx, true);
+  assert.equal('cost_approx' in (await finishedWith({ cost_usd: 1.17 })), false);
+});
+
 test('runWorkflowStep: a child that fails to start because the signal is already aborted is reported cancelled, not failed', async () => {
   const controller = new AbortController();
   controller.abort();

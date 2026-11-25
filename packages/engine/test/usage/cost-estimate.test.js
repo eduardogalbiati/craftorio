@@ -150,3 +150,17 @@ test('withEstimates (#346): a stage whose items have no estimate has none, and a
   assert.equal(costEstimate.withEstimates(roadmap, history()).stages[0].estimate, null);
   assert.deepEqual(costEstimate.withEstimates({ state: 'planned', stages: [] }, history()).stages, []);
 });
+
+test('#72 withEstimates: an item and its stage are marked when a run, or a child run, includes an unknown cost; a simulated run never', () => {
+  const past = (runId, extra) => ({ ...run(runId, '2026-11-25T10:00:00Z', { develop: 10, screenshots: 5 }), ...extra });
+  const marked = (r) => {
+    const roadmap = { stages: [{ id: 's1', items: [{ id: 'a', status: 'done', workflow: WF, inputs: {}, issues: [], runId: r.runId, runs: [r.runId] }] }] };
+    const [stage] = costEstimate.withEstimates(roadmap, [r]).stages;
+    return [!!stage.items[0].actualApprox, !!stage.actualApprox];
+  };
+  const sessions = [{ step_id: 'develop', provider: 'claude', cost_usd: 3, cost_estimate: { source: 'unknown', model: 'x', cli_cost_usd: 0.24 } }];
+  assert.deepEqual(marked(past('own', { sessions })), [true, true]);
+  assert.deepEqual(marked(past('child', { childrenCostUsd: 0.5, childrenCostApprox: true })), [true, true]);
+  assert.deepEqual(marked(past('known', {})), [false, false]);
+  assert.deepEqual(marked(past('simulated', { sessions, mock: true })), [false, false]);
+});

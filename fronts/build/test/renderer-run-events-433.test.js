@@ -442,3 +442,23 @@ test('a replayed run that ended: no toast, no usage reload, no Save to issue pre
   assert.equal(page.callsTo('getUsage').length, usage);
   assert.equal(page.state().runId, 'r0', 'a replayed workflow.started does not take the Run screen');
 });
+
+test('#72 the reducer keeps a turn of unknown cost as unknown and a child run\'s mark; known ones carry neither', async () => {
+  const page = await openPage();
+  let seq = 0;
+  const ev = (type, fields) => fire(page, { run_id: 'r72', seq: ++seq, ts: ts(seq), type, ...fields });
+  ev('workflow.started', { workflow: 'wf', file: 'wf.yaml', inputs: {}, steps: [] });
+  const snap = { id: 's1', agent: 'reviewer', provider: 'claude', model: 'x', turns: 1, tokens: {}, cost_usd: 0 };
+  ev('session.opened', { session_id: 's1', session: snap });
+  ev('session.message_sent', { session_id: 's1', step_id: 'review', turn: 1, prompt: 'p' });
+  ev('session.message_received', { session_id: 's1', step_id: 'review', turn: 1, usage: { input: 10, output: 2 }, cost_usd: null, cost_source: 'unknown', cli_cost_usd: 0.24, duration_ms: 1000, session: { ...snap, cost_estimate: { source: 'unknown', model: 'x', cli_cost_usd: 0.24, unknown_cli_usd: 0.24 } } });
+  ev('session.message_sent', { session_id: 's1', step_id: 'review', turn: 2, prompt: 'p' });
+  ev('session.message_received', { session_id: 's1', step_id: 'review', turn: 2, usage: { input: 10, output: 2 }, cost_usd: 0.4, duration_ms: 1000, session: { ...snap, turns: 2, cost_usd: 0.4 } });
+  for (const [id, mark] of [['c1', { cost_approx: true }], ['c2', {}]]) {
+    ev('workflow.child_started', { child_run_id: id, step_id: 'fan', workflow: 'wf' });
+    ev('workflow.child_finished', { child_run_id: id, status: 'success', cost_usd: 0.5, ...mark });
+  }
+  const v = view(page, 'r72');
+  assert.deepEqual(v.sessions.s1.turnLog.map((x) => [!!x.result.unknown, x.result.cost]), [[true, null], [false, 0.4]]);
+  assert.deepEqual(v.run.childRuns.map((c) => [c.run_id, !!c.cost_approx]), [['c1', true], ['c2', false]]);
+});

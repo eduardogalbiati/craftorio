@@ -184,6 +184,26 @@ test('readRun exposes childrenCostUsd (#175): from summary.children_cost_usd whe
   assert.equal(runs.readRun(root, 'no-children').childrenCostUsd, 0);
 });
 
+test('#72 readRun marks the child runs\' cost when a child\'s includes an unknown one, from the summary and from the events', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-approx-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const started = { ts: '2026-11-25T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' };
+  const record = (id, approx, withSummary) => {
+    fs.mkdirSync(path.join(root, id));
+    const mark = approx ? { cost_approx: true } : {};
+    fs.writeFileSync(path.join(root, id, 'events.jsonl'), jl(started, ...(withSummary ? [] : [
+      { ts: '2026-11-25T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c1', step_id: 'child', workflow: 'child.yaml' },
+      { ts: '2026-11-25T10:00:05Z', type: 'workflow.child_finished', child_run_id: 'c1', status: 'success', cost_usd: 0.5, ...mark },
+    ])));
+    if (withSummary) fs.writeFileSync(path.join(root, id, 'summary.json'), JSON.stringify({ run_id: id, workflow: 'parent.yaml', status: 'success', started_at: started.ts, sessions: [], child_runs: [{ run_id: 'c1', step_id: 'child', workflow: 'child.yaml', status: 'success', cost_usd: 0.5, ...mark }], children_cost_usd: 0.5 }));
+    return runs.readRun(root, id).childrenCostApprox;
+  };
+  assert.equal(record('summary-approx', true, true), true);
+  assert.equal(record('events-approx', true, false), true);
+  assert.equal(record('summary-known', false, true), false);
+  assert.equal(record('events-known', false, false), false);
+});
+
 test('readRun exposes the saves of its document to its issue (issue-saves.json), [] when there are none', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issue-saves-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

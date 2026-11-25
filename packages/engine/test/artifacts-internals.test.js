@@ -95,3 +95,9 @@ test('renderResultSummary: status, issues as reported by a step, suite counts, c
   assert.match(md, /1 new element \(no original\)/);
   assert.match(md, /Branch `feat\/x`/);
 });
+
+test('#72 renderResultSummary: the cost is marked when it includes a turn of unknown cost, plain when every cost is known', (t) => {
+  const run = tmp(t);
+  assert.match(renderResultSummary(run, { status: 'success', cost_usd: 1.17, cost_approx: true }), /^- Cost: ≈ \$1\.17$/m);
+  assert.match(renderResultSummary(run, { status: 'success', cost_usd: 0.93 }), /^- Cost: \$0\.93$/m);
+});

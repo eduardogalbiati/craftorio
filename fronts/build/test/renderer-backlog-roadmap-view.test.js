@@ -257,6 +257,25 @@ test('#215 a finished stage shows its real total cost against its estimate, colo
   assert.match(head, /rm-verdict-bad/);
 });
 
+test('#72 a finished stage whose cost includes an unknown one marks its real total and says why in the tooltip', () => {
+  const x = item('a', 'done', 1, 'A', { estimate, actualUsd: 22.21, actualMinutes: 221, runId: 'r1', runs: ['r1'] });
+  const headOf = (extra) => stageHead(loadRoadmap().html(pair(x, { estimate: { usd: 15.18, minutes: 105, items: 2, missing: 0, runs: 30 }, actualUsd: 22.21, ...extra }), () => {}, { showAll: true }), 1);
+  assert.match(text(headOf({ actualApprox: true })), /≈ \$22\.21/);
+  assert.match(headOf({ actualApprox: true }), /title="[^"]*cost is unknown/);
+  assert.doesNotMatch(text(headOf({})), /≈ \$22\.21/);
+});
+
+test('#72 an item with an estimate marks its real cost, done or running, only when it includes an unknown cost', () => {
+  const costText = (status, extra) => {
+    const x = item('a', status, 1, 'A', { estimate, actualUsd: 10, actualMinutes: 60, runId: 'r1', runs: ['r1'], ...extra });
+    return text(meter(itemBlock(loadRoadmap().html(single(x), () => {}, { showAll: true }), 'a'), 'cost').html);
+  };
+  for (const status of ['done', 'running']) {
+    assert.match(costText(status, { actualApprox: true }), /≈ \$10\.00 of ≈ \$15\.18/);
+    assert.doesNotMatch(costText(status, {}), /≈ \$10\.00/);
+  }
+});
+
 // ---- #216: inputs as friendly pills ------------------------------------------------------------
 
 const heroWorkflow = {

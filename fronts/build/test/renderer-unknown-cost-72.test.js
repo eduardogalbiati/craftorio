@@ -159,3 +159,76 @@ test('#72 the Run screen and the run list leave a run whose costs are all known 
   assert.doesNotMatch(totalRow(html), MARK);
   assert.doesNotMatch(await runScreenTotal('en', list), MARK);
 });
+
+// ---- the Run screen's sessions, turns and child runs (after the code) ----------------------------------
+
+const ESTIMATE = { source: 'unknown', model: UNKNOWN, cli_version: '2.1.316', cli_cost_usd: 0.24, unknown_cli_usd: 0.24 };
+// its last turn had a price (US$ 0.50 recorded), a turn before it had none (the CLI said US$ 0.10)
+const MIXED = session('reviewer', UNKNOWN, 0.5, { cost_estimate: { source: 'tokens', model: UNKNOWN, cli_cost_usd: 0.9, unknown_cli_usd: 0.1 } });
+
+// the Run screen of a run with these sessions, the first one selected
+async function runScreen(lang, sessions, { run = {}, turnLog } = {}) {
+  const page = await pageIn(lang);
+  page.sandbox.__run = { id: RUN_ID, status: 'success', workflow: 'w', inputs: {}, startedAt: H.NOW - 2 * H.HOUR, finishedAt: H.NOW - H.HOUR, ...run };
+  page.sandbox.__sessions = [ORCHESTRATOR, ...sessions];
+  page.sandbox.__turns = turnLog || [];
+  page.run(`(() => {
+    const v = { ...newRunView(), run: __run, past: true, sessions: new Map(__sessions.map((s) => [s.id, { ...s, turnLog: new Map(__turns.map((x) => [x.n, x])) }])) };
+    state.view = 'run'; state.runs.set(__run.id, v); state.runId = __run.id; state.selected = __sessions[1].id;
+    renderSessions(); renderDetail();
+  })()`);
+  await settle(20);
+  return page;
+}
+const cardCost = (page, id) => textOf(page.$(`.session-card[data-id="${id}"] [data-testid="session-cost"]`)).trim();
+// the cost of the selected session's detail (the last dd of its head) and its turns' heads
+const detailCost = (page) => textOf([...page.$('#tab-detail').querySelectorAll('.detail-head dd')].at(-1)).trim();
+const turnHeads = (page) => [...page.$('#tab-detail').querySelectorAll('.turn-head .meta')].map((x) => textOf(x).trim());
+
+for (const [lang, word] of [['en', 'unknown'], ['pt-BR', 'desconhecido']]) {
+  test(`#72 Run screen (${lang}): a session whose only turn is unknown, and that turn, read "${word}", never 0.0000`, async () => {
+    const result = { usage: { input: 1, output: 1 }, duration: 1000 };
+    const page = await runScreen(lang, [session('reviewer', UNKNOWN, 0, { cost_estimate: ESTIMATE })], {
+      turnLog: [{ n: 1, items: [], result: { ...result, cost: null, unknown: true } }, { n: 2, items: [], result: { ...result, cost: 0.4 } }],
+    });
+    assert.match(cardCost(page, 's-reviewer'), new RegExp(`^${word}`));
+    assert.match(detailCost(page), new RegExp(`^${word}`));
+    assert.doesNotMatch(cardCost(page, 's-reviewer') + detailCost(page), /0[.,]0000/);
+    const [unknown, known] = turnHeads(page);
+    assert.match(unknown, new RegExp(word));
+    assert.match(known, /0[.,]4000/);
+    assert.doesNotMatch(known, new RegExp(word));
+  });
+}
+
+test('#72 Run screen: a session with known turns and an unknown last one shows its amount marked, in the card and the detail', async () => {
+  const page = await runScreen('en', [session('reviewer', UNKNOWN, 0.5, { cost_estimate: ESTIMATE })]);
+  assert.match(cardCost(page, 's-reviewer'), /≈ \$0\.5000/);
+  assert.match(detailCost(page), /≈ \$0\.5000/);
+});
+
+test('#72 Run screen: a session with an unknown turn followed by a priced one is marked too', async () => {
+  const page = await runScreen('en', [MIXED]);
+  assert.match(cardCost(page, 's-reviewer'), MARK);
+  assert.match(detailCost(page), MARK);
+});
+
+// the child runs' costs on the Run screen: the orchestrator's card, and the strip of child run links
+const CHILDREN = (mark) => [{ run_id: 'c1', step_id: 'fan', workflow: 'w', status: 'success', cost_usd: 0.5, ...mark }];
+async function childCosts(mark) {
+  const page = await runScreen('en', [session('developer', 'claude-opus-5-5', 0.93)], { run: { childRuns: CHILDREN(mark) } });
+  const label = page.run("I18n.t('run.child_runs_cost')");
+  const card = [...page.$('#sessions').querySelectorAll('.session-card[data-id="orchestrator"] .metric')].map((m) => textOf(m).trim()).find((x) => x.startsWith(label));
+  page.sandbox.__parent = { childRuns: CHILDREN(mark) };
+  return { card, strip: H.visibleText(page.run('childRunsStrip(__parent)')) };
+}
+
+test('#72 Run screen: the child runs\' cost of the orchestrator\'s card is marked when a child\'s includes an unknown one, only then', async () => {
+  assert.match((await childCosts({ cost_approx: true })).card, /≈ \$0\.5000/);
+  assert.doesNotMatch((await childCosts({})).card, MARK);
+});
+
+test('#72 Run screen: the strip of child runs gives the same marked cost as the orchestrator\'s card', async () => {
+  assert.match((await childCosts({ cost_approx: true })).strip, /≈ \$0\.5000/);
+  assert.doesNotMatch((await childCosts({})).strip, MARK);
+});

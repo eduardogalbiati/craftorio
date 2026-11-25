@@ -96,3 +96,40 @@ test('#615 a finished item keeps its final cost through a live reload', () => {
   const html = R.html(R.mergeState(shown(), light()), () => {}, ALL);
   assert.match(meterText(html, 'b'), /\$1\.00/);
 });
+
+// ---- #72: the mark of a cost that includes an unknown one follows the live reloads --------------------
+
+const stateOf = (data) => require('@craftorio/engine/domains/backlog/backlog').backlogState({ projectId: 'p1', ...data });
+const withItemA = (extra) => {
+  const data = shown();
+  Object.assign(data.roadmap.stages[0].items[0], extra);
+  return data;
+};
+
+test('#72 the light backlog:state carries a running item\'s mark, without changing the stages\' shape', () => {
+  const marked = stateOf(withItemA({ actualUsd: 2.5, actualApprox: true }));
+  const plain = stateOf(withItemA({ actualUsd: 2.5 }));
+  assert.equal(marked.roadmap.stages[0].items[0].actualApprox, true);
+  assert.equal('actualApprox' in plain.roadmap.stages[0].items[0], false);
+  const shapes = [marked, plain].map(({ roadmap }) => JSON.stringify({ ...roadmap, stages: null }));
+  assert.equal(shapes[0], shapes[1]);
+});
+
+test('#72 after a live reload the running item\'s meter and the stage are marked, and the finished item is not', () => {
+  const { R } = loaded();
+  const l = light();
+  l.roadmap.stages[0].items[0].actualApprox = true;
+  const merged = R.mergeState(shown(), l);
+  assert.equal(merged.roadmap.stages[0].actualApprox, true);
+  const html = R.html(merged, () => {}, ALL);
+  assert.match(meterText(html, 'a'), /≈ \$2\.50/);
+  assert.doesNotMatch(meterText(html, 'b'), /≈ \$1\.00/);
+});
+
+test('#72 a live reload whose costs are all known again clears the mark', () => {
+  const { R } = loaded();
+  const merged = R.mergeState(withItemA({ actualApprox: true }), light());
+  assert.equal(!!merged.roadmap.stages[0].items[0].actualApprox, false);
+  assert.equal(!!merged.roadmap.stages[0].actualApprox, false);
+  assert.doesNotMatch(meterText(R.html(merged, () => {}, ALL), 'a'), /≈ \$2\.50/);
+});

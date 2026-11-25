@@ -78,7 +78,8 @@ function loadRunList({ now = NOW } = {}) {
     state: { workflows: [], runs: new Map(), runMeta: new Map() },
     esc,
     fmtDur: (ms) => `${Math.round((ms || 0) / 1000)}s`,
-    fmtUsd: (n) => `$${(Number(n) || 0).toFixed(2)}`,
+    fmtUsd: (n, approx = false) => `${approx ? '≈ ' : ''}$${(Number(n) || 0).toFixed(2)}`,
+    SessionCost: require('@craftorio/shared/session-cost'), // #72: the sessions' total
     fmtTok: (n) => String(n || 0),
     fmtNum: (n) => String(n || 0),
     dateOf: (s) => String(s || ''),
