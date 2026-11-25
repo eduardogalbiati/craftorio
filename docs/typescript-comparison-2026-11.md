@@ -7,7 +7,7 @@ repository, with Node 24.22.2 and TypeScript 6.0.3 on Linux (WSL2); medians of 5
 | | JavaScript with JSDoc (today) | `.ts` |
 | --- | --- | --- |
 | Build step | none | none for Node (it strips the types); one for the pages, whose 51 `<script>` tags read `packages/shared` as is: 0.4 s to transpile the package, 1.8 s with `tsc` (emit and source maps) |
-| Type check | `npm run typecheck`, whole repository: 4.4 s | about the same checker and options |
+| Type check | `npm run typecheck`, whole repository: 5.5 s (two runs of `tsc`: the engine, then the pages) | about the same checker and options |
 | Loading the 51 modules, Node | 19 ms | 82 ms (types stripped at load) |
 | Loading the 51 modules, Electron as Node | 17 ms | 89 ms |
 | `npm start`: before Electron (`prestart`) | 5.2 s | 5.2 s, plus the build of the pages' copy (0.4 s or 1.8 s, above) |

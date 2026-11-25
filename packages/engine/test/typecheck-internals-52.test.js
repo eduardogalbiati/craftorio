@@ -1,11 +1,11 @@
 // #52, internals of scripts/typecheck.js the acceptance tests (typecheck-coverage-52.test.js) do not reach:
-// which lines count as silenced, and nextFiles where git cannot say.
+// which lines count as silenced, the deleted files of the lists, the two jsconfigs, and nextFiles where git cannot say.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { checkSilenced, nextFiles } = require('../../../scripts/typecheck.js');
+const { checkRatchet, checkSilenced, nextFiles, typecheck } = require('../../../scripts/typecheck.js');
 
 const root = path.join(__dirname, '..', '..', '..');
 const posix = (p) => String(p).replace(/\\/g, '/');
@@ -38,6 +38,36 @@ test('#52 a block directive without text, and a URL before the cast, give no rea
   });
   const kinds = checkSilenced({ root: dir, recorded: { 'src/block.js': 1, 'src/url.js': 1 } }).map((p) => `${p.file}:${p.line} ${p.kind}`);
   assert.deepEqual(kinds, ['src/block.js:2 no-reason', 'src/url.js:2 no-reason']);
+});
+
+test('#52 @ts-expect-error and a cast to * silence the checker too', (t) => {
+  const dir = project(t, {
+    'src/expect.js': '// @ts-check\n// @ts-expect-error\nmodule.exports = 1;\n',
+    'src/star.js': '// @ts-check\nmodule.exports = /** @type {*} */ (1);\n',
+    'src/why.js': '// @ts-check\nmodule.exports = /** @type { * } */ (1); // it comes from outside\n',
+  });
+  const kinds = checkSilenced({ root: dir, recorded: { 'src/expect.js': 1, 'src/star.js': 1, 'src/why.js': 1 } }).map((p) => `${p.file}:${p.line} ${p.kind}`);
+  assert.deepEqual(kinds, ['src/expect.js:2 no-reason', 'src/star.js:2 no-reason']);
+});
+
+test('#52 a deleted file still in NEXT or UNCHECKED fails until it leaves the list', (t) => {
+  const dir = project(t, { 'src/old.js': 'module.exports = 1;\n' });
+  const problems = checkRatchet({ root: dir, checked: [], next: ['src/gone-next.js'], unchecked: ['src/gone.js', 'src/old.js'] });
+  assert.deepEqual(problems.map((p) => `${p.file} ${p.kind}`), ['src/gone-next.js leave-list', 'src/gone.js leave-list']);
+  assert.match(problems[0].message, /NEXT/);
+  assert.match(problems[1].message, /UNCHECKED/);
+});
+
+test('#52 the browser names are known in the files of jsconfig.pages.json only, and an error of both configs is told once', async (t) => {
+  const body = 'module.exports = document.title;\n';
+  const dir = project(t, {
+    'src/engine.js': `// @ts-check\n${body}`,
+    'pages/screen.js': "// @ts-check\nconst shared = require('../src/shared');\nmodule.exports = [document.title, shared];\n",
+    'src/shared.js': '// @ts-check\n/** @type {number} */\nmodule.exports.n = "x";\n',
+    'jsconfig.pages.json': JSON.stringify({ extends: './jsconfig.json', compilerOptions: { lib: ['es2023', 'dom'] }, files: ['pages/screen.js'], include: ['pages/**/*.js'] }),
+  });
+  const found = (await typecheck({ root: dir })).map((e) => `${posix(path.relative(fs.realpathSync(dir), fs.realpathSync(e.file)))}:${e.line}`);
+  assert.deepEqual(found.sort(), ['src/engine.js:2', 'src/shared.js:3']);
 });
 
 test('#52 nextFiles outside a git repository: the commits are unknown (null), never 0', async (t) => {

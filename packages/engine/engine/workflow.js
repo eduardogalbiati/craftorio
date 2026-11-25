@@ -365,7 +365,8 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     // stopped once it did ({ step, next, at }: summary.paused, what Resume continues from)
     this.pausing = null;
     this.paused = null;
-    this.lastFinished = null; // { step, visit } of the last step.finished (endOfError)
+    /** @type {{ step: string, visit: number } | null} */
+    this.lastFinished = null; // of the last step.finished (endOfError)
     this.childHandles = new Set(); // the handles of the child runs in progress (startChild), paused with this run
     this.liveCommand = null; // the step command in progress (a suite step's), named while the run pauses
     this.seq = 0;
@@ -508,7 +509,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     if (this.pausing) this.pausing.final = true; // ending now: Cancel pause no longer applies
     const st = this.ctx.steps[current];
     // a gate after step.finished (a stall check) leaves its visit counted: it has its output
-    const finished = this.lastFinished?.step === current && /** @type {{ visit: number }} */ (/** @type {unknown} */ (this.lastFinished)).visit === st?.visits;
+    const finished = this.lastFinished?.step === current && /** @type {{ visit: number }} */ (this.lastFinished).visit === st?.visits;
     if (this.stepRunning === current && st?.visits && !finished) st.visits--;
     this.paused = { step: current, next: this.nextTurnOf(current), at: new Date().toISOString() };
     return { status: 'paused', error: null };

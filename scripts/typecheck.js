@@ -1,19 +1,21 @@
 // Type checking ratchet (issue #346): TypeScript's checker on JavaScript with JSDoc types, file by
 // file. jsconfig.json keeps checkJs off; a file opts in with `// @ts-check` in its leading comments
-// and imports the shared shapes from packages/shared/types.js. test/typecheck-346.test.js runs the
+// and imports the shared shapes from packages/shared/types.js. jsconfig.pages.json is the same for the
+// page scripts (ui-kit, fronts, renderers), with the browser's types and the page globals (#52). test/typecheck-346.test.js runs the
 // checker (so `npm test` runs it on every OS) and the ratchet:
 //   - CHECKED lists the files that opted in: a file that opted in is recorded here and can't opt out;
 //   - NEXT is the owner's list of files to check next: a file leaves it when it opts in;
 //   - UNCHECKED lists the other files older than the rule for new files (issue #52): a source file in
 //     none of the three lists is new (a moved file too) and starts with `// @ts-check`. Generated and
-//     vendored files (a generated/ or vendor/ folder) and tests are out. Remove a deleted file from it;
+//     vendored files (a generated/ or vendor/ folder) and tests are out. A deleted file leaves NEXT and UNCHECKED;
 //   - SILENCED counts the lines of each opted-in file that silence the checker (`@ts-ignore`,
-//     `@ts-nocheck`, a cast to `any`), each with its reason on the line: the count only goes down.
+//     `@ts-expect-error`, `@ts-nocheck`, a cast to `any` or `*`), each with its reason on the line: the
+//     count only goes down.
 // `--next` ranks the files to opt in next: the commits of the last 60 days that fixed them (a subject
 // that starts with "Fix"), then those that changed them, with the errors tsc would report on each.
 // `npm run check` runs the ratchet, the silenced lines and the checker (scripts/check.js).
 //
-//   npm run typecheck                   the plain checker (tsc --noEmit -p jsconfig.json)
+//   npm run typecheck                   the plain checker (tsc --noEmit -p jsconfig.json, then the pages)
 //   node scripts/typecheck.js           the checker and the ratchets, exit 1 on any problem; the coverage
 //   node scripts/typecheck.js --next    the files to check next, most valuable first
 
@@ -24,6 +26,7 @@ const { sourceFiles } = require('./source-tree');
 const { countCommits } = require('@craftorio/shared/architecture-model');
 
 const ROOT = path.join(__dirname, '..');
+const CONFIGS = ['jsconfig.json', 'jsconfig.pages.json'];
 
 // files that opted in with // @ts-check (sorted, one per line)
 const CHECKED = [
@@ -31,6 +34,7 @@ const CHECKED = [
   'fronts/build/views/backlog/backlog-roadmap.js',
   'fronts/build/views/projects/project-wizard.js',
   'fronts/build/views/supervisor/supervisor.js',
+  'packages/contract/node-globals.js',
   'packages/contract/page-globals.js',
   'packages/engine/domains/chat/speech.js',
   'packages/engine/domains/project/project-map.js',
@@ -40,7 +44,10 @@ const CHECKED = [
   'packages/engine/domains/supervisor/supervisor-tools.js',
   'packages/engine/domains/usage/cost-estimate.js',
   'packages/engine/domains/workflow/workflow-compose.js',
+  'packages/engine/engine/check-findings.js',
+  'packages/engine/engine/check-tools.js',
   'packages/engine/engine/expected-files.js',
+  'packages/engine/engine/output-lines.js',
   'packages/engine/engine/project-instructions.js',
   'packages/engine/engine/project-version.js',
   'packages/engine/engine/providers.js',
@@ -638,8 +645,9 @@ function coverage({ root = ROOT } = {}) {
   return { checked: files.filter((f) => optedIn.has(f)).length, total: files.length };
 }
 
-// [{ file, kind: 'opted-out' | 'unlisted' | 'leave-list' | 'new-file', message }]
-function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked = UNCHECKED } = {}) {
+// [{ file, kind: 'opted-out' | 'unlisted' | 'leave-list' | 'new-file', message }]; UNCHECKED is this
+// repository's record, another root has none unless it is given
+function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked = root === ROOT ? UNCHECKED : [] } = {}) {
   const optedIn = new Set(findOptedIn({ root }));
   const problems = [];
   for (const file of checked) {
@@ -650,6 +658,11 @@ function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked =
     if (next.includes(file)) problems.push({ file, kind: 'leave-list', message: `${file} opted in with // @ts-check: remove it from NEXT in scripts/typecheck.js` });
     if (unchecked.includes(file)) problems.push({ file, kind: 'leave-list', message: `${file} opted in with // @ts-check: remove it from UNCHECKED in scripts/typecheck.js` });
   }
+  for (const [name, list] of Object.entries({ NEXT: next, UNCHECKED: unchecked })) {
+    for (const file of list) {
+      if (!fs.existsSync(path.join(root, ...file.split('/')))) problems.push({ file, kind: 'leave-list', message: `${file} does not exist any more: remove it from ${name} in scripts/typecheck.js` });
+    }
+  }
   const known = new Set([...checked, ...next, ...unchecked]);
   for (const file of checkable(root)) {
     if (!optedIn.has(file) && !known.has(file)) problems.push({ file, kind: 'new-file', message: `${file} is a new source file without // @ts-check: start it with // @ts-check and add it to CHECKED in scripts/typecheck.js` });
@@ -657,10 +670,10 @@ function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked =
   return problems;
 }
 
-// What silences the checker on a line: a comment that is a @ts-ignore or @ts-nocheck directive, or a
-// cast to any. The reason is the text after the directive, or a // comment after the cast.
-const DIRECTIVE = /(?:^|\s|\*)(?:\/\/+|\/\*+|\*)\s*@ts-(?:ignore|nocheck)\b(.*)$/;
-const ANY_CAST = /\/\*\*\s*@type\s*\{\s*any\s*\}\s*\*\/\s*\(/g;
+// What silences the checker on a line: a comment that is a @ts-ignore, @ts-expect-error or @ts-nocheck
+// directive, or a cast to any (`*` is any too). The reason is the text after the directive, or a // comment after the cast.
+const DIRECTIVE = /(?:^|\s|\*)(?:\/\/+|\/\*+|\*)\s*@ts-(?:ignore|expect-error|nocheck)\b(.*)$/;
+const ANY_CAST = /\/\*\*\s*@type\s*\{\s*(?:any|\*)\s*\}\s*\*\/\s*\(/g;
 
 // { line, reason } of each silencing line of a text (line is 1-based)
 function silencedLines(text) {
@@ -690,16 +703,14 @@ function checkSilenced({ root = ROOT, recorded = SILENCED } = {}) {
   return problems;
 }
 
-// [{ file, line, message }] from the checker on root/jsconfig.json (line is 1-based); `checkJs` true
-// checks every file, opted in or not
-function typecheck({ root = ROOT, checkJs = false } = {}) {
+// [{ file, line, message }] from the checker on one jsconfig of root (line is 1-based)
+function typecheckConfig(configPath, checkJs) {
   const ts = require('typescript');
-  const configPath = path.join(root, 'jsconfig.json');
   const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} });
-  if (!parsed) return Promise.resolve([{ file: configPath, line: 0, message: 'jsconfig.json cannot be read' }]);
+  if (!parsed) return [{ file: configPath, line: 0, message: `${path.basename(configPath)} cannot be read` }];
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: { ...parsed.options, checkJs }, projectReferences: parsed.projectReferences });
   const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
-  const errors = diagnostics
+  return diagnostics
     .filter((d) => d.category === ts.DiagnosticCategory.Error)
     .map((d) => {
       const message = ts.flattenDiagnosticMessageText(d.messageText, '\n');
@@ -707,7 +718,14 @@ function typecheck({ root = ROOT, checkJs = false } = {}) {
       const { line } = d.file.getLineAndCharacterOfPosition(d.start || 0);
       return { file: d.file.fileName, line: line + 1, message };
     });
-  return Promise.resolve(errors);
+}
+
+// the errors of the jsconfigs of root, each once (a module both check is in both); `checkJs` true
+// checks every file, opted in or not
+function typecheck({ root = ROOT, checkJs = false } = {}) {
+  const [main, ...others] = CONFIGS.map((name) => path.join(root, name));
+  const errors = [main, ...others.filter((file) => fs.existsSync(file))].flatMap((file) => typecheckConfig(file, checkJs));
+  return Promise.resolve([...new Map(errors.map((e) => [`${e.file}:${e.line} ${e.message}`, e])).values()]);
 }
 
 const relative = (root, file) => path.relative(root, file).replace(/\\/g, '/');

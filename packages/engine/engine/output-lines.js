@@ -1,3 +1,4 @@
+// @ts-check
 // What a command's output is read with (#50, split from packages/engine/engine/suite-step.js):
 // clean(text) without the terminal's colour codes, fileOf(loc, cwd) the file a location names. Used by the
 // suite step (suite-step.js) and the check step's comparison with the base (check-findings.js).

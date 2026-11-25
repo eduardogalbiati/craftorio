@@ -36,6 +36,7 @@
     "licenses": "node scripts/third-party-licenses.js",
     "lint:lists": "node scripts/lint-lists.js",
     "package": "node apps/desktop/scripts/package.js",
+    "posttypecheck": "tsc --noEmit -p jsconfig.pages.json",
     "prebuild": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "prepare": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "prestart": "node scripts/docs.js --derived && node scripts/build-3d.js",

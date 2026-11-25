@@ -70,7 +70,7 @@ implicit `any`, `this` and catch variables allowed, so a file opts in without a 
 - **A new file starts checked** (#52): a source file that is in none of `CHECKED`, `NEXT` and
   `UNCHECKED` (the files older than the rule) must have `// @ts-check`; `npm run check` names the one
   that does not. A moved file is new. Generated and vendored files (a `generated/` or `vendor/`
-  folder) and tests are out. No file enters `UNCHECKED`; one that opts in or is deleted leaves it.
+  folder) and tests are out. No file enters `UNCHECKED`; one that opts in or is deleted leaves it (the check names it).
 - **Opt a file in**: put `// @ts-check` in its leading comments (first line, or after a `/* global */` line), annotate what the
   checker cannot infer (`/** @param {...} */`, a `/** @type {...} */ (x)` cast for a local set in a
   callback), and add the file to `CHECKED` in `scripts/typecheck.js` (removing it from `NEXT`
@@ -84,15 +84,16 @@ implicit `any`, `this` and catch variables allowed, so a file opts in without a 
 - **The next files** (#52): `node scripts/typecheck.js --next` ranks the files that did not opt in by
   the commits of the last 60 days that fixed them (a subject that starts with "Fix"), then by those that
   changed them, with the errors tsc would report on each.
-- **No silencing** (#52): in an opted-in file a `@ts-ignore`, a `@ts-nocheck` or a cast to `any` has its
+- **No silencing** (#52): in an opted-in file a `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`, or a cast to `any` or `*`, has its
   reason on the line (`// @ts-ignore: why`, `/** @type {any} */ (x) // why`), and `SILENCED` in
   `scripts/typecheck.js` holds the count per file: it only goes down. Type the value instead.
 - **Screens** (#52): `packages/contract/page-globals.js` (types only, no page loads it) declares the
-  globals the page scripts share (`t`, `api`, `window.X`); add the one a screen needs there. jsconfig.json
-  has the browser's `dom` types for every checked file, so the checker does not say that an engine file
-  uses a name Node lacks.
-- **Run it**: `npm run typecheck` (`tsc --noEmit -p jsconfig.json`), or `node scripts/typecheck.js`
-  for the checker, the ratchet and the coverage (`49 of 551 files checked`). `npm test` runs both through `test/typecheck-346.test.js` on
+  globals the page scripts share (`t`, `api`, `window.X`); add the one a screen needs there. Only
+  `jsconfig.pages.json` (ui-kit, fronts, renderers) has them and the browser's `dom` types: in an engine file
+  (`jsconfig.json`) a name Node lacks is an error, but for the `window` the shared modules test for
+  (`packages/contract/node-globals.js`).
+- **Run it**: `npm run typecheck` (`tsc --noEmit -p jsconfig.json`, then `jsconfig.pages.json`), or `node scripts/typecheck.js`
+  for the checker, the ratchet and the coverage (`<checked> of <total> files checked`). `npm test` runs both through `test/typecheck-346.test.js` on
   every OS (a few seconds).
 - **The ratchet** (`scripts/typecheck.js`): every opted-in file passes with no error; `CHECKED` is
   exactly the files that opted in, so a file that opted in cannot opt out (dropping its

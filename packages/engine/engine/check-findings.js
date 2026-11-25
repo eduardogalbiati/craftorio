@@ -1,3 +1,4 @@
+// @ts-check
 // What a found check (check-tools.js) reports, compared with what it reports on the base (#50), for the check step
 // (check-step.js). A finding is a line with a place in a file: `src/a.js:2:1: msg`, `a.ts(2,3): error`, Checkstyle's
 // `[WARN] /x/F.java:[3,5] msg`, ESLint's rows under a file's line, Prettier's `[warn] src/a.js`. Two findings are the

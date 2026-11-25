@@ -1,3 +1,4 @@
+// @ts-check
 // The project's own linter and type checker (#50), for the check step (check-step.js) of a project with no
 // `check` script and no check_command. Found, never guessed: a tool counts only when the project's files
 // configure it AND it is installed (the project's node_modules/.bin, or the PATH the command runs with).

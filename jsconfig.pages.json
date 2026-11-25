@@ -1,0 +1,25 @@
+{
+  "extends": "./jsconfig.json",
+  "compilerOptions": {
+    "lib": [
+      "es2023",
+      "dom",
+      "dom.iterable"
+    ]
+  },
+  "files": [
+    "packages/contract/page-globals.js"
+  ],
+  "include": [
+    "packages/ui-kit/**/*.js",
+    "fronts/*/**/*.js",
+    "apps/*/renderer/**/*.js"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "packages/*/test/**",
+    "fronts/*/test/**",
+    "fronts/*/features/**",
+    "apps/*/test/**"
+  ]
+}

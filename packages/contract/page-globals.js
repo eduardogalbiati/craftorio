@@ -2,9 +2,8 @@
 // Types only, no page loads this file: the globals the page scripts share without a module (#52), so
 // a screen can opt in to the type checker. A `var` of a script is a global for the checker, also as
 // `window.X`. A module of packages/shared has its own type; a kit's or a front's global has none yet
-// (any) until its file opts in. Add a global here when a screen that opts in uses it. Every checked
-// file sees these names and the browser's (jsconfig.json `dom`), the engine's too: the checker does
-// not say that Node lacks them.
+// (any) until its file opts in. Add a global here when a screen that opts in uses it. Only
+// the page scripts see these names and the browser's: jsconfig.pages.json, not jsconfig.json.
 /* eslint no-unused-vars: 0 */
 
 // ---- packages/shared ----
@@ -64,7 +63,7 @@ var api;
 /** @type {PageFunction} */ var openSupervisorChat;
 /** @type {PageObject} */ var OracleChat;
 /** @type {PageObject} */ var OracleChatModel;
-/** @type {PageObject} */ var oracleAgent;
+/** @type {PageObject | undefined} no file defines it: oracle.js reads undefined (a bug of its own, out with its fix) */ var oracleAgent;
 /** @type {PageObject} */ var PasteImage;
 /** @type {PageObject} */ var ProjectCityImpact;
 /** @type {PageObject} */ var ProjectConflictMap;

@@ -8,9 +8,7 @@
     "ignoreDeprecations": "6.0",
     "target": "es2023",
     "lib": [
-      "es2023",
-      "dom",
-      "dom.iterable"
+      "es2023"
     ],
     "types": [
       "node"
@@ -23,6 +21,9 @@
     "resolveJsonModule": true,
     "maxNodeModuleJsDepth": 0
   },
+  "files": [
+    "packages/contract/node-globals.js"
+  ],
   "include": [
     "packages/*/**/*.js",
     "fronts/*/**/*.js",
@@ -33,6 +34,10 @@
     "packages/*/test/**",
     "fronts/*/test/**",
     "fronts/*/features/**",
-    "apps/*/test/**"
+    "apps/*/test/**",
+    "packages/contract/page-globals.js",
+    "packages/ui-kit/**",
+    "fronts/**",
+    "apps/*/renderer/**"
   ]
 }
