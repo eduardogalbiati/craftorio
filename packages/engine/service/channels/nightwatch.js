@@ -1,3 +1,4 @@
+// @ts-check
 // Night watch screen (#172): the switch's state, the owner's permissions, the Oracle's night log and
 // the nights' metrics (packages/engine/domains/night/night-watch.js), and the morning summary. While the watch is on it also
 // detects the anomalies (oracle.detected): from the run events (a failed, interrupted, stalled or
@@ -109,7 +110,7 @@ module.exports = (ctx) => {
     if (openFor !== key) { open.clear(); openFor = key; }
     return w;
   };
-  function detect({ kind, runId = null, projectId = null, since, key, evidence = null }) {
+  function detect(/** @type {{ kind: string, runId?: string | null, projectId?: string | null, since: any, key: string, evidence?: any }} */ { kind, runId = null, projectId = null, since, key, evidence = null }) {
     if (open.has(key)) return;
     const id = crypto.randomUUID();
     open.set(key, id);
@@ -176,7 +177,7 @@ module.exports = (ctx) => {
       for (const line of text.split('\n')) {
         let e = null;
         try { e = JSON.parse(line); } catch { continue; }
-        if (e?.type === 'workflow.started') return night.selfHealingEvent(e).event;
+        if (e?.type === 'workflow.started') return /** @type {{ event: any }} */ (night.selfHealingEvent(e)).event;
       }
     } catch { /* no events file: the detectors work without the run's project and issues */ } finally {
       if (fd != null) fs.closeSync(fd);

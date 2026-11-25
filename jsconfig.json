@@ -8,7 +8,9 @@
     "ignoreDeprecations": "6.0",
     "target": "es2023",
     "lib": [
-      "es2023"
+      "es2023",
+      "dom",
+      "dom.iterable"
     ],
     "types": [
       "node"

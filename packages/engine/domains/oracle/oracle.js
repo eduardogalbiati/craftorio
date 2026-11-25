@@ -252,7 +252,7 @@ function monthlyBlock(budget) {
  * push notification (an action taken under Night watch); `onChange(message)` a message was added;
  * `onNightEnd({ startedAt, until, by })` a Night watch ended (#172: its morning summary).
  */
-function createOracle({
+function createOracle(/** @type {Record<string, any>} */ {
   dir, tools, bridge, mcpCommand, skillsDirs, resolveCommand, refuseReal, agent, settings, budget = () => null,
   perform = null, restore = null, notify = () => {}, onChange = () => {}, onNightEnd = () => {},
 }) {

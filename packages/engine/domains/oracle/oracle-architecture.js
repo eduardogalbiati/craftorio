@@ -160,7 +160,7 @@ function mockReport(model) {
  * `oracle`: { oneTurn, budgetRefusal } of packages/engine/domains/oracle/oracle.js; `agent`: the Oracle's { model, effort }.
  * Throws on an invalid answer (its cost is already recorded in the Oracle's usage).
  */
-async function analyze({ project, model, mock, oracle, agent, onItem = null }) {
+async function analyze(/** @type {{ project: any, model: any, mock?: boolean, oracle: any, agent: any, onItem?: Function|null }} */ { project, model, mock, oracle, agent, onItem = null }) {
   if (mock) return { report: mockReport(model), costUsd: 0, tokens: {}, simulated: true };
   const refused = oracle.budgetRefusal();
   if (refused) return { refused };

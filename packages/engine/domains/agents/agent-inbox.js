@@ -46,7 +46,7 @@ function requestText({ from, kind, reason }) {
  * permission covers then keeps the daytime rule (the owner is there), and a covered kind runs alone
  * only when its permission is checked.
  */
-function waitReason(kind, params, { clickKinds = [], confirmKinds = [], watch = null, allowed = [] } = {}) {
+function waitReason(kind, params, /** @type {{ clickKinds?: string[], confirmKinds?: string[], watch?: any, allowed?: string[] }} */ { clickKinds = [], confirmKinds = [], watch = null, allowed = [] } = {}) {
   if (clickKinds.includes(kind)) return 'It starts a run, which can cost money: it waits for the owner\'s click.';
   const byDay = confirmKinds.includes(kind) ? 'It publishes or is hard to reverse: it waits for the owner\'s click.' : null;
   if (!watch?.active) return byDay;

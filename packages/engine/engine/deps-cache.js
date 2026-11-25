@@ -189,7 +189,7 @@ function missingDeps(dir) {
 const installArgs = (d, ignoreScripts) => (ignoreScripts ? [...d.args, '--ignore-scripts'] : d.args);
 
 // Runs `cmd args` (a .cmd shim through the shell on Windows) → { code, output, timedOut }; never rejects.
-function runCommand(cmd, args, { cwd, env, timeoutMs = INSTALL_TIMEOUT_MS, signal } = {}) {
+function runCommand(cmd, args, /** @type {{ cwd?: string, env?: any, timeoutMs?: number, signal?: AbortSignal }} */ { cwd, env, timeoutMs = INSTALL_TIMEOUT_MS, signal } = {}) {
   const exe = resolveCommand(cmd);
   if (!exe) return Promise.resolve({ code: null, output: `${cmd} not found in PATH`, timedOut: false });
   const childEnv = { ...process.env, ...(env || {}) };

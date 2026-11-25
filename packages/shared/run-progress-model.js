@@ -244,7 +244,7 @@
    * #614: `merged` (the commit a run merged, null: none): a clean merge is no step of its own, so the
    * station where the work lands (landsWork) is done with it, entered or not, and names the commit (`merged`).
    */
-  function pipeline({ merged = null, ...opts } = {}) {
+  function pipeline(/** @type {Record<string, any>} */ { merged = null, ...opts } = {}) {
     const list = trailStations(opts);
     return merged ? list.map((st) => (landsWork(st) ? { ...st, state: 'done', merged } : st)) : list;
   }

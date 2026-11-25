@@ -1409,7 +1409,7 @@ function checkBudget(budget) {
 // `timeZone` (#273): the owner's zone (settings.timeZone): the turn's prompt names it and the local time.
 // `workflowKinds` (#791): the project's workflow and inputs of a Feature and a Fix (already resolved):
 // the prompt names them, and the answer's groups get their kind's (normalizeAnswer).
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null, runDefaults = null, workflowKinds = null }) {
+async function ask(/** @type {Record<string, any>} */ { backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null, timeZone = null, language = null, runDefaults = null, workflowKinds = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;

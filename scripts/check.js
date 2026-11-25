@@ -2,8 +2,8 @@
 // before its final answer and by the check step of ai-development-local-hero after develop. Each
 // rule calls the same code its test asserts with: lint:lists, layers, the file-size ratchet, code
 // health, the decisions log, docs --check, the Oracle's capabilities list, the workflows' load checks
-// (#469, #474), tests reading no live document under docs/work/ (#695) and the typecheck (ratchet
-// and checker). One line per finding (`<rule>: <what broke and how to fix it>`), then
+// (#469, #474), tests reading no live document under docs/work/ (#695) and the typecheck (the
+// ratchet, with the rule for new files and the silenced lines of #52, and the checker). One line per finding (`<rule>: <what broke and how to fix it>`), then
 // `checks: pass` or `checks: N finding(s)` and exit 1. The suite still runs the rule tests.
 //
 //   npm run check                       every rule on this checkout
@@ -19,7 +19,7 @@ const { checkFileSizes } = require('./file-size-ratchet');
 const { checkLayers } = require('./layers');
 const { lintFiles } = require('./lint-lists');
 const { checkTestFixtures } = require('./test-fixture-rule');
-const { checkRatchet, typecheck } = require('./typecheck');
+const { checkRatchet, checkSilenced, typecheck } = require('./typecheck');
 
 const ROOT = path.join(__dirname, '..');
 const rel = (root, file) => (path.isAbsolute(file) ? path.relative(root, file) : file).replace(/\\/g, '/');
@@ -47,6 +47,7 @@ const RULES = [
   ['test-fixtures', (root) => checkTestFixtures(root).map((p) => p.message)],
   ['typecheck', async (root) => [
     ...checkRatchet({ root }).map((p) => p.message),
+    ...checkSilenced({ root }).map((p) => p.message),
     ...(await typecheck({ root })).map((e) => `${rel(root, e.file)}:${e.line} ${e.message}`),
   ]],
 ];

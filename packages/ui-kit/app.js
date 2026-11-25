@@ -58,6 +58,7 @@ const CATEGORIES = {
 };
 
 // ---------------------------------------------------------------------------
+/** @type {Record<string, any>} */ // each screen adds its own fields
 const state = {
   view: 'dashboard',
   ws: null,
@@ -965,6 +966,7 @@ function renderNavRuns() {
 // Never blocks anything: it hides by itself and its × dismisses it.
 // action (#281): { label, run, done? }, a button inside the toast ("Undo"). toast.js (openToast)
 // draws it, runs it and counts the toast down: 10 s with an action, 15 for a gate, 7 otherwise.
+/** @param {any} title @param {any} [detail] @param {any} [runId] @param {any} [gate] @param {{ action?: { label: string, run: () => any } | null }} [options] */
 function showToast(title, detail, runId = null, gate = null, { action = null } = {}) {
   const html = (head, text) => `<button type="button" class="toast-close" aria-label="${t('common.dismiss')}" title="${t('common.dismiss')}">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
   const onClick = (e) => {

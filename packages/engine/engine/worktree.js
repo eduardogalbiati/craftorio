@@ -786,7 +786,7 @@ function recordRemoved(runDir, { dir, branch, wipCommit }) {
  * of an ended run go with its worktree, or `scratchDays` after the run ended without a worktree folder.
  * @returns {Promise<string[]>} removed folders
  */
-async function cleanupWorktrees({ worktreesDir, runsDir, active = [], scratchDays = SCRATCH_DAYS, log = () => {} }) {
+async function cleanupWorktrees(/** @type {{ worktreesDir: string, runsDir: string, active?: string[] | (() => string[]), scratchDays?: number, log?: (line: any) => void }} */ { worktreesDir, runsDir, active = [], scratchDays = SCRATCH_DAYS, log = () => {} }) {
   let names = [];
   try { names = fs.readdirSync(worktreesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { names = []; }
   const removed = [];

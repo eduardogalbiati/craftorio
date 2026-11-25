@@ -281,14 +281,22 @@ function readIgnoreRevs(root) {
   return parseIgnoreRevs(fs.readFileSync(file, 'utf8'));
 }
 
-// { commits: { file: n }, last: { file: date } } or { missing: 'why' }.
-function readChurn(root, files) {
+// The commits of the history (`since`: only those git dates after it) with the files each changed and
+// its subject, { walked: [{ hash, date, ignored, targets, subject }] }, or { missing: 'why' }.
+function readHistory(root, files, { since = null } = {}) {
   const shallow = git(root, ['rev-parse', '--is-shallow-repository']);
   if (shallow === null) return { missing: 'churn: not a git repository, commits unknown' };
   if (shallow.trim() === 'true') return { missing: 'churn: shallow clone, git log does not hold the whole history (git fetch --unshallow)' };
-  const log = git(root, ['log', '--no-merges', '-M', '--name-status', '--format=%x01%H %cI']);
+  const log = git(root, ['log', '--no-merges', '-M', '--name-status', '--format=%x01%H %cI %s', ...(since ? [`--since=${since}`] : [])]);
   if (log === null) return { missing: 'churn: git log failed (no commits?), commits unknown' };
-  return countCommits(walkHistory(parseLog(log), files, readIgnoreRevs(root)), files);
+  const subjects = new Map([...log.matchAll(/^\x01(\S+) \S+ (.*)$/gm)].map((m) => [m[1], m[2].trim()]));
+  return { walked: walkHistory(parseLog(log), files, readIgnoreRevs(root)).map((c) => ({ ...c, subject: subjects.get(c.hash) || '' })) };
+}
+
+// { commits: { file: n }, last: { file: date } } or { missing: 'why' }.
+function readChurn(root, files) {
+  const history = readHistory(root, files);
+  return history.missing ? history : countCommits(history.walked, files);
 }
 
 function readHead(root) {
@@ -407,4 +415,5 @@ module.exports = {
   hotspots,
   MAX_COMPLEXITY,
   MIN_DUPLICATE_LINES,
+  readHistory,
 };

@@ -14,8 +14,10 @@
 // - requestRef(name, number): "PR #12" / "MR !12";
 // - rawFileUrl(name, repo, file): a public raw read of one file, GitLab's form for an unknown host.
 // Browser: window.Platforms (loads after the adapters); Node: module.exports.
-(function (root) {
+(function (/** @type {Record<string, any>} */ root) {
+  /** @type {unknown} not the exports' own type, which needs PLATFORMS */
   const node = typeof module === 'object' && module.exports;
+  /** @type {readonly (typeof import('./github') | typeof import('./gitlab'))[]} */
   const PLATFORMS = Object.freeze(node
     ? [require('./github'), require('./gitlab')]
     : [root.PlatformGitHub, root.PlatformGitLab]);

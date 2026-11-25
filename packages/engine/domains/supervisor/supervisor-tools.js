@@ -1,3 +1,4 @@
+// @ts-check
 // The supervisor's read-only tools over the service (#28): workflows, projects, runs, skills, agents,
 // usage and analytics, the same data the screens show. The app-wide supervisor chat
 // (packages/engine/domains/supervisor/supervisor-chat.js) offers them to its `claude` session through the MCP server
@@ -79,7 +80,7 @@ function supervisorTools(ctx) {
         projectId: str('Only the runs of this project'),
         status: str('Only the runs with this status (e.g. failed, succeeded, interrupted)'),
       }),
-      run: async ({ limit, projectId, status } = {}) => {
+      run: async (/** @type {{ limit?: number, projectId?: string, status?: string }} */ { limit, projectId, status } = {}) => {
         let list = (await ctx.listAllRuns()).runs;
         if (projectId) list = list.filter((r) => r.project?.id === projectId);
         if (status) list = list.filter((r) => r.status === status);
@@ -96,7 +97,7 @@ function supervisorTools(ctx) {
       name: 'list_skills',
       description: 'The skills of the workspace: id, name and description.',
       inputSchema: obj(),
-      run: () => json(skills.listSkills(ws().skills).map((s) => ({ id: s.id, name: s.name, description: s.description, uses: s.uses }))),
+      run: () => json(skills.listSkills(ws().skills).map((/** @type {Record<string, any>} */ s) => ({ id: s.id, name: s.name, description: s.description, uses: s.uses }))),
     },
     {
       name: 'read_skill',
@@ -117,7 +118,7 @@ function supervisorTools(ctx) {
       name: 'get_usage',
       description: 'Tokens and cost this month per provider, the budgets and the recent runs.',
       inputSchema: obj({ scope: { type: 'string', enum: ['orchestrator', 'machine'], description: 'orchestrator (default): the app\'s runs; machine: every CLI session on this machine' } }),
-      run: async ({ scope } = {}) => json(await ctx.usageSnapshot(scope === 'machine' ? 'machine' : 'orchestrator')),
+      run: async (/** @type {{ scope?: string }} */ { scope } = {}) => json(await ctx.usageSnapshot(scope === 'machine' ? 'machine' : 'orchestrator')),
     },
     {
       name: 'get_analytics',
@@ -127,7 +128,7 @@ function supervisorTools(ctx) {
         to: str('Last day, YYYY-MM-DD'),
         scope: { type: 'string', enum: ['orchestrator', 'machine'] },
       }),
-      run: async ({ from, to, scope } = {}) => analytics.analyticsReport(await ctx.analyticsSnapshot({ from, to, scope })),
+      run: async (/** @type {{ from?: string, to?: string, scope?: string }} */ { from, to, scope } = {}) => analytics.analyticsReport(await ctx.analyticsSnapshot({ from, to, scope })),
     },
   ];
 }

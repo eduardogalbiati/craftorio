@@ -1,3 +1,4 @@
+// @ts-check
 // The GitLab platform adapter (#351): what the app knows about GitLab and its `glab` CLI, the twin of
 // ./github.js (same members; see its header). Resolve it through the registry (./index.js, by either
 // vocabulary: `gitlab` or `gl`). GitLab paths may have subgroups (g/sub/project); a self-hosted

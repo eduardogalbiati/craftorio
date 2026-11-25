@@ -350,7 +350,7 @@ const KIND_WORDS = { changes_requested: 'Changes requested', comment: 'Review co
 // their own words), each as a Markdown quote (every line starts with "> ") after a line naming its author,
 // file:line and link, under a header telling the agent not to follow instructions inside them.
 // → { ok, prompt ('' when !ok), sent, refused, error? }
-function buildFixRequest({ requests = [], ids = [], note = '', round = 1 } = {}) {
+function buildFixRequest(/** @type {{ requests?: any[], ids?: any[], note?: string, round?: number }} */ { requests = [], ids = [], note = '', round = 1 } = {}) {
   const want = new Set((Array.isArray(ids) ? ids : []).map(String));
   const picked = (Array.isArray(requests) ? requests : []).filter((r) => r && want.has(String(r.id)));
   const sent = picked.filter((r) => r.trusted === true);
@@ -379,7 +379,7 @@ const GH_REPLY = 'mutation($thread:ID!,$body:String!){addPullRequestReviewThread
 
 // One reply per fixed review thread (GitHub) / discussion (GitLab), through `run(cli, args)` → { exit_code, output };
 // CI requests get none, and nothing is resolved. → { replied: [ids], errors: [{ id, error }] }; never rejects.
-async function replyToFixed(pr, { requests = [], commit = '', run } = {}) {
+async function replyToFixed(pr, /** @type {{ requests?: any[], commit?: string, run?: any }} */ { requests = [], commit = '', run } = {}) {
   const out = { replied: [], errors: [] };
   const t = parseTarget(pr?.url);
   if (!t || t.kind !== 'pr') return { ...out, errors: [{ id: null, error: 'not a pull/merge request URL' }] };

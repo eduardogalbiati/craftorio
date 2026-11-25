@@ -1,3 +1,4 @@
+// @ts-check
 // The first-project onboarding's pure model (#638, docs/work/first-project-onboarding/spec.md R1, R3,
 // R5, R7): the wizard's steps and moves, the workflows suggested from a profile, the cost of the
 // analyses before the click. The wizard and the engine share it; it reads no file and no DOM.
@@ -174,7 +175,7 @@
   // #725: a failed job's known codes, the one list of the engine (its short reason) and the wizard (its words)
   const FAILURE_CODES = ['cli-missing', 'invalid-ranking', 'no-folder', 'no-profile', 'refused', 'timeout'];
 
-  function workflowsColumnState({ mode, profileJob } = {}) {
+  function workflowsColumnState(/** @type {{ mode?: string, profileJob?: any }} */ { mode, profileJob } = {}) {
     if (mode === 'manual') return 'manual';
     if (mode !== 'analyze') return 'choose';
     const status = profileJob?.status;
@@ -201,7 +202,7 @@
     return ['pending', 'pending', 'pending'];
   }
 
-  function analysisPhases({ job, interview } = {}) {
+  function analysisPhases(/** @type {{ job?: any, interview?: any }} */ { job, interview } = {}) {
     const known = interview?.phases || null;
     const states = phaseStates(job, known);
     // a failed job: the phase it stopped at, the first one not ended
@@ -251,12 +252,12 @@
     // the host (github.com, git@gitlab.com): always after a scheme or in an scp form, else only before owner/repo
     if (/[.@]/.test(parts[0] || '') && (full || parts.length > 2)) parts.shift();
     if (parts.length < 2) return '';
-    return parts.pop().split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return /** @type {string} */ (parts.pop()).split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
   // #738: the wizard's notice when the owner cannot push to the imported repository (push === false; true
   // or unknown: null): its text names owner/repo, its choices Create a fork and Work locally (mode local)
-  function forkSuggestion({ repo, push } = {}) {
+  function forkSuggestion(/** @type {{ repo?: string | null, push?: boolean | null }} */ { repo, push } = {}) {
     if (push !== false) return null;
     const name = repoUrlParts(repo).slice(-2).join('/');
     return {

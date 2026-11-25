@@ -1,3 +1,4 @@
+// @ts-check
 // The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (packages/engine/domains/roadmap/roadmap.js), each stage started
 // when the previous one has finished and merged; the bar names the base's known failures (#405, packages/engine/domains/project/base-health.js). The item card reads in three bands (#282). 1: its
 // issues' titles (what leads: a list, one line per issue, linked, #110; under it "4 issues · complexity 9", the total of their `complexity:n` labels) | cost and time
@@ -125,7 +126,7 @@
   const askOracleHtml = (x) => (askable(x) && window.GateOracle?.failureButtonHtml ? window.GateOracle.failureButtonHtml(x, 'data-rm-ask-oracle data-testid="roadmap-ask-oracle"') : '');
   // #269: the bar's ⋮ menu (open or not) and its entries: a new action is a line here, the bar stays; #421: its summary's
   // "By release" list; #391: its Pause menu (after this stage, or now) and the "Pausing after stage" badge with its Cancel pause
-  let [menuOpen, byReleaseOpen, pauseOpen, simulate] = [false, false, false, null]; // #750: Simulated, a ⋮ entry (null: the default)
+  let [menuOpen, byReleaseOpen, pauseOpen, simulate] = /** @type {[boolean, boolean, boolean, boolean | null]} */ ([false, false, false, null]); // #750: Simulated, a ⋮ entry (null: the default)
   const simulating = (r) => (simulate ?? (!!state.simulationOnly || !!r?.simulated)) && devMode();
   const pauseHtml = (r) => `<span class="bl-menu-wrap rm-pause-wrap"><button class="btn sm btn-icon warn-ghost" type="button" data-rm="pause" title="${t('backlog_roadmap.pause_after_this_stage_or_now')}" aria-haspopup="menu" aria-expanded="${pauseOpen}">${ICON.pause}${t('backlog_roadmap.pause')}</button>${pauseOpen ? Menu.menuHtml(RoadmapModel.pauseChoices(r).map((c) => ({ id: `pause-${c.after}`, iconHtml: c.after === 'stage' ? MI.pause : MI.stop, label: c.label, title: c.hint, testid: `roadmap-pause-${c.after === 'stage' ? 'after-stage' : 'now'}`, attrs: `data-rm="pause-${esc(c.after)}"` })), { className: 'rm-menu rm-pause-menu', testid: 'roadmap-pause-menu', label: t('backlog_roadmap.pause_the_roadmap') }) : ''}</span>`; // #748: the shared menu, each hint in its tooltip
   const pausingHtml = (r, at = RoadmapModel.pausingAfterStage(r)) => (at < 0 ? '' : `<span class="badge warn" data-testid="roadmap-pausing-badge">${t('backlog_roadmap.pausing_after_stage')} ${at + 1}</span> <button class="btn sm ghost" type="button" data-rm="cancel-pause" data-testid="roadmap-cancel-pause" title="${t('backlog_roadmap.take_the_pause_back_the_roadmap')}">${t('backlog_roadmap.cancel_pause')}</button>`);
@@ -134,7 +135,7 @@
     { id: 'versions', label: 'backlog_roadmap.restore_an_earlier_version', title: 'backlog_roadmap.restore_an_earlier_version_tip', show: () => true }];
   // the item whose Edit form is open; its "add input" pair is shown; the stage whose note is edited; #287: the values of an Edit
   // form whose save was refused ({ id, inputs, mock }); a refused edit whose item is gone ({ item, reason }), its values shown apart
-  let [editing, adding, noteEditing, kept, lost] = [null, false, null, null, null];
+  let [editing, adding, noteEditing, kept, lost] = /** @type {[any, any, any, Record<string, any> | null, Record<string, any> | null]} */ ([null, false, null, null, null]);
   // #138: the items grouped by their issues' epics instead of by stage (remembered)
   const BY_EPIC_KEY = 'craftorio.roadmapByEpic';
   let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
@@ -223,7 +224,7 @@
     return `<div class="rm-meter" ${id} data-verdict="${m.verdict}"${m.title ? ` title="${esc(m.title)}"` : ''}><div class="rm-meter-row"><span class="rm-meter-label">${t(label)}</span><span class="rm-meter-value">${m.value}</span>${m.of ? `<span class="rm-meter-of muted">${esc(m.of)}</span>` : ''}<span class="spacer"></span>${right}</div>${m.ratio != null ? `<div class="rm-meter-bar" aria-hidden="true">${barInner(m.ratio)}</div>` : ''}</div>`;
   }
   // a real value against its estimate; `running`: within the estimate reads "on track"
-  function againstHtml(kind, actual, estimate, { fmt, more, running = false, extra = [], approx = false }) {
+  function againstHtml(kind, actual, estimate, /** @type {{ fmt: any, more: any, running?: any, extra?: any[], approx?: any }} */ { fmt, more, running = false, extra = [], approx = false }) {
     const v = Estimates.verdict(actual, estimate);
     if (!v) return meterHtml(kind, { verdict: 'none', value: esc(fmt(actual, approx)) });
     const onTrack = running && v.level === 'good';
@@ -299,7 +300,7 @@
   // does not define (added with "add input") as text.
   function formHtml(raw) {
     // #287: a refused save keeps what the owner typed, not the stored values
-    const x = kept?.id === raw.id ? { ...raw, inputs: kept.inputs, mock: kept.mock } : raw;
+    const x = kept?.id === raw.id ? { ...raw, inputs: /** @type {Record<string, any>} */ (kept).inputs, mock: /** @type {Record<string, any>} */ (kept).mock } : raw;
     const defs = inputDefs(x);
     const key = modeIn(x).key;
     const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== key && !skipInput(k, def || {})));
@@ -414,7 +415,7 @@
     const where = est.step ? groupOf.get(est.step) || readable(est.step, run.stepNames) : t('backlog_roadmap.run_starting');
     const whereId = est.step && !groupOf.has(est.step) ? ` (${est.step})` : '';
     const label = { waiting: t('status_pill.status_waiting'), failed: t('backlog_roadmap.failed_at', { where }), stopped: t('backlog_roadmap.stopped_at', { where }), done: t('backlog_roadmap.done_2') }[est.state] || where; // #36
-    const round = est.round > 1 && est.state !== 'done' ? est.round : 0;
+    const round = /** @type {number} */ (est.round) > 1 && est.state !== 'done' ? est.round : 0;
     const sender = round && est.sentBackBy ? groupOf.get(est.sentBackBy) || readable(est.sentBackBy, run.stepNames) : '';
     // who works there: the human at a gate, else the step's first agent (the engine when none yet)
     const first = last?.agents?.[0];
@@ -666,7 +667,7 @@
   // ---- the stage's ⋮ menu (#282): its rarely used actions, out of the head -------------------------------
   // #748: the shared menu (packages/ui-kit/menu.js), grouped; a refused entry stays, aria-disabled, its reason in its
   // tooltip only. Opened and closed in the page, never by a redraw. #284: a finished stage has nothing to hold back.
-  let [stageMenu, stageBinding, barBinding] = [null, null, null]; // the id of the stage whose menu is open; its Menu.bindMenu; the bar's (bindMenus)
+  let [stageMenu, stageBinding, barBinding] = /** @type {[any, Record<string, any> | null, Record<string, any> | null]} */ ([null, null, null]); // the id of the stage whose menu is open; its Menu.bindMenu; the bar's (bindMenus)
   function stageMenuBody(stage, s, count, r, done) {
     const off = !!stage.disabled;
     const acts = may(r, stage); // with a stage, start is "Run this stage" (#141)
@@ -1224,7 +1225,7 @@
   // #138: the items under their issues' epics (an item of issues in two epics shows under both; "No
   // epic" last), each with its stage; editing stays in the stage view. `v`: the view's filter (#217);
   // `shows`: the items the view keeps (#268: Planned | All, the date range).
-  function byEpicHtml(r, epics, byNumber, v = {}, shows = () => true) {
+  function byEpicHtml(r, epics, byNumber, v = {}, /** @type {(item: any) => boolean} */ shows = () => true) {
     const sections = [...epics.map((e) => ({ id: e.id, title: e.title })), { id: '', title: t('backlog_roadmap.no_epic') }].map((e) => {
       if (v.epic && v.epic !== (e.id || NO_EPIC)) return '';
       const rows = [];
@@ -1306,7 +1307,7 @@
   let chainPicker = null;
   let chainFor = null;
   function mountChain(data) {
-    const box = document.querySelector('#bl-list [data-rm-chain]');
+    const box = /** @type {HTMLElement} */ (document.querySelector('#bl-list [data-rm-chain]'));
     const item = box && (data?.roadmap?.stages || []).flatMap((st) => st.items || []).find((x) => x.id === box.dataset.rmChain);
     if (!item) { chainPicker = null; chainFor = null; return; }
     const value = chainFor === item.id && chainPicker ? chainPicker.value() : item.then || null;
@@ -1331,7 +1332,7 @@
   // as the cut line of the stage before it); a save puts the releases no stage carries back in their places
   const roadmapOf = (data) => RoadmapModel.foldReleases(data?.roadmap);
   const withLead = (r, stages) => RoadmapModel.unfoldReleases(r?.leadReleases, stages);
-  async function save(ctx, r, stages, edit = null) {
+  async function save(ctx, r, stages, /** @type {Record<string, any> | null} */ edit = null) {
     let out = null;
     try {
       out = await api.saveRoadmap(ctx.projectId, withLead(r, stages), edit?.label || null, r?.updatedAt || null);
@@ -1440,7 +1441,7 @@
 
   // #196: the bar's "Show the item": the item that paused the roadmap, scrolled into view and marked.
   function showItem(id) {
-    flashTo([...document.querySelectorAll('#bl-list [data-item]')].find((x) => x.dataset.item === id), 'center');
+    flashTo([.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('#bl-list [data-item]'))].find((x) => x.dataset.item === id), 'center');
   }
   function flashTo(el, block) {
     if (!el) return;
@@ -1487,29 +1488,29 @@
   }
 
   // ---- the ⋮ menus (#269 the bar's, #282 a stage's) and the earlier versions (#281) ----------------------
-  const focusMenu = (sel, wrap = '.rm-menu-wrap') => document.querySelector(`#bl-list ${wrap} ${sel}`)?.focus({ preventScroll: true });
-  const stageButtonOf = (id) => [...(document.querySelectorAll?.('#bl-list [data-rm-stage-menu]') || [])].find((b) => b.dataset.rmStageMenu === id) || null;
+  const focusMenu = (sel, wrap = '.rm-menu-wrap') => /** @type {HTMLElement | null} */ (document.querySelector(`#bl-list ${wrap} ${sel}`))?.focus({ preventScroll: true });
+  const stageButtonOf = (id) => [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll?.('#bl-list [data-rm-stage-menu]') || [])].find((b) => b.dataset.rmStageMenu === id) || null;
   // #748: the stage menu opens and closes in the page, never by a redraw (scroll, paged cards, the stage stay put);
   // without its button in the page, the next draw shows it open; near the window's bottom it opens upward
   function openStageMenu(r, id) {
     const [btn, s] = [stageButtonOf(id), r.stages.findIndex((st) => st.id === id)];
     stageMenu = id;
     if (!btn || s < 0) return;
-    const wrap = btn.closest('.rm-stage-menu-wrap');
+    const wrap = /** @type {HTMLElement} */ (btn.closest('.rm-stage-menu-wrap'));
     if (!wrap.querySelector('.rm-stage-menu')) wrap.insertAdjacentHTML('beforeend', stageMenuBody(r.stages[s], s, r.stages.length, r, !RoadmapModel.hasUnfinished(r.stages[s])));
-    const menu = wrap.querySelector('.rm-stage-menu');
+    const menu = /** @type {HTMLElement} */ (wrap.querySelector('.rm-stage-menu'));
     btn.setAttribute('aria-expanded', 'true');
     const box = menu.getBoundingClientRect?.();
     if (box && window.innerHeight && box.bottom > window.innerHeight) menu.classList.add('up');
     stageBinding = Menu.bindMenu(menu, { anchor: btn, onClose: (why) => closeStageMenu(why === 'escape') });
-    menu.querySelector('[role="menuitem"]')?.focus({ preventScroll: true });
+    /** @type {HTMLElement | null} */ (menu.querySelector('[role="menuitem"]'))?.focus({ preventScroll: true });
   }
   // `keep`: the menu stays in the page, hidden (an entry's click still finds its stage), until the click is done
   function closeStageMenu(focus = false, keep = false) {
     const id = stageMenu;
     stageBinding?.close();
     [stageMenu, stageBinding] = [null, null];
-    for (const menu of document.querySelectorAll?.('#bl-list .rm-stage-menu') || []) { if (keep) menu.hidden = true; else menu.remove(); }
+    for (const menu of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll?.('#bl-list .rm-stage-menu') || [])) { if (keep) menu.hidden = true; else menu.remove(); }
     const btn = id != null ? stageButtonOf(id) : null;
     btn?.setAttribute('aria-expanded', 'false');
     if (focus) btn?.focus({ preventScroll: true });
@@ -1638,7 +1639,7 @@
     }
     ctx.render();
     // the form or note just opened: its first control gets the focus
-    document.querySelector('.rm [autofocus]')?.focus({ preventScroll: true });
+    /** @type {HTMLElement | null} */ (document.querySelector('.rm [autofocus]'))?.focus({ preventScroll: true });
     return true;
   }
   // #748: no redraw (the bar's open menu closes in onClick)
@@ -1717,7 +1718,7 @@
     undoToast(ctx, out, t('backlog_roadmap.cleared_the_roadmap'), plural(r.stages.length, 'backlog_roadmap.stages_removed'));
   }
   async function proposeClicked({ ctx, r, act }) {
-    const text = document.querySelector('#rm-proposal')?.value.trim();
+    const text = /** @type {HTMLTextAreaElement | null} */ (document.querySelector('#rm-proposal'))?.value.trim();
     if (!text) return 'handled';
     let proposal;
     try { proposal = JSON.parse(text); } catch { throw new Error(t('backlog_roadmap.the_proposal_is_not_valid_json')); }

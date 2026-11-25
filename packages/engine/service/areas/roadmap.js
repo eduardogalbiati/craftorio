@@ -1,3 +1,4 @@
+// @ts-check
 // Service area: roadmaps (packages/engine/domains/roadmap/roadmap.js). Settles each started roadmap from its runs and starts
 // the current stage's items while there are free run slots; called after every run and when a
 // workspace opens. Also the roadmap as the Backlog shows it (item statuses from their runs, #112)
@@ -264,7 +265,7 @@ module.exports = (ctx) => {
   // transitions.js holdForStackParent) waits for its own PR's merge too: the next stage may stack on it.
   // #809: so does a run in its PR monitor (pr_monitor, live: `prMonitor`), with the monitor's last card
   // (ci, review, conflicts, comments, result, error) on its PR; pr_review stays for the runs before it
-  function mergeGateOf(runId, find, live, row = null) {
+  function mergeGateOf(runId, find, live, /** @type {Record<string, any> | null} */ row = null) {
     const last = row?.progress?.at(-1);
     const atGate = live ? !!live.stackHold || !!live.prMonitor || (live.pendingGates?.() || []).some((g) => g.step_id === 'pr_review')
       : last?.step === 'pr_monitor' || (last?.status === 'waiting' && last.step === 'pr_review');
@@ -283,7 +284,7 @@ module.exports = (ctx) => {
   }
   // #809: the engine's card (pr.monitor's fields) on a roadmap item's PR, with why its last read failed;
   // #810: with its merge choices (Merge, Merge ignoring protection, Close) and a failed merge's or close's message
-  const monitorCardOf = (c, error, { mergeError, closeError } = {}) => ({
+  const monitorCardOf = (c, error, /** @type {{ mergeError?: any, closeError?: any }} */ { mergeError, closeError } = {}) => ({
     ci: c.ci, review: c.review, conflicts: c.conflicts, comments: c.comments, result: c.result, checkedAt: c.checked_at || null, error: error || null,
     mergeOptions: c.merge_options || null, ...(mergeError ? { mergeError } : {}), ...(closeError ? { closeError } : {}),
   });

@@ -1,3 +1,4 @@
+// @ts-check
 // The Oracle's chat (#171; the service is #122, packages/engine/domains/oracle/oracle.js): one conversation in two places.
 // - the dock (#oracle-dock): docked on Home's Overview (the view `dashboard`), open there; hidden on
 //   Home's Analytics tab (#255, the view `analytics`: the drawer, as on the other screens);
@@ -31,6 +32,7 @@
 // selectRun, showView, openArtifactsAt, showSettingsTab, registerView, viewRegistry, Robots).
 (() => {
   const M = window.OracleChatModel;
+  /** @type {Record<string, any>} */
   const or = {
     messages: [], service: null, pending: null, error: null, loaded: false, drawer: false,
     drafts: { text: '', images: [] }, pasteError: null, memory: M.memoryForm(''), memoryOpen: false, refilledFor: null,
@@ -189,7 +191,7 @@
     or.memoryOpen = true;
     try { or.memory = M.editMemory(M.memoryForm((await api.oracleMemory()).text)); } catch (e) { or.memory = { ...M.editMemory(M.memoryForm('')), error: errMsg(e) }; }
     render();
-    document.querySelector(`#oracle-mem-${activeSurface()}`)?.focus({ preventScroll: true });
+    /** @type {HTMLElement | null} */ (document.querySelector(`#oracle-mem-${activeSurface()}`))?.focus({ preventScroll: true });
   }
   async function saveMemory() {
     or.memory = { ...or.memory, saving: true };
@@ -201,7 +203,7 @@
   function toggleImport(on) {
     or.memory = { ...or.memory, importing: on, importText: on ? or.memory.importText || '' : '', rev: (or.memory.rev || 0) + 1 };
     render();
-    if (on) document.querySelector(`#oracle-mem-import-${activeSurface()}`)?.focus({ preventScroll: true });
+    if (on) /** @type {HTMLElement | null} */ (document.querySelector(`#oracle-mem-import-${activeSurface()}`))?.focus({ preventScroll: true });
   }
   async function importMemory() {
     try {
@@ -294,7 +296,8 @@
   window.AgentsWindow?.onNavigate?.('oracle:settings', openSettings);
   // run ids and #issues in the text become links; links and absolute paths get their target
   function decorate(box) {
-    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement.closest('a, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (/** @type {HTMLElement} */ (n.parentElement).closest('a, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+    /** @type {any[]} */
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     for (const node of nodes) {
@@ -552,7 +555,7 @@
       ops.classList.toggle('hidden', !ops.innerHTML.trim());
       // while on, the strip's Turn off is the control
       const nightOn = M.nightWatchView(or.service?.nightWatch).active;
-      document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.disabled = nightOn || v.state === 'unavailable'));
+      /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-oracle-night]')).forEach((b) => (b.disabled = nightOn || v.state === 'unavailable'));
       $(`#oracle-screen-${w}`).textContent = where;
       $(`#oracle-screen-${w}`).title = where;
       $(`#oracle-status-${w}`).innerHTML = statusHtml();
@@ -573,7 +576,7 @@
       pe.textContent = or.pasteError || '';
       pe.classList.toggle('hidden', !or.pasteError);
       $(`#oracle-foot-${w}`).textContent = footHtml(v);
-      document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.disabled = v.state === 'answering' || v.state === 'unavailable'));
+      /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-oracle-reset]')).forEach((b) => (b.disabled = v.state === 'answering' || v.state === 'unavailable'));
     }
     const badge = $('#nav-oracle-count');
     badge.textContent = String(v.unread);
@@ -676,13 +679,13 @@
 
   // the head buttons of every surface (bound again when the window's surface is mounted, #263)
   function bindOps() {
-    document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.onclick = reset));
-    document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
-    document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-oracle-reset]')).forEach((b) => (b.onclick = reset));
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-oracle-memory]')).forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-oracle-night]')).forEach((b) => (b.onclick = () => {
       if (M.nightWatchView(or.service?.nightWatch).active) return;
       or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(new Date(), TimeZone.current()), saving: false, error: null };
       render();
-      if (or.nightForm) document.querySelector(`#oracle-night-until-${or.window ? WINDOW : or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+      if (or.nightForm) /** @type {HTMLElement | null} */ (document.querySelector(`#oracle-night-until-${or.window ? WINDOW : or.drawer ? 'drawer' : 'dock'}`))?.focus({ preventScroll: true });
     }));
   }
 
@@ -751,12 +754,12 @@
         for (const w of ALL_SURFACES) chats[w]?.update({ messages: or.messages, turn: turnElsewhere(w) });
         render();
       });
-      document.addEventListener('input', (e) => {
+      document.addEventListener('input', (/** @type {Event & { target: any }} */ e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
         if (e.target.classList?.contains('oracle-mem-import-input')) or.memory = { ...or.memory, importText: e.target.value };
         if (e.target.classList?.contains('oracle-night-until') && or.nightForm) or.nightForm = { ...or.nightForm, until: e.target.value };
       });
-      document.addEventListener('submit', (e) => {
+      document.addEventListener('submit', (/** @type {Event & { target: any }} */ e) => {
         if (e.target.matches?.('[data-oracle-mem-form]')) { e.preventDefault(); saveMemory(); }
         if (e.target.matches?.('[data-oracle-night-form]')) { e.preventDefault(); startNightWatch(); }
       });
@@ -780,7 +783,7 @@
         if (p.phase === 'end' && or.elsewhere) { Object.assign(or, { pending: null, live: null, liveIn: null, elsewhere: false }); load().then(sent); }
       });
       document.addEventListener('click', (e) => {
-        const t = e.target;
+        const t = /** @type {EventTarget & { closest(selector: string): (HTMLElement & { disabled?: boolean, target?: string }) | null }} */ (e.target);
         const chip = t.closest('[data-oracle-q]');
         if (chip) { ask(chip.dataset.oracleQ); return; }
         if (t.closest('[data-oracle-uncontext]')) { or.context = null; render(); return; }
@@ -807,12 +810,12 @@
         const mute = t.closest('[data-oracle-mute]');
         if (mute) { setWatch(() => api.muteOracleRun({ runId: mute.dataset.oracleMute, on: mute.dataset.on === '1' })); return; }
         const unwatch = t.closest('[data-oracle-unwatch]');
-        if (unwatch) { setWatch(() => api.oracleWatch({ ...JSON.parse(unwatch.dataset.oracleUnwatch), on: false })); return; }
+        if (unwatch) { setWatch(() => api.oracleWatch({ ...JSON.parse(/** @type {string} */ (unwatch.dataset.oracleUnwatch)), on: false })); return; }
         if (t.closest('[data-oracle-night-cancel]')) { or.nightForm = null; render(); return; }
         if (t.closest('[data-oracle-night-off]')) { stopNightWatch(); return; }
         if (t.closest('[data-oracle-settings]')) { e.preventDefault(); openSettings(); return; }
         const link = t.closest('[data-oracle-link]');
-        if (link) { e.preventDefault(); follow(JSON.parse(link.dataset.oracleLink)); return; }
+        if (link) { e.preventDefault(); follow(JSON.parse(/** @type {string} */ (link.dataset.oracleLink))); return; }
         const copy = t.closest('[data-oracle-copy]');
         if (copy) { api.clipboardWrite(copy.dataset.oracleCopy).then(() => { copy.title = I18n.t('oracle.copied'); }).catch(() => {}); return; }
         // any other link in an answer: not a navigation of the app's page

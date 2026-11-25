@@ -1,3 +1,4 @@
+// @ts-check
 // The project map workflow (#372, workflows/analyze-project.yaml since #631): what its machine steps do, read-only
 // on the project. The engine's `type: project_map` steps (packages/engine/engine/run/project-map-steps.js) call
 // these with the project's folder and the workspace's architecture folder (<workspace>/architecture).
@@ -294,7 +295,7 @@ async function drawMap({ folder, archRoot, projectId, mock, oracle, agent, round
  * the Oracle refuses (its budget), with the reason.
  * #731: `planCostUsd` / `planTokens`, the cartographer's turn run just before (drawMap), are added to the
  * saved report's cost, so the analysis's estimate (arch.estimateCost) covers both turns.
- * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, onItem?: Function, planCostUsd?: number|null, planTokens?: any }} where
+ * @param {{ folder: string, archRoot: string, projectId: string, mock: boolean, oracle: any, agent: any, onItem?: Function|null, planCostUsd?: number|null, planTokens?: any }} where
  */
 async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, onItem = null, planCostUsd = null, planTokens = null }) {
   if (!mock && !oracle) throw new Error('The Oracle is not available to this run: the analysis needs the app service.');
@@ -309,7 +310,7 @@ async function analyzeMap({ folder, archRoot, projectId, mock, oracle, agent, on
   const costUsd = plan == null ? out.costUsd : (out.costUsd == null ? null : Number(out.costUsd) + plan);
   const tokens = !out.simulated && planTokens ? { ...out.tokens, input: (Number(out.tokens?.input) || 0) + (Number(planTokens.input) || 0), output: (Number(out.tokens?.output) || 0) + (Number(planTokens.output) || 0) } : out.tokens;
   const saved = arch.saveReport(archRoot, projectId, { date, head: model.head, branch: model.branch, costUsd, tokens, simulated: out.simulated, report: out.report });
-  return { cost_usd: costUsd, date, findings: (out.report.findings || []).length, report_id: saved.id, simulated: out.simulated, summary: out.report.summary };
+  return { cost_usd: costUsd, date, findings: (/** @type {Record<string, any>} */ (out.report).findings || []).length, report_id: saved.id, simulated: out.simulated, summary: /** @type {Record<string, any>} */ (out.report).summary };
 }
 
 module.exports = {

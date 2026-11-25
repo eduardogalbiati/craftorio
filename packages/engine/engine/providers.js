@@ -1,3 +1,4 @@
+// @ts-check
 // Runs one turn on a provider: spawns its CLI (or the simulation) and normalizes the events with the
 // adapter's stream parser. What differs per CLI lives in its adapter (packages/shared/providers/, #348).
 //
@@ -30,12 +31,12 @@ const registry = require('@craftorio/shared/providers');
 const { emptyUsage } = require('@craftorio/shared/providers/usage');
 
 function sleep(ms, signal) {
-  return new Promise((resolve, reject) => {
+  return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error('Cancelled'));
     const t = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
     const onAbort = () => { clearTimeout(t); reject(new Error('Cancelled')); };
     signal?.addEventListener('abort', onAbort, { once: true });
-  });
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +161,7 @@ function resolveCommand(cmd) {
       return f ? path.join(dir, f) : null;
     } catch { return null; }
   };
-  for (const [finder, shell] of [[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]]) {
+  for (const [finder, shell] of /** @type {[(dir: string) => string | null, boolean][]} */ ([[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]])) {
     for (const dir of windowsDirs()) {
       const p = finder(dir);
       if (p) return { file: p, shell };
@@ -212,7 +213,7 @@ async function resolveCommandAsync(cmd) {
     const f = names.find(suffixedName(cmd));
     return f ? path.join(dir, f) : null;
   }, () => null);
-  for (const [finder, shell] of [[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]]) {
+  for (const [finder, shell] of /** @type {[(dir: string) => Promise<string | null>, boolean][]} */ ([[exact('.exe'), false], [suffixed, false], [exact('.cmd'), true], [exact('.bat'), true]])) {
     const p = (await Promise.all(dirs.map(finder))).find(Boolean);
     if (p) return { file: p, shell };
   }
@@ -446,6 +447,7 @@ function runCli(opts, parser) {
     if (child.pid) opts.onSpawn?.({ pid: child.pid, shim: !!resolved.shell });
 
     // #728: a fresh turn (no session resumed) owes nothing to an earlier total under the same CLI session id
+    /** @type {import('../../shared/types').TurnResult} */
     const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId, error: null, ...(providerSessionId ? {} : { turnTotalBefore: 0 }) };
     let stderr = '';
     let done = false;
@@ -630,6 +632,7 @@ function mockValue(s, key, h) {
   }
   switch (s.type) {
     case 'object': {
+      /** @type {Record<string, any>} */
       const o = {};
       for (const [k, ps] of Object.entries(s.properties || {})) {
         // sequences.needs_human: { <step>: n } (#567): an ask_human step asks the owner on its first n visits

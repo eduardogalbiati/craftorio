@@ -606,7 +606,7 @@ function groupTask(issues) {
  * item saved hides neither of them.
  * @param {{ inputs: object }} wf the workflow (its input definitions)
  */
-function runInputs(item, wf, folder, projectDefaults = null) {
+function runInputs(item, wf, folder, /** @type {Record<string, any> | null} */ projectDefaults = null) {
   const defs = wf.inputs || {};
   const inputs = { ...item.inputs };
   if (projectDefaults) {

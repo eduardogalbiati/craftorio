@@ -1,3 +1,4 @@
+// @ts-check
 // The Oracle service (#122, packages/engine/domains/oracle/oracle.js), a kernel area since phase 4 of the
 // reorganisation study (#590): the `oracle:*` channels live in the ai front
 // (packages/engine/fronts/ai/channels/oracle.js) and read it through ctx (oracleService, oracleDelegate,
@@ -257,7 +258,7 @@ module.exports = (ctx) => {
     },
   };
 
-  async function perform(a, { mock } = {}) {
+  async function perform(a, /** @type {{ mock?: boolean }} */ { mock } = {}) {
     const fn = PERFORM[a.kind];
     if (!fn) throw new Error(`Unknown action: ${a.kind}`);
     const out = await fn(a, { mock: !!mock, sim: simulation.simulationOnly() });
@@ -265,7 +266,7 @@ module.exports = (ctx) => {
   }
   // #240: the owners' inboxes (po:request, supervisor:request) run their mechanical kinds with these
   // same functions, checked like a card; the backups go to the Oracle's folder, as a card's do
-  const performAction = (kind, params, { mock } = {}) => {
+  const performAction = (kind, params, /** @type {{ mock?: boolean }} */ { mock } = {}) => {
     actions.ACTIONS[kind]?.check?.(params);
     return perform({ id: `request-${Date.now().toString(36)}`, kind, params }, { mock });
   };
@@ -409,7 +410,7 @@ module.exports = (ctx) => {
     };
   }
 
-  async function delegate({ to, question, projectId, runId, branch, command } = {}, { mock } = {}) {
+  async function delegate(/** @type {Record<string, any>} */ { to, question, projectId, runId, branch, command } = {}, /** @type {{ mock?: boolean }} */ { mock } = {}) {
     const sim = simulated({ mock });
     const q = String(question || '').trim();
     if (!q) throw new Error('Say what to ask.');
@@ -445,7 +446,7 @@ module.exports = (ctx) => {
   // request_agent: { to: 'po' | 'supervisor', kind, params, reason, projectId?, requestedBy?, mock } →
   // the owner's answer { ok, text, costUsd, error?, pending? }; the owner records it in its conversation
   // and the Oracle's chat gets a short line. An unknown `to` is refused here and recorded nowhere.
-  async function requestAgent({ to, kind, params, reason, projectId, requestedBy, mock } = {}) {
+  async function requestAgent(/** @type {Record<string, any>} */ { to, kind, params, reason, projectId, requestedBy, mock } = {}) {
     const p = params && typeof params === 'object' && !Array.isArray(params) ? params : {};
     // the Supervisor's inbox is the build front's (phase 4, #590): an engine that does not serve it says so
     const send = to === 'po' ? ctx.productOwnerRequest : to === 'supervisor' ? ctx.supervisorRequest : null;

@@ -1,3 +1,4 @@
+// @ts-check
 // Service area: the runs in progress. Starts a run (concurrency limits, budgets, the project it
 // belongs to, no second live run of the same issues, #112), records what it emits (events.jsonl,
 // the index, notifications, 'run:event') and reacts as it ends (the roadmaps, issue
@@ -188,8 +189,9 @@ module.exports = (ctx) => {
   function notifyInterruptedRun() {
     const { ws } = ctx;
     if (!ws) return null;
+    /** @type {any[] | null} */
     let list = null;
-    try { list = [].concat(JSON.parse(fs.readFileSync(ws.activeRun, 'utf8'))); } catch { return null; }
+    try { list = /** @type {any[]} */ ([]).concat(JSON.parse(fs.readFileSync(ws.activeRun, 'utf8'))); } catch { return null; }
     leftMarks = [];
     writeMarks();
     const interrupted = list.filter((info) => info?.runId && !active.has(String(info.runId)) && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted');
@@ -222,7 +224,7 @@ module.exports = (ctx) => {
     const max = machineProfile.resolveLimits(settings, machineProfile.readMachine()).concurrentRuns;
     return {
       enabled: true, max: Math.max(1, Math.floor(num(max) || 1)),
-      perProject: num(c.perProject) ? Math.max(1, Math.floor(num(c.perProject))) : null, countSimulations: !!c.countSimulations,
+      perProject: num(c.perProject) ? Math.max(1, Math.floor(/** @type {number} */ (num(c.perProject)))) : null, countSimulations: !!c.countSimulations,
     };
   }
 
@@ -230,7 +232,7 @@ module.exports = (ctx) => {
   // Child runs of `type: workflow` steps count like any run (#175), and a parent waiting for its children
   // lends them its slot: it does not count for its own descendants, nor for anyone while one of its
   // children holds the slot (a limit of 1 runs the children one at a time instead of never).
-  function slotProblem({ mock, projectId, parentRunId = null }, self = null) {
+  function slotProblem({ mock, projectId, parentRunId = null }, /** @type {object | null} */ self = null) {
     const c = concurrency();
     if (mock && !c.countSimulations) return '';
     const all = [...active.values(), ...[...reserved].filter((x) => x !== self)];
@@ -399,14 +401,14 @@ module.exports = (ctx) => {
     // the same issues never get a second live run, from this app or another one: resume that run instead
     const twin = liveRunForIssues(issues);
     if (twin) {
-      const err = new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window)' : ''}: open or resume that run instead of starting the same work twice.`);
+      const err = /** @type {Error & { runId?: string }} */ (new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window)' : ''}: open or resume that run instead of starting the same work twice.`));
       err.runId = twin.runId;
       throw err;
     }
     // automation (queue, roadmap) cannot ask: it stops and names the run that holds the same work
     const kept = allowKeptWork ? null : ctx.keptWorkForIssues(issues);
     if (kept) {
-      const err = new Error(`${kept.title}. ${kept.text} Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.`);
+      const err = /** @type {Error & { runId?: string }} */ (new Error(`${kept.title}. ${kept.text} Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.`));
       err.runId = kept.runId;
       throw err;
     }
@@ -414,7 +416,7 @@ module.exports = (ctx) => {
 
   // recover (#607, areas/recover.js): { runId, events, worktree, personas, owner } a run the app died in,
   // continued in its own folder with its own id; `owner` is its owner.json, already taken over
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, workspaceWorkflow = false }) {
+  async function startWorkflowRun(/** @type {import('../../../shared/types').RunStart} */ { file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, workspaceWorkflow = false }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // a resumed run continues that work, a recovered run (#607) is that run
@@ -584,7 +586,7 @@ module.exports = (ctx) => {
   // previous: { run_id, status } the child a resumed parent's previous run started for this item (#175):
   // reused when it succeeded, else resumed from where it stopped (the step Resume from step… suggests,
   // its gate when that step lies past a decided one: a gate always asks again), else started afresh.
-  async function startChildRun(parentRun, { file, inputs, parent, label, signal = null, previous = null }) {
+  async function startChildRun(parentRun, /** @type {{ file: string, inputs: any, parent: any, label?: string, signal?: AbortSignal | null, previous?: any }} */ { file, inputs, parent, label, signal = null, previous = null }) {
     let done;
     const finished = new Promise((resolve) => { done = resolve; });
     const step = `${parentRun.wf.metadata?.name || path.basename(parentRun.file)}, step ${parent.step_id}${label ? `: ${label}` : ''}`;
@@ -766,7 +768,7 @@ function prActions(ctx, liveRun, active) {
     return [...active.values()].some((r) => r !== run && [url, n].includes(String(r.ctx?.inputs?.parent_pr ?? '').trim()));
   };
 
-  async function mergeRunPr({ runId, admin = false } = {}) {
+  async function mergeRunPr(/** @type {{ runId?: string, admin?: boolean }} */ { runId, admin = false } = {}) {
     const { run, at } = target(runId);
     const rights = await prRights(ctx, run, at.url);
     const fork = run.ctx?.inputs?.mode === 'fork';
@@ -787,7 +789,7 @@ function prActions(ctx, liveRun, active) {
     return { merged: true };
   }
 
-  async function closeRunPr({ runId } = {}) {
+  async function closeRunPr(/** @type {{ runId?: string }} */ { runId } = {}) {
     const { run, at } = target(runId);
     if (run.ctx?.inputs?.mode === 'fork') throw clientError('Fork + PR: the upstream\'s maintainers close the pull request.');
     const rights = await prRights(ctx, run, at.url);
@@ -798,7 +800,7 @@ function prActions(ctx, liveRun, active) {
 
   // #811: "Ask for a fix" from the card: the requests the owner picked among the card's (only trusted authors'
   // are sent, as quoted data: run-pr.js buildFixRequest) and their note; nothing to send → the run gets nothing
-  async function askRunPrFix({ runId, ids = [], note = '' } = {}) {
+  async function askRunPrFix(/** @type {{ runId?: string, ids?: any[], note?: string }} */ { runId, ids = [], note = '' } = {}) {
     const { run, at } = target(runId);
     const requests = at.card?.requests || [];
     const r = runPr.buildFixRequest({ requests, ids: ids || [], note: note || '', round: (run.prFixRounds || 0) + 1 });

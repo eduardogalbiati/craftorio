@@ -619,7 +619,7 @@ function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
 // env, with the gate's name in `gate`): the item is parked (finished for its stage) and the run is
 // left as it is, still waiting at the same gate for the owner.
 // #807 stack: `modeOf(item)` gives the item's effective run mode (Fork + PR refuses it)
-function itemAction(dir, projectId, itemId, action, { alive = null, runOf = null, now = new Date(), keepPaused = false, modeOf = null } = {}) {
+function itemAction(dir, projectId, itemId, action, /** @type {{ alive?: ((runId: any) => any) | null, runOf?: ((runId: any) => any) | null, now?: Date, keepPaused?: boolean, modeOf?: ((item: any) => any) | null }} */ { alive = null, runOf = null, now = new Date(), keepPaused = false, modeOf = null } = {}) {
   if (!['park', 'retry', 'skip', 'stack'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);

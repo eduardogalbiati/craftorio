@@ -6,6 +6,8 @@ Read this when planning new work, to avoid redoing a discussion. Ideas the owner
 - Dynamic model roles: role → provider/model map with fallbacks when a CLI is missing or over
   budget (discussed, not built; the owner accepted requiring all three CLIs for now). Portable
   permissions → per-provider flags is done: `capabilities` ([capabilities.md](capabilities.md)).
+- JSDoc or `.ts` (#52): measured in [docs/typescript-comparison-2026-11.md](../typescript-comparison-2026-11.md),
+  the owner's decision is open.
 - Ticket slicer / planner step feeding fan-out implementers; arena "design-sketch" runs.
 - Pop-out window for the supervisor chat; free-text feedback on the arena's gates (redo); the engine supports it now.
 - Arena ideas not done: rubric hidden from contenders, contenders configurable by input.

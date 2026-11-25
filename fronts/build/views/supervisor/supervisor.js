@@ -1,3 +1,4 @@
+// @ts-check
 // Supervisor chat (#28): the app-wide conversation with the Supervisor, in a right-side drawer
 // (#svc-drawer) opened from the Workflows screen's round button (#409, data-testid=supervisor-fab:
 // its robot and the yellow dot of an unseen answer drawn here; #254, #264: no screen of its own and
@@ -21,6 +22,7 @@
   // answers that arrived while neither the drawer nor the pane showed them
   // attached (#409): the run a run card sent ({ runId, workflow, status, error, mock, issues }), until
   // the next question
+  /** @type {Record<string, any>} */
   const sv = { messages: [], busy: false, loaded: false, drawer: false, full: false, tools: [], live: null, window: false, liveIn: null, pending: null, since: 0, unread: 0, elsewhere: false, attached: null };
   let chat = null; // the shared chat (agent-chat.js), mounted with the drawer
   let winChat = null; // the Agents window's chat (#263), while its pane shows the Supervisor
@@ -77,7 +79,7 @@
   // box (#130; a suggestion chip sends without them, they stay in the box); a failure goes back to the
   // chat (the question back in the box, the error shown)
   // `from`: the chat it was sent from (the drawer's or the Agents window's, #263)
-  const sendFrom = (from) => async (q, _attachments, { fromBox } = {}) => {
+  const sendFrom = (from) => async (q, _attachments, /** @type {{ fromBox?: boolean }} */ { fromBox } = {}) => {
     const c = from();
     const screen = screenContext();
     Object.assign(sv, { busy: true, pending: q, since: Date.now(), liveIn: c, live: window.LiveTurn.create({ agent: t('supervisor.supervisor') }) });
@@ -199,7 +201,7 @@
       if (sv.full) $('#svc-tools').innerHTML = sv.tools.map((t) => `<li><span class="mono">${esc(t.name)}</span> <span class="muted">${esc(t.description)}</span></li>`).join('');
       renderAttached();
     }
-    document.querySelectorAll('.svc-clear').forEach((b) => (b.disabled = sv.busy || !sv.messages.length));
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('.svc-clear')).forEach((b) => (b.disabled = sv.busy || !sv.messages.length));
     renderFab();
     syncSendButtons();
     window.AgentsWindow?.changed?.();
@@ -229,7 +231,7 @@
 
   // #409: the run cards' Send to supervisor (run-list.js): disabled while a question is in flight
   function syncSendButtons() {
-    document.querySelectorAll('[data-run-act="send-sup"]').forEach((b) => {
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('[data-run-act="send-sup"]')).forEach((b) => {
       if (b.disabled === sv.busy) return;
       b.disabled = sv.busy;
       b.innerHTML = sendToSupervisorHtml(sv.busy);
@@ -317,7 +319,7 @@
       $('#svc-backdrop').onclick = closeDrawerPanel;
       $('#btn-svc-full').onclick = () => setFull(!sv.full);
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && sv.drawer) closeDrawerPanel(); });
-      document.querySelectorAll('.svc-clear').forEach((b) => (b.onclick = clear));
+      /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('.svc-clear')).forEach((b) => (b.onclick = clear));
       // #274: the shared chat (the live turn's Stop included); the screen is read when the message
       // is sent: the one under the drawer
       chat = window.AgentChat.create($('#svc-chat'), {
@@ -338,7 +340,7 @@
         if (p.phase === 'end' && sv.elsewhere) turnElsewhere(p);
       });
       // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
-      window.addEventListener('agent-request:changed', async (e) => {
+      window.addEventListener('agent-request:changed', async (/** @type {CustomEventInit & Event} */ e) => {
         if (e.detail?.owner !== 'supervisor') return;
         if (e.detail.messages) sv.messages = e.detail.messages;
         else await load();
@@ -346,10 +348,10 @@
         render();
       });
       document.addEventListener('click', (e) => {
-        const chip = e.target.closest('[data-svc-q]');
+        const chip = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (e.target).closest('[data-svc-q]'));
         // a chip of the Agents window's pane asks from that chat (#263)
         if (chip) (chip.closest('[data-svc-window]') ? winChat : chat)?.ask(chip.dataset.svcQ);
-        if (e.target.closest('[data-svc-unattach]') && !sv.busy) { sv.attached = null; render(); }
+        if (/** @type {HTMLElement} */ (e.target).closest('[data-svc-unattach]') && !sv.busy) { sv.attached = null; render(); }
       });
       // the round button gets its robot before the drawer is first opened
       renderFab();

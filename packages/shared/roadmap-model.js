@@ -1,3 +1,4 @@
+// @ts-check
 // Roadmap model (#349): the roadmap's rules, pure (no DOM, no files, never changes what it is given).
 // The states, what counts as finished, the current stage and which owner action applies where.
 // packages/engine/domains/roadmap/roadmap.js (the only writer of a roadmap's state, pausedBy, scope and item statuses), the

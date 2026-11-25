@@ -54,7 +54,7 @@
     return unknownOf(s) != null || (sessionCost(s, prices) == null && totalTokens(s.tokens) > 0);
   }
 
-  function runCost(sessions, prices = {}) {
+  function runCost(sessions, /** @type {Record<string, any> | null} */ prices = {}) {
     const list = sessions || [];
     return { usd: list.reduce((a, s) => a + (sessionCost(s, prices) || 0), 0), approx: list.some((s) => isApprox(s, prices)) };
   }

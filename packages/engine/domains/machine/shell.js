@@ -45,7 +45,7 @@ function runShim(file, args = [], opts = {}) {
   return spawn(cmdLine(file, args), { ...opts, shell: true });
 }
 
-function execShim(file, args = [], opts = {}, cb = undefined) {
+function execShim(file, args = [], opts = {}, /** @type {((err: any, stdout: any, stderr: any) => void) | undefined} */ cb = undefined) {
   if (typeof opts === 'function') { cb = opts; opts = {}; }
   if (!isShim(file)) return execFile(file, args, { ...opts, shell: false }, cb);
   return exec(cmdLine(file, args), opts, cb);

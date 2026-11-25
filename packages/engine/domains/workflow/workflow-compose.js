@@ -1,3 +1,4 @@
+// @ts-check
 // #487: a project's workflow set composed from its ways of working. The ways-of-working seed
 // (seeds/ways-of-working/seed.md) infers a profile from the repository (#630: the mode, local merge or
 // pull requests; the CI's triggers; unit or unit+E2E tests and the E2E command, #844 or none; the release style, the
@@ -118,7 +119,7 @@ function openQuestions(profile) {
   ];
   if (!RELEASE_STYLES.includes(profile?.release)) {
     // #844: the release style the wizard suggests for the same profile (one release style everywhere)
-    const release = suggestWorkflows(profile).suggestions.find((s) => s.id === 'release').value;
+    const release = /** @type {{ value: string }} */ (suggestWorkflows(profile).suggestions.find((s) => s.id === 'release')).value;
     out.push(ask('release', 'ways_of_working.q_release', { type: 'choice', options: choice(RELEASE_STYLES.map((r) => [r, `onboarding.choice_release_${r.replace(/-/g, '_')}`])), default: release }));
   }
   if (!modeOf(profile)) {
@@ -191,7 +192,7 @@ function factsText(s, facts) {
   return `The project: languages ${langs}; its tests run with ${tests}${check}.`;
 }
 
-const agent = ({ model = STRONG_MODEL, effort, session = 'persistent', tools, skills, system }) => ({
+const agent = (/** @type {{ model?: string, effort?: string, session?: string, tools?: string[], skills?: string[], system: string }} */ { model = STRONG_MODEL, effort, session = 'persistent', tools, skills, system }) => ({
   provider: 'claude',
   model,
   ...(effort ? { effort } : {}),
@@ -430,7 +431,7 @@ const dump = (doc) => `${HEADER}\n${yaml.dump(doc, { lineWidth: -1, noRefs: true
  * repository's manifest (packages/engine/domains/project/project-manifest.js readManifest), which the composed one is merged
  * into (mergeManifest). Writes nothing.
  */
-function composeWorkflowSet({ profile, answers, facts, existing } = {}) {
+function composeWorkflowSet(/** @type {{ profile?: any, answers?: any, facts?: any, existing?: any }} */ { profile, answers, facts, existing } = {}) {
   const prof = withOverrides(profile, answers);
   const s = settingsOf(prof, answers);
   const f = facts && Array.isArray(facts.skills) ? { languages: languageFacts(facts.languages).languages, skills: facts.skills } : languageFacts(prof.languages);

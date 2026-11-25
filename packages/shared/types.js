@@ -206,6 +206,7 @@
  * @property {RoadmapIssue[]} issues
  * @property {import('./roadmap-model').RoadmapItemStatus} status
  * @property {string | null} runId
+ * @property {string | null} [testRunId] the run of its Start Test (#702)
  * @property {string[]} runs
  * @property {string | null} error
  * @property {number} [number]
@@ -330,6 +331,42 @@
  * @property {object} [observability]
  */
 
+/**
+ * What a provider adapter's `parse` fills while a CLI's turn streams (packages/engine/engine/providers.js).
+ * @typedef {object} TurnResult
+ * @property {string} text
+ * @property {string} lastText
+ * @property {Tokens | null} usage
+ * @property {Tokens | null} [streamUsage]
+ * @property {number | null} costUsd
+ * @property {number} [modelCalls]
+ * @property {string | null} providerSessionId
+ * @property {string | null} error
+ * @property {boolean} [cut]
+ * @property {number} [turnTotalBefore]
+ */
+
+/**
+ * The options of a run (WorkflowRun's constructor comment says what each one is).
+ * @typedef {{ file: string, inputs?: any, mock?: boolean, runsDir: string, skillsDirs?: string[], projectId?: string | null,
+ *   issues?: RoadmapIssue[] | null, issue?: RoadmapIssue | null, notices?: { level: string, message: string }[] } & Record<string, any>} RunOptions
+ */
+
+/**
+ * What starts a run in the service (areas/runs.js startWorkflowRun).
+ * @typedef {{ file: string, inputs?: any, mock?: boolean, mockSequences?: any, resume?: any, recover?: any, projectId?: string | null,
+ *   issues?: RoadmapIssue[] | null, allowKeptWork?: boolean, notices?: { level: string, message: string }[], attachments?: any, then?: any,
+ *   from?: any, parent?: any, onFinished?: ((event: any) => void) | null, signal?: AbortSignal | null,
+ *   onSlotWait?: ((why: string) => void) | null, agentOverrides?: any, workspaceWorkflow?: boolean }} RunStart
+ */
+
+/**
+ * The fields of a WorkflowRun its constructor does not set: its areas' (packages/engine/engine/run/) and
+ * the service's (`owner`, `pr`).
+ * @typedef {{ accountCooldownMs?: number, agentOverrides?: any, idleWarnMs?: number, owner?: any, endStatus?: { status: string, message: string } | null, ownerAgents?: any, personas?: any, pr?: any,
+ *   providerAccounts?: any, recovered?: any, resumeImages?: any, serverForegroundMs?: number }} RunFields
+ */
+
 // The one value of this module: every `type` of RunEvent, sorted (test/types-346.test.js keeps it
 // equal to the union). Browser: window.CoreTypes; Node: module.exports.
 (function (root) {
@@ -389,4 +426,4 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.CoreTypes = api;
   // (globalThis is the window in a browser: no `window` name, which a file checked alone would not know)
-})(/** @type {any} */ (globalThis));
+})(/** @type {any} */ (globalThis)); // any: the checker knows no CoreTypes on globalThis

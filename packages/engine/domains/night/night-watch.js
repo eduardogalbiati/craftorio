@@ -136,7 +136,7 @@ function permissionOf(kind, params = {}) {
  * default 15, and no other run of the roadmap still going), 'escalate' (no skip permission: left to the
  * owner, as before) or 'wait'. It never answers the gate.
  */
-function gateDecision({ waitingSince, now = Date.now(), allowed = [], othersRunning = false, settings = {} }) {
+function gateDecision(/** @type {{ waitingSince: any, now?: number, allowed?: string[], othersRunning?: boolean, settings?: Record<string, any> }} */ { waitingSince, now = Date.now(), allowed = [], othersRunning = false, settings = {} }) {
   if (!allowed.includes('skip')) return 'escalate';
   const minutes = Number(settings?.oracle?.parkAfterMinutes);
   const after = (Number.isFinite(minutes) && minutes >= 0 ? minutes : PARK_AFTER_MINUTES) * 60e3;
@@ -245,7 +245,7 @@ function roadmapIncidents(roadmaps = [], active = []) {
  * ts of its last progress event, `floor` the ts used when none was seen (the run's start, if later).
  * → [{ runId, projectId, since }]
  */
-function stalledRuns(active = [], lastProgress = new Map(), { now = Date.now(), floor = null, stallMs = STALL_MS } = {}) {
+function stalledRuns(active = [], lastProgress = new Map(), /** @type {{ now?: number, floor?: string | null, stallMs?: number }} */ { now = Date.now(), floor = null, stallMs = STALL_MS } = {}) {
   const out = [];
   for (const r of active) {
     if (r.waiting || r.status === 'waiting') continue;
@@ -408,7 +408,7 @@ function detectSelfHealing(runs = []) {
  * (packages/engine/domains/run/step-regressions.js) whose key is not in `flagged`, so a step is reported once until it
  * recovers. Report only: a finding carries no action and no proposal.
  */
-function regressionFindings(runs, { issues = [], prices = {}, thresholds = {}, flagged = [] } = {}) {
+function regressionFindings(runs, /** @type {{ issues?: any[], prices?: any, thresholds?: any, flagged?: any[] }} */ { issues = [], prices = {}, thresholds = {}, flagged = [] } = {}) {
   const seen = new Set(flagged || []);
   const byId = new Map((runs || []).map((r) => [r.runId, r]));
   return stepRegressions(runs, { issues, prices, thresholds, flagged })
@@ -457,7 +457,7 @@ function selfHealingDays(log, now = Date.now()) {
  * (actions taken alone that did not fail), waiting (left for the owner: oracle.escalated, and the
  * actions blocked in an owner's inbox), costUsd, tokens (the Oracle's usage.jsonl lines of the day) }.
  */
-function selfHealingMetrics({ log = [], usage = [], day }) {
+function selfHealingMetrics(/** @type {{ log?: any[], usage?: any[], day: string }} */ { log = [], usage = [], day }) {
   const on = (e) => String(e.ts).slice(0, 10) === day;
   const entries = log.filter(on);
   const escalated = entries.filter((e) => e.type === 'oracle.escalated');
@@ -560,7 +560,7 @@ function activeIntervals(facts, w0, w1) {
  * Window W = startedAt → endedAt (or the
  * end time; `now` while it is on). Durations are in ms, money in US$.
  */
-function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now(), resolveWindowMs = RESOLVE_WINDOW_MS, loopCap = LOOP_CAP }) {
+function nightMetrics(/** @type {{ night: any, log?: any[], runs?: any[], usage?: any[], now?: number, resolveWindowMs?: number, loopCap?: number }} */ { night, log = [], runs = [], usage = [], now = Date.now(), resolveWindowMs = RESOLVE_WINDOW_MS, loopCap = LOOP_CAP }) {
   const w0 = ms(night.startedAt);
   const w1 = Math.min(ms(night.endedAt || night.until), now);
   const span = Math.max(0, w1 - w0);
@@ -710,7 +710,7 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
  * what waits, safety, and one line per step regression (#335 `regressions`: regressionFindings).
  * #337 `limits`: packages/engine/domains/night/night-limits.js pastDayLimits, the runs past a day limit and the spending above them.
  */
-function morningSummary(m, { proposed = 0, regressions = [], limits = null } = {}) {
+function morningSummary(m, /** @type {{ proposed?: number, regressions?: any[], limits?: { lines: string[], overDayUsd: number } | null }} */ { proposed = 0, regressions = [], limits = null } = {}) {
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
   const s = m.safety;
   return {

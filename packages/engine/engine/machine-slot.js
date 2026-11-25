@@ -89,7 +89,7 @@ function tryTake(name, { dir = slotDir(), maxHoldMs = defaultsOf(name).maxHoldMs
  * Waits for the slot and takes it → { release, token, waitedMs, inherited }. onWait(holder) is
  * called once when it has to wait. Throws after waitMs or when the signal aborts.
  */
-async function acquireSlot(name, { dir, waitMs = WAIT_MS, pollMs = 1000, signal, onWait = () => {}, holder, maxHoldMs, inherit } = {}) {
+async function acquireSlot(name, /** @type {{ dir?: string, waitMs?: number, pollMs?: number, signal?: AbortSignal, onWait?: (holder?: any) => void, holder?: string, maxHoldMs?: number, inherit?: string }} */ { dir, waitMs = WAIT_MS, pollMs = 1000, signal, onWait = () => {}, holder, maxHoldMs, inherit } = {}) {
   const t0 = Date.now();
   let told = false;
   for (;;) {

@@ -1,3 +1,4 @@
+// @ts-check
 // Voice input (#82): local speech-to-text with the whisper.cpp CLI (`whisper-cli`), found like the
 // agent CLIs (resolveCommand), and the ggml models it reads, downloaded from Settings into the
 // user's app data folder (not the workspace: models are big and machine-specific). The renderer
@@ -149,7 +150,7 @@ function downloadModel(id, dataDir) {
   const p = new Promise((resolve, reject) => {
     const get = (url, hops) => {
       https.get(url, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops < 5) {
+        if (/** @type {number} */ (res.statusCode) >= 300 && /** @type {number} */ (res.statusCode) < 400 && res.headers.location && hops < 5) {
           res.resume();
           return get(new URL(res.headers.location, url).href, hops + 1);
         }

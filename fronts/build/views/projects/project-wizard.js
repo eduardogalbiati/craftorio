@@ -1,4 +1,5 @@
 /* global api, uiLocale */
+// @ts-check
 // The new-project wizard (#641, onboarding step 4 of docs/work/first-project-onboarding/plan.md; spec
 // R1-R3, R5): a modal over the page with the steps of OnboardingModel (packages/shared/onboarding-model.js),
 // and the onboarding's progress tray. window.ProjectWizard = { open(), close() } opens it: Projects › New project
@@ -202,6 +203,7 @@
   function updatedAgo(iso) {
     const s = (Date.parse(iso) - Date.now()) / 1000;
     if (!Number.isFinite(s)) return '';
+    /** @type {[Intl.RelativeTimeFormatUnit, number][]} */
     const units = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
     const [unit, size] = units.find(([, n]) => Math.abs(s) >= n) || units[units.length - 1];
     try {
@@ -363,7 +365,7 @@
 
   // the create step's live parts as the name is typed or gh / glab answers (the caret stays)
   function refreshCreate() {
-    const box = document.getElementById('wizard-new-remote');
+    const box = /** @type {HTMLInputElement | null} */ (document.getElementById('wizard-new-remote'));
     if (box) box.disabled = !!cur.projectId || !signedIn().length;
     const hint = document.getElementById('wizard-new-remote-hint');
     if (hint) hint.textContent = remoteHint();
@@ -613,6 +615,7 @@
   function loadReview() {
     const pid = cur.projectId;
     if (!pid) return;
+    /** @type {[string, () => any, any][]} */
     const reads = [['backlog', () => activity.readBacklog(pid), true], ['city', () => api.architectureCity?.(pid), jobDone('projectMap')],
       ['facts', () => activity.readFacts(pid), jobDone('facts')], ['report', () => api.architectureReport?.(pid), jobDone('projectMap')]];
     for (const [key, read, due] of reads) {
@@ -763,7 +766,7 @@
     else if (id === 'wizard-new-name') {
       cur.model = { ...cur.model, name: String(e.target.value || '') };
       refreshCreate();
-      const nextBtn = document.getElementById('wizard-next');
+      const nextBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('wizard-next'));
       if (nextBtn) nextBtn.disabled = !canNext();
     }
     else return false;
@@ -782,7 +785,7 @@
       // #739: the typed URL's rule; a name the owner typed stays
       cur.model = { ...cur.model, repository: repoUrl(repo), name: cur.nameTyped ? cur.model.name : M.displayNameFromUrl(repo) };
       render();
-      const nameField = document.getElementById('wizard-name');
+      const nameField = /** @type {HTMLInputElement | null} */ (document.getElementById('wizard-name'));
       if (nameField) nameField.value = cur.model.name;
       document.getElementById('wizard-name')?.focus?.();
     }
@@ -848,7 +851,7 @@
     if (id === 'wizard-name') cur.nameTyped = value.trim() !== '';
     else if (!cur.nameTyped) {
       cur.model = { ...cur.model, name: M.displayNameFromUrl(value) };
-      const nameField = document.getElementById('wizard-name');
+      const nameField = /** @type {HTMLInputElement | null} */ (document.getElementById('wizard-name'));
       if (nameField) nameField.value = cur.model.name;
     }
     if (id === 'wizard-repo') repoSlot(); // #848: the list under the field follows the typed text
@@ -861,7 +864,7 @@
     }
     const into = document.getElementById('wizard-clone-into');
     if (into) into.textContent = cloneInto();
-    const nextBtn = document.getElementById('wizard-next');
+    const nextBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('wizard-next'));
     if (nextBtn) nextBtn.disabled = !canNext();
   }
 
@@ -895,7 +898,7 @@
       root.addEventListener('input', onInput);
       root.addEventListener('change', (e) => { onInput(e); if (cur) resume.save(); }); // #741: a pick made without a render
       root.addEventListener('keydown', onKey);
-      root.addEventListener('focusout', (e) => { if (cur?.stale && e.target?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
+      root.addEventListener('focusout', (e) => { if (cur?.stale && /** @type {HTMLElement | null} */ (e.target)?.id === 'wizard-review-idea') { cur.stale = false; render(); } });
       document.body.appendChild(root);
     }
     // Import is selected when the wizard opens (mock-1); #632: the create step's choices start at mock-3's

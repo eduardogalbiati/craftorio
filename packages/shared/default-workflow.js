@@ -122,7 +122,7 @@
     return MODE_ENDINGS[oldValidation(inputs)?.mode ?? modes.default] || 'local';
   }
   /** #792: how a run with these resolved inputs ({ values, sources }) ends (see the header). */
-  const runEnding = (wf, { values, sources }, alias = null) => ending(wf, aliasInputs(alias, sources.mode && sources.mode !== 'workflow' ? { mode: values.mode } : {}));
+  const runEnding = (wf, { values, sources }, /** @type {Record<string, any> | null} */ alias = null) => ending(wf, aliasInputs(alias, sources.mode && sources.mode !== 'workflow' ? { mode: values.mode } : {}));
 
   // #486: the categories of a development workflow (the manifest's solo/team, the bundled ones' build;
   // #630: a composed set's feature)

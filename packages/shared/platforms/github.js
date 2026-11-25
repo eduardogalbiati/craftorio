@@ -1,3 +1,4 @@
+// @ts-check
 // The GitHub platform adapter (#351): what the app knows about GitHub and its `gh` CLI, so the rest
 // of src/ never branches on the platform. Resolve it through the registry (./index.js, by either
 // vocabulary: `github` or `gh`); the GitLab twin (./gitlab.js) has the same members.

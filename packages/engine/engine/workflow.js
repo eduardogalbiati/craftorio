@@ -1,3 +1,4 @@
+// @ts-check
 // Engine that runs the step graph defined in the YAML.
 // Emits events ('event') that feed the UI and the observability recorder.
 // `WorkflowRun` keeps the run loop: the constructor (run state, inputs, agents, template context),
@@ -152,7 +153,8 @@ const testedSummary = (ctx) => (ctx.vars?.tested ? { tested: ctx.vars.tested, te
 // never a human_edit gate (#647), which only the person ends
 const supervisedGate = (step, exhausted) => step.type === 'human_approval' && (step.kind === 'escalation' || !!exhausted);
 
-class WorkflowRun extends EventEmitter {
+/** @typedef {import('../../shared/types').RunFields & typeof accountsMethods & typeof checkoutMethods & typeof costsMethods & typeof gatesMethods & typeof machineStepsMethods & typeof outputsMethods & typeof projectMapStepsMethods & typeof refactorProposalsStepsMethods & typeof releaseStepsMethods & typeof resumeMethods & typeof sessionsMethods & typeof setupMethods & typeof supervisionMethods & typeof testRequestsMethods & typeof transitionsMethods & typeof turnsMethods} RunParts */
+class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** @type {unknown} */ (EventEmitter)) {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see packages/engine/domains/usage/usage.js); prices: USD per 1M tokens by model.
   // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
@@ -221,7 +223,7 @@ class WorkflowRun extends EventEmitter {
   //   turn's [Language] line and the output instruction follow it (packages/shared/language.js); null = English.
   // recover (#607): { runId, events, worktree } a run the app died in, continued in its own folder with
   //   its own id at its last finished turn (packages/engine/engine/run/resume.js seedRecovery); not a resume
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, serverForegroundMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
+  constructor(/** @type {import('../../shared/types').RunOptions} */ { file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, serverForegroundMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -506,7 +508,7 @@ class WorkflowRun extends EventEmitter {
     if (this.pausing) this.pausing.final = true; // ending now: Cancel pause no longer applies
     const st = this.ctx.steps[current];
     // a gate after step.finished (a stall check) leaves its visit counted: it has its output
-    const finished = this.lastFinished?.step === current && this.lastFinished.visit === st?.visits;
+    const finished = this.lastFinished?.step === current && /** @type {{ visit: number }} */ (/** @type {unknown} */ (this.lastFinished)).visit === st?.visits;
     if (this.stepRunning === current && st?.visits && !finished) st.visits--;
     this.paused = { step: current, next: this.nextTurnOf(current), at: new Date().toISOString() };
     return { status: 'paused', error: null };
@@ -525,7 +527,7 @@ class WorkflowRun extends EventEmitter {
     if (!['pending', 'running'].includes(this.status) || this.abort.signal.aborted) throw new Error(`The run is ${this.abort.signal.aborted ? 'stopping' : this.status}: there is nothing to pause.`);
     if (!this.pausing) {
       this.pausing = { at: new Date().toISOString() };
-      const p = this.pauseState();
+      const p = /** @type {{ step: any, agents?: any, command?: any }} */ (this.pauseState());
       this.emitEvent('run.pausing', { step_id: p.step, ...(p.agents ? { agents: p.agents } : {}), ...(p.command ? { command: p.command } : {}) });
     }
     for (const h of this.childHandles) { try { h.pause?.(); } catch { /* ending */ } }
@@ -760,7 +762,7 @@ class WorkflowRun extends EventEmitter {
     const visit = st.visits;
     const schema = stepOutputSchema(step, agentName);
     // evidence_dir: where this visit's screenshots go (#146), <run_dir>/evidence/<step>/round-<visit>
-    const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
+    /** @type {Record<string, any>} */ const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
     // `test_map: true` (#219): the code → tests map of the agent's checkout, as {{ test_map }}
     if (step.test_map) scope.test_map = this.writeTestMap(agentName);
     // #567: the answer to the question of its previous turn (agentQuestion), as {{ human_answer }}

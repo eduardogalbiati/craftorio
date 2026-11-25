@@ -139,7 +139,7 @@ async function prepareFolder(folder, { repo, cloned, fresh, git }) {
  *   that reason and nothing is cloned (retryClone clones it); fresh (#632, a new project): its folder must be
  *   empty or not exist
  */
-async function createProject(dir, data, { git = execGit, reposDir = null, cloneError = null, fresh = false } = {}) {
+async function createProject(dir, data, /** @type {{ git?: typeof execGit, reposDir?: string | null, cloneError?: string | null, fresh?: boolean }} */ { git = execGit, reposDir = null, cloneError = null, fresh = false } = {}) {
   const name = String(data.name || '').trim();
   if (!name) throw new Error('Enter the project name.');
   fs.mkdirSync(dir, { recursive: true });

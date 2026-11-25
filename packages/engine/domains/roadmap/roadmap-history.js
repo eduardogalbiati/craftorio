@@ -38,7 +38,10 @@ function saveVersion(workspace, projectId, stages, label) {
   return id;
 }
 
-/** The kept versions, newest first: [{ id, at, label }]. */
+/**
+ * The kept versions, newest first: [{ id, at, label }].
+ * @returns {{ id: string, at: any, label: string }[]}
+ */
 function listVersions(workspace, projectId) {
   const dir = historyDir(workspace, projectId);
   return names(dir).reverse().map((f) => {

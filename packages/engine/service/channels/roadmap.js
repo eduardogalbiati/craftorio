@@ -1,3 +1,4 @@
+// @ts-check
 // Backlog roadmap (packages/engine/domains/roadmap/roadmap.js): ordered stages of runs per project, each stage after the
 // previous one merged. Every channel returns the Backlog (withIssueRuns), whose `roadmap` the
 // screen shows (apps/desktop/renderer/backlog-roadmap.js); the service's dispatchRoadmaps runs it.
@@ -54,7 +55,7 @@ module.exports = (ctx) => {
   // → { id, label } for the screen's toast, or null when there is nothing to undo.
   // `paused` (#399, a stage pause, which changes the roadmap's state only): recorded although the
   // stages did not change; its Undo resumes the roadmap as it ran before ({ stage, simulated, scope }).
-  function edited(id, before, label, { undoable = true, paused = null } = {}) {
+  function edited(id, before, label, /** @type {{ undoable?: boolean, paused?: { stage: string, simulated: boolean, scope: any } | null }} */ { undoable = true, paused = null } = {}) {
     const after = stagesOf(id);
     if (!paused && JSON.stringify(before) === JSON.stringify(after)) return null;
     keep(id, before, label);

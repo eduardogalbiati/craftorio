@@ -61,25 +61,40 @@ above stays as it is.
   keep the ones for what can really be missing (an old file, an optional field, a caller outside
   the checked files). Each removal needs a test that reaches it.
 
-## Type checking (#346)
+## Type checking (#346, #52)
 
 TypeScript's checker on the JavaScript, with JSDoc types, file by file: no file is converted.
 `typescript` is a dev dependency; `jsconfig.json` keeps `checkJs` off (strict null checks on;
 implicit `any`, `this` and catch variables allowed, so a file opts in without a rewrite).
 
-- **Opt a file in**: put `// @ts-check` in its leading comments (first line), annotate what the
+- **A new file starts checked** (#52): a source file that is in none of `CHECKED`, `NEXT` and
+  `UNCHECKED` (the files older than the rule) must have `// @ts-check`; `npm run check` names the one
+  that does not. A moved file is new. Generated and vendored files (a `generated/` or `vendor/`
+  folder) and tests are out. No file enters `UNCHECKED`; one that opts in or is deleted leaves it.
+- **Opt a file in**: put `// @ts-check` in its leading comments (first line, or after a `/* global */` line), annotate what the
   checker cannot infer (`/** @param {...} */`, a `/** @type {...} */ (x)` cast for a local set in a
-  callback), and add the file to `CHECKED` in `scripts/typecheck.js` (removing it from `NEXT` when
-  it was there). Change code only where the checker finds a real bug, and say so in the PR.
+  callback), and add the file to `CHECKED` in `scripts/typecheck.js` (removing it from `NEXT`
+  or `UNCHECKED`). An option whose default is `null` or `{}` is typed where it is declared
+  (`/** @type {{ mock?: boolean }} */ { mock } = {}`), also when the function is in another file. Change code only where the checker finds a real bug, and say so in the PR.
 - **The types** live in `packages/shared/types.js`: `RunSummary`, `RunEvent` (a union by `type`),
   `Roadmap`, `RoadmapStage`, `RoadmapItem`, `Workflow`, `WorkflowStep`, `SessionRecord`, matching
   what the code writes (a field that can be missing is optional). Import them with
   `/** @param {import('./shared/types').Roadmap} roadmap */` (the path relative to the file). A
   shape changes: change its typedef in the same commit.
+- **The next files** (#52): `node scripts/typecheck.js --next` ranks the files that did not opt in by
+  the commits of the last 60 days that fixed them (a subject that starts with "Fix"), then by those that
+  changed them, with the errors tsc would report on each.
+- **No silencing** (#52): in an opted-in file a `@ts-ignore`, a `@ts-nocheck` or a cast to `any` has its
+  reason on the line (`// @ts-ignore: why`, `/** @type {any} */ (x) // why`), and `SILENCED` in
+  `scripts/typecheck.js` holds the count per file: it only goes down. Type the value instead.
+- **Screens** (#52): `packages/contract/page-globals.js` (types only, no page loads it) declares the
+  globals the page scripts share (`t`, `api`, `window.X`); add the one a screen needs there. jsconfig.json
+  has the browser's `dom` types for every checked file, so the checker does not say that an engine file
+  uses a name Node lacks.
 - **Run it**: `npm run typecheck` (`tsc --noEmit -p jsconfig.json`), or `node scripts/typecheck.js`
-  for the checker plus the ratchet. `npm test` runs both through `test/typecheck-346.test.js` on
+  for the checker, the ratchet and the coverage (`49 of 551 files checked`). `npm test` runs both through `test/typecheck-346.test.js` on
   every OS (a few seconds).
 - **The ratchet** (`scripts/typecheck.js`): every opted-in file passes with no error; `CHECKED` is
   exactly the files that opted in, so a file that opted in cannot opt out (dropping its
   `// @ts-check` fails); `NEXT` is the owner's list of files to check next and only shrinks (a file
-  of it that opted in fails until it leaves the list). Both lists are sorted, one file per line.
+  of it that opted in fails until it leaves the list). The lists are sorted, one file per line.

@@ -1,3 +1,4 @@
+// @ts-check
 // Service area (#640, onboarding step 3 of docs/work/first-project-onboarding/plan.md): the jobs that
 // follow a new project's import, chained by dependency: clone (#639, packages/engine/domains/project/projects.js)
 // → facts → (the Ways of working profile ∥ the project map). #731: the project map job draws the city plan
@@ -103,7 +104,7 @@ function failureOf(e) {
   const error = String(e?.message || e || '');
   const line = cut(error.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || 'The job failed without a reason.');
   const code = OnboardingModel.FAILURE_CODES.find((c) => FAILURE_TESTS[c](e, error)) || 'failed';
-  return { code, ...(code === 'cli-missing' ? { cli: error.match(CLI_MISSING)[1] } : {}), reason: line };
+  return { code, ...(code === 'cli-missing' ? { cli: /** @type {RegExpMatchArray} */ (error.match(CLI_MISSING))[1] } : {}), reason: line };
 }
 
 // an E2E hook's comma-separated list of names (the environment variable named)
@@ -253,7 +254,7 @@ function e2ePlatformCli(args) {
 
 // #738: gh / glab for a provider, args as given (the system boundary the tests replace) → { ok, out }; a
 // simulated run never calls them (e2ePlatformCli's answers, else { ok: false })
-async function machinePlatformCli(provider, args, { cwd } = {}) {
+async function machinePlatformCli(provider, args, /** @type {{ cwd?: string }} */ { cwd } = {}) {
   if (simulation.simulationOnly()) return e2ePlatformCli(args) || { ok: false, out: 'Simulation only: gh / glab are not called.' };
   const id = issues.PLATFORMS[provider]?.cli;
   const r = id ? await resolveCommandAsync(id) : null;
@@ -268,7 +269,7 @@ function jsonOf(answer) {
 }
 
 // #738: the repository's owner/name, the one rule of the wizard's notice (onboarding-model.js forkSuggestion)
-const ownerRepoOf = (repo) => OnboardingModel.forkSuggestion({ repo, push: false }).repo;
+const ownerRepoOf = (repo) => /** @type {{ repo: string }} */ (OnboardingModel.forkSuggestion({ repo, push: false })).repo;
 
 // #738: the repository's name on its platform: the full path where the platform has subgroups (GitLab,
 // the registry's Platforms.parseRepoUrl), else owner/repo
@@ -285,6 +286,8 @@ function forkRemoteOf(forkUrl, repo) {
 const README = (name) => `# ${name}\n`;
 const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Store', 'Thumbs.db', 'dist/', 'build/', 'coverage/', '*.log', ''].join('\n');
 
+/** @typedef {{ ok: boolean, url?: string | null, error?: string }} RemoteAnswer */
+
 /**
  * The onboarding of new projects: { start, status, analyze, retry } (the state is documented above).
  * git: projects.js's git (ls-remote and clone); cli(provider) → { installed, signedIn };
@@ -295,6 +298,9 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  * a new project's private repository (default: gh / glab, machineRemote); #30: install(cmd, args, { cwd }) →
  * { code, output } runs the dependency install (default: deps-cache.js runCommand); #74: savedMap(project) →
  * { costUsd } | null, the project map an earlier process saved (default: none).
+ * @param {{ projectsDir: string, reposDir: string, git?: typeof execGit, cli?: typeof machineCli, jobs: any, slotsDir?: string,
+ *   emit?: (event: string, state: any) => void, pollMs?: number, remote?: (provider: string, spec: { name: string, folder: string }) => Promise<RemoteAnswer>,
+ *   platformCli?: typeof machinePlatformCli, install?: typeof depsCache.runCommand, savedMap?: (project: any) => any }} options
  */
 function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts), savedMap = () => null }) {
   const states = new Map();
@@ -487,7 +493,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
    * repository of an existing project creates nothing: its onboarding not finished resumes (that project's
    * state, with its wizard), else { exists: true, finished: true, projectId } (the wizard offers to open it).
    */
-  async function start({ name, repo } = {}) {
+  async function start(/** @type {{ name?: string, repo?: string }} */ { name, repo } = {}) {
     if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
     if (typeof repo !== 'string' || !repo.trim()) throw clientError('The repository URL is missing.');
     const existing = projects.listProjects(projectsDir).find((x) => !x.error && sameRepo(x.repo, repo));
@@ -514,7 +520,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   // without push the state suggests a fork (the wizard's notice). Not read on another host nor when the CLI
   // does not answer; never fails the import. A simulated run's E2E hook stands for gh on any host.
   async function readPush(id, repo) {
-    const e2e = simulation.simulationOnly() && ['0', '1'].includes(process.env.CRAFTORIO_E2E_REPO_PUSH);
+    const e2e = simulation.simulationOnly() && ['0', '1'].includes(/** @type {string} */ (process.env.CRAFTORIO_E2E_REPO_PUSH));
     const platform = Platforms.findPlatform(providerOf(repo) || (e2e ? Platforms.DEFAULT_PLATFORM : null));
     if (!platform) return;
     const name = forkNameOf(platform, repo);
@@ -624,7 +630,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   }
 
   // #741: the wizard's state saved with the project (its step, the picks, finished kept)
-  function saveWizard(projectId, { step, picks } = {}) {
+  function saveWizard(projectId, /** @type {{ step?: string, picks?: any }} */ { step, picks } = {}) {
     if (!OnboardingModel.STEPS.some((x) => x.id === step)) throw clientError(`The wizard step must be one of: ${OnboardingModel.STEPS.map((x) => x.id).join(', ')}.`);
     const p = projectOf(projectId);
     if (!p) throw clientError(`No onboarding runs for the project ${projectId}.`);
@@ -716,7 +722,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
    * its profile, and is pushed before the remote is asked. A failed local repository removes the project; a
    * remote that fails leaves the local project.
    */
-  async function create({ name, starts = 'readme', remote: wanted = null, answers } = {}) {
+  async function create(/** @type {{ name?: string, starts?: string, remote?: { provider?: string } | null, answers?: any }} */ { name, starts = 'readme', remote: wanted = null, answers } = {}) {
     if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
     if (!['readme', 'empty'].includes(starts)) throw clientError('The project starts with readme or empty.');
     const provider = wanted?.provider || null;
@@ -748,6 +754,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
         change(p.id, { remote: { provider, status: c.status, reason: remoteReason(provider, c.status) } });
       } else {
         change(p.id, { remote: { provider, status: 'creating' } });
+        /** @type {RemoteAnswer} */
         const out = await Promise.resolve().then(() => remote(provider, { name: p.id, folder })).catch((e) => ({ ok: false, error: String(e?.message || e) }));
         if (out?.url) projects.updateProject(projectsDir, p.id, { repo: out.url });
         change(p.id, { remote: out?.ok ? { provider, status: 'created', url: out.url } : { provider, status: 'failed', reason: String(out?.error || 'The repository was not created.'), ...(out?.url ? { url: out.url } : {}) } });
@@ -808,9 +815,9 @@ module.exports = (ctx) => {
     onboardingFinish: ({ projectId }) => onboarding().finish(projectId),
     onboardingFork: ({ projectId }) => onboarding().fork(projectId),
     onboardingInstallDeps: ({ projectId }) => onboarding().installDeps(projectId),
-    onboardingRepos: ({ provider } = {}) => machineRepos(provider),
+    onboardingRepos: (/** @type {{ provider?: string }} */ { provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
-    onboardingSaveWizard: ({ projectId, step, picks } = {}) => onboarding().saveWizard(projectId, { step, picks }),
+    onboardingSaveWizard: (/** @type {{ projectId?: string, step?: string, picks?: any }} */ { projectId, step, picks } = {}) => onboarding().saveWizard(projectId, { step, picks }),
     onboardingStart: (data) => onboarding().start(data),
     onboardingStatus: ({ projectId }) => onboarding().status(projectId),
     onboardingWorkLocally: ({ projectId }) => onboarding().workLocally(projectId),
