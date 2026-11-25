@@ -8,3 +8,34 @@
 # Made up GitHub tokens of the redaction tests: they fail the token's checksum
 7248ec50b4b06318b8aa4e2252ba0cfbc4fc930c:test/findings-361.test.js:github-pat:47
 a93079ac3758613897905365426c747a6fb805f7:test/recorder-baseline-redact-475.test.js:github-pat:81
+
+# Made up engine tokens of the connection and server tests (tok-…, sign-in-…, serve-…): test values, never a real server's token
+1bb1318a608533f8ab20cd4ddcec3a93e9d45605:packages/engine/test/account/sign-in-off.test.js:generic-api-key:13
+e7c6750b0b29e371abc5f973c73581c5ee32a17b:apps/desktop/test/host/engine-connection-window-751.test.js:generic-api-key:27
+76aaf79f4203e7213f6a57b484d3f4fbe4643a60:test/engine-connection-test-insecure-480.test.js:generic-api-key:11
+83cc5d10e20b27928a93bf8157e5f593a28c6b20:test/engine-connection-480.test.js:generic-api-key:30
+19cb39d46d53b9fd82d49ecf1a8c6b0cb11ac67e:test/engine-connection-window.test.js:generic-api-key:13
+54a17fdd14fcffd97918d073830590dff4e0fed9:test/engine-connection.test.js:generic-api-key:129
+18f867cdd8958dfdbd394408ac0bc89137556a3a:packages/engine/test/serve-479.test.js:generic-api-key:48
+f278831a1e4ee6c77b8be1d713ac2027295a327a:test/serve-479.test.js:generic-api-key:25
+
+# The WebSocket handshake's Sec-WebSocket-Key: the RFC 6455 sample nonce, public by design
+f07bb47e1caed597c752ca0f5913b387fd79412e:packages/engine/test/server-479.test.js:generic-api-key:174
+f278831a1e4ee6c77b8be1d713ac2027295a327a:test/server-479.test.js:generic-api-key:76
+
+# Made up Slack token and PEM block of the redaction tests: the test checks they are redacted
+a93079ac3758613897905365426c747a6fb805f7:test/recorder-baseline-redact-475.test.js:slack-bot-token:99
+a93079ac3758613897905365426c747a6fb805f7:test/recorder-baseline-redact-475.test.js:private-key:55
+
+# File paths and CSS selectors the rule takes for keys (evidence screenshot names, a data- attribute)
+1224d0bf9410db38be62a2246e219df9773f4368:test/screenshot.test.js:generic-api-key:30
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:190
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:191
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:192
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:202
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:211
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:212
+6b0a7723a67ded2fc243c824887d954b57935639:test/pr-screenshots.test.js:generic-api-key:221
+
+# A git commit id (40 hex) in a recorded run's summary, which the Sourcegraph rule reads as a token
+1224d0bf9410db38be62a2246e219df9773f4368:poc/run-3d.html:sourcegraph-access-token:729
