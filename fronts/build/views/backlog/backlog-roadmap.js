@@ -1138,7 +1138,7 @@
     const epicSelect = options.length ? `<select class="rm-epic${v.epic ? ' active' : ''}" data-rm-epic aria-label="${t('backlog_roadmap.epic')}" title="${t('backlog_roadmap.show_the_items_of_one_epic')}"><option value="">${t('backlog_roadmap.all_epics')}</option>${options.map((o) =>
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
     const left = `${epicSelect}${r.stages.length ? releaseFilterHtml(data, rv) : ''}${window.RoadmapSummary?.byReleaseHtml(r, { open: byReleaseOpen, money: cost, minutes: mins }) || ''}${sinceSelect}${viewSeg}${toggle}`;
-    const filters = left || count || view.synced ? `<div class="rm-head-filters" data-testid="filter-row">${left}<span class="spacer"></span>${view.synced ? `<span class="muted small">${esc(view.synced)}</span>` : ''}${count}</div>` : '';
+    const filters = left || count || view.synced ? `<div class="rm-head-filters" data-testid="filter-row">${left}${view.synced ? `<span class="spacer muted small rm-synced" title="${esc(view.synced)}">${esc(view.synced)}</span>` : '<span class="spacer"></span>'}${count}</div>` : '';
     const live = window.BacklogLive, act = live ? live.activityHtml(r, data, { clock, pausedByFailure, failures, offOpen: offOpen.length }) : failures;
     const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins, money: cost }) || ''}${act}${filters}</div>`;
     // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
