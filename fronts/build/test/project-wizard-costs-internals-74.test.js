@@ -64,3 +64,19 @@ test('#74 git\'s profile waiting for an analysis nobody asked for offers the cho
   await W.emit(app, { ...W.READY, jobs: jobsWith({ status: 'waiting', profile: PROFILE }, { status: 'waiting' }) });
   assert.equal(at(app, 'wizard-workflows-column').attrs['data-state'], 'choose');
 });
+
+test('#74 a resumed review, its analyses done before the restart, says what they cost', async () => {
+  const app = await analysisStep({ profile: { costUsd: 0.42, free: false, basis: 1 } });
+  const done = { status: 'done', profile: PROFILE, costUsd: 0.42 };
+  await W.emit(app, { ...W.READY, jobs: jobsWith(done, { status: 'done', costUsd: 0.74 }) });
+  await W.press(app, 'wizard-skip');
+  await app.settle(10);
+  assert.equal(W.currentStep(app), 'review');
+  assert.match(textOf(at(app, 'wizard-review-cost-total').outer), /\$1\.16/);
+});
+
+test('#74 Analyze says only what is still to run: a project map done before a restart is not in it', async () => {
+  const app = await analysisStep({ profile: { costUsd: 0.42, free: false, basis: 1 }, map: 0.9 });
+  await W.emit(app, { ...W.READY, jobs: jobsWith({ status: 'waiting', profile: PROFILE }, { status: 'done', costUsd: 0.74 }) });
+  assert.match(textOf(at(app, 'wizard-workflows-choice-cost').outer), /\$0\.42/);
+});

@@ -5,6 +5,7 @@
 // through the shell, else one Oracle turn read-only in its daily budget (packages/engine/domains/oracle/oracle-seeds.js),
 // simulated under mock or CRAFTORIO_SIMULATION_ONLY; saved under <workspace>/architecture/. The
 // state lives per service context (a WeakMap on ctx), read at call time.
+// estimateSeed (#74): what a seed's run may cost, one rule for seeds:estimate and the interview's estimate.
 // runDefaultsOf (#735): a project's run defaults over its last ways-of-working profile, for the run
 // dialog's hints, the Backlog's queue and the Roadmap; withProjectDefaults, a run's inputs over them.
 // productOwnerWorkflows (#790, #791): what the Product Owner may plan on for a project (the channel
@@ -14,6 +15,7 @@ const { execFile, exec: execShell } = require('child_process');
 const path = require('path');
 const DefaultWorkflow = require('@craftorio/shared/default-workflow');
 const agents = require('../domains/agents/agents');
+const arch = require('../domains/oracle/oracle-architecture');
 const oracleSeeds = require('../domains/oracle/oracle-seeds');
 const projects = require('../domains/project/projects');
 const runDefaults = require('../domains/project/project-run-defaults');
@@ -88,6 +90,23 @@ function projectOf(ctx, projectId) {
 
 /** The project's recorded tool command for a seed, or null. */
 const toolOf = (p, seedId) => (p.seedTools && p.seedTools[seedId]) || null;
+
+/** #74: whether a record saved `at` is of this project, not of a removed one imported before under the same id. */
+const sinceCreated = (p, at) => !p.createdAt || !(Date.parse(at) < Date.parse(p.createdAt));
+
+/**
+ * What a run of the seed may cost → { costUsd | null (not known), free, basis }: free when no model is called (a
+ * recorded tool, or `free`: the caller knows), else the mean of the project's last real runs; #74 `others`: of the
+ * other projects' when it has none. Runs nothing.
+ */
+function estimateSeed(ctx, p, seedId, { free = false, others = false } = {}) {
+  if (free || toolOf(p, seedId)) return { costUsd: 0, free: true, basis: 0 };
+  const root = seedsRoot(ctx);
+  // the Oracle's runs, dated as estimateCost reads them (a seed run's `date` is its folder)
+  const runsOf = (id) => oracleSeeds.listSeedRuns(root, id, seedId).filter((r) => r.source === 'oracle').map((r) => ({ ...r, date: r.at }));
+  const est = others ? arch.estimateFromOthers(root, p.id, runsOf) : arch.estimateCost(runsOf(p.id));
+  return { costUsd: est ? est.usd : null, free: false, basis: est ? est.basis : 0 };
+}
 
 /** The run of a seed in progress on a project ({ since, items, last } copy, or null) and its last error. */
 function runState(ctx, p, seedId) {
@@ -196,6 +215,7 @@ function productOwnerWorkflows(ctx, project, chosen = null) {
 module.exports = {
   commitGone,
   commitsSince,
+  estimateSeed,
   git,
   productOwnerWorkflows,
   projectListing,
@@ -205,6 +225,7 @@ module.exports = {
   runSeed,
   runState,
   seedsRoot,
+  sinceCreated,
   toolOf,
   withProjectDefaults,
 };

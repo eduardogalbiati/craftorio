@@ -1,7 +1,7 @@
 // Analysis seeds on a project's Architecture tab (#360): the workspace's seeds (packages/engine/domains/seed/seeds.js) with
 // each one's last run, its recorded tool and the commits since (seeds:list); the cost estimate
-// (free with a tool; else the mean of the seed's last real runs; #74: the Ways of working's is the interview's own,
-// workflowInterviewEstimate in areas/workflow-interview.js); a run (packages/engine/domains/oracle/oracle-seeds.js: one
+// (seed-runs.js estimateSeed: free with a tool; else the mean of the seed's last real runs; #74: the Ways of working's is
+// the interview's own, workflowInterviewEstimate in areas/workflow-interview.js); a run (packages/engine/domains/oracle/oracle-seeds.js: one
 // Oracle turn read-only in its daily budget, or the project's tool, simulated under mock or
 // CRAFTORIO_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
 // interview: packages/engine/service/seed-runs.js); the history and one result
@@ -9,7 +9,6 @@
 // project's settings (seedTools); and "Make it a tool" (packages/engine/fronts/analyser/domains/seed-tool-issue.js: an issue in the
 // project's tracker, a preview in simulation). Nothing here crosses a human gate or writes to the project.
 
-const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
 const backlog = require('@craftorio/engine/domains/backlog/backlog');
 const projects = require('@craftorio/engine/domains/project/projects');
 const seeds = require('@craftorio/engine/domains/seed/seeds');
@@ -72,11 +71,10 @@ module.exports = (ctx) => {
   function estimate({ projectId, seedId }) {
     const p = projectOf(projectId);
     const seed = seedOf(seedId);
+    // the interview's is also true of seeds:run, which always asks the Oracle without a tool, only while git never
+    // settles every field of the profile (workflow-interview.js simulatedProfile: release is always null)
     if (seed.id === WAYS_OF_WORKING) return ctx.workflowInterviewEstimate({ projectId });
-    if (toolOf(p, seed.id)) return { costUsd: 0, free: true };
-    const runs = oracleSeeds.listSeedRuns(root(), p.id, seed.id).filter((r) => r.source === 'oracle').map((r) => ({ ...r, date: r.at }));
-    const est = arch.estimateCost(runs);
-    return est ? { costUsd: est.usd, free: false, basis: est.basis } : { costUsd: null, free: false, basis: 0 };
+    return seedRuns.estimateSeed(ctx, p, seed.id);
   }
 
   async function run({ projectId, seedId, mock }) {

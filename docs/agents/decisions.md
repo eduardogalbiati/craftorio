@@ -99,9 +99,9 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   opened by Home's empty state, Projects › New project and the Setup's last step; Edit keeps the old
   dialog. The clone is a job of the engine (`cloning | ready | failed`, an access check first): a
   refused access or a failed clone ends `failed` with a readable reason and Retry, never `ready`.
-  The free analyses (facts, the Ways of working profile) run after the clone; the paid ones (the
-  project map, the ranking) only on the owner's click, their cost shown before it, and "analyze
-  later" never calls a model. The progress tray stays when the wizard closes; Finish never waits for
+  The free analyses (facts, what git tells of the Ways of working profile) run after the clone; the paid ones
+  (the project map and, #74, the Oracle's turn on the profile fields git leaves open) only on the owner's
+  click, their cost shown before it, and "analyze later" never calls a model. The progress tray stays when the wizard closes; Finish never waits for
   an analysis (one still running notifies when it ends). The project page leads with a "Next steps"
   card (the refactors to the roadmap, the first idea, the refactor cadence; release CI and
   screenshots come in a later phase). Setup loses its Workflows step. Phase 1 covers spec R1, R2,

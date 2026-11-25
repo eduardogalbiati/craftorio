@@ -28,7 +28,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const arch = require('../../domains/oracle/oracle-architecture');
 const builder = require('../../domains/workflow/workflow-builder');
 const compose = require('../../domains/workflow/workflow-compose');
 const oracleSeeds = require('../../domains/oracle/oracle-seeds');
@@ -159,6 +158,8 @@ async function simulatedProfile(project, onGit = null) {
 
 // #640: a field git could not settle (null, or no language found)
 const open = (v) => v == null || (Array.isArray(v) && !v.length);
+// #74: whether a run completes this free profile: git left a field open, outside a simulation
+const leftOpen = (free) => !simulation.simulationOnly() && Object.values(free.profile).some(open);
 
 // #630: evidence only, never a profile field (an older seed's answer may still give them)
 const EVIDENCE_ONLY = ['merge', 'team'];
@@ -197,14 +198,14 @@ module.exports = (ctx) => {
     return model.simulated ? free || simulatedProfile(p) : null;
   }
 
-  // #74: whether a run calls the model for this free profile: a field git left open, no simulation, no recorded tool
-  const needsOracle = (p, free) => !simulation.simulationOnly() && !seedRuns.toolOf(p, SEED_ID) && Object.values(free.profile).some(open);
+  // #74: whether a run calls the model for this free profile: it is left open and no tool is recorded
+  const needsOracle = (p, free) => leftOpen(free) && !seedRuns.toolOf(p, SEED_ID);
 
   // #74: the project's last real answer over the free profile, with what it cost, or null; a project imported
   // again under the same id does not take an earlier one's
   async function paidAnswer(p, free) {
     const last = oracleSeeds.listSeedRuns(root(), p.id, SEED_ID)[0];
-    if (!last || last.simulated || (p.createdAt && Date.parse(last.at) < Date.parse(p.createdAt))) return null;
+    if (!last || last.simulated || !seedRuns.sinceCreated(p, last.at)) return null;
     const found = await lastProfile(p, free);
     return found && { ...found, costUsd: last.costUsd };
   }
@@ -231,7 +232,7 @@ module.exports = (ctx) => {
         const found = paid || { ...free, simulated: false, needsOracle: true };
         return { ...found, questions: compose.openQuestions(found.profile) };
       }
-      const ask = !simulation.simulationOnly() && Object.values(free.profile).some(open);
+      const ask = leftOpen(free);
       at.oracle = { status: ask ? 'running' : 'not-needed' };
       const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: !ask });
       if (out.refused) {
@@ -251,18 +252,14 @@ module.exports = (ctx) => {
   }
 
   /**
-   * #74: what the interview may cost → { costUsd | null (not known), free, basis }: free when no model is called (git
-   * settles every field, a recorded tool, a simulation), else the mean of the project's last real runs, or of the
-   * other projects'. Runs nothing.
+   * #74: what the interview may cost, as estimateSeed (seed-runs.js) says it, the other projects' runs too; free also
+   * when git settles every field or in a simulation. Runs nothing.
    */
   async function workflowInterviewEstimate({ projectId }) {
     const p = projectOf(projectId);
     const e2e = simulation.e2eOnboardingCosts()?.profile;
     if (Number.isFinite(e2e)) return { costUsd: e2e, free: false, basis: 1 };
-    if (!needsOracle(p, await simulatedProfile(p))) return { costUsd: 0, free: true, basis: 0 };
-    const runsOf = (id) => oracleSeeds.listSeedRuns(root(), id, SEED_ID).filter((r) => r.source === 'oracle').map((r) => ({ ...r, date: r.at }));
-    const est = arch.estimateFromOthers(root(), p.id, runsOf);
-    return { costUsd: est ? est.usd : null, free: false, basis: est ? est.basis : 0 };
+    return seedRuns.estimateSeed(ctx, p, SEED_ID, { free: !needsOracle(p, await simulatedProfile(p)), others: true });
   }
 
   /** #733: the last saved run → { profile, evidence, questions, simulated, date, costUsd }, or null; runs nothing. */

@@ -7,7 +7,8 @@
 // The free part (facts and what git tells of the profile, spec R5) runs once the clone is ready; the paid part (the
 // project map and, #74, the Oracle's turn on the profile fields git leaves open) only after onboardingAnalyze
 // ("analyze later" never calls it, nor does a restart): until then such a profile job is `waiting` with git's
-// profile. A done analysis says what it cost, costUsd, when its record does. The project map takes the
+// profile. A done analysis says what it cost, costUsd, when its record does; after a restart too (savedMap: the
+// project's real report is its map, done and not paid twice). The project map takes the
 // machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so it waits for
 // other heavy work on the machine. The state of each project is kept in memory:
 //   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: no-access | clone-failed,
@@ -44,12 +45,14 @@ const Platforms = require('@craftorio/shared/platforms');
 // #848: the platform the gh E2E hook stands for, the GitHub adapter's own id (#351: no platform literal here)
 const { id: E2E_REPOS_PLATFORM } = require('@craftorio/shared/platforms/github');
 const agents = require('../../domains/agents/agents');
+const arch = require('../../domains/oracle/oracle-architecture');
 const depsCache = require('../../engine/deps-cache');
 const { oneLine } = require('../../engine/gate-summary');
 const issues = require('../../domains/backlog/issues');
 const { identityArgs } = require('../../engine/worktree');
 const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
+const seedRuns = require('../seed-runs');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
 const { execGit } = require('../../domains/workspace/workspace');
@@ -290,12 +293,13 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  * slotsDir: the machine slots' folder (default: the machine's); pollMs: the slot's poll (default:
  * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
  * a new project's private repository (default: gh / glab, machineRemote); #30: install(cmd, args, { cwd }) →
- * { code, output } runs the dependency install (default: deps-cache.js runCommand).
+ * { code, output } runs the dependency install (default: deps-cache.js runCommand); #74: savedMap(project) →
+ * { costUsd } | null, the project map an earlier process saved (default: none).
  */
-function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts) }) {
+function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts), savedMap = () => null }) {
   const states = new Map();
-  // per project: { wanted (analyze was asked during the clone), asked (the paid part was started), oracle (the
-  // profile waits for the Oracle's turn), facts (the facts job's promise), free, paid (the running parts), cli }
+  // per project: { wanted (analyze was asked during the clone), asked (the paid part was started), facts (the
+  // facts job's promise), free, paid (the running parts), cli }
   const work = new Map();
   const workOf = (id) => { if (!work.has(id)) work.set(id, {}); return work.get(id); };
   const snapshot = (s) => JSON.parse(JSON.stringify(s));
@@ -328,6 +332,12 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     change(id, { status: 'failed', code: undefined, reason: `The onboarding stopped: ${String(e?.message || e)}` });
   }
 
+  // #74: what an analysis cost, the interview's or the project map's, when its record says it
+  function costPart(result) {
+    const cost = result?.costUsd ?? result?.cost_usd;
+    return Number.isFinite(cost) ? { costUsd: cost } : {};
+  }
+
   // a job of the chain: running (with the machine slot when `heavy`), then done or failed → its result, or null;
   // input() is read inside, so a removed project fails the job instead of escaping
   async function runJob(id, name, input, { heavy = false } = {}) {
@@ -343,14 +353,12 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       // follows the fork choice (no push access: an external contribution)
       const profile = result?.profile ? withForkMode(result.profile, states.get(id)?.fork) : null;
       // #74: git's profile, the rest of it paid: it waits for the analysis (startPaid)
-      if (name === 'profile') workOf(id).oracle = !!result.needsOracle;
       if (result?.needsOracle) {
         change(id, {}, { [name]: { status: 'waiting', profile } });
         return { result };
       }
-      const cost = result?.costUsd ?? result?.cost_usd; // the interview's, the project map's
       // #781: simulated: no model turn, the wizard's Oracle line reads "not needed" after a restart too
-      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}), ...(result?.simulated ? { simulated: true } : {}), ...(Number.isFinite(cost) ? { costUsd: cost } : {}) } });
+      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}), ...(result?.simulated ? { simulated: true } : {}), ...costPart(result) } });
       return { result };
     } catch (e) {
       // #725: the full error (the wizard's tooltip) and its short reason
@@ -375,12 +383,14 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   }
 
   // #74: the Oracle's turn on a profile git left open (or a profile failed before the analysis was asked for),
-  // after the free part
+  // after the free part; a turn that failed in the free part (a Retry) is not asked again: one paid try per click
   async function completeProfile(id, facts) {
     const w = workOf(id);
-    const again = !w.free && states.get(id)?.jobs?.profile?.status === 'failed';
+    const job = () => states.get(id)?.jobs?.profile;
+    const again = !w.free && job()?.status === 'failed';
     await w.free;
-    if (w.oracle || again) await runProfile(id, facts);
+    const waits = job()?.status === 'waiting' && !!job().profile; // git's profile, its open fields waiting
+    if (waits || again) await runProfile(id, facts);
   }
 
   // the paid part: the project map once the facts are known (#730: no ranking after it) and, beside it, the profile's
@@ -601,13 +611,15 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   }
 
   // #741: the state of an onboarding this process did not start: its clone as the record says, the free part
-  // run again once the clone is ready (the facts and the profile the wizard's step 3 reads)
+  // run again once the clone is ready (the facts and the profile the wizard's step 3 reads); #74: a project map already
+  // saved is done, with what it cost
   function restore(p) {
     const waiting = Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }]));
     const ready = p.status === 'ready';
     // #30: the dependencies still missing after a restart (the project page's Next steps reads them)
     const deps = ready ? depsOf(p) : undefined;
-    states.set(p.id, { projectId: p.id, name: p.name, status: ready ? 'ready' : 'failed', jobs: { ...waiting, clone: { status: ready ? 'done' : 'failed' } }, cli: null, ...(deps ? { deps } : {}), ...(ready ? {} : { code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }) });
+    const map = ready ? savedMap(p) : null;
+    states.set(p.id, { projectId: p.id, name: p.name, status: ready ? 'ready' : 'failed', jobs: { ...waiting, ...(map ? { projectMap: { status: 'done', ...costPart(map) } } : {}), clone: { status: ready ? 'done' : 'failed' } }, cli: null, ...(deps ? { deps } : {}), ...(ready ? {} : { code: 'clone-failed', reason: `The clone failed: ${p.cloneError || 'no reason was given.'}` }) });
     if (ready && !p.onboarding.finished) startFree(p.id);
   }
 
@@ -779,7 +791,12 @@ module.exports = (ctx) => {
         return out;
       },
     };
-    const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs: e2eJobs(e2eCosts(jobs)), emit: (event, state) => ctx.events.emit(event, state) });
+    // #74: the project's last report a model made (a simulated one is not its map), since it was imported
+    const savedMap = (p) => {
+      const last = arch.listReports(archRoot, p.id)[0];
+      return last && !last.simulated && seedRuns.sinceCreated(p, last.date) ? last : null;
+    };
+    const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs: e2eJobs(e2eCosts(jobs)), savedMap, emit: (event, state) => ctx.events.emit(event, state) });
     current = { ws, ob };
     return ob;
   }

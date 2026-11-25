@@ -51,7 +51,7 @@ const git = async (args) => {
 // a profile that waits for the Oracle; `paid` counts the turns asked for (input.oracle)
 function setup(t, { fail = {}, hold = null } = {}) {
   const root = tmp(t, 'costs-74-int-');
-  const calls = { facts: 0, free: 0, paid: 0 };
+  const calls = { facts: 0, free: 0, map: 0, paid: 0 };
   const once = (name) => { if (fail[name]) { fail[name] -= 1; throw new Error(`${name} failed`); } };
   const jobs = {
     facts: async () => { calls.facts += 1; once('facts'); return {}; },
@@ -60,13 +60,13 @@ function setup(t, { fail = {}, hold = null } = {}) {
       once(oracle ? 'paid' : 'free');
       return oracle ? { profile: PROFILE, costUsd: 0.42 } : { profile: PROFILE, needsOracle: true };
     },
-    projectMap: async () => { if (hold) await hold; return { cost_usd: 0.74 }; },
+    projectMap: async () => { calls.map += 1; if (hold) await hold; once('map'); return { cost_usd: 0.74 }; },
   };
-  const ob = createOnboarding({
+  const make = (more = {}) => createOnboarding({
     projectsDir: path.join(root, 'projects'), reposDir: path.join(root, 'repos'), slotsDir: path.join(root, 'locks'),
-    git, jobs, cli: async () => ({ installed: true, signedIn: true }),
+    git, jobs, cli: async () => ({ installed: true, signedIn: true }), ...more,
   });
-  return { calls, ob };
+  return { calls, make, ob: make() };
 }
 const start = async (ob) => (await ob.start({ name: 'Widgets', repo: 'https://github.com/acme/widgets.git' })).projectId;
 
@@ -75,7 +75,7 @@ test('#74 a profile that waits for the Oracle keeps git\'s profile, and says not
   const id = await start(ob);
   const s = await until(ob, id, (x) => x.jobs.profile.profile, 'the free read ends');
   assert.deepEqual(s.jobs.profile, { status: 'waiting', profile: PROFILE });
-  assert.deepEqual(calls, { facts: 1, free: 1, paid: 0 });
+  assert.deepEqual(calls, { facts: 1, free: 1, map: 0, paid: 0 });
 });
 
 test('#74 Retry before the analysis is asked for never pays', async (t) => {
@@ -114,6 +114,32 @@ test('#74 Retry of a failed Oracle turn asks the Oracle again, during the analys
   await until(ob, id, (x) => x.jobs.profile.status === 'done', 'asked again after it');
   assert.equal(calls.paid, 3);
   assert.equal(calls.free, 1);
+});
+
+test('#74 one Retry asks the Oracle once, when the project map and the profile\'s turn both failed and the turn fails again', async (t) => {
+  const { calls, ob } = setup(t, { fail: { map: 1, paid: 9 } });
+  const id = await start(ob);
+  await until(ob, id, (x) => x.jobs.profile.profile, 'the free read ends');
+  await ob.analyze(id);
+  await until(ob, id, (x) => x.status === 'analyzed' && x.jobs.profile.status === 'failed' && x.jobs.projectMap.status === 'failed', 'both fail');
+  assert.equal(calls.paid, 1);
+  await ob.retry(id);
+  await until(ob, id, (x) => x.status === 'analyzed' && x.jobs.projectMap.status === 'done', 'the map runs again');
+  await pause(50);
+  assert.equal(calls.paid, 2);
+});
+
+test('#74 after a restart a project map already saved is done with its cost, and Analyze does not pay it again', async (t) => {
+  const { calls, make, ob } = setup(t);
+  const id = await start(ob);
+  await until(ob, id, (x) => x.jobs.profile.profile, 'the free read ends');
+  const again = make({ savedMap: (p) => (p.id === id ? { costUsd: 0.74 } : null) });
+  assert.deepEqual(again.status(id).jobs.projectMap, { status: 'done', costUsd: 0.74 });
+  await until(again, id, (x) => x.jobs.profile.profile, 'the free read runs again');
+  await again.analyze(id);
+  const end = await until(again, id, (x) => x.status === 'analyzed', 'the analysis ends');
+  assert.equal(end.jobs.projectMap.costUsd, 0.74);
+  assert.deepEqual({ map: calls.map, paid: calls.paid }, { map: 0, paid: 1 });
 });
 
 test('#74 Retry of failed facts keeps a paid profile', async (t) => {
@@ -187,6 +213,35 @@ test('#74 the estimate: not known with no past run, then the other projects\' ru
   assert.deepEqual(await area.workflowInterviewEstimate({ projectId: b.id }), { costUsd: 0.5, free: false, basis: 1 });
   projects.updateProject(ws.projects, b.id, { seedTools: { 'ways-of-working': 'node x.js' } });
   assert.equal((await area.workflowInterviewEstimate({ projectId: b.id })).free, true);
+});
+
+// seeds:run always asks the Oracle for this seed without a tool: seeds:estimate may say the interview's estimate only
+// while git never settles the whole profile
+test('#74 git never settles the release style, so the seed\'s estimate is never free without a tool', async (t) => {
+  const { area, project } = await interview(t);
+  const p = await project('demo');
+  execFileSync('git', ['tag', 'v1.0.0'], { cwd: p.folder });
+  fs.writeFileSync(path.join(p.folder, '.gitlab-ci.yml'), 'release:\n  only: [tags]\n');
+  const free = await area.workflowInterview({ projectId: p.id, free: true });
+  assert.equal(free.profile.release, null);
+  assert.equal((await area.workflowInterviewEstimate({ projectId: p.id })).free, false);
+});
+
+test('#74 the app reads the saved map of a resumed onboarding: the real report since the import, not a simulated or an older one', async (t) => {
+  const ws = setupWorkspace(tmp(t, 'costs-74-int-map-'), { persist: false });
+  const root = path.join(ws.root, 'architecture');
+  const p = await projects.createProject(ws.projects, { name: 'demo', folder: repository(t) });
+  projects.updateProject(ws.projects, p.id, { onboarding: { step: 'review', picks: {}, finished: true } });
+  const report = { summary: 's', areas: [], findings: [] };
+  const created = Date.parse(projects.readProject(ws.projects, p.id).createdAt);
+  const at = (ms) => new Date(created + ms).toISOString();
+  const mapNow = () => require('../service/areas/project-onboarding')({ ws, events: { emit() {} } }).onboardingStatus({ projectId: p.id }).jobs.projectMap;
+  arch.saveReport(root, p.id, { date: at(-60e3), costUsd: 9, simulated: false, report });
+  assert.deepEqual(mapNow(), { status: 'waiting' });
+  arch.saveReport(root, p.id, { date: at(60e3), costUsd: 0.74, simulated: false, report });
+  assert.deepEqual(mapNow(), { status: 'done', costUsd: 0.74 });
+  arch.saveReport(root, p.id, { date: at(120e3), costUsd: 0, simulated: true, report });
+  assert.deepEqual(mapNow(), { status: 'waiting' });
 });
 
 test('#74 the estimate is free in a simulation', async (t) => {

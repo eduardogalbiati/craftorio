@@ -7,12 +7,13 @@
 //   wizard-skip before the click (hidden once Analyze was asked during the clone, the engine's `wanted`);
 // - an amount: before it ran its estimate ("Not known yet" without one), "free" only when no model is called (the
 //   engine's estimate says so, or the job ended simulated); once done its record's cost (jobs.<id>.costUsd); "—" failed;
-// - estimateText(): the two analyses' estimate beside Analyze the repository ('' when not read yet or free);
+// - estimateText(): the estimate of the analyses still to run beside Analyze the repository ('' when not read yet or free);
 // - readEstimates(): api.seedEstimate (the profile's) and api.architectureEstimate (the project map's, from the other
 //   projects when this one has none), read at step 3 and again once the clone is there (git says then whether the
 //   profile needs a model);
 // - reviewCosts(): wizard-review-costs, what each analysis that ran cost (data-part, wizard-amount) and
-//   wizard-review-cost-total, from the onboarding's records; '' when skipped and for a new project;
+//   wizard-review-cost-total, from the onboarding's records (after a restart too: an analysis done and charged);
+//   '' when skipped and for a new project;
 // - onState(before, state): the header's cost is read again when one of the analyses ended.
 // Uses app.js globals (api, esc, t), window.OnboardingModel and usage-widget.js's loadUsageThrottled.
 
@@ -40,7 +41,7 @@
     const costOf = (id) => (Number.isFinite(jobOf(id).costUsd) ? jobOf(id).costUsd : null);
     const spentOrEstimate = (id) => (jobOf(id).status === 'done' ? costOf(id) ?? estimateOf(id) : estimateOf(id));
     const parts = () => COSTED.filter((id) => !isFree(id));
-    const summary = () => M.costSummary(parts().map((id) => ({ id, estimate: spentOrEstimate(id), checked: true })));
+    const summary = (ids = parts()) => M.costSummary(ids.map((id) => ({ id, estimate: spentOrEstimate(id), checked: true })));
 
     // #725: a failed job has no amount ("—"), nor a done one whose cost is not known (#850: or left for later)
     function amount(id) {
@@ -96,7 +97,10 @@
       </div>`;
     }
 
-    const estimateText = () => (isNew() || loading() || !parts().length ? '' : t('onboarding.workflows_choice_cost', { cost: totalText() }));
+    function estimateText() {
+      const left = parts().filter((id) => jobOf(id).status !== 'done');
+      return isNew() || loading() || !left.length ? '' : t('onboarding.workflows_choice_cost', { cost: costText(summary(left).total) });
+    }
 
     // each estimate on its own, a failed read is not known; one provisional until the clone is there
     function readEstimates() {
@@ -131,8 +135,9 @@
     }
 
     function reviewCosts() {
-      if (isNew() || !['analyzing', 'analyzed'].includes(cur().onboarding?.status)) return '';
       const charged = parts();
+      const ran = ['analyzing', 'analyzed'].includes(cur().onboarding?.status) || charged.some((id) => jobOf(id).status === 'done');
+      if (isNew() || !ran) return '';
       const { total, unknown } = M.costSummary(charged.map((id) => ({ id, estimate: costOf(id), checked: true })));
       const running = COSTED.some((id) => !ENDED.includes(jobOf(id).status));
       const sum = !charged.length ? t('onboarding.cost_free') : total == null ? (running ? '—' : t('onboarding.review_cost_unknown')) : money(total);
