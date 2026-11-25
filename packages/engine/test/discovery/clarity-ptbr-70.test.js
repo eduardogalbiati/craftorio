@@ -64,6 +64,40 @@ test('#70 the same card has the same score and the same open points in both lang
   assert.deepEqual(of('en').next, 'users');
 });
 
+test('#70 a card scored in English lists its gaps in Portuguese once the interface is, and back', (t) => {
+  const dir = tmp(t);
+  const { id } = discovery.createCard(dir, P, { title: 'Export runs' });
+  discovery.grillCard(dir, P, id);
+  discovery.answerGrill(dir, P, id, { text: 'Nothing exports.' }); // the score and its gaps are saved, in English
+  const gaps = () => Array.from(discovery.readCard(dir, P, id).clarity.gaps);
+  const english = gaps();
+  assert.equal(english[0], 'Goal: what is true when this is done');
+  I18n.setLanguage('pt-BR');
+  const portuguese = gaps();
+  assert.equal(portuguese.length, english.length);
+  assert.deepEqual(portuguese.filter((g) => english.includes(g)), []);
+  I18n.setLanguage('en');
+  assert.deepEqual(gaps(), english);
+});
+
+// the interview's last note, when the first answer (20%) reaches a bar of 20%
+function lastNote(t, language) {
+  const dir = tmp(t);
+  I18n.setLanguage(language);
+  const { id } = discovery.createCard(dir, P, { title: 'Exportar execuções' });
+  discovery.setClarityBar(dir, P, { bar: 20 });
+  discovery.grillCard(dir, P, id);
+  assert.equal(discovery.answerGrill(dir, P, id, { text: 'Nada exporta.' }).question, null);
+  return discovery.readConversation(dir, P, id).at(-1).text;
+}
+
+test('#70 the note that ends the interview reads in the interface language, with the score and the bar', (t) => {
+  assert.equal(lastNote(t, 'en'), 'Clarity 20%: at or above the bar of 20%. The interview ends here; the card can move to Ready.');
+  const text = lastNote(t, 'pt-BR');
+  assert.equal(/Clarity|at or above|interview|the card can|Ready/.test(text), false, text);
+  assert.equal(text.split('20%').length - 1, 2, text);
+});
+
 test('#70 English unchanged: the first question, a gap and who scored the card', (t) => {
   const dir = tmp(t);
   const card = discovery.createCard(dir, P, { title: 'Export runs' });

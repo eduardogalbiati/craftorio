@@ -112,6 +112,18 @@ test('#70 English unchanged: create, append and comment ask as before', { timeou
   assert.deepEqual(await asked(page, 'comment', 8), { title: 'Comment on #8', message: 'The draft is added as a comment on #8.', yes: 'Comment' });
 });
 
+test('#70 a backlog sync that failed after filing is told in the interface language, with the error', { timeout: 30000 }, async () => {
+  const note = async (language) => {
+    const page = await openDrawer({ history: HISTORY, language, api: { fileProductOwnerDraft: async () => plain({ messages: HISTORY, preview: true, filed: {}, syncError: 'gh: offline' }) } });
+    await click(page, page.$('#po-drawer [data-po-act="create"]'), 'create');
+    return textOf(page.$('#po-drawer .po-draft-actions .error')).trim();
+  };
+  assert.equal(await note('en'), 'Filed, but the backlog sync failed: gh: offline');
+  const pt = await note('pt-BR');
+  assert.equal(/Filed|sync failed/.test(pt), false, pt);
+  assert.equal(pt.includes('gh: offline'), true, pt);
+});
+
 test('#70 en: the heading over the related issues says related or similar, never close', { timeout: 30000 }, async () => {
   const heading = relatedHeading(await openDrawer({ history: HISTORY }));
   assert.match(heading, /related|similar/i);

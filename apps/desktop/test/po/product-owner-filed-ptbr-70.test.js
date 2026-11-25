@@ -47,7 +47,8 @@ async function file(t, language, { exec = cli().exec, action = 'create', preview
     cached: action === 'create' ? null : { number: 7, body: 'Original.', url: `${REPO}/issues/7` }, epicList: EPICS, exec, ...over,
   });
   // the kept folder is a path: out of the text the assertions read
-  return { ...res, text: res.message.text.replaceAll(path.join(runsDir, 'po-demo-1'), '<folder>') };
+  const shown = (s) => String(s ?? '').replaceAll(path.join(runsDir, 'po-demo-1'), '<folder>');
+  return { ...res, text: shown(res.message.text), command: shown(res.command) };
 }
 const english = (text) => ENGLISH.test(text.replaceAll(DRAFT.title, '').replaceAll('Run reports', '').replace(/`[^`]*`/g, ''));
 

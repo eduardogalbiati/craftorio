@@ -92,6 +92,46 @@ test('#70 pt-BR: the commit dialog\'s preview note reads in Portuguese, with the
   assert.equal(/developer mode|nothing was filed|The app would run/.test(note), false, note);
 });
 
+// what went wrong after the commit, told in the toast
+async function toastAfter(language, out, { roadmap = false, api = {} } = {}) {
+  const ready = card({ title: 'Exportar em CSV', column: 'ready', clarity: 90 });
+  const page = await board(language, {
+    cards: [ready],
+    api: {
+      proposeDiscoveryCommit: async () => ({ split: { issues: [{ title: 'Exportar a tabela', tasks: ['Escrever o CSV'], complexity: 2, workflow: 'feature.yaml', reason: '' }] }, model: 'm', costUsd: 0 }),
+      commitDiscoveryCard: async () => ({ issues: [{ number: 101, title: 'Exportar a tabela', workflow: 'feature.yaml' }], card: { ...ready, column: 'committed' }, ...out }),
+      ...api,
+    },
+  }, REAL);
+  const detail = await page.openCard(ready.id);
+  detail.querySelector(tid('discovery-commit')).click();
+  await settle(20);
+  page.$(tid('discovery-commit-roadmap')).checked = roadmap;
+  const { Event } = page.dom.classes;
+  page.$('#dsc-commit-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await settle(30);
+  return page.text(page.$('#toast'));
+}
+const ENGLISH_PROBLEM = /Not filed|from the Backlog|Labels the|left out|backlog sync failed|Not planned|sync the backlog/i;
+const PROBLEMS = [
+  ['an issue not filed', { failed: [{ title: 'Documentar', error: 'HTTP 502' }] }, {}, ['Documentar', 'HTTP 502'], 'Not filed: Documentar (HTTP 502). File it from the Backlog.'],
+  ['two issues not filed', { failed: [{ title: 'Documentar', error: 'HTTP 502' }, { title: 'Testar', error: 'x' }] }, {}, ['Documentar; Testar', 'HTTP 502'], 'Not filed: Documentar; Testar (HTTP 502). File them from the Backlog.'],
+  ['labels left out', { skippedLabels: ['bug', 'area:ui'] }, {}, ['bug, area:ui'], 'Labels the repository does not have were left out: bug, area:ui.'],
+  ['a failed sync, the roadmap waiting for it', { syncError: 'gh: offline' }, { roadmap: true }, ['gh: offline', 'roadmap'], 'The backlog sync failed: gh: offline Not planned in the roadmap: sync the backlog, then add the issues to it.'],
+  ['a roadmap that refused them', {}, { roadmap: true, api: { proposeRoadmap: async () => { throw new Error('E-ROADMAP'); } } }, ['E-ROADMAP', 'roadmap'], 'Not planned in the roadmap: E-ROADMAP'],
+];
+for (const [what, out, opts, facts, english] of PROBLEMS) {
+  test(`#70 after a commit, ${what}: told in the interface language, English unchanged`, { timeout: 30000 }, async () => {
+    const pt = await toastAfter('pt-BR', out, opts);
+    assert.equal(ENGLISH_PROBLEM.test(pt), false, pt);
+    assert.deepEqual(['#101', ...facts].filter((f) => !pt.includes(f)), [], pt);
+    // what was not planned is never also said to be planned
+    assert.equal(/planned in the roadmap\./.test(pt), false, pt);
+    const en = await toastAfter('en', out, opts);
+    assert.equal(en.includes(english), true, en);
+  });
+}
+
 // ---- the card's history -------------------------------------------------------------------------------
 
 const REASONS = ['move-triage', 'move-shape', 'automation-shape', 'result-write-review', 'merge', 'before-automation', 'before-grill', 'before-restore', 'before-result'];

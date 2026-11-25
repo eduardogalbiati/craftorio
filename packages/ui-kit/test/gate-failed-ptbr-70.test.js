@@ -148,6 +148,18 @@ test('#70 English unchanged: feature test_failed, no tests and a red suite', { t
   assert.equal(failing.headline, 'The test suite still fails after 3 round(s): 1 failing test(s) of this run.');
 });
 
+test('#70 feature test_failed, 6 failures and one that also fails on the base: the first 4 listed, the 6 counted, in both languages', { timeout: 30000 }, async () => {
+  const failures = [1, 2, 3, 4, 5, 6].map((n) => ({ test: `caso-${n}`, file: `test/c${n}.test.js`, error: 'E' }));
+  const ctx = { previous_step: 'suite', steps: { suite: { output: suite({ failures, preexisting: [{ test: 'antigo', file: 'test/a.test.js' }] }), visits: 3 } } };
+  const en = await drawn('en', 'feature.yaml', 'test_failed', ctx);
+  assert.equal(en.headline, 'The test suite still fails after 3 round(s): 6 failing test(s) of this run.');
+  assert.equal(en.text.includes('… and 2 more (see Details)') && en.text.includes('1 pre-existing failure not counted'), true, en.text);
+  const pt = await drawn('pt-BR', 'feature.yaml', 'test_failed', ctx);
+  assert.equal(ENGLISH_TEST.test(pt.headline), false, pt.headline);
+  assert.equal(/\b3\b/.test(pt.headline) && /\b6\b/.test(pt.headline), true, pt.headline);
+  assert.deepEqual([1, 2, 3, 4].filter((n) => !pt.text.includes(`caso-${n}`)), []);
+});
+
 // ---- fix: verify_failed -------------------------------------------------------------------------------
 
 const verify = { output: { claim: 'CLAIM-1', evidence: 'EVIDENCE-1' }, visits: 3 };
