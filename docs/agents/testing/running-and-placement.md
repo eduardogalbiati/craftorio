@@ -31,6 +31,12 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   docs PRs that run no test, so a test copies it into its `test/fixtures/` and reads the copy.
   `npm run check`'s `test-fixtures` rule (`scripts/test-fixture-rule.js`) names each test file and
   line that reads a path under `docs/work/`.
+- Generated files fail before the suite, not in it: `npm run check`'s `generated` rule
+  (`scripts/generated-files.js`, run by a run's rule_check after every developer commit) says when
+  `packages/contract/contract.json` or the contract hash pinned in
+  `packages/engine/test/service/one-front-composition-590.test.js` is behind the engine (`npm run
+  contract` rewrites both; add a changeset for `@craftorio/contract`), and when a `docs/agents/` file
+  grows over 200 lines (split it into `docs/agents/<topic>/`, then `npm run docs`).
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +

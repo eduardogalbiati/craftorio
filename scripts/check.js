@@ -2,7 +2,9 @@
 // before its final answer and by the check step of ai-development-local-hero after develop. Each
 // rule calls the same code its test asserts with: lint:lists, layers, the file-size ratchet, code
 // health, the decisions log, docs --check, the Oracle's capabilities list, the workflows' load checks
-// (#469, #474), tests reading no live document under docs/work/ (#695) and the typecheck (the
+// (#469, #474), tests reading no live document under docs/work/ (#695), the generated files and limits
+// the suite would otherwise fail on late (scripts/generated-files.js: contract.json, the #590 test's
+// contract hash pin, the docs' size limit, each naming its command) and the typecheck (the
 // ratchet, with the rule for new files and the silenced lines of #52, and the checker). One line per finding (`<rule>: <what broke and how to fix it>`), then
 // `checks: pass` or `checks: N finding(s)` and exit 1. The suite still runs the rule tests.
 //
@@ -16,6 +18,7 @@ const { checkComplexity, checkDuplication } = require('./code-health');
 const { checkDecisions, checkOracleCapabilities } = require('./doc-rules');
 const { checkDocs } = require('./docs');
 const { checkFileSizes } = require('./file-size-ratchet');
+const { checkGenerated } = require('./generated-files');
 const { checkLayers } = require('./layers');
 const { lintFiles } = require('./lint-lists');
 const { checkTestFixtures } = require('./test-fixture-rule');
@@ -45,6 +48,7 @@ const RULES = [
   ['oracle-capabilities', (root) => checkOracleCapabilities(root).map((p) => p.message)],
   ['workflows', (root) => checkWorkflows(root)],
   ['test-fixtures', (root) => checkTestFixtures(root).map((p) => p.message)],
+  ['generated', (root) => checkGenerated(root)],
   ['typecheck', async (root) => [
     ...checkRatchet({ root }).map((p) => p.message),
     ...checkSilenced({ root }).map((p) => p.message),
