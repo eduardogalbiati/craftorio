@@ -64,6 +64,8 @@ const INTERNAL_COMMANDS = new Set([
   'verify',
   'vol',
 ]);
+// `D:`, a command of cmd too
+const DRIVE_CHANGE = /^.:$/;
 // npm adds its own node-gyp to a script's PATH
 const NPM_PROVIDED = 'node-gyp';
 
@@ -80,7 +82,8 @@ const listOf = (value) => value.split(';').map((v) => v.trim().replace(/"/g, '')
 
 // The first command of a command line, when its failure fails the whole line (alone or before `&&`), else null
 function firstCommand(command) {
-  const text = String(command || '').replace(/\d?[<>]&\d/g, ' ').trim();
+  // a digit is a handle only after a separator: `tool2>&1` runs tool2
+  const text = String(command || '').replace(/(?:(?<![^\s,;=])\d)?[<>]&\d/g, ' ').trim();
   // quoted text separates nothing; the same length, so that the index holds in `text`
   const masked = text.replace(/"[^"]*"/g, (q) => 'q'.repeat(q.length));
   if (/["^|\r\n]/.test(masked) || /&/.test(masked.replace(/&&/g, '  '))) return null;
@@ -88,10 +91,11 @@ function firstCommand(command) {
   return (end < 0 ? text : text.slice(0, end)).trim();
 }
 
-// The program a command names, as cmd splits it ({ name, quoted }), or null when it cannot be told
+// The program a command names, as cmd splits it ({ name, quoted }), or null when it cannot be told: a
+// redirection comes first (`<in.txt tool`, `2>nul tool`: a digit at `<` or `>` is a handle)
 function programOf(command) {
   const quoted = /^"([^"]+)"(?=[\s,;=<>]|$)/.exec(command);
-  const name = quoted ? quoted[1] : /^[^\s"<>,;=]+(?=[\s<>,;=]|$)/.exec(command)?.[0];
+  const name = quoted ? quoted[1] : /^(?!\d[<>])[^\s"<>,;=]+(?=[\s<>,;=]|$)/.exec(command)?.[0];
   return name && !/[%()@]/.test(name) ? { name, quoted: !!quoted } : null;
 }
 
@@ -140,7 +144,7 @@ function firstProgramMissing(command, where, depth = 0) {
   const program = first && programOf(first);
   if (!first || !program) return false;
   const { name, quoted } = program;
-  if (!quoted && isInternal(name)) return false;
+  if (DRIVE_CHANGE.test(name) || (!quoted && isInternal(name))) return false;
   if (depth && name.toLowerCase() === NPM_PROVIDED) return false;
   // cmd ends an unquoted program at a slash (`ping/n`): missing only when both readings are
   const readings = quoted ? [name] : [...new Set([name, name.split('/')[0]])].filter(Boolean);
