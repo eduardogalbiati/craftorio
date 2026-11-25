@@ -2,7 +2,7 @@
 // (WorkflowRun.finish, before workflow.finished) from the run's summary (the event's `summary`):
 // the status, what was done per issue (the last step output with an `issues` list), the commits
 // (the worktree branch and head, the local merge), the tests (each suite step: pass/fail and
-// counts; the coverage summary), a secret scan that did not pass (#49), the screenshots (the final evidence set, new elements #185) and
+// counts; the coverage summary), a secret scan that did not pass (#49), the screenshots (the final evidence set, new elements #185; #80: a run without UI folders says the screenshots and the UI review were skipped) and
 // links to the key artifacts. It is the first artifact of the run (category `result`,
 // packages/engine/domains/evidence/artifact-categories.js) and what the owner opens. No model call.
 const fs = require('fs');
@@ -83,8 +83,14 @@ function secretsSection(summary) {
 
 function screenshotsSection(runDir, summary) {
   const lines = [];
-  for (const { output: o } of outputs(summary).filter((s) => s.output.kind === 'screenshots')) {
+  const shots = outputs(summary).filter((s) => s.output.kind === 'screenshots');
+  for (const { output: o } of shots) {
     if (o.message) lines.push(`- ${oneLine(o.message)}`);
+  }
+  // #80: a run whose project has no UI folders (an input it has, left empty) and took no screenshots says why
+  const uiFolders = summary?.inputs?.ui_folders;
+  if (Array.isArray(uiFolders) && !uiFolders.length && !shots.length) {
+    lines.push('- The run has no UI folders: the screenshots and the UI review were skipped.');
   }
   let ev = null;
   try { ev = readEvidence(runDir); } catch { ev = null; }

@@ -14,7 +14,8 @@
 //   the project's kind (backend / frontend / full-stack). No Node assumption: an `npm …` command only
 //   when the project's package.json has that script; no E2E unless an E2E suite was found (and the
 //   profile does not say unit tests only). A backend project gets no UI default: ui_folders [],
-//   screenshots off, e2e_tests off, steps_folders [].
+//   screenshots off, e2e_tests off, steps_folders []. #80: pages at the root give the UI folder './'
+//   (the `ui_files` filter reads it as the root-level files); only folders the project has are listed.
 // - resolveRunInputs({ typed, roadmap, project, workflow }) → { values, sources }: per input of the
 //   workflow, what the owner typed (the dialog, the CLI's --input) > the roadmap / queue item's saved
 //   inputs > the project's run defaults > the workflow's default; `sources[key]` says which one.
@@ -32,6 +33,7 @@ const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand, checkCommands } = require('../../engine/check-step');
 const { foundChecks } = require('../../engine/check-tools');
 const { detectTestCommand } = require('../../engine/suite-step');
+const { UI_FILE } = require('../../engine/test-ids');
 const { detectLanguage, listBranches } = require('./project-inputs');
 const {
   modeOfPicks,
@@ -52,7 +54,6 @@ const OVERRIDABLE = ['base_behind', 'base_branch', 'check_command', 'e2e_command
 const WEB_DEPS = ['@angular/core', '@sveltejs/kit', 'next', 'nuxt', 'preact', 'react', 'react-dom', 'solid-js', 'svelte', 'vue'];
 const SERVER_DEPS = ['@hapi/hapi', '@nestjs/core', 'express', 'fastify', 'hono', 'koa', 'next', 'nuxt'];
 const E2E_CONFIGS = ['cypress.config.js', 'cypress.config.ts', 'playwright.config.js', 'playwright.config.ts', 'playwright.config.mjs'];
-const UI_FILE = /\.(html|jsx|tsx|vue|svelte)$/i;
 const SKIP_DIRS = new Set(['.git', '.craftorio', '.github', '.multiagent', 'build', 'coverage', 'dist', 'docs', 'e2e', 'features', 'node_modules', 'out', 'target', 'test', 'tests', 'vendor']);
 // folders that hold several apps: the UI folder is one level deeper (apps/web/)
 const CONTAINERS = new Set(['apps', 'packages', 'services']);
@@ -70,7 +71,8 @@ function detectE2eCommand(folder) {
   return name ? `npm run ${name}` : null;
 }
 
-// the folders holding the project's UI files (pages, components), e.g. ['web/'], ['apps/desktop/']
+// the folders holding the project's UI files (pages, components), e.g. ['web/'], ['apps/desktop/'];
+// #80: pages at the repository root (index.html) give the root folder './' (its root-level files)
 function uiFolders(folder) {
   const found = new Set();
   const walk = (rel, depth) => {
@@ -80,7 +82,9 @@ function uiFolders(folder) {
       const child = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name) && !e.name.startsWith('.') && depth < MAX_DEPTH) walk(child, depth + 1);
-      } else if (rel && UI_FILE.test(e.name)) {
+      } else if (!rel && UI_FILE.test(e.name)) {
+        found.add('./');
+      } else if (UI_FILE.test(e.name)) {
         const parts = rel.split('/');
         found.add(`${(CONTAINERS.has(parts[0]) && parts[1] ? parts.slice(0, 2) : parts.slice(0, 1)).join('/')}/`);
       }

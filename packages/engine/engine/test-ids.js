@@ -17,6 +17,9 @@ const DEFAULT_RENDERER = 'src/renderer';
 const STEP_EXTS = ['.js', '.cjs', '.mjs', '.ts'];
 const RENDERER_EXTS = ['.cjs', '.html', '.js', '.jsx', '.mjs', '.svelte', '.ts', '.tsx', '.vue'];
 const SKIPPED_DIRS = new Set(['.git', 'node_modules']);
+// #80: a UI file (a page or a component), what finds a project's UI folders (domains/project/
+// project-run-defaults.js) and what the `ui_files` filter matches in a run without UI folders
+const UI_FILE = /\.(html|jsx|tsx|vue|svelte)$/i;
 
 // The unique static ids of `getByTestId(...)` in a source text, in order of first use.
 function testIdsUsed(source) {
@@ -78,4 +81,5 @@ module.exports = {
   missingTestIds,
   stepFiles,
   testIdsUsed,
+  UI_FILE,
 };

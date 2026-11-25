@@ -70,9 +70,10 @@ test('ai-development-local-hero (#151): a change with screens to capture takes i
   assert.equal(firstGoto(develop, developScope({ screenshots: [SCREEN] })), 'developer_screenshots');
 });
 
-test('ai-development-local-hero (#151, #670): a change to src/renderer/ with no screen listed goes back to develop once, then takes its screenshots', () => {
+test('ai-development-local-hero (#151, #670): a change to a page with no screen listed goes back to develop once, then takes its screenshots', () => {
   const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
-  const scope = developScope({ screenshots: [], files: ['src/renderer/views/runs/runs.js'] });
+  // #80: no UI folder input, a page counts by its extension
+  const scope = developScope({ screenshots: [], files: ['web/views/runs.html'] });
   assert.equal(firstGoto(develop, scope), 'develop');
   assert.equal(firstGoto(develop, { ...scope, vars: { ui_screens_returned: 'yes' } }), 'developer_screenshots');
 });
@@ -82,7 +83,7 @@ test('ai-development-local-hero (#151): a change with no UI skips the screenshot
   assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['packages/engine/engine/workflow.js', 'docs/agents/engine.md'] })), 'code_review');
 });
 
-// #588: the project's UI folders are a workflow input (`ui_folders`, default `src/renderer/`), read by
+// #588: the project's UI folders are a workflow input (`ui_folders`, #80: default empty), read by
 // every route to developer_screenshots, by the ui_reviewer's agent_when and by its prompt.
 // This repository's layout after the reorganisation (#577): the kit, the fronts and each app's renderer.
 const REPO_UI = ['packages/ui-kit/', 'fronts/', 'apps/desktop/renderer/', 'apps/web/renderer/'];
@@ -110,13 +111,12 @@ const ROUTES = [
 const step = (wf, id) => wf.steps.find((s) => s.id === id);
 const uiReviewerRuns = (wf, scope) => Boolean(evalExpr(step(wf, 'code_review').agent_when.ui_reviewer, scope));
 
-test('ai-development-local-hero (#588): the project\'s UI folders and step definition folders are inputs, src/renderer/ and features/steps by default', () => {
+test('ai-development-local-hero (#588): the project\'s UI folders and step definition folders are inputs, empty by default (#80)', () => {
   const wf = loadWorkflow(WORKFLOW);
-  const folders = (v) => [].concat(v).map((f) => String(f).replace(/\/+$/, ''));
   assert.ok(wf.inputs.ui_folders, 'the workflow declares a ui_folders input');
-  assert.deepEqual(folders(wf.inputs.ui_folders.default), ['src/renderer']);
+  assert.deepEqual(wf.inputs.ui_folders.default, []);
   assert.ok(wf.inputs.steps_folders, 'the workflow declares a steps_folders input');
-  assert.deepEqual(folders(wf.inputs.steps_folders.default), ['features/steps']);
+  assert.deepEqual(wf.inputs.steps_folders.default, []);
 });
 
 for (const file of ['fronts/build/views/run/run.js', 'packages/ui-kit/style.css', 'apps/web/renderer/index.html', 'fronts\\plan\\views\\board\\board.js']) {
@@ -139,14 +139,14 @@ test('ai-development-local-hero (#588): with this repository\'s UI folders, a ch
   assert.equal(uiReviewerRuns(wf, uiScope(wf, { files, inputs: { ui_folders: REPO_UI } })), false);
 });
 
-test('ai-development-local-hero (#588): with no input set, a project with the old layout keeps src/renderer/ as its UI folder', () => {
+test('ai-development-local-hero (#80): with no UI folder, a changed page or component is a UI change, no folder is assumed', () => {
   const wf = loadWorkflow(WORKFLOW);
   for (const [id, output] of ROUTES) {
-    assert.equal(firstGoto(step(wf, id), uiScope(wf, { files: ['src/renderer/views/runs/runs.js'], output })), 'developer_screenshots', `${id}: src/renderer/ is a UI change`);
-    assert.equal(firstGoto(step(wf, id), uiScope(wf, { files: ['fronts/build/views/run/run.js'], output })), 'code_review', `${id}: another project's layout is not assumed`);
+    assert.equal(firstGoto(step(wf, id), uiScope(wf, { files: ['web/index.html'], output })), 'developer_screenshots', `${id}: a page is a UI change`);
+    assert.equal(firstGoto(step(wf, id), uiScope(wf, { files: ['src/renderer/views/runs/runs.js'], output })), 'code_review', `${id}: src/renderer/ is not assumed`);
   }
-  assert.equal(uiReviewerRuns(wf, uiScope(wf, { files: ['src/renderer/style.css'] })), true);
-  assert.equal(uiReviewerRuns(wf, uiScope(wf, { files: ['packages/ui-kit/style.css'] })), false);
+  assert.equal(uiReviewerRuns(wf, uiScope(wf, { files: ['src/App.tsx'] })), true);
+  assert.equal(uiReviewerRuns(wf, uiScope(wf, { files: ['src/renderer/style.css'] })), false);
 });
 
 test('ai-development-local-hero (#588): without screenshots, the UI reviewer reads the diff of the project\'s UI folders', () => {
@@ -157,7 +157,7 @@ test('ai-development-local-hero (#588): without screenshots, the UI reviewer rea
   const own = diffLine(prompt({ ui_folders: REPO_UI }));
   for (const folder of REPO_UI) assert.ok(own.includes(folder), `the diff covers ${folder}: ${own}`);
   assert.ok(!own.includes('src/renderer'), `src/renderer/ is not read on this layout: ${own}`);
-  assert.ok(diffLine(prompt({})).includes('src/renderer/'), 'the default still diffs src/renderer/');
+  assert.ok(!diffLine(prompt({})).includes('src/renderer'), 'without UI folders the whole diff, no src/renderer/ (#80)');
 });
 
 test('ai-development-local-hero (#151): the screenshots go to the review in automatic mode, to the owner\'s gate in validated mode', () => {

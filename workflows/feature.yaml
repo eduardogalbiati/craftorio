@@ -354,18 +354,19 @@ inputs:
     main: true
     options: { "off": "Off", changed: Changed screens, all: All }
     description: "All: the developer's UI states before your check and the evidence's captures. Changed: only the screens the issue changes, original and modified. Off: no screenshot step and no npm run screenshot by any agent; the evidence is the diff, the logs and the test results (cheapest: the evidence step costs about $0.3-1.5 and 5-10 min of a run)."
-  # #588: where the project's UI and its E2E step definitions live (another layout than src/renderer/)
+  # #588: where the project's UI and its E2E step definitions live. #80: no default of this repository's
+  # own: the project's run defaults read them from its files (./ for pages at the root), else empty
   ui_folders:
     label: "UI folders"
     group: Tests
     type: array
-    default: [src/renderer/]
-    description: "The project's UI folders, repository-relative (one per line). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there."
+    default: []
+    description: "The project's UI folders, repository-relative (one per line; ./ for pages at the root). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there. Empty: a changed page or component (.html, .jsx, .tsx, .vue, .svelte) counts as a UI change."
   steps_folders:
     label: "Step definition folders"
     group: Tests
     type: array
-    default: [features/steps]
+    default: []
     description: "The folders of the project's E2E step definitions, repository-relative (one per line), read by the test id check."
   test_command:
     type: string
@@ -1550,7 +1551,7 @@ steps:
   # test/e2e-playwright.test.js). Missing ones go back to the developer with the list and where each
   # is used, at most twice in the run; then the run goes on and the suite's test reports them. A
   # project without BDD step definitions is skipped (a note in the output). The folders come from
-  # the steps_folders / ui_folders inputs (#588; default features/steps, src/renderer/).
+  # the steps_folders / ui_folders inputs (#588; #80: from the project's files, empty when it has none).
   - id: testid_check
     display: Test id check (scenarios)
     type: test_ids
@@ -1796,7 +1797,7 @@ steps:
       {% endif %}
       Look at each PNG once, original and modified. When there is no screenshot (a simulated run, a
       failed capture, or no screen listed), review the diff of the styles and markup instead:
-      `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- {{ (inputs.ui_folders or ['src/renderer/']) | join(' ') }}`.
+      `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} {% if inputs.ui_folders | length %}-- {{ inputs.ui_folders | join(' ') }}{% endif %}`.
       Judge only what the change touched, never the rest of the app, and never the code's logic.
       For each screenshot (or each changed screen, without screenshots), go through the fixed
       checklist of ui-conventions and mark each item pass or fail with one line of evidence:

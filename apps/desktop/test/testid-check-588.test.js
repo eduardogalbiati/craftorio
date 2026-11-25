@@ -77,7 +77,7 @@ test('#588 missingTestIds: a step definition inside a UI folder does not define 
 
 // ---- the ui_files filter of the workflows' conditions ----------------------------------------------
 
-test('#588 ui_files: the changed files under the UI folders, one folder or a list, slashes normalised, src/renderer by default', () => {
+test('#588 ui_files: the changed files under the UI folders, one folder or a list, slashes normalised, pages and components by extension without folders (#80)', () => {
   const { render } = require('@craftorio/engine/engine/run/templates');
   const under = (files, folders) => Number(render('{{ files | ui_files(folders) | length }}', { files, folders }));
   assert.equal(under(['fronts/build/views/run.js'], ['packages/ui-kit/', 'fronts/']), 1);
@@ -85,8 +85,10 @@ test('#588 ui_files: the changed files under the UI folders, one folder or a lis
   assert.equal(under(['packages/ui-kit/style.css'], 'packages/ui-kit/'), 1, 'one folder as a string');
   assert.equal(under('packages/ui-kit/style.css', ['packages/ui-kit']), 1, 'one file as a string');
   assert.equal(under(['src/renderer-old/x.js', 'lib/src/renderer.js'], ['src/renderer/']), 0, 'a sibling folder or a file of the same name is not under it');
-  assert.equal(under(['src/renderer/views/a.js'], null), 1, 'no folders: src/renderer');
+  assert.equal(under(['src/renderer/views/a.js'], null), 0, 'no folders: no src/renderer default (#80)');
   assert.equal(under(['fronts/build/views/run.js'], null), 0);
+  assert.equal(under(['index.html', 'web/App.tsx', 'lib/a.js'], []), 2, 'no folders: a page or a component by its extension (#80)');
+  assert.equal(under(['index.html', 'web/index.html'], ['./']), 1, 'the root folder: the root-level files (#80)');
   assert.equal(under(null, ['fronts']), 0, 'no files changed');
   assert.equal(under([], []), 0);
 });
@@ -100,8 +102,8 @@ test('#588 inputs: the folders typed in a form (comma or one per line) reach the
   assert.deepEqual(typed.ui_folders, ['packages/ui-kit/', 'fronts/', 'apps/web/renderer/']);
   assert.deepEqual(typed.steps_folders, ['features/steps', 'fronts/build/features/steps']);
   const none = newRun({}).inputs;
-  assert.deepEqual(none.ui_folders, ['src/renderer/']);
-  assert.deepEqual(none.steps_folders, ['features/steps']);
+  assert.deepEqual(none.ui_folders, []);
+  assert.deepEqual(none.steps_folders, []);
 });
 
 test('#588 inputs: the Start form shows a list default as text that comes back as the same list', (t) => {

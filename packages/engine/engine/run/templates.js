@@ -178,12 +178,15 @@ tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
 });
 
 // The files of a list (a step's files_changed) under the project's UI folders (#588), compared with
-// forward slashes; folders: one or a list, repository-relative (default src/renderer, the old layout).
+// forward slashes; folders: one or a list, repository-relative. #80: the root folder ('./') holds the
+// files at the root level only; without folders (none given, or an empty list: an empty project) a
+// UI file is a page or a component by its extension (testIds.UI_FILE), never Craftorio's src/renderer.
 //   when: "(output.files_changed or []) | ui_files(inputs.ui_folders) | length"
 tpl.addFilter('ui_files', (files, folders) => {
-  const norm = (p) => String(p ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-  const dirs = [].concat(folders ?? testIds.DEFAULT_RENDERER).map(norm).filter(Boolean);
-  return [].concat(files ?? []).filter((f) => dirs.some((d) => norm(f) === d || norm(f).startsWith(`${d}/`)));
+  const norm = (p) => String(p ?? '').replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '') || '.';
+  const dirs = [].concat(folders ?? []).filter((d) => String(d ?? '').trim()).map(norm);
+  const under = (f, d) => (d === '.' ? !f.includes('/') : f === d || f.startsWith(`${d}/`));
+  return [].concat(files ?? []).filter((f) => (dirs.length ? dirs.some((d) => under(norm(f), d)) : testIds.UI_FILE.test(norm(f))));
 });
 
 // The mockups an issue's text embeds or links (#670, packages/engine/engine/ui-review-checks.js):
