@@ -38,6 +38,30 @@ test('README has a Getting started section that mentions Setup', () => {
   assert.match(section, /Setup/);
 });
 
+// #69: the Setup is Agents and First project, and the simulation is turned on in Settings
+const SETUP_DOCS = ['docs/agents/renderer/screens-and-setup.md', 'docs/readme/010-running.md', 'docs/screens/setup.md'];
+for (const file of SETUP_DOCS) {
+  test(`#69 ${file} no longer describes the Setup's Try it safely step`, () => {
+    assert.equal(/try[ -]it[ -]safely/i.test(read(file)), false);
+  });
+}
+
+test('#69 the README no longer describes the Setup\'s Try it safely step', () => {
+  assert.equal(/Try it safely/i.test(read('README.md')), false);
+});
+
+for (const file of ['docs/readme/010-running.md', 'docs/screens/setup.md']) {
+  test(`#69 ${file} says two steps and how to turn the simulation on: Settings › Execution › Developer mode`, () => {
+    const text = read(file).replace(/\*\*/g, '').replace(/\s+/g, ' ');
+    assert.match(text, /Agents/);
+    assert.match(text, /First project/);
+    assert.match(text, /simulation/i);
+    assert.match(text, /Settings › Execution/);
+    assert.match(text, /Developer mode/i);
+    assert.equal(/Finish[^.]*Simulation checked|on by default here/i.test(text), false, 'not on by default');
+  });
+}
+
 test('README Screens table has a Setup row', () => {
   assert.ok(read('README.md').split('\n').some((l) => l.startsWith('| Setup')), 'a row starting with "| Setup"');
 });

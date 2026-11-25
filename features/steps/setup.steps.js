@@ -2,14 +2,16 @@
 // confirm, setupDone in the workspace's settings.json, Settings › Agents & CLIs › "Run setup again".
 // Locators are roles and data-testid only (skills/ui-conventions):
 //   setup                                   the Setup (a large modal or screen)
-//   setup-step-<slug>                       a stepper item: agents, try-it-safely, first-project
-//                                           (#643: no workflows step any more); the current one
-//                                           has aria-current="step"
+//   setup-step-<slug>                       a stepper item: agents, first-project (#643: no workflows
+//                                           step any more; #69: no try-it-safely step either); the
+//                                           current one has aria-current="step"
 //   setup-cli-<id>                          a row of the Agents step: claude, codex, grok, gh, glab,
 //                                           git; its status badge reads Ready / Not signed in / Not
 //                                           installed / Checking…, a required CLI shows "Required"
 //   setup-skip, setup-next, setup-back      the Setup's buttons
 //   confirm-modal                           the app's confirm dialog (index.html), Skip's confirm
+//   settings-developer-mode                 (#69, the developer adds it) the checkbox of Settings ›
+//                                           Execution › Developer mode (data-setting="developerMode")
 // (#643) the last step, First project, opens the project wizard (onboarding.steps.js) by itself on a
 // workspace with no project, as it opened the old New project dialog.
 // "Run setup again" is a button of Settings › Agents & CLIs, by its role and name.
@@ -62,12 +64,12 @@ async function stepperReads(page, names) {
     return els.every((el, i) => i === 0 || (els[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
   }, ids);
   expect(inOrder, `the stepper reads ${names.join(', ')} in this order`).toBe(true);
-  // and nothing else (#643: three steps, no Workflows)
+  // and nothing else (#643: no Workflows; #69: two steps, no Try it safely)
   await expect(setup(page).locator('[data-testid^="setup-step-"]')).toHaveCount(names.length);
 }
 
-Then("the Setup's stepper reads {string}, {string} and {string}", async ({ e2e }, a, b, c) => {
-  await stepperReads(e2e.window, [a, b, c]);
+Then("the Setup's stepper reads {string} and {string}", async ({ e2e }, a, b) => {
+  await stepperReads(e2e.window, [a, b]);
 });
 
 Then("the Setup's stepper has no {string} step", async ({ e2e }, name) => {
@@ -123,11 +125,42 @@ Then('the first-run Setup is not shown', async ({ e2e }) => {
   await expect(setup(page)).toBeHidden();
 });
 
+// the workspace's settings.json as saved, null while it cannot be read (not written yet)
+function savedSettings(e2e) {
+  try { return JSON.parse(fs.readFileSync(path.join(e2e.scratch, 'workspace', 'settings.json'), 'utf8')); } catch { return null; }
+}
+
 Then('the workspace settings record the setup as done', async ({ e2e }) => {
-  const file = path.join(e2e.scratch, 'workspace', 'settings.json');
+  await expect.poll(() => savedSettings(e2e)?.setupDone).toBe(true);
+});
+
+// ---- #69: the Setup leaves the simulation mode (Settings › Execution › Developer mode) as it is -------
+// state: on | off
+function switchState(state) {
+  if (!['on', 'off'].includes(state)) throw new Error(`unknown switch state "${state}" (on or off)`);
+  return state === 'on';
+}
+
+// Finish: the Setup's button on its last step
+When('I finish the Setup', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(stepItem(page, 'First project')).toHaveAttribute('aria-current', 'step');
+  await setup(page).getByTestId('setup-next').click();
+  await expect(setup(page)).toBeHidden({ timeout: 30000 });
+});
+
+// off: false or not written (the default); an unreadable file is neither
+Then('the workspace settings have developer mode {string}', async ({ e2e }, state) => {
+  const on = switchState(state);
   await expect.poll(() => {
-    try { return JSON.parse(fs.readFileSync(file, 'utf8')).setupDone; } catch { return undefined; }
-  }).toBe(true);
+    const saved = savedSettings(e2e);
+    return saved ? !!saved.developerMode : null;
+  }).toBe(on);
+});
+
+Then('the developer mode switch is {string}', async ({ e2e }, state) => {
+  const on = switchState(state);
+  await expect(e2e.window.getByTestId('settings-developer-mode')).toBeChecked({ checked: on, timeout: 30000 });
 });
 
 When('I ask to run the setup again', async ({ e2e }) => {
@@ -137,11 +170,11 @@ When('I ask to run the setup again', async ({ e2e }) => {
 // ---- #23: the Setup in Português (Brasil) ----------------------------------------------------------------
 // The Setup's own "Interface language" select (data-testid="setup-language", a native select labelled by
 // the language's name) saves the interface language at once; the page's html lang follows it.
-// The Try it safely step's machine line (data-testid="machine-profile-line", the engine's machine profile)
-// reads in the interface language once read: in Português (Brasil) none of the English line's words
-// ("This machine: 20 threads, 32 GB → up to 5 runs at once, 2 test workers per run") is left.
+// The machine line (data-testid="machine-profile-line", the engine's machine profile), in Settings › Execution ›
+// Concurrent runs (#69: the Setup's Try it safely step is gone), reads in the interface language once read: in
+// Português (Brasil) none of the English line's words ("This machine: 20 threads, 32 GB → up to 5 runs at once,
+// 2 test workers per run") is left.
 const LANGUAGE_CODE = { English: 'en', 'Português (Brasil)': 'pt-BR' };
-const READING = /^(Reading this machine…|Lendo esta máquina…)$/;
 const ENGLISH_MACHINE_WORDS = ['This machine', 'run at once', 'runs at once', 'test worker', 'per run', "couldn't be read"];
 
 When("I choose {string} as the Setup's language", async ({ e2e }, label) => {
@@ -154,11 +187,11 @@ When("I choose {string} as the Setup's language", async ({ e2e }, label) => {
   await expect(page.locator('html')).toHaveAttribute('lang', code, { timeout: 30000 });
 });
 
-Then("the Setup's line about this machine reads in {string}", async ({ e2e }, language) => {
-  const line = setup(e2e.window).getByTestId('machine-profile-line');
+Then('the line about this machine reads in {string}', async ({ e2e }, language) => {
+  const line = e2e.window.getByTestId('machine-profile-line').filter({ visible: true });
+  // the profile is read: the line has text (an empty one is not visible)
   await expect(line).toBeVisible({ timeout: 30000 });
-  // the profile is read: no "Reading this machine…" placeholder any more
-  await expect(line).not.toHaveText(READING, { timeout: 30000 });
+  await expect(line).toHaveText(/\d/, { timeout: 30000 });
   const text = (await line.innerText()).replace(/\s+/g, ' ').trim();
   if (language === 'English') {
     expect(text, 'the machine line in English').toMatch(/This machine/);

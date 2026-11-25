@@ -3,17 +3,17 @@ Feature: The welcome and a new project read in Portuguese, and the app calls its
   wizard's review and the project's Next steps card show no English left over (#23). The header's usage
   counter names the product, Craftorio, instead of "Orchestrator" / "Orquestrador", in both languages (#24).
 
-  # #23: the Setup's own language select switches the interface at once. Its Try it safely step (the
-  # second) shows the line the engine reads from this machine's threads and memory; in English it reads
-  # "This machine: 20 threads, 32 GB → up to 5 runs at once, 2 test workers per run".
-  @issue-23
-  Scenario: With the Setup in Português (Brasil), its Try it safely step says what this machine can run in Portuguese
-    Given the app is open on a new workspace
-    Then the first-run Setup is open on its "Agents" step
-    When I choose "Português (Brasil)" as the Setup's language
-    And I go to the Setup's next step
-    Then the first-run Setup is open on its "Try it safely" step
-    And the Setup's line about this machine reads in "Português (Brasil)"
+  # #23: the line sized from this machine's threads and memory; in English it reads "This machine: 20 threads,
+  # 32 GB → up to 5 runs at once, 2 test workers per run". #69: the Setup's Try it safely step, which showed
+  # it, is gone: Settings › Execution › Concurrent runs is where it reads, in Portuguese as the step did.
+  @issue-23 @issue-69
+  Scenario: In Português (Brasil), Settings › Execution says what this machine can run in Portuguese
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I open the "Execução" settings tab
+    Then the line about this machine reads in "Português (Brasil)"
 
   # #23: a new workspace's Oracle has no history yet, so its panel offers its suggested questions (in
   # English "What happened overnight?", "Where do my tokens go?"…) and its header its Night watch button.

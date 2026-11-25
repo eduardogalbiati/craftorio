@@ -1,6 +1,6 @@
 // #367 Machine profile in the UI: Settings › Execution › Concurrent runs
-// (packages/ui-kit/views/settings/settings.js) and the first-run Setup (#319, packages/ui-kit/setup.js)
-// show the machine's line (machineLine of packages/engine/domains/machine/machine-profile.js, or its packages/shared/ counterpart),
+// (packages/ui-kit/views/settings/settings.js; #69: no longer the first-run Setup, packages/ui-kit/setup.js)
+// shows the machine's line (machineLine of packages/engine/domains/machine/machine-profile.js, or its packages/shared/ counterpart),
 // with "Use these values", manual values and a "back to auto" link, and the memory guard's
 // suggestion with an Apply button. The renderer runs only inside Electron, so these tests read the
 // sources (static markup or the template strings that draw it).
@@ -9,7 +9,7 @@
 //     machine-profile-test-workers (the manual test workers per run; the manual runs reuse
 //     #set-cr-max), machine-profile-back-to-auto ("back to auto"), machine-profile-suggestion,
 //     machine-profile-apply ("Apply"); the settings saved: settings.machineProfile.
-//   setup.js: machine-profile-line.
+//   setup.js: none (#69).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -44,6 +44,6 @@ test('Settings saves the owner\'s choice as settings.machineProfile (auto or man
   assert.match(settings, /mode: 'auto'|mode: "auto"/);
 });
 
-test('Setup (#319) shows the machine line too', () => {
-  assert.equal(setup.includes('data-testid="machine-profile-line"'), true);
+test('#69 the Setup no longer shows the machine line: Settings › Execution does', () => {
+  assert.equal(setup.includes('machine-profile-line'), false);
 });

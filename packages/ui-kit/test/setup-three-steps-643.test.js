@@ -4,8 +4,10 @@
 // workspaces".
 //
 // The contract assumed here:
+// - #69: the Setup has two steps (Try it safely is gone; its own tests: setup-two-steps-69.test.js), so one Next
+//   from Agents reaches the last one;
 // - packages/ui-kit/setup.js draws one stepper item per step (data-step="<id>") in its dialog markup;
-// - reaching the Setup's last step (Next from Try it safely, or Finish on it) opens the wizard
+// - reaching the Setup's last step (Next from Agents, or Finish on it) opens the wizard
 //   (window.ProjectWizard.open(): #project-wizard shown on its 'start' step), never the old New
 //   project dialog (#project-modal);
 // - Finish and Skip save setupDone: true and never write settings.hiddenWorkflows: whatever the
@@ -68,20 +70,19 @@ async function nextToFinish(app, max = 6) {
 
 // ---- the dialog ------------------------------------------------------------------------------------
 
-test('#643 the Setup\'s stepper draws three steps: agents, try-it-safely, first-project', () => {
+test('#643 #69 the Setup\'s stepper draws two steps: agents, first-project', () => {
   const app = page();
   const modals = String(app.defs.get('setup')?.modals || '');
   const steps = H.findAll(modals, (e) => e.attrs['data-step']).map((e) => e.attrs['data-step']);
-  assert.deepEqual(steps, ['agents', 'try-it-safely', 'first-project']);
+  assert.deepEqual(steps, ['agents', 'first-project']);
   assert.equal(/data-testid="setup-step-workflows"/.test(modals), false, 'no Workflows step');
 });
 
-test('#643 Next from Try it safely lands on the last step, First project', async () => {
+test('#643 Next from Agents lands on the last step, First project', async () => {
   const app = page({ projects: [{ id: 'p1', name: 'Shop', folder: 'C:/p/shop' }] });
   await app.boot();
   assert.equal(setupOpen(app), true, 'a new workspace opens the Setup');
-  await pressNext(app); // Agents -> Try it safely
-  await pressNext(app); // Try it safely -> the next step
+  await pressNext(app); // Agents -> First project
   assert.equal(app.el('#setup-modal #setup-title').textContent, 'Add your first project');
   assert.equal(app.el('#setup-modal #btn-setup-next').textContent, 'Finish');
 });
@@ -117,8 +118,7 @@ test('#643 without the build front: no openProjectWizard action, no New project 
   await app.boot();
   assert.equal(setupOpen(app), true, 'a new workspace opens the Setup');
   assert.equal(app.run("window.Actions.has('openProjectWizard')"), false);
-  await pressNext(app); // Agents -> Try it safely
-  await pressNext(app); // Try it safely -> First project
+  await pressNext(app); // Agents -> First project
   await app.settle(10);
   assert.equal(app.el('#setup-modal #setup-title').textContent, 'Add your first project');
   assert.equal(/data-testid="setup-new-project"/.test(String(app.el('#setup-modal #setup-body').innerHTML)), false, 'no New project button');
@@ -138,8 +138,7 @@ test('#643 with the build front: the openProjectWizard action exists and opens t
 test('#643 First project shows its New project button when the build front is there', async () => {
   const app = page({ projects: [{ id: 'p1', name: 'Shop', folder: 'C:/p/shop' }] });
   await app.boot();
-  await pressNext(app);
-  await pressNext(app);
+  await pressNext(app); // Agents -> First project
   assert.equal(/data-testid="setup-new-project"/.test(String(app.el('#setup-modal #setup-body').innerHTML)), true);
 });
 
@@ -156,8 +155,7 @@ test('#643 when the wizard opened by the Setup closes, First project reads the p
       disconnect() { this.on = false; }
       takeRecords() { return []; }
     };`);
-  await pressNext(app); // Agents -> Try it safely
-  await pressNext(app); // Try it safely -> First project: the wizard opens
+  await pressNext(app); // Agents -> First project: the wizard opens
   await app.settle(10);
   assert.equal(wizardShown(app), true, 'the wizard opened');
   const reads = app.callsTo('listProjects').length;
@@ -178,10 +176,7 @@ test('#643 when the last step opens the wizard, the focus is not put back on the
   const next = app.el('#setup-modal #btn-setup-next');
   let focused = 0;
   next.focus = () => { focused += 1; };
-  await pressNext(app); // Agents -> Try it safely
-  assert.equal(focused > 0, true, 'a plain Next focuses Next again (the check sees focus calls)');
-  focused = 0;
-  await pressNext(app); // Try it safely -> First project: the wizard opens
+  await pressNext(app); // Agents -> First project: the wizard opens
   await app.settle(10);
   assert.equal(wizardShown(app), true, 'the wizard opened');
   assert.equal(focused, 0, 'Next/Finish was not focused under the wizard');
@@ -193,9 +188,7 @@ test('#643 reaching First project with a project already there opens no wizard a
   const next = app.el('#setup-modal #btn-setup-next');
   let focused = 0;
   next.focus = () => { focused += 1; };
-  await pressNext(app);
-  focused = 0;
-  await pressNext(app);
+  await pressNext(app); // Agents -> First project
   await app.settle(10);
   assert.equal(wizardShown(app), false, 'no wizard: the workspace has a project');
   assert.equal(focused, 1, 'Finish has the focus');
