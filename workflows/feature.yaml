@@ -2184,7 +2184,8 @@ steps:
     scope: affected
     # T6: its whole round (empty: `command` runs whole)
     whole_command: "{{ inputs.whole_test_command }}"
-    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
+    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact,
+    # measured by the whole-suite round only (the affected rounds run bare)
     coverage: true
     transitions:
       # #223: the issue's scenarios, written first, run after the suite

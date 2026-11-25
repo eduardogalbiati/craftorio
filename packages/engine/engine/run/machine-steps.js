@@ -342,8 +342,11 @@ const methods = {
           // the wait for memory was written to the round's log: kept when this execution writes that file
           ...(logPrefix && (extra.logName ? `${extra.logName}${env}` : roundLog) === roundLog ? { logPrefix } : {}),
           // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
-          // (#396: and the failures are classed in or outside the change; null: unknown, in the change)
-          coverage: step.coverage === true,
+          // (#396: and the failures are classed in or outside the change; null: unknown, in the change).
+          // Only an execution of the whole suite measures it: a round of selected files (affected, failed
+          // first, listed) runs bare, and coverage-summary.md stays the last whole run's (about a quarter
+          // of the suite's time on this repository: 270 s bare, 341 s with coverage)
+          coverage: step.coverage === true && extra.files === undefined,
           changedFiles: () => {
             const base = this.worktree?.base;
             return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : null;
