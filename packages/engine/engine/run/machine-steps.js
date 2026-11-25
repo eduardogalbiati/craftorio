@@ -17,6 +17,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const I18n = require('@craftorio/shared/i18n');
 const capabilities = require('../capabilities');
 const checkStep = require('../check-step');
 const { childEnv } = require('../child-env');
@@ -298,7 +299,7 @@ const methods = {
     const sync = await this.bringBaseIn(step);
     // a rebase that could not be aborted leaves a half-rebased tree: never tested
     if (sync?.blocked) {
-      const output = { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: sync.blocked, message: `The suite could not run: ${sync.blocked}`, base_commit: sync.base_commit };
+      const output = { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: sync.blocked, message: I18n.t('engine.suite_could_not_run', { reason: sync.blocked }), base_commit: sync.base_commit };
       this.emitEvent('log', { level: 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: 0, message: `${step.id}: ${output.message}` });
       return output;
     }
@@ -363,7 +364,7 @@ const methods = {
           ...(env && extra.logName ? { logName: `${extra.logName}${env}` } : {}),
         });
       } catch (e) {
-        return { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+        return { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: I18n.t('engine.suite_could_not_run', { reason: e.message }) };
       } finally {
         watch?.stop();
       }

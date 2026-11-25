@@ -10,6 +10,7 @@
 
 'use strict';
 
+const I18n = require('@craftorio/shared/i18n');
 const { checkAttachments } = require('../providers');
 const gateSummary = require('../gate-summary');
 const mergeQueue = require('../merge-queue');
@@ -98,19 +99,27 @@ const methods = {
     // screens render it apart (the event's `report`), '' leaves the message as it is
     const report = this.gateText(step, step.report);
     if (report) message = `${report}\n\n${message}`;
-    const choices = step.choices ? step.choices.map((c) => ({
-      id: c.id,
-      label: render(c.label, this.ctx),
-      // #30: the catalog key the screens translate the label with (the YAML label stays the English fallback)
-      ...(c.label_key ? { label_key: String(c.label_key) } : {}),
-      ...(c.help_key ? { help_key: String(c.help_key) } : {}), // #36: the help's key, as label_key
-      ...(c.feedback_required ? { feedback_required: true } : {}),
-      ...(c.help ? { help: this.gateText(step, c.help) } : {}),
-    })) : null;
+    const choices = step.choices ? step.choices.map((c) => {
+      const label = render(c.label, this.ctx);
+      const help = c.help ? this.gateText(step, c.help) : '';
+      // #70: a help_key may be a template too (the help of one choice depends on what happened)
+      const helpKey = c.help_key ? render(c.help_key, this.ctx).trim() : '';
+      return {
+        id: c.id,
+        // #30: the catalog key the screens translate the label with (the YAML label stays the English fallback);
+        // #70: the record already reads in the interface language, for what does not know the keys (the
+        // recommendation's label, the phone)
+        label: c.label_key ? I18n.translated(String(c.label_key), label) : label,
+        ...(c.label_key ? { label_key: String(c.label_key) } : {}),
+        ...(helpKey ? { help_key: helpKey } : {}), // #36: the help's key, as label_key
+        ...(c.feedback_required ? { feedback_required: true } : {}),
+        ...(c.help ? { help: helpKey ? I18n.translated(helpKey, help) : help } : {}),
+      };
+    }) : null;
     // an Approve / Reject gate: what its buttons say and do (#213)
     const yesNo = step.choices ? null : {
-      approve: { label: this.gateText(step, step.approve_label) || 'Approve', help: this.gateText(step, step.approve_help) },
-      reject: { label: this.gateText(step, step.reject_label) || 'Reject', help: this.gateText(step, step.reject_help) },
+      approve: { label: this.gateText(step, step.approve_label) || I18n.t('common.approve'), help: this.gateText(step, step.approve_help) },
+      reject: { label: this.gateText(step, step.reject_label) || I18n.t('gate_panel.reject'), help: this.gateText(step, step.reject_help) },
     };
     const brief = gateSummary.gateBrief({
       message,

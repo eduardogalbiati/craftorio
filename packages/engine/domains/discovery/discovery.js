@@ -54,6 +54,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const I18n = require('@craftorio/shared/i18n');
 const { itemName } = require('@craftorio/shared/doc-model');
 const { frozenThumbnail } = require('@craftorio/shared/mockup-model');
 const clarity = require('./clarity');
@@ -326,6 +327,7 @@ function load(folder) {
   const unscored = !card.clarity?.ts && typeof card.clarity?.score !== 'number';
   return {
     ...card,
+    ...(card.clarity?.by === RUBRIC ? { clarity: { ...card.clarity, gaps: clarity.gapsShown(card.clarity.gaps) } } : {}), // #70
     ...(unscored ? { clarity: { ...card.clarity, ...clarity.scoreClarity({ type: card.type, ...text }), ts: card.updated || card.created, by: RUBRIC } } : {}),
     ...text,
     attachments: attachmentNames(folder),
@@ -871,8 +873,8 @@ function askNext(dir, projectId, id, { reached = false } = {}) {
   const next = reached ? null : clarity.nextQuestion(card);
   if (!next) {
     const text = reached
-      ? `Clarity ${card.clarity.score}%: at or above the bar of ${bar}%. The interview ends here; the card can ${card.column === 'ready' ? 'be committed' : 'move to Ready'}.`
-      : `Nothing left to ask: the document covers every point of the rubric for ${card.type}.`;
+      ? I18n.t(card.column === 'ready' ? 'discovery.grill_reached_ready' : 'discovery.grill_reached', { score: card.clarity.score, bar })
+      : I18n.t('discovery.grill_covered', { type: card.type });
     appendConversation(dir, projectId, id, { kind: 'note', author: GRILL, text });
     return { card: readCard(dir, projectId, id), bar, question: null };
   }

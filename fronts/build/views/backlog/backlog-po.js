@@ -758,7 +758,7 @@
       const out = await api.fileProductOwnerDecongest(po.projectId, msg.ts, n, simulated);
       po.messages = out.messages;
       if (out.backlog) actions().showData(out.backlog);
-      if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
+      if (out.syncError) po.notes[key] = { text: t('backlog_po.filed_sync_failed', { error: out.syncError }), error: true };
     } catch (e) {
       po.notes[key] = { text: errMsg(e), error: true };
     } finally {
@@ -787,9 +787,7 @@
     }
     const action = act.startsWith('create') ? 'create' : act;
     if (!simulated) {
-      const what = action === 'create' ? [`Create the issue “${x.draft.title}”`, 'It is filed on the project\'s repository as shown.', 'Create']
-        : action === 'append' ? [`Add to #${n}`, `The ${x.existingIssue === n && x.addition ? 'addition' : 'draft'} is appended to #${n}'s description as a dated section; the rest of it is kept.`, 'Add']
-          : [`Comment on #${n}`, `The ${x.existingIssue === n && x.addition ? 'addition' : 'draft'} is added as a comment on #${n}.`, 'Comment'];
+      const what = window.BacklogPoConfirm.draftTexts(act, n, x, projectRecord());
       if (!await confirmDialog(...what)) return;
     }
     Object.assign(po, { busy: true, error: null });
@@ -799,7 +797,7 @@
       const out = await api.fileProductOwnerDraft(po.projectId, msg.ts, action, n, simulated, action === 'create' && !!x.draft?.epic && placeEpic(m));
       po.messages = out.messages;
       if (out.backlog) actions().showData(out.backlog);
-      if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
+      if (out.syncError) po.notes[key] = { text: t('backlog_po.filed_sync_failed', { error: out.syncError }), error: true };
       const filed = !out.preview && out.filed?.number;
       markNextStepIssue(out);
       if (filed && act === 'create-roadmap') {

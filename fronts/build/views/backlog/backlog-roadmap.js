@@ -1695,12 +1695,11 @@
     const scope = at >= 0 ? r.stages[at].id : null;
     if (!await checkPushes(ctx, r, scope)) return 'handled';
     const real = !simulated && r.stages.some((s) => !s.disabled && (!scope || s.id === scope) && s.items.some((x) => !x.mock && editable(x)));
-    const cost = 'they use your CLI subscriptions and cost money). Human gates still wait for you.';
     const [title, body, label] = r.state !== 'paused'
-      ? ['Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start']
+      ? [t('backlog_roadmap.start_the_roadmap'), t('backlog_roadmap.start_the_roadmap_confirm'), t('backlog_roadmap.start')]
       : at >= 0
-        ? [`Resume stage ${at + 1}`, `Runs in progress keep going; the next planned items of stage ${at + 1} start as real runs (${cost} The roadmap pauses again when that stage is done.`, 'Resume']
-        : ['Resume the roadmap', `Runs in progress keep going; the next planned items start as real runs (${cost}`, 'Resume'];
+        ? [t('backlog_roadmap.resume_stage_title', { stage: at + 1 }), t('backlog_roadmap.resume_stage_confirm', { stage: at + 1 }), t('backlog_roadmap.resume')]
+        : [t('backlog_roadmap.resume_the_roadmap'), t('backlog_roadmap.resume_the_roadmap_confirm'), t('backlog_roadmap.resume')];
     if (real && !await confirmDialog(title, body, label)) return 'handled';
     await window.RoadmapBaseNotice.started(ctx, simulated, scope);
   }

@@ -16,6 +16,7 @@ Visible text through `t()` (#329), the catalogues, number and date formats, and 
   change re-renders every open window (`interface-language.js`, over the `settings:changed` push):
   a screen redraws from its state, so read `t()` when drawing, never once at load. To add a
   language: a `<code>.json` next to `en.json` plus its code in `PAGE_LANGUAGES` (`i18n.js`); the
-  Interface select lists it. Never translated: user content, workflow YAML texts, skills, agents'
-  messages, engine errors and logs. Captures: `npm run screenshot -- --lang pt-BR`,
+  Interface select lists it. Never translated: user content, workflow YAML texts
+  (except where the YAML names a catalog key: `label_key`, `help_key`, a gate's `translated` filter, #70),
+  skills, agents' messages, engine errors and logs. Captures: `npm run screenshot -- --lang pt-BR`,
   `npx electron scripts/smoke.js <out.png> --lang pt-BR`; both default to English.

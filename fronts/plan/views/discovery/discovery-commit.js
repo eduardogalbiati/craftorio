@@ -37,8 +37,7 @@
   function actionHtml(c) {
     const score = scoreOf(c);
     const under = underBar(c);
-    const why = score === null ? `A card is committed from ${BAR}% clarity: this one has no score yet.`
-      : `A card is committed from ${BAR}% clarity: this one is at ${score}%. Close the gaps listed under Clarity (Grill me).`;
+    const why = score === null ? t('discovery_commit.under_bar_no_score', { bar: BAR }) : t('discovery_commit.under_bar_score', { bar: BAR, score });
     return `
       <div class="row dsc-actions" role="group" aria-label="${t('discovery_commit.ready')}">
         <button type="button" class="btn sm primary" data-testid="discovery-commit" data-detail="commit"${under ? ' disabled' : ''} title="${esc(under ? why : t('discovery_commit.the_product_owner_proposes_the_issues'))}">${t('discovery_commit.commit_to_the_backlog')}</button>
@@ -185,9 +184,7 @@
     const preview = !!state.settings?.developerMode && !state.simulationOnly;
     const regions = (Array.isArray(crops) ? crops : []).filter((c) => c?.mid && c?.file).map(({ mid, file, name }) => ({ mid: String(mid), file: String(file), name: String(name || file) }));
     Object.assign(cm, { projectId, card, issues: [], crops: regions, loading: true, busy: false, note: '', done, preview });
-    const where = state.simulationOnly ? 'Simulation: they only join this workspace\'s backlog, nothing reaches GitHub or GitLab. The card then leaves the board for the Committed list and never comes back.'
-      : preview ? 'Developer mode: File the issues only previews the commands. Nothing is filed and the card stays in Ready.'
-        : 'They are filed on the project\'s repository. The card then leaves the board for the Committed list and never comes back.';
+    const where = state.simulationOnly ? t('discovery_commit.where_simulated') : preview ? t('discovery_commit.where_preview') : t('discovery_commit.where_real');
     $('#dsc-commit-what').textContent = t('discovery_commit.title_becomes_issues_in_the_backlog', { title: card.title, id: card.id, where });
     $('#dsc-commit-error').textContent = '';
     $('#dsc-commit-roadmap').checked = false;
@@ -197,8 +194,8 @@
       const out = await api.proposeDiscoveryCommit(projectId, card.id, preview);
       if (seq !== cm.seq) return;
       cm.issues = (out?.split?.issues || []).slice(0, MAX_ISSUES).map((i) => ({ ...i, tasks: [...(i.tasks || [])] }));
-      cm.note = out?.fallback ? `The Product Owner could not be asked (${out.fallback}): this is the split by the rules.`
-        : out?.model === 'simulated' ? 'Simulated: the split by the rules, no model was called.' : '';
+      cm.note = out?.fallback ? t('discovery_commit.note_fallback', { error: out.fallback })
+        : out?.model === 'simulated' ? t('discovery_commit.note_simulated') : '';
     } catch (e) {
       if (seq !== cm.seq) return;
       $('#dsc-commit-error').textContent = errMsg(e);
@@ -262,18 +259,18 @@
       return;
     }
     if (out.preview) {
-      Object.assign(cm, { busy: false, note: `Preview (developer mode): nothing was filed. The app would run: ${(out.commands || []).join(' ; ')}` });
+      Object.assign(cm, { busy: false, note: t('discovery_commit.note_preview', { commands: (out.commands || []).join(' ; ') }) });
       renderDialog();
       return;
     }
     // the card is committed: what goes wrong from here is told, never undone
     const problems = [];
-    if (out.failed?.length) problems.push(`Not filed: ${out.failed.map((f) => f.title).join('; ')} (${out.failed[0].error}). File ${out.failed.length > 1 ? 'them' : 'it'} from the Backlog.`);
-    if (out.skippedLabels?.length) problems.push(`Labels the repository does not have were left out: ${out.skippedLabels.join(', ')}.`);
-    if (out.syncError) problems.push(`The backlog sync failed: ${out.syncError}`);
+    if (out.failed?.length) problems.push(t('discovery_commit.not_filed', { titles: out.failed.map((f) => f.title).join('; '), error: out.failed[0].error, count: out.failed.length }));
+    if (out.skippedLabels?.length) problems.push(t('po.filed_labels_left_out', { labels: out.skippedLabels.join(', ') }));
+    if (out.syncError) problems.push(t('discovery_commit.sync_failed', { error: out.syncError }));
     if (roadmap && !out.syncError) {
-      try { await planRoadmap(projectId, card, out.issues || []); } catch (err) { problems.push(`Not planned in the roadmap: ${errMsg(err)}`); }
-    } else if (roadmap) problems.push('Not planned in the roadmap: sync the backlog, then add the issues to it.');
+      try { await planRoadmap(projectId, card, out.issues || []); } catch (err) { problems.push(t('discovery_commit.not_planned', { error: errMsg(err) })); }
+    } else if (roadmap) problems.push(t('discovery_commit.not_planned_sync'));
     cm.busy = false;
     close();
     done?.({ ...out, roadmap }, problems);

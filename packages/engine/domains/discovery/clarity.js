@@ -11,8 +11,13 @@
 //   nextQuestion / recordAnswer   → the Grill me interview: the next open point as a question (with a
 //                                   proposed answer when the card already holds one), and the answer
 //                                   written into the card's text under the point's heading
+//   gapsShown(gaps)               → saved gaps, the rubric's own in the interface language (#70)
 // The same rubric is the bundled skill skills/clarity-score (for agents that score what they write).
+// What the rubric says (gaps, questions) reads in the interface language (#70: clarity.<point>_* of the
+// catalogs); the heading an answer is written under stays English, the one the score looks for.
 // Pure: the discovery store (packages/engine/domains/discovery/discovery.js) saves the score in card.json and keeps the bar.
+
+const I18n = require('@craftorio/shared/i18n');
 
 const DEFAULT_BAR = 85;
 // the owner's night, when agents work alone
@@ -23,70 +28,37 @@ const KINDS = ['idea', 'intent', 'prd', 'rfc', 'task', 'bug', 'hotfix'];
 const NON_GOALS = /\bnon[- ]?goals?\b|\b(out of|not in) scope\b/;
 const withoutNonGoals = (h) => h.replace(new RegExp(NON_GOALS.source, 'g'), ' ');
 
-// A point of the rubric: `label` (the heading Grill me writes), `weight`, `heading` (does a
-// lower-case heading name it), `gap` (what is missing) and `question` (what Grill me asks).
+// A point of the rubric: `label` (the heading Grill me writes), `weight` and `heading` (does a
+// lower-case heading name it); its texts are the catalogs' clarity.<id>_label, _gap (what is missing)
+// and _question (what Grill me asks).
 const CRITERIA = {
-  problem: {
-    label: 'Problem', weight: 3, heading: (h) => /\b(problem|motivation|background)\b/.test(h),
-    gap: 'what is wrong or missing today, and for whom', question: 'What is wrong or missing today, and who feels it?',
-  },
-  goal: {
-    label: 'Goal', weight: 2, heading: (h) => /\b(goals?|objectives?)\b/.test(withoutNonGoals(h)),
-    gap: 'what is true when this is done', question: 'What is the goal: what is true when this is done?',
-  },
-  users: {
-    label: 'Users', weight: 2, heading: (h) => /\b(users?|personas?|audience)\b/.test(h),
-    gap: 'who uses it, and in which situation', question: 'Who are the users, and in which situation do they need this?',
-  },
-  steps: {
-    label: 'Steps to reproduce', weight: 3, heading: (h) => /\breproduc/.test(h),
-    gap: 'how to reproduce it, step by step', question: 'How is it reproduced, step by step?',
-  },
-  observed: {
-    label: 'Observed', weight: 2, heading: (h) => /\b(observed|actual)\b/.test(h),
-    gap: 'what happens today (the error text, the wrong value)', question: 'What happens today (the error text, the wrong value)?',
-  },
-  expected: {
-    label: 'Expected', weight: 2, heading: (h) => /\bexpected\b/.test(h),
-    gap: 'what should happen instead', question: 'What should happen instead?',
-  },
-  scope: {
-    label: 'Scope', weight: 2, heading: (h) => /\bscope\b/.test(withoutNonGoals(h)),
-    gap: 'what is part of this change', question: 'What is in scope: which parts change?',
-  },
-  nonGoals: {
-    label: 'Non-goals', weight: 1, heading: (h) => NON_GOALS.test(h),
-    gap: 'what is left out on purpose', question: 'What is left out on purpose (the non-goals)?',
-  },
-  alternatives: {
-    label: 'Alternatives considered', weight: 2, heading: (h) => /\balternatives?\b/.test(h),
-    gap: 'the other options and why they lose', question: 'Which alternatives were considered, and why does each one lose?',
-  },
-  acceptance: {
-    label: 'Acceptance criteria', weight: 3, heading: (h) => /\bacceptance\b|\bdone when\b|\bdefinition of done\b/.test(h),
-    gap: 'nothing verifiable says when it is done', question: 'Which criteria, each one verifiable, say that it is done?',
-  },
-  metrics: {
-    label: 'Success metrics', weight: 2, heading: (h) => /\b(metrics?|success)\b/.test(h),
-    gap: 'how success is measured', question: 'How is success measured (the metric and its target)?',
-  },
-  decisions: {
-    label: 'Decisions', weight: 1, heading: (h) => /\bdecisions?\b/.test(h),
-    gap: 'what was decided, by whom', question: 'Which decisions are already made, and by whom?',
-  },
-  openQuestions: {
-    label: 'Open questions', weight: 1, heading: (h) => /\b(open (questions?|points?)|questions)\b/.test(h),
-    gap: 'what is still undecided ("None" when nothing is)', question: 'What is still undecided? Say "None" when nothing is.',
-  },
-  dependencies: {
-    label: 'Dependencies', weight: 1, heading: (h) => /\b(dependenc(y|ies)|depends on|blocked by)\b/.test(h),
-    gap: 'what it needs first, or what it blocks ("None" when nothing)', question: 'What does it depend on, or block? Say "None" when nothing.',
-  },
-  evidence: {
-    label: 'Evidence', weight: 1, heading: (h) => /\b(evidence|references?)\b/.test(h),
-    gap: 'what shows the problem is real (a run, a log, a number, a file)', question: 'What shows the problem is real (a run, a log, a number, a file)?',
-  },
+  problem: { label: 'Problem', weight: 3, heading: (h) => /\b(problem|motivation|background)\b/.test(h) },
+  goal: { label: 'Goal', weight: 2, heading: (h) => /\b(goals?|objectives?)\b/.test(withoutNonGoals(h)) },
+  users: { label: 'Users', weight: 2, heading: (h) => /\b(users?|personas?|audience)\b/.test(h) },
+  steps: { label: 'Steps to reproduce', weight: 3, heading: (h) => /\breproduc/.test(h) },
+  observed: { label: 'Observed', weight: 2, heading: (h) => /\b(observed|actual)\b/.test(h) },
+  expected: { label: 'Expected', weight: 2, heading: (h) => /\bexpected\b/.test(h) },
+  scope: { label: 'Scope', weight: 2, heading: (h) => /\bscope\b/.test(withoutNonGoals(h)) },
+  nonGoals: { label: 'Non-goals', weight: 1, heading: (h) => NON_GOALS.test(h) },
+  alternatives: { label: 'Alternatives considered', weight: 2, heading: (h) => /\balternatives?\b/.test(h) },
+  acceptance: { label: 'Acceptance criteria', weight: 3, heading: (h) => /\bacceptance\b|\bdone when\b|\bdefinition of done\b/.test(h) },
+  metrics: { label: 'Success metrics', weight: 2, heading: (h) => /\b(metrics?|success)\b/.test(h) },
+  decisions: { label: 'Decisions', weight: 1, heading: (h) => /\bdecisions?\b/.test(h) },
+  openQuestions: { label: 'Open questions', weight: 1, heading: (h) => /\b(open (questions?|points?)|questions)\b/.test(h) },
+  dependencies: { label: 'Dependencies', weight: 1, heading: (h) => /\b(dependenc(y|ies)|depends on|blocked by)\b/.test(h) },
+  evidence: { label: 'Evidence', weight: 1, heading: (h) => /\b(evidence|references?)\b/.test(h) },
 };
+
+// #70: a point's text (label, gap, question) in the interface language, and its line among the gaps
+const textOf = (id, part, lang) => I18n.t(`clarity.${id}_${part}`, null, lang);
+const gapLine = (id, lang) => `${textOf(id, 'label', lang)}: ${textOf(id, 'gap', lang)}`;
+
+/** Saved gaps with the rubric's own lines, written in any interface language, in the current one; another scorer's as they are. */
+function gapsShown(gaps) {
+  if (!Array.isArray(gaps)) return gaps;
+  const ids = new Map(Object.keys(CRITERIA).flatMap((id) => I18n.languages().map((lang) => [gapLine(id, lang), id])));
+  return gaps.map((g) => (ids.has(g) ? gapLine(ids.get(g)) : g));
+}
 
 // each kind's points, in the order Grill me asks them
 const BUG = ['problem', 'steps', 'observed', 'expected', 'goal', 'scope', 'nonGoals', 'acceptance', 'decisions', 'openQuestions', 'dependencies', 'evidence'];
@@ -168,7 +140,7 @@ function scoreClarity(card) {
   const weight = (ids) => ids.reduce((sum, id) => sum + CRITERIA[id].weight, 0);
   return {
     score: Math.round((100 * (weight(rubric) - weight(open))) / weight(rubric)),
-    gaps: open.map((id) => `${CRITERIA[id].label}: ${CRITERIA[id].gap}`),
+    gaps: open.map((id) => gapLine(id)),
   };
 }
 
@@ -241,7 +213,7 @@ function proposal(id, card) {
 /** The next question of the interview: the first open point of the card's kind, `{ criterion, label, question, proposal }`, or null when every point is covered. */
 function nextQuestion(card) {
   const [id] = openPoints(card).open;
-  return id ? { criterion: id, label: CRITERIA[id].label, question: CRITERIA[id].question, proposal: proposal(id, card || {}) } : null;
+  return id ? { criterion: id, label: textOf(id, 'label'), question: textOf(id, 'question'), proposal: proposal(id, card || {}) } : null;
 }
 
 // An answer as the body of its point's section (level 2), whatever markdown the person wrote: its
@@ -282,6 +254,7 @@ module.exports = {
   claritySettings,
   DEFAULT_BAR,
   DEFAULT_NIGHT,
+  gapsShown,
   KINDS,
   nextQuestion,
   nightHours,

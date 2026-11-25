@@ -3,7 +3,7 @@
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
 // `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `expected_docs`, `issue_numbers`,
-// `issue_lines`, `one_line`, `suite_lines`), `evalExpr` for `when:` conditions, and `testsPlan` (the
+// `issue_lines`, `one_line`, `suite_lines`, `tests_plan_text`, `translated`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
 
@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
+const I18n = require('@craftorio/shared/i18n');
 const checkStep = require('../check-step');
 const expectedFiles = require('../expected-files');
 const gateSummary = require('../gate-summary');
@@ -213,15 +214,31 @@ tpl.addFilter('issue_lines', (issues, only = null) => gateSummary.issueLines(iss
 tpl.addFilter('one_line', (s, n = 110) => gateSummary.oneLine(s, n));
 tpl.addFilter('suite_lines', (output) => gateSummary.suiteLines(output));
 
+// A gate's text in the interface language (#70): the YAML's own text in English, the catalog key's in
+// another language ({name} from params; the YAML's text when no catalog has the key).
+//   {% filter translated('engine.test_failed_healer', { summary: x }) %}The healer: {{ x }}{% endfilter %}
+tpl.addFilter('translated', (text, key, params = {}) => {
+  const given = Object.fromEntries(Object.entries(params || {}).map(([k, v]) => [k, v ?? '']));
+  return I18n.translated(String(key), String(text ?? ''), given);
+});
+
+// The run's tests (`tests_plan`) at a gate, in the interface language (#70); `plan`: testsPlan's items.
+//   {{ tests_plan | tests_plan_text(tests_plan_items) }}
+tpl.addFilter('tests_plan_text', (text, plan) => (I18n.getLanguage() === 'en' || !Array.isArray(plan) ? text : plan.map((p) => I18n.t(p.source === CHOSEN ? 'engine.tests_plan_chosen' : 'engine.tests_plan_default', {
+  label: I18n.translated(`workflow_texts.feature_${p.input}_label`, p.label),
+  value: I18n.translated(`workflow_texts.feature_${p.input}_opt_${p.value}`, p.value_label),
+})).join(' ')));
+
 // The test inputs of the development workflows (#203): what the run summary and the gates say
 // ("Unit tests: Off (workflow default)"), and their evidence screenshots (#205: "Screenshots: Off").
+const CHOSEN = 'chosen for this run';
 const TEST_INPUTS = { unit_tests: 'Unit tests', e2e_tests: 'E2E tests', screenshots: 'Screenshots' };
 function testsPlan(defs, given, resolved) {
   return Object.entries(TEST_INPUTS).filter(([k]) => defs?.[k]).map(([k, label]) => {
     const def = defs[k];
     const value = resolved[k];
     const chosen = given?.[k] !== undefined && given[k] !== '' && given[k] !== def.default;
-    return { input: k, label: def.label || label, value, value_label: def.options?.[value] || String(value), source: chosen ? 'chosen for this run' : 'workflow default' };
+    return { input: k, label: def.label || label, value, value_label: def.options?.[value] || String(value), source: chosen ? CHOSEN : 'workflow default' };
   });
 }
 

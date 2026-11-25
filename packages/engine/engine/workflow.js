@@ -325,6 +325,7 @@ class WorkflowRun extends EventEmitter {
       skill_dir: (name) => resolveSkill(this.skillsDirs, name).path,
       // the unit / E2E test inputs (#203), one sentence for the gates and the verifier ('' without them)
       tests_plan: this.testsPlan.map((p) => `${p.label}: ${p.value_label} (${p.source}).`).join(' '),
+      tests_plan_items: this.testsPlan, // #70: for a gate in the interface language (tests_plan_text)
     };
     // outputs (#290): every visit's output, oldest first (`output` is the last one); a resumed run
     // only has the last

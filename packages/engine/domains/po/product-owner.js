@@ -108,6 +108,7 @@ const {
 const { conflictsOf } = require('../project/repo-performance');
 const { storeFor } = require('../workspace/store');
 const { readEvents } = require('../supervisor/supervisor');
+const I18n = require('@craftorio/shared/i18n');
 const Language = require('@craftorio/shared/language');
 const TimeZone = require('../analytics/time-zone');
 
@@ -1201,6 +1202,17 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   };
 }
 
+// #70: what the conversation says of a draft filed, or only previewed
+function filedText(n, url, title) {
+  if (n && url) return I18n.t('po.filed_link', { n, url, title });
+  if (n) return I18n.t('po.filed_local', { n, title });
+  return url ? I18n.t('po.filed_url', { url, title }) : I18n.t('po.filed_issue', { title });
+}
+function previewText(command, epic) {
+  if (command.local) return epic ? I18n.t('po.filed_preview_local_epic', { id: epic.id, title: epic.title }) : I18n.t('po.filed_preview_local');
+  return epic ? I18n.t('po.filed_preview_epic', { command: command.display, id: epic.id, title: epic.title }) : I18n.t('po.filed_preview', { command: command.display });
+}
+
 /**
  * Files the current draft on the owner's click and records it in the conversation.
  * at: the draft message's ts (a draft revised, filed or discarded since is refused);
@@ -1211,6 +1223,7 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
  * placeEpic (#138): a new issue joins the draft's epic (`epicList`: the cache's epics) once filed.
  * timeZone (#273): the owner's zone (settings.timeZone), the day of an appended "## Update" section.
  * issuesLanguage (#328): the issues language code, the Related line added and the epic's body line.
+ * The message recorded reads in the interface language (#70), the issue's own text never.
  * Returns { preview, action, command, body, filed, message, messages, skippedLabels? }.
  */
 async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, placeEpic = false, epicList = [], timeZone = null, issuesLanguage = null, exec = backlog.execCli }) {
@@ -1229,7 +1242,7 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
   const epic = action === 'create' && placeEpic && issue.draft?.epic ? (epicList || []).find((e) => e.id === issue.draft.epic) : null;
   if (preview) {
     const filed = { action, number: target, preview: true, draft: at, command: command.display, ...(epic ? { epic: epic.id } : {}) };
-    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: `**Preview** (simulated): nothing was filed. The app would ${command.local ? command.display : `run \`${command.display}\``}${epic ? `, then place the issue in the epic ${epic.id} ${epic.title}` : ''}.`, filed });
+    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: previewText(command, epic), filed });
     return { ...out, filed, message, messages: readConversation(backlogDir, projectId) };
   }
   // gh reads the body from it; for glab it is the record of what was sent
@@ -1240,22 +1253,23 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
   let text;
   if (action === 'create') {
     filed = { action, number: n, url, title: issue.draft.title, draft: at, labels: issue.draft.labels.filter((l) => !skippedLabels.includes(l)), ...(command.local ? { local: true } : {}) };
-    text = `Filed ${n && url ? `[#${n}](${url})` : n ? `#${n} in the local backlog` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
+    text = filedText(n, url, issue.draft.title);
+    if (skippedLabels.length) text += ` ${I18n.t('po.filed_labels_left_out', { labels: skippedLabels.join(', ') })}`;
     if (epic && n) {
       try {
         await epics.applyEpic({ platform, repo, epic: { id: epic.id }, issues: [n], epics: epicList, dir, issuesLanguage, exec });
         filed.epic = epic.id;
-        text += ` Placed in the epic ${epic.id} ${epic.title}.`;
-      } catch (e) { text += ` It could not be placed in the epic ${epic.id}: ${e.message}`; }
+        text += ` ${I18n.t('po.filed_epic', { id: epic.id, title: epic.title })}`;
+      } catch (e) { text += ` ${I18n.t('po.filed_epic_failed', { id: epic.id, error: e.message })}`; }
     }
   } else {
     const issueUrl = cached?.url || null;
     filed = { action, number: target, url: action === 'comment' ? url || issueUrl : issueUrl, draft: at };
     const ref = filed.url ? `[#${target}](${filed.url})` : `#${target}`;
-    text = action === 'comment' ? `Commented on ${ref}.` : `Added to ${ref}: a dated section at the end of its description, the rest kept as it was.`;
+    text = action === 'comment' ? I18n.t('po.filed_comment', { ref }) : I18n.t('po.filed_append', { ref });
   }
   filed.folder = threadDir(where, thread);
-  text += ` The conversation and the analysis are kept in \`${filed.folder}\`.`;
+  text += ` ${I18n.t('po.filed_kept', { folder: filed.folder })}`;
   const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text, filed });
   return { ...out, filed, message, messages: readConversation(backlogDir, projectId), ...(skippedLabels.length ? { skippedLabels } : {}) };
 }

@@ -42,6 +42,7 @@
   const FAST = ['bug', 'hotfix']; // the fast lane's types
   // the runs whose result comes back to a card, by the `source` it is recorded under
   const SOURCES = { 'ai-arena': 'AI Arena', 'write-doc': 'Write a document', 'write-review': 'Write & Review' };
+  const RUBRIC = 'Clarity rubric'; // who scored a card, as the engine records it (discovery.js RUBRIC)
   const LS_RUNS = 'discovery.runs'; // run id → { projectId, cardId, source }, until the run ends
   const THREAD = '<svg class="inbox-clip" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>';
   const CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>';
@@ -907,7 +908,7 @@
         <span class="muted small">${below ? t('discovery.needs_grilling_the_bar_is_bar', { bar: esc(bar) }) : uncommittable ? t('discovery.at_the_bar_of_bar_but', { bar: esc(bar), BAR: commit().BAR }) : t('discovery.at_or_above_the_bar_of', { bar: esc(bar) })}</span>
         ${(below || uncommittable) && !readOnly() ? `<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="${t('discovery.an_interview_in_this_thread_one')}">${t('discovery.grill_me')}</button>` : ''}
       </div>
-      ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">${t('discovery.scored_by')} <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
+      ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">${t('discovery.scored_by')} <b>${esc(by === RUBRIC ? t('discovery.clarity_rubric') : by || 'unknown')}</b> ${when(ts)}</p>` : ''}
       ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">${t('discovery.moved_anyway')}</span> <b>${esc(override.by)}</b> ${t(override.score == null ? 'discovery.moved_it_to_ready_without_a_score_ts' : 'discovery.moved_it_to_ready_at_score_ts', { score: esc(override.score), ts: when(override.ts) })} ${esc(override.reason)}</p>` : ''}
       ${missing.length ? `<p class="muted small">${t('discovery.missing')}</p><ul class="dsc-missing" data-testid="clarity-missing">${missing.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}`;
   }
@@ -983,12 +984,13 @@
   // What a version is, from its reason (snapshotVersion's label in its file name).
   function versionLabel(reason) {
     const move = /^move-(.+)$/.exec(reason);
-    if (move) return `Moved to ${columnOf(move[1])?.title || move[1]}`;
+    if (move) return t('discovery.version_moved', { column: columnOf(move[1])?.title || move[1] });
     const result = /^result-(.+)$/.exec(reason);
-    if (result) return `${SOURCES[result[1]] || result[1]} result`;
+    if (result) return t('discovery.version_result', { source: SOURCES[result[1]] || result[1] });
     const automation = /^automation-(.+)$/.exec(reason);
-    if (automation) return `${columnOf(automation[1])?.title || automation[1]} automation result`;
-    return { merge: 'Before a merge', 'before-automation': 'Before an automation\'s result', 'before-grill': 'Before a Grill me answer', 'before-restore': 'Before a restore', 'before-result': 'Before a run\'s result' }[reason] || reason;
+    if (automation) return t('discovery.version_automation', { column: columnOf(automation[1])?.title || automation[1] });
+    const key = { merge: 'discovery.version_before_merge', 'before-automation': 'discovery.version_before_automation', 'before-grill': 'discovery.version_before_grill', 'before-restore': 'discovery.version_before_restore', 'before-result': 'discovery.version_before_result' }[reason];
+    return key ? t(key) : reason;
   }
 
   function renderVersions() {

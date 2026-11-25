@@ -16,6 +16,12 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff
   (`git diff <ref>...HEAD` in the worktree, read-only terminal). `approval.resolved` carries `wait_ms`; the summary's
   `timing.gates` / `timing.gate_wait_ms` hold the owner's time at gates, apart from agent time.
+- Gate texts in the interface language (#70): a choice names catalog keys (`label_key`, `help_key`, the latter a
+  template too), read by the screens at every draw and by the engine when the gate opens (the record's
+  `label` / `help`); a `summary:`, `recommend:` or `message:` wraps each sentence in
+  `{% filter translated('engine.key', { name: value }) %}English{% endfilter %}`: the YAML's text in English, the
+  key's in another language, as of when the gate opened. A `recommend:` keeps its `<answer>: ` outside the filter.
+  Reports and a test's output (`suite_failures`, `suite_lines`) stay as the step wrote them.
 - Gate summaries (#213): every gate's card shows a short summary first, the message collapsed in
   its Details. A workflow declares it per gate, all templates rendered with the run's context:
   `summary:` (Markdown; its first line is "What happened", the next lines the status per issue,

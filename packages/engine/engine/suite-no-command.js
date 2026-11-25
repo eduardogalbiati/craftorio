@@ -3,27 +3,26 @@
 // files with no command (or a folder git cannot list) stay `blocked`: test_command is what is missing.
 // Only a step whose transitions name `not_run` gets that status (`routedStatus`): any other workflow
 // (the owner's copies, a composed one, release) keeps routing it as `blocked`.
+// The reasons read in the interface language (#70): the gates show them.
 
+const I18n = require('@craftorio/shared/i18n');
 const { folderHasTests } = require('./test-paths');
 
-const NO_COMMAND = 'no test command: set the workflow\'s test_command input';
 const LOOKED_IN = 'package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml';
-const TESTS_NO_COMMAND = `${NO_COMMAND} (the project has test files, but no command was found in ${LOOKED_IN})`;
-const NONE_FOUND = `${NO_COMMAND} (none found in ${LOOKED_IN})`;
 
 // cwd: the folder the suite would run in; patterns: the workflow's tests_paths (default TESTS_PATHS).
 // log: null, nothing ran, so the round wrote no log file
 async function suiteWithoutCommand(cwd, patterns) {
   const tests = await folderHasTests(cwd, patterns);
-  if (tests === false) return { status: 'not_run', reason: 'the project has no tests', log: null };
-  return { status: 'blocked', reason: tests ? TESTS_NO_COMMAND : NONE_FOUND, log: null };
+  if (tests === false) return { status: 'not_run', reason: I18n.t('engine.suite_no_tests'), log: null };
+  return { status: 'blocked', reason: I18n.t(tests ? 'engine.suite_no_command_tests' : 'engine.suite_no_command_none_found', { files: LOOKED_IN }), log: null };
 }
 
 // the round's output as the step's transitions can route it
 function routedStatus(output, step) {
   if (output.status !== 'not_run' || (step.transitions || []).some((t) => /\bnot_run\b/.test(String(t.when || '')))) return output;
-  const reason = `${NO_COMMAND} (${output.reason})`;
-  return { ...output, status: 'blocked', reason, message: `The suite could not run: ${reason}` };
+  const reason = I18n.t('engine.suite_no_command_reason', { reason: output.reason });
+  return { ...output, status: 'blocked', reason, message: I18n.t('engine.suite_could_not_run', { reason }) };
 }
 
 module.exports = {
