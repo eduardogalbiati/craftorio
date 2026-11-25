@@ -17,6 +17,7 @@
 //   `sources[key]` says which one; what the item or the owner set for a key the workflow lacks stays;
 // - chosen(inputs, defs, project): the inputs worth saving on an item: never a blank one, never one equal
 //   to what is shown anyway; an input the workflow does not declare stays;
+// - checksOff(command): #50: that check_command turns the rule checks off (`off`, any case);
 // - withAliases(defaults): the defaults with release.yaml's names added, for the run dialog's fields.
 // Browser: window.RunInputs; Node: module.exports.
 (function (root) {
@@ -30,6 +31,8 @@
   const blank = (v) => !given(v) || (typeof v === 'string' && !v.trim());
   const text = (v) => (Array.isArray(v) ? v.join(',') : String(v ?? ''));
   const sameValue = (a, b) => text(a) === text(b);
+
+  const checksOff = (command) => /^off$/i.test(text(command).trim());
 
   function fits(def, v) {
     if (!Array.isArray(def?.enum)) return true;
@@ -91,6 +94,7 @@
 
   const api = {
     blank,
+    checksOff,
     choices,
     chosen,
     fits,

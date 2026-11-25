@@ -37,6 +37,20 @@ async function projectPage(projectInputHints, ids = [PID]) {
   return app;
 }
 
+// each read waits for its answer: take() gives the ones asked since the last take, answered together (other parts of
+// the page read the same hints, e.g. the settings' checks of #50, so a visit may ask more than once)
+function heldReads() {
+  let pending = [];
+  return {
+    read: () => new Promise((resolve) => { pending.push(resolve); }),
+    take() {
+      const taken = pending;
+      pending = [];
+      return { count: taken.length, answer: (hints) => taken.forEach((resolve) => resolve(hints)) };
+    },
+  };
+}
+
 const has = (app, testid) => H.findEl(pageMarkup(app, { defs: false }), (e) => e.attrs['data-testid'] === testid) !== null;
 const offered = (app) => {
   assert.equal(has(app, 'project-next-steps'), true, 'the Next steps card is drawn');
@@ -44,10 +58,10 @@ const offered = (app) => {
 };
 
 test('#75 the entry is left out while the kind is read, then follows it', { timeout: 30000 }, async () => {
-  let answer;
-  const app = await projectPage(() => new Promise((resolve) => { answer = resolve; }));
+  const { take, read } = heldReads();
+  const app = await projectPage(read);
   assert.equal(offered(app), false, 'while reading');
-  answer({ detectedKind: 'frontend' });
+  take().answer({ detectedKind: 'frontend' });
   await app.settle(30);
   assert.equal(offered(app), true, 'once read');
 });
@@ -78,12 +92,6 @@ test('#75 the picked kind decides over the one read', { timeout: 30000 }, async 
 
 // ---- several reads in flight ------------------------------------------------------------------------------
 
-// each read waits for its answer: answers[i]({ detectedKind })
-function heldReads() {
-  const answers = [];
-  return { answers, read: () => new Promise((resolve) => { answers.push(resolve); }) };
-}
-
 async function leaveAndReturn(app) {
   app.run('showView("inbox")');
   await app.settle(10);
@@ -92,28 +100,31 @@ async function leaveAndReturn(app) {
 }
 
 test('#75 of two reads in flight the newest one wins, whichever answers last', { timeout: 30000 }, async () => {
-  const { answers, read } = heldReads();
+  const { take, read } = heldReads();
   const app = await projectPage(read);
+  const first = take();
   await leaveAndReturn(app);
-  assert.equal(answers.length, 2, 'read again on the way back');
-  answers[1]({ detectedKind: 'frontend' });
+  const second = take();
+  assert.deepEqual([first.count > 0, second.count > 0], [true, true], 'read, and read again on the way back');
+  second.answer({ detectedKind: 'frontend' });
   await app.settle(30);
   assert.equal(offered(app), true, 'the newest read');
-  answers[0]({ detectedKind: 'backend' });
+  first.answer({ detectedKind: 'backend' });
   await app.settle(30);
   app.run('renderProjectView()');
   assert.equal(offered(app), true, 'the older answer, arrived last, changes nothing');
 });
 
 test('#75 the kind read before stays while it is read again on the way back', { timeout: 30000 }, async () => {
-  const { answers, read } = heldReads();
+  const { take, read } = heldReads();
   const app = await projectPage(read);
-  answers[0]({ detectedKind: 'frontend' });
+  take().answer({ detectedKind: 'frontend' });
   await app.settle(30);
   await leaveAndReturn(app);
-  assert.equal(answers.length, 2, 'read again');
+  const again = take();
+  assert.equal(again.count > 0, true, 'read again');
   assert.equal(offered(app), true, 'while reading again');
-  answers[1]({ detectedKind: 'backend' });
+  again.answer({ detectedKind: 'backend' });
   await app.settle(30);
   assert.equal(offered(app), false, 'once read again');
 });

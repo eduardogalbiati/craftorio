@@ -22,6 +22,9 @@ const SERVERS = [
   'bun dev',
   'bun run dev',
   'pnpm --filter web dev',
+  // #50: options that take a value
+  'npm run --loglevel error dev',
+  'pnpm --reporter silent dev',
   // pnpm's -w is --workspace-root (no value); npm's -w is --workspace <name>
   'pnpm -w dev',
   'pnpm -w run dev',

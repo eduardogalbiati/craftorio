@@ -25,6 +25,9 @@
 // #216) on the cards that list them.
 // #785: resolved(defs, saved, runDefaults) gives each value and its source, formHtml's `sources` says
 // it per field; differing / differHtml: the saved values that differ from the project's.
+// #50: checksOf(given, runDefaults) is what a run's rule check runs (`check_command`, else the run defaults'
+// `check_commands`) and checksHtml draws it, on the project's settings and in the Start panel; forgetHints(projectId)
+// drops what hintsOf remembers (no id: all), after a save and when the Start panel opens.
 // Browser: window.WorkflowInputs (pills and show_if wired once on the document); Node: module.exports.
 (function (root) {
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
@@ -390,6 +393,27 @@
     return promise;
   }
 
+  function forgetHints(projectId) {
+    if (projectId) hintsCache.delete(projectId);
+    else hintsCache.clear();
+  }
+
+  // ---- the rule checks of a run (#50) ---------------------------------------------------------
+  /** { off, commands, rewrites }: what the check runs for a `check_command` (blank: what was found). */
+  function checksOf(given, runDefaults) {
+    const own = String(given ?? '').trim();
+    if (runInputs().checksOff(own)) return { off: true, commands: [], rewrites: [] };
+    if (own) return { off: false, commands: [own], rewrites: [] };
+    return { off: false, commands: runDefaults?.check_commands || [], rewrites: runDefaults?.check_rewrites || [] };
+  }
+
+  /** Those commands as one line (off, none found), and a line per command not run because it rewrites files. */
+  function checksHtml({ off, commands, rewrites }) {
+    if (off) return esc(t('workflow_inputs.checks_off'));
+    const list = commands.length ? commands.map((c) => `<code class="mono">${esc(c)}</code>`).join(' · ') : esc(t('workflow_inputs.checks_none'));
+    return [list, ...rewrites.map((r) => esc(t('workflow_inputs.checks_rewrites', { name: r.name, why: r.why })))].join('<br>');
+  }
+
   function note(field, text, title) {
     const slot = field.querySelector('.wi-note');
     if (slot) slot.innerHTML = text ? ` <span class="badge wi-badge" title="${esc(title)}">${esc(text)}</span>` : '';
@@ -468,10 +492,13 @@
 
   const api = {
     applyHints,
+    checksHtml,
+    checksOf,
     differHtml,
     differing,
     evalCondition,
     fieldHtml,
+    forgetHints,
     formHtml,
     hintsOf,
     humanize,

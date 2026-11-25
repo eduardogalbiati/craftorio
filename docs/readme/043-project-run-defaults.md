@@ -39,7 +39,8 @@ Where each input of feature, fix and release gets its project value:
 | `base_branch` | the repository's default branch |
 | `base_behind` | no workflow input: what a roadmap does when its local base is behind origin (#805). `update` fast-forwards it first, `continue` goes on from it; empty asks at Start and goes on when nobody is there. Project settings |
 | `test_command` (release: `unit_command`) | the profile's test command, else discovery (`package.json`, `go.mod`, `Cargo.toml` → `cargo test`, …) |
-| `check_command` | the profile's check command, else the project's check discovery |
+| `check_command` | the profile's check command, else the project's `check` script; `off` (Project settings) runs none |
+| `check_commands` | no workflow input: what the rule check runs without a `check_command` (#50), the `check` script or the linter and type checker found; shown in Project settings and Start |
 | `e2e_tests` (release: `e2e_suite`) | `off` for a backend, a unit-only profile or no E2E suite found |
 | `e2e_command` | the profile's E2E command or the suite found (Playwright / Cypress config); empty otherwise |
 | `ui_folders` | the UI folders found; empty for a backend |

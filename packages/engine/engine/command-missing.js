@@ -2,6 +2,7 @@
 // and the suite step (suite-step.js). cmd says it in the system's language and code page, and exits 1
 // (npm too): the text is never read, the program is looked up the way cmd does (the command's folder,
 // then PATH, with PATHEXT; a script of package.json has the node_modules/.bin folders before PATH).
+// programOnPath (#50, any platform): whether a program is installed, for the check step's own tools (check-tools.js).
 // Only the first program is looked up, and only when it must have run: anything this file cannot
 // decide (another separator than `&&`, `%VAR%`, a group, no PATH or PATHEXT, a script shell other
 // than cmd) is not missing. Linux and macOS never get here: their shells exit 127.
@@ -115,6 +116,20 @@ function programThere(name, { cwd, dirs, exts }) {
   return folders.some((d) => names.some((n) => fileThere(path.resolve(cwd, d, n))));
 }
 
+// #50: whether a folder of the PATH a command runs with has the program `name` (the current folder does not count),
+// executable on Linux and macOS, with an extension of PATHEXT on Windows
+function programOnPath(name, { env = process.env, platform = process.platform } = {}) {
+  if (platform === 'win32') {
+    const exts = listOf(envValue(env, 'PATHEXT'));
+    return listOf(envValue(env, 'PATH')).some((dir) => exts.some((ext) => fileThere(path.join(dir, name + ext))));
+  }
+  return String(env.PATH || '').split(':').filter(Boolean).some((dir) => {
+    const file = path.join(dir, name);
+    try { fs.accessSync(file, fs.constants.X_OK); } catch { return false; }
+    return fileThere(file);
+  });
+}
+
 // The node_modules/.bin folders npm puts before PATH for a script of cwd's package.json
 function binDirs(cwd) {
   const dirs = [];
@@ -168,4 +183,5 @@ function programMissing(command, { code, timedOut = false, cwd, env = process.en
 module.exports = {
   isMissingCode,
   programMissing,
+  programOnPath,
 };

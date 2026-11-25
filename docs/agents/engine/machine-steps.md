@@ -121,8 +121,12 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   (`vars.baseline_returns`).
 - A **check step** (`type: check`, no agent, no model call, #404; `runCheckStep` →
   `packages/engine/engine/check-step.js`): the project's rule checks in the run's checkout, `command` (a
-  template; empty: `npm run check` when the project's package.json has a `check` script) through the
-  suite's `runCommand`, `timeout` optional (default 10m), the log in `logs/check-<visit>.log`. `dir` (a
+  template; empty: `npm run check` when the project's package.json has a `check` script, else every linter and
+  type checker the project configures and has installed, #50, `check-tools.js`; `off`: none) through the
+  suite's `runCommand`, `timeout` optional (default 10m), the log in `logs/check-<visit>.log` (a found tool's:
+  `check-<visit>-<tool>.log`, and `-base.log` for its run on the base). A found tool that fails is compared with
+  the run's base checkout (`suiteBase`, `check-findings.js`): only new findings fail the step, `notes` says the
+  rest, what cannot be compared is reported without blocking. `dir` (a
   template, #63) runs it in another folder, for a workflow without a worktree (backlog-refresh's
   `repository` step); the processes of that folder are never swept. It runs
   in a mock run too (a local, free check, like the test id step). Output `{ kind: 'check', status:
@@ -130,8 +134,8 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   lines, `skipped` when there is no checkout or no command. A missing command is an environment
   failure (#30): exit code 127 or the shell's own line, and on Windows (exit code 1, a translated text)
   the command's program, or the one its npm script starts, found nowhere (#67,
-  `packages/engine/engine/command-missing.js`). ai-development-local-hero runs it as
-  `rule_check` after each develop commit (input `check_command`), the last agent-less step before
+  `packages/engine/engine/command-missing.js`). feature, fix and refactor (#50) and
+  ai-development-local-hero run it as `rule_check` after each develop commit (input `check_command`); in feature it is the last agent-less step before
   the owner's gate or the review; the routes into it test `worktree_dir | check_command(...)` (the
   template filter), so a project without a check command never visits it. A failure goes back to
   develop with the findings at most twice per review round (`vars.check_returns`), then to the

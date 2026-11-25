@@ -6,7 +6,8 @@
 # only: the run starts from base_branch; the release workflow ships the patch). A step
 # `{ id, fragment: fix-pipeline }` gets the body under its id; the step's own keys win
 # (packages/engine/engine/run/load.js, expandFragments). The bodies read only the inputs task, issue,
-# hotfix and base_branch and the steps reproduce, develop, code_review, suite, e2e and verify_change.
+# hotfix and base_branch and the steps reproduce, develop, rule_check (#50, fix.yaml only), code_review,
+# suite, e2e and verify_change.
 
 steps:
   reproduce:
@@ -41,7 +42,8 @@ steps:
       {% if steps.reproduce.output %}It reproduces with `{{ steps.reproduce.output.command }}`: {{ steps.reproduce.output.observed }}
       {% endif %}{% if inputs.hotfix %}Hotfix: the smallest change that removes the bug, nothing else.
       {% endif %}{% else %}Back on your fix:
-      {% if steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
+      {% if previous_step == 'rule_check' and steps.rule_check.output and steps.rule_check.output.status == 'fail' %}The orchestrator ran the project's rule checks after your commit, and they fail (never weaken a rule or a test): {{ steps.rule_check.output.message }}
+      {% elif steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
       {% for f in steps.code_review.output.findings %}- {{ f }}
       {% endfor %}{% endif %}{% if steps.suite.output and steps.suite.output.status not in ['pass', 'not_run'] %}The test suite failed: {{ steps.suite.output.message }}
       {% endif %}{% if steps.e2e.output and steps.e2e.output.status != 'pass' %}The E2E suite failed: {{ steps.e2e.output.message }}

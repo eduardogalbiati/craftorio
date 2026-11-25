@@ -1,10 +1,14 @@
 # =============================================================================
 # Workflow: Fix (#630, spec R8)
-#   reproduce ─► develop ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
-#                                                                  └─ Remote: ci (PR + CI) ─► pr_monitor ─► end
+#   reproduce ─► develop ─► rule_check ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
+#                                                                                └─ Remote: ci (PR + CI) ─► pr_monitor ─► end
 #   - reproduce (the developer): one command that shows the bug for the reported reason, a failing
 #     regression test when it can; no production code yet (fragments/fix-pipeline.yaml).
 #   - develop: the fix of the root cause, with the regression test that failed before it.
+#   - rule_check (no agent, #50): the project's rule checks after each fix commit, as feature's: the
+#     check_command, the `check` script, else its own linter and type checker, only for what the change
+#     added. Back to develop at most twice, then check_failed; an environment failure (#30) stops at
+#     check_environment (fragments/check-pipeline.yaml).
 #   - code_review, suite, verify_change, verify_failed: fragments/dev-pipeline.yaml.
 #   - Local mode: the run's branch is merged into the local base (resolve_merge / merge_blocked on a
 #     conflict, fragments/local-merge-pipeline.yaml), then push_main pushes it (the project auto-push
@@ -109,6 +113,12 @@ inputs:
     default: ""
     label: Test command
     description: "The project's whole-suite command (e.g. npm test, cargo test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+  # #50: the project's fast rule checks, run after each developer commit (rule_check)
+  check_command:
+    type: string
+    default: ""
+    label: Check command
+    description: "The project's fast rule checks (lint, types...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script (npm run check), else the linter and the type checker the project itself configures and has installed (only what the change added goes back); a project with none skips the step. off: no checks."
   # #71: the owner's policy for a project with no test command and no test file
   no_tests:
     type: string
@@ -219,7 +229,24 @@ steps:
     agent: developer
     transitions:
       - when: "true"
+        goto: rule_check
+  # #50: the project's rule checks after each commit (no agent), as feature.yaml's rule_check (#404): the
+  # check_command, the `check` script, else the project's own linter and type checker; none: skipped.
+  # Findings go back at most twice (a pass resets the count), then to you at check_failed.
+  - id: rule_check
+    fragment: check-pipeline
+    transitions:
+      # #30: the environment, not the code: no round counted
+      - when: "output.status == 'fail' and output.failure_kind == 'environment'"
+        goto: check_environment
+      - when: "output.status == 'fail' and (vars.check_returns or 0) | int < 2"
+        goto: develop
+        set: { check_returns: "{{ (vars.check_returns or 0) | int + 1 }}" }
+      - when: "output.status == 'fail'"
+        goto: check_failed
+      - when: "true"
         goto: code_review
+        set: { check_returns: "0" }
   - id: code_review
     fragment: dev-pipeline
     agent: reviewer
@@ -297,6 +324,25 @@ steps:
         goto: end
         status: failed
 
+  # #404: still failing after the developer's rounds. A decision: neither the supervisor nor a retry answers it
+  - id: check_failed
+    fragment: check-pipeline
+    choices:
+      - { id: continue, label: "Continue to the review anyway", help: "The review and the suite run; the change is reported as not passing the rule checks." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      - when: "true"
+        goto: code_review
+        set: { check_returns: "0" }
+
+  # #30: the checks cannot run here (dependencies not installed, a command missing): you fix the environment
+  # and try again; no round counted. A decision, like check_failed
+  - id: check_environment
+    fragment: check-pipeline
+
   # ============================ LOCAL MODE ===================================
   - id: resolve_merge
     fragment: local-merge-pipeline
@@ -317,11 +363,11 @@ steps:
 
 groups:
   - name: Develop
-    steps: [reproduce, develop]
+    steps: [reproduce, develop, rule_check]
   - name: Review
     steps: [code_review]
   - name: Validate
-    steps: [suite, verify_change, validate, verify_failed]
+    steps: [suite, check_failed, check_environment, verify_change, validate, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_monitor]
 

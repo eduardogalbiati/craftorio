@@ -22,7 +22,8 @@ mix structural and behavioural changes in one commit):
    (`edits_tests: false`) and the pinned tests are locked (`protect_files`): a turn that changes one
    is refused. No behaviour change, no dependency upgrade, no rename of a public interface the issue
    does not name.
-4. **Gates**: the project's full suite (`suite`, no agent; in this repository it includes the
+4. **Gates**: the project's rule checks after each commit (`rule_check`, no agent, #50: Feature's rounds and
+   gates), the project's full suite (`suite`, no agent; in this repository it includes the
    code-health ratchets) and the build audit (`build`).
 5. **Review** (`review`): one question, "same behaviour, simpler structure?", answered from the
    before/after figures of the target (lines, files touched by the change, complexity, or the

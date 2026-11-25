@@ -26,16 +26,16 @@
 #     code_review still checks the acceptance files are unchanged (`git diff`), as a second line.
 #   - rule_check (no agent, #404): after each develop commit (after the test-id check and the
 #     screenshots, before the owner's gate or the review) the orchestrator runs the project's
-#     rule checks (`check_command`, or the `check` script of its package.json; none: skipped). A
-#     failure goes back to develop with the findings, at most twice per review round, then to the
+#     rule checks (`check_command`, or the `check` script of its package.json, else the linter and
+#     type checker it configures and has installed, #50, only for what the change added; none or
+#     `check_command: off`: skipped). A failure goes back to develop with the findings, at most twice per review round, then to the
 #     owner at check_failed; never to the test writer. The suite still runs every test after it.
 #     An environment failure (#30: no dependencies installed, a command not found) never goes back
 #     to develop nor counts as a round: the run stops once at check_environment (Try again reruns it).
 #   - docs_check (no agent, #757): right after rule_check (or in its place without a check command),
 #     when the issues list docs under `## Expected files`: none of them touched by the run's diff
 #     (and not in left_out with a reason) goes back to develop once per review round.
-#   - unit_tests defaults to run_existing (the suite after the review, no second test-writer
-#     step); e2e_tests to off.
+#   - unit_tests defaults to write_and_run and so does e2e_tests (off when the project has no E2E suite).
 # The rule "the developer never writes tests" (#47) becomes, here only: the developer never edits
 # the acceptance tests written before it, and may add internal tests.
 # Everything below is inherited from Software Development, local hero:
@@ -383,7 +383,7 @@ inputs:
     default: ""
     label: Check command
     group: Checks
-    description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check); a project without one skips the step."
+    description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check), else the linter and the type checker the project itself configures and has installed (only what the change added goes back); a project with none skips the step. off: no checks."
   # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
   # continue, a suite red only outside the change goes on to the build without the test_failed gate.
   suite_red_outside_change:
@@ -1291,10 +1291,13 @@ steps:
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
       {% endif %}
-      Before your final answer, run the project's check command (`{{ inputs.check_command or 'npm run check' }}`
+      {% if inputs.check_command | checks_off %}The project's rule checks are turned off for this run: run none (`checks: off`).
+      {% else %}{% set checks = worktree_dir | check_command(inputs.check_command) %}Before your final answer, run the project's check command (`{{ checks or inputs.check_command or 'npm run check' }}`
       when it has one; no check command: say so) in the foreground, output in a log, fix what it
       reports and commit. Record the result in `checks` (`checks: pass` or the findings left). The
-      orchestrator runs it again after your commit and sends failures back here.
+      orchestrator runs it again after your commit and sends failures back here.{% if checks not in ['', 'npm run check', (inputs.check_command or '') | trim] %}
+      These are the project's own linter and type checker (#50): only what your change added goes
+      back, leave the findings the base has.{% endif %}{% endif %}
       Your turn ends at green acceptance tests and a commit: answer once the ```run-tests block
       passes and the change is committed. The code_review step reviews your diff next, in its own
       session: never start a sub-agent to review your diff.
@@ -1419,16 +1422,15 @@ steps:
 
   # #404: the project's rule checks (lint, layers, file sizes, code health, docs, types...), run by
   # the orchestrator after each develop commit (no agent, no model call, about a minute): the
-  # check_command input, or `npm run check` when the project's package.json has a `check` script.
+  # check_command input, or `npm run check` when the project's package.json has a `check` script, else
+  # the project's own linter and type checker (#50: findings the base has are said, never sent back).
   # It is the last agent-less step after develop (after testid_check and the screenshots), just
   # before the owner's gate or the review; a project without a check command never reaches it.
   # Findings go back to the developer, at most twice per review round (a pass resets the count),
   # then to the owner at check_failed; never to the test writer. The suite still runs every test,
   # the rule tests included.
   - id: rule_check
-    display: Rule checks
-    type: check
-    command: "{{ inputs.check_command }}"
+    fragment: check-pipeline
     transitions:
       # #30: the environment, not the code (no dependencies installed): the owner fixes it, no round counted
       - when: "output.status == 'fail' and output.failure_kind == 'environment'"
@@ -2255,14 +2257,7 @@ steps:
   # gate (a decision: neither the supervisor nor a retry answers it). Continue takes rule_check's
   # routes after a pass; the suite's rule tests still report what is left.
   - id: check_failed
-    type: human_approval
-    summary: |
-      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s) (`{{ steps.rule_check.output.command }}`).
-      - ✖ {{ (steps.rule_check.output.cause or steps.rule_check.output.findings | last) | one_line(240) }}
-    message: |
-      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s): {{ steps.rule_check.output.cause }}
-      {{ steps.rule_check.output.message }}
-      The change is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
+    fragment: check-pipeline
     choices:
       - { id: continue, label: "Continue to the review anyway", help: "The review and the suite run; the change is reported as not passing the rule checks." }
       - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
@@ -2286,27 +2281,7 @@ steps:
   # (npm ci in the folder the cause names) and tries again, which reruns rule_check. A decision, like
   # check_failed: neither the supervisor nor a retry answers it.
   - id: check_environment
-    type: human_approval
-    summary: |
-      The project's rule checks cannot run: {{ steps.rule_check.output.cause }}
-    message: |
-      {{ steps.rule_check.output.cause }}
-      No developer round was counted. Fix the environment, then try again: the rule checks run again.
-    environment: rule_check
-    choices:
-      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed.", help_key: engine.check_environment_retry_help }
-      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it.", help_key: engine.check_environment_stop_help }
-    transitions:
-      - when: "choice == 'stop'"
-        goto: end
-        status: failed
-      # a gate answered by its first choice (--auto-approve, the simulated automations) must not loop
-      # forever on an environment nobody fixes: 3 retries, then the run ends as failed
-      - when: "true"
-        goto: rule_check
-        max_visits: 3
-        on_exhausted: end
-        status: failed
+    fragment: check-pipeline
 
   - id: test_failed
     type: human_approval
