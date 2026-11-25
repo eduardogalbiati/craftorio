@@ -221,8 +221,8 @@ Then('the project\'s Workflows block offers {string}', async ({ e2e }, label) =>
 // What the screens expose (the renderer's contract for these steps):
 // - data-testid="project-ways-of-working": the project page's button that opens the interview;
 // - data-testid="ways-of-working-drawer": the interview drawer (role="dialog");
-// - data-testid="ways-of-working-estimate": the analysis's cost, "≈ US$ <n>" or "no estimate yet",
-//   shown before anything runs; "ways-of-working-analyze": the button that starts the analysis;
+// - data-testid="ways-of-working-estimate": the analysis's cost, "≈ US$ <n>", "no estimate yet" or
+//   "free" (#74: no model is called, as in a simulation), shown before anything runs; "ways-of-working-analyze": the button that starts the analysis;
 //   "ways-of-working-cancel": Cancel (closes the drawer, runs nothing); "ways-of-working-close": closes it;
 // - data-testid="ways-of-working-profile": the inferred profile, its labels ("Solo: local merge",
 //   "Team: ...", "Release: milestone"...); one data-testid="ways-of-working-evidence" per fact behind it;
@@ -283,7 +283,8 @@ When('I open the Ways of working interview', async ({ e2e }) => {
 Then('the interview shows the analysis\'s cost estimate before anything runs', async ({ e2e }) => {
   const estimate = interviewPart(e2e.window, 'ways-of-working-estimate');
   await expect(estimate).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(estimate).toContainText(/≈\s*US\$\s*\d|no estimate yet/i, { timeout: LOAD_TIMEOUT });
+  // #74: "free" when no model is called, which a simulation (every E2E run) never does
+  await expect(estimate).toContainText(/Analysis cost:\s*(≈\s*US\$\s*\d|no estimate yet|free)/i, { timeout: LOAD_TIMEOUT });
   await expect(interviewPart(e2e.window, 'ways-of-working-analyze')).toBeEnabled();
   await expect(visible(interview(e2e.window).getByTestId('ways-of-working-profile'))).toHaveCount(0);
   expect(waysOfWorkingRuns(e2e), 'ways-of-working runs in the workspace').toEqual([]);
