@@ -6,7 +6,7 @@ source: CHANGELOG.md (English)
 
 Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos seus documentos do SDLC; `#123` leva à issue.
 
-## [1.0.0] - 2026-11-24
+## [1.0.0] - 2026-11-25
 
 > A primeira release com o nome Craftorio. As versões recomeçam; as releases abaixo são do Multiagent Orchestrator, o mesmo app.
 
@@ -31,6 +31,8 @@ Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos se
 - Uma dependência faltando na primeira run para uma vez num gate, em vez de mandar o desenvolvedor de volta (#30).
 - Uma run simulada não mostra gasto (#31).
 - A gaveta do Product Owner não leva o texto não enviado de outro projeto (#26); Iniciar abre no workflow padrão do projeto (#27).
+- O Backlog Refresh funciona num projeto criado de uma pasta local: acha o repositório no GitHub ou GitLab por trás da pasta, e para antes de qualquer chamada de modelo quando não há nenhum (#63, #65).
+- O guarda de servidor deixado em primeiro plano para o servidor certo no Windows e no Linux, pela hora de início, nunca o que o agente iniciou em segundo plano (#66).
 
 ## [1.4.0] - 2026-10-26
 

@@ -6,7 +6,7 @@ translation: CHANGELOG.pt-BR.md
 
 Every release of the app, newest first. Items link to their SDLC documents; `#123` links to the issue.
 
-## [1.0.0] - 2026-11-24
+## [1.0.0] - 2026-11-25
 
 > The first release under the name Craftorio. Versions start again; the releases below are of the Multiagent Orchestrator, the same app.
 
@@ -31,6 +31,8 @@ Every release of the app, newest first. Items link to their SDLC documents; `#12
 - A missing dependency in a first run stops once at a gate instead of sending the developer back (#30).
 - A simulated run shows no spend (#31).
 - The Product Owner drawer does not carry another project's unsent text (#26); Start opens on the project's default workflow (#27).
+- Backlog Refresh works on a project created from a local folder: it finds the GitHub or GitLab repository behind the folder, and stops before any model call when there is none (#63, #65).
+- The guard for a server left in the foreground stops the right one on Windows and Linux, by its start time, never the one the agent started in the background (#66).
 
 ## [1.4.0] - 2026-10-26
 
