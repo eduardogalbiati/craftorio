@@ -94,7 +94,7 @@
     }
     // context window: at the first request of the turn → its largest request (a fresh session starts small)
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
-    const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
+    const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · ${it.costUnknown ? esc(t('run_list.cost_unknown')) : `$${it.cost.toFixed(2)}`} · ${fmtSecs(it.durationMs)}` : '';
     return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
       <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? turnModelTag(it) : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
@@ -289,7 +289,7 @@
         const ok = it.status === 'success';
         const tested = testedPill(it);
         // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? t('runchat.done') : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? t('runchat.done') : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · ${it.costApprox ? '≈ ' : ''}$${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
           <button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_a')}">${t('runchat.resume_from_step')}</button></div>`;
       }
       default: return '';
@@ -365,7 +365,7 @@
     pill.dataset.status = waiting ? 'waiting' : status;
     pill.textContent = StatusPill.statusLabel(status, { waiting: !!waiting });
     // #31: a simulated run reads $0.00 (the title's badge says simulated)
-    $c('#rc-cost').textContent = r.mock ? '$0.00' : r.cost ? `$${r.cost.toFixed(2)}` : '';
+    $c('#rc-cost').textContent = r.mock ? '$0.00' : r.cost ? `${r.costApprox ? '≈ ' : ''}$${r.cost.toFixed(2)}` : '';
     $c('#rc-stop').classList.toggle('hidden', !chat.live);
   }
 

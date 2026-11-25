@@ -9,6 +9,12 @@
   // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
   // packages/shared/providers/, resolves both).
   const registry = typeof module === 'object' && module.exports ? require('@craftorio/shared/providers') : root.Providers;
+  const cost = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/session-cost') : root.SessionCost);
+  // a finished run's total (#72): its sessions', as on every screen; a summary without them: what it says
+  const endCost = (s, run) => {
+    const total = s.sessions?.length ? cost().runCost(s.sessions, null) : { usd: s.cost_usd ?? run.cost, approx: s.cost_approx || run.costApprox };
+    return { cost: total.usd, costApprox: !!total.approx };
+  };
   // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
   const cliNamed = (key) => {
     const a = registry.resolve(key);
@@ -259,7 +265,9 @@
       const s = ev.session ? { ...known, ...sessionInfo({ ...known, ...ev.session }) } : known;
       this.sessions.set(ev.session_id, s);
       this.active.delete(ev.session_id);
-      this.run.cost += ev.cost_usd || 0;
+      const { usd, approx } = cost().turnCost(ev); // #72: a turn of unknown cost counts the CLI's figure, marked
+      this.run.cost += usd;
+      this.run.costApprox ||= approx;
       const t = this.turns.get(`${ev.session_id}:${ev.turn}`) || { activity: [] };
       this.turns.delete(`${ev.session_id}:${ev.turn}`);
       const stepId = baseStep(ev.step_id);
@@ -271,7 +279,7 @@
         kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider, simulates: s.simulates || null,
         model: s.model || '', effort: s.effort || null, mode: s.mode || null, side: this.sideOf(s.agent || '?'), stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
         tokensIn: (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0), tokensOut: u.output || 0,
-        cost: ev.cost_usd || 0, durationMs: ev.duration_ms || 0, parent: group?.id,
+        cost: ev.cost_usd || 0, costUnknown: approx, durationMs: ev.duration_ms || 0, parent: group?.id,
         // the engine takes the ```handoff block out of the answer; context = { start, peak } tokens
         handoff: ev.handoff || null, context: ev.context || null, fresh: ev.turn === 1,
       });
@@ -542,7 +550,7 @@
       for (const it of this.machine.values()) { Object.assign(it, { state: ev.status === 'success' ? 'passed' : 'failed', finishedAt: ev.ts || null, waitingReason: null }); this.touch(it); }
       this.machine.clear();
       // tested (#396): 'not green' when the run went on without a green suite; 'no tests' (#71)
-      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), cost: s.cost_usd ?? this.run.cost, durationMs: s.duration_ms || 0, tested: s.tested || null });
+      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), ...endCost(s, this.run), durationMs: s.duration_ms || 0, tested: s.tested || null });
     },
   };
 

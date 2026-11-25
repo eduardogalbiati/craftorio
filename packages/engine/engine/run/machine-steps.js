@@ -735,7 +735,7 @@ const methods = {
       }
       if (type === 'workflow.child_finished') {
         const c = this.childRuns.find((x) => x.run_id && x.run_id === data.child_run_id);
-        if (c) Object.assign(c, { status: data.status, cost_usd: data.cost_usd || 0 });
+        if (c) Object.assign(c, { status: data.status, cost_usd: data.cost_usd || 0, ...(data.cost_approx ? { cost_approx: true } : {}) });
       }
       this.emitEvent(type, data);
     };

@@ -634,6 +634,7 @@ function runInputs(item, wf, folder, projectDefaults = null) {
 // runs change (statuses, runs, estimates), so the screen fetches the whole Backlog only when an edit
 // changed the stages (an issue added to an item, a note, a cut line), not on every status write
 const LIVE_KEYS = new Set([
+  'actualApprox',
   'actualMinutes',
   'actualTopStep',
   'actualUsd',
@@ -661,7 +662,7 @@ function backlogState(data) {
   const runOf = (x) => {
     if (!LIVE_ITEM_STATES.has(x.status)) return {};
     // #615: a live run's cost so far, so the card's cost meter follows it without a full read
-    const cost = typeof x.actualUsd === 'number' ? { actualUsd: x.actualUsd } : {};
+    const cost = typeof x.actualUsd === 'number' ? { actualUsd: x.actualUsd, ...(x.actualApprox ? { actualApprox: true } : {}) } : {};
     if (!x.run) return cost;
     const { status, mock, startedAt, finishedAt, waiting, gate, atGate, progress, error, mergedCommit } = x.run;
     // #614: a run that merged while live (a parked item's) shows its Merge station done

@@ -9,7 +9,8 @@
 //     zero); an item waiting for its merge (#797) counts as an item, with nothing left to spend; an item
 //     without an estimate is listed, never counted as zero. Stages run in sequence, a stage's items in
 //     parallel: minutes is the sum of each stage's longest remainder (gates not counted).
-//   spent { usd, since }: the real cost of the finished and running items; since: the oldest item origin.
+//   spent { usd, since, approx? }: the real cost of the finished and running items; since: the oldest item
+//     origin; approx (#72): it includes a cost the app does not know.
 //   releases: per cut line in stage order ({ version, at }: the stages after the previous line up to
 //     stage `at`, plus the release run's own estimate), then { after: true } for the rest; [] without lines.
 // #750: stats(roadmap) the Roadmap header's numbers as values (null when unknown; backlog-live.js statsHtml draws the four
@@ -57,11 +58,12 @@
     const list = Array.isArray(stages) ? stages : [];
     const parts = list.map(stagePart);
     let spent = 0;
+    let approx = false;
     let costed = 0; // #750: the items with a real cost (the header's Spent is "—" without one)
     let since = null;
     for (const x of list.flatMap((s) => (Array.isArray(s.items) ? s.items : []))) {
       // #31: a simulated run spends nothing
-      if (['done', 'parked', 'running', 'waiting_merge'].includes(x.status) && num(x.actualUsd) !== null && !model().isSimulated(x)) { spent += num(x.actualUsd); costed += 1; }
+      if (['done', 'parked', 'running', 'waiting_merge'].includes(x.status) && num(x.actualUsd) !== null && !model().isSimulated(x)) { spent += num(x.actualUsd); costed += 1; approx ||= !!x.actualApprox; }
       if (x.origin && (!since || Date.parse(x.origin) < Date.parse(since))) since = x.origin;
     }
     const lines = (Array.isArray(releases) ? releases : []).filter((x) => num(x?.at) !== null && x.at >= 0).sort((a, b) => a.at - b.at);
@@ -72,7 +74,7 @@
       from = line.at + 1;
     }
     if (lines.length) split.push({ after: true, ...total(parts.slice(from)) });
-    return { planned: total(parts), spent: { usd: round(spent), since, items: costed }, releases: split };
+    return { planned: total(parts), spent: { usd: round(spent), since, items: costed, ...(approx ? { approx } : {}) }, releases: split };
   }
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

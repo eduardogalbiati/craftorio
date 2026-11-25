@@ -38,12 +38,15 @@ module.exports = (ctx) => {
   const oracleDir = () => ctx.ws.oracle || path.join(ctx.ws.root, 'oracle');
   const supervisorDir = () => ctx.ws.supervisor || path.join(ctx.ws.root, 'supervisor');
 
-  // The Oracle's and (#280) the Supervisor chat's spend is in no run folder: their days are added as
-  // runs (computeUsage's and budgetBaseline's `extraRuns`). The Product Owner's month joins the
-  // budget checks through usage.withPeerUsage.
+  // The Oracle's, (#280) the Supervisor chat's and (#72) the Product Owner's spend is in no run folder:
+  // their days are added as runs (computeUsage's and budgetBaseline's `extraRuns`).
   function agentUsageRuns() {
     const { timeZone } = workspace.readSettings(ctx.ws);
-    return [...oracle.usageRuns(oracleDir(), timeZone), ...supervisorChat.usageRuns(supervisorDir(), timeZone)];
+    return [
+      ...oracle.usageRuns(oracleDir(), timeZone),
+      ...productOwner.usageRuns(ctx.ws.backlog, timeZone),
+      ...supervisorChat.usageRuns(supervisorDir(), timeZone),
+    ];
   }
 
   // Analytics' Agents tab (#280): the three agents' totals, days and sessions in a range of the

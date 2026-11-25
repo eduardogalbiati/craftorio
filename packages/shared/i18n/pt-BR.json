@@ -5266,7 +5266,9 @@
   "run_list.commits_of_this_run_newest_first": "Commits desta execução, mais recentes primeiro",
   "run_list.cost": "custo",
   "run_list.cost_2": "Custo",
+  "run_list.cost_approx_tip": "Inclui turnos de custo desconhecido (sem preço para o modelo): o valor do próprio CLI, nas tarifas de outro modelo, ou nada quando ele não informou. Adicione o preço em Uso › Preços: ele vale a partir das próximas execuções.",
   "run_list.cost_not_recorded": "custo não registrado",
+  "run_list.cost_unknown": "desconhecido",
   "run_list.could_not_load_more_runs": "Não foi possível carregar mais execuções:",
   "run_list.could_not_load_runs_error": "Não foi possível carregar as execuções: {error}",
   "run_list.could_not_load_the_artifacts": "Não foi possível carregar os artefatos:",
@@ -6164,6 +6166,7 @@
   "usage.usage_value": "Valor de uso",
   "usage.usd_per_1m_tokens_used_to": "USD por 1M de tokens, usado para estimar o custo quando o CLI não o informa.",
   "usage.warning_only_runs_are_not_blocked": "Só aviso, as execuções não são bloqueadas.",
+  "usage.what_the_total_counts": "Além das execuções, o total conta as chamadas do Oracle, do chat do Supervisor e do Product Owner; as do designer de mockups, da vigia do supervisor e das análises dele pedidas em uma tela não são contadas.",
 
   "usage_widget.against_the_daily_budget": ", contra o orçamento diário{raised}: os roadmaps pausam antes de um início que o ultrapassaria",
   "usage_widget.against_the_night_budget": ", contra o orçamento da noite{raised}: os roadmaps pausam antes de um início que o ultrapassaria",

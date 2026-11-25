@@ -7,7 +7,7 @@
 // SAME_INPUTS of them, else scaled (STEP_FACTORS): the test step by `unit_tests` / `e2e_tests` (#203),
 // the screenshots and evidence steps by `screenshots` (#205; the Cost step sets these inputs). A step
 // turned off costs nothing. Sessions without a reported cost (Codex) are priced from their tokens ×
-// settings.prices (packages/engine/domains/usage/usage.js sessionCost) and the estimate is marked `estimated`. No history:
+// settings.prices (packages/shared/session-cost.js) and the estimate is marked `estimated`. No history:
 // null ("no estimate yet"). Pure: the service passes the run list (packages/engine/domains/run/runs.js listRuns).
 // Time (#215): the same rules on each step's duration (the run's `progress` trail, human gates left
 // out), so an estimate also has `minutes`; a run without a trail counts its whole duration as one
@@ -18,9 +18,9 @@
 // cost of a finished item next to it) and by its budget cap (packages/engine/domains/usage/budget.js).
 
 const path = require('path');
-const { stageActualUsd } = require('@craftorio/shared/roadmap-model');
+const { stageActualApprox, stageActualUsd } = require('@craftorio/shared/roadmap-model');
+const { runCost, sessionCost, tokenPricedUsd } = require('@craftorio/shared/session-cost');
 const { complexityOf } = require('../roadmap/live-roadmap');
-const { sessionCost } = require('./usage');
 
 const HISTORY = 30;
 const SAME_INPUTS = 3;
@@ -74,7 +74,7 @@ function pastRun(run, byNumber, prices) {
   let estimated = false;
   for (const s of run.sessions) {
     const id = String(s.step_id || 'run');
-    const cost = s.cost_usd ? s.cost_usd : sessionCost(s, prices);
+    const cost = sessionCost(s, prices);
     if (cost == null) continue;
     if (!s.cost_usd && cost) estimated = true;
     steps[id] = (steps[id] || 0) + cost;
@@ -178,11 +178,14 @@ const RELEASE_WORKFLOW = 'release.yaml';
 const runsOf = (item, runById) => [...new Set([...(item?.runs || []), ...(item?.runId ? [item.runId] : [])])].map((id) => runById.get(id)).filter(Boolean);
 
 /** The real cost of an item's runs (`runs`: listRuns rows by id), null when it has none (#31: a simulated run counts 0). */
-function actualCost(item, runById) {
+function actualCost(item, runById, prices = {}) {
   const found = runsOf(item, runById);
   if (!found.length) return null;
-  return round(found.reduce((a, r) => a + (r.mock ? 0 : (r.costUsd || 0) + (r.childrenCostUsd || 0)), 0));
+  return round(found.reduce((a, r) => a + (r.mock ? 0 : (r.costUsd || 0) + tokenPricedUsd(r.sessions, prices) + (r.childrenCostUsd || 0)), 0));
 }
+
+/** #72: whether that cost includes one the app does not know (shown "≈"). */
+const actualApprox = (item, runById, prices = {}) => runsOf(item, runById).some((r) => !r.mock && (runCost(r.sessions, prices).approx || !!r.childrenCostApprox));
 
 /**
  * The real duration of an item's runs in minutes (gate waits left out; elapsed while one runs) and its
@@ -202,7 +205,7 @@ function actualTime(item, runById) {
  * The roadmap with an `estimate` on each item and stage, and the real cost (`actualUsd`) and duration
  * (`actualMinutes`, `actualTopStep`) of each item with a run. A stage's estimate sums its items' costs
  * and takes its longest item's minutes (`missing`: items with no estimate yet); its `actualUsd` sums
- * its items' real costs, its `actualMinutes` is its longest item's.
+ * its items' real costs (`actualApprox`, #72: one of them includes a cost the app does not know), its `actualMinutes` is its longest item's.
  * @param {import('@craftorio/shared/types').Roadmap} roadmap
  * @param {any[] | null | undefined} runs
  * @param {{ issues?: any[], prices?: object }} [options]
@@ -216,12 +219,13 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
       if (s.kind === 'release') return s.runId ? s : { ...s, estimate: estimateItem({ workflow: RELEASE_WORKFLOW }, runs, { prices, complexity: 1 }) };
       const items = (s.items || []).map((x) => {
         const estimate = estimateItem(x, runs, { issues, prices });
-        const actualUsd = actualCost(x, runById);
+        const actualUsd = actualCost(x, runById, prices);
         const time = actualTime(x, runById);
         return {
           ...x,
           estimate,
           ...(actualUsd != null ? { actualUsd } : {}),
+          ...(actualApprox(x, runById, prices) ? { actualApprox: true } : {}),
           ...(time ? { actualMinutes: time.minutes, actualTopStep: time.topStep } : {}),
         };
       });
@@ -242,6 +246,7 @@ function withEstimates(roadmap, runs, { issues = [], prices = {} } = {}) {
         } : null,
         ...(actualUsd != null ? {
           actualUsd,
+          ...(stageActualApprox(items) ? { actualApprox: true } : {}),
           actualMinutes: Math.max(0, ...items.map((x) => x.actualMinutes || 0)),
         } : {}),
       };

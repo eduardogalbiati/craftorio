@@ -132,7 +132,7 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
     const item = items[index];
     const label = foreach ? itemLabel(item, index) : null;
     const base = { index, ...(foreach ? { item } : {}), run_id: null, status: 'failed', error: null, outputs: {} };
-    let cost = 0;
+    let cost = { cost_usd: 0 };
     let handle = null;
     if (paused()) {
       results[index] = { ...base, status: 'paused', error: 'not started: the run was paused' };
@@ -160,7 +160,7 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
       });
       const end = await child.finished;
       Object.assign(base, { status: end.status || 'failed', error: end.error || null, outputs: end.outputs || {} });
-      cost = +end.cost_usd || 0;
+      cost = { cost_usd: +end.cost_usd || 0, ...(end.cost_approx ? { cost_approx: true } : {}) };
     } catch (e) {
       base.error = e.message;
       // stopped while it waited for a slot of Settings › Execution (#175)
@@ -169,7 +169,7 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
       live.delete(index);
       if (handle) handles?.delete(handle);
     }
-    emit('workflow.child_finished', { step_id: step.id, child_run_id: base.run_id, workflow, status: base.status, error: base.error, cost_usd: cost, ...(foreach ? { index, label } : {}) });
+    emit('workflow.child_finished', { step_id: step.id, child_run_id: base.run_id, workflow, status: base.status, error: base.error, ...cost, ...(foreach ? { index, label } : {}) });
     results[index] = base;
   };
 

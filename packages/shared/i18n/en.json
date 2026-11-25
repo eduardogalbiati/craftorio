@@ -5266,7 +5266,9 @@
   "run_list.commits_of_this_run_newest_first": "Commits of this run, newest first",
   "run_list.cost": "cost",
   "run_list.cost_2": "Cost",
+  "run_list.cost_approx_tip": "Includes turns whose cost is unknown (no price for the model): the CLI's own figure, at another model's rates, or nothing when it gave none. Add the price in Usage › Prices: it counts from the next runs on.",
   "run_list.cost_not_recorded": "cost not recorded",
+  "run_list.cost_unknown": "unknown",
   "run_list.could_not_load_more_runs": "Could not load more runs:",
   "run_list.could_not_load_runs_error": "Could not load runs: {error}",
   "run_list.could_not_load_the_artifacts": "Could not load the artifacts:",
@@ -6164,6 +6166,7 @@
   "usage.usage_value": "Usage value",
   "usage.usd_per_1m_tokens_used_to": "USD per 1M tokens, used to estimate cost when the CLI does not report it.",
   "usage.warning_only_runs_are_not_blocked": "Warning only, runs are not blocked.",
+  "usage.what_the_total_counts": "Besides the runs, the total counts the calls of the Oracle, the Supervisor chat and the Product Owner; the mockup designer's, the supervisor's watch's and its analyses asked on a screen are not counted.",
 
   "usage_widget.against_the_daily_budget": ", against the daily budget{raised}: the roadmaps pause before a start that would pass it",
   "usage_widget.against_the_night_budget": ", against the night budget{raised}: the roadmaps pause before a start that would pass it",

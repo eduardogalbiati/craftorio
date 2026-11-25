@@ -364,7 +364,7 @@ module.exports = (ctx) => {
       ...productOwnerWorkflows(ctx, p), // #790, #791: the project's workflows, its default and its kinds
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
-      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
+      budget: sim ? null : usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }),
       mock: sim, mode, timeZone: settings.timeZone,
       runDefaults: runDefaultsNow(ctx, p), // #785
       language: settings.language, // #327, #328
@@ -486,8 +486,7 @@ module.exports = (ctx) => {
         // the runs' spend, the Oracle's own days, the Supervisor chat's (#280) and the Product Owner's calls this month
         budget: () => {
           const settings = workspace.readSettings(ctx.ws);
-          const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() });
-          return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices);
+          return usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() });
         },
         perform, restore,
         notify: (n) => ctx.notify?.(notifier.oracleNotice(n)),

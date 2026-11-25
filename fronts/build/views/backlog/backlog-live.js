@@ -77,12 +77,12 @@
         error: lr.error,
         stages: r.stages.map((s) => {
           const merged = s.items.map((x) => {
-            const { run, status, runId, runs, waiting, actualUsd, pr, tested } = items.get(x.id);
-            return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd } : {}), ...(run ? { run: { ...x.run, ...run } } : {}), ...(pr ? { pr } : {}), ...(tested ? { tested } : {}) };
+            const { run, status, runId, runs, waiting, actualUsd, actualApprox, pr, tested } = items.get(x.id);
+            return { ...x, status, runId, runs, waiting, ...(actualUsd != null ? { actualUsd, actualApprox } : {}), ...(run ? { run: { ...x.run, ...run } } : {}), ...(pr ? { pr } : {}), ...(tested ? { tested } : {}) };
           });
           // #615: a live run's new cost moves the stage's total (its items' actualUsd summed)
           const actualUsd = window.RoadmapModel.stageActualUsd(merged) ?? s.actualUsd;
-          return { ...s, pause: pauses.get(s.id) || undefined, items: merged, ...(actualUsd != null ? { actualUsd } : {}) };
+          return { ...s, pause: pauses.get(s.id) || undefined, items: merged, ...(actualUsd != null ? { actualUsd, actualApprox: window.RoadmapModel.stageActualApprox(merged) } : {}) };
         }),
       },
     };
@@ -138,7 +138,7 @@
       col(t('backlog_roadmap.stat_stages'), I?.formatNumber(s.stages) ?? String(s.stages), t('backlog_roadmap.stat_disabled', { count: s.disabled })),
       col(t('backlog_roadmap.stat_left'), t('backlog_roadmap.items_count', { count: s.left.items }), t('backlog_roadmap.stat_in_stages', { count: s.left.stages })),
       col(t('backlog_roadmap.stat_forecast'), s.forecast ? `≈ ${minutes(s.forecast.minutes)}` : '—', s.forecast ? `≈ ${money(s.forecast.usd)}${none ? ` · ${none}` : ''}` : none, [t('backlog_roadmap.summary_tip'), noneTip].filter(Boolean).join('\n')),
-      col(t('backlog_roadmap.stat_spent'), s.spent ? money(s.spent.usd) : '—', t('backlog_roadmap.stat_so_far'), s.spent?.since ? t('backlog_roadmap.summary_spent_tip', { date: String(s.spent.since).slice(0, 10) }) : ''),
+      col(t('backlog_roadmap.stat_spent'), s.spent ? `${s.spent.approx ? '≈ ' : ''}${money(s.spent.usd)}` : '—', t('backlog_roadmap.stat_so_far'), [s.spent?.since ? t('backlog_roadmap.summary_spent_tip', { date: String(s.spent.since).slice(0, 10) }) : '', s.spent?.approx ? t('run_list.cost_approx_tip') : ''].filter(Boolean).join('\n')),
     ].join('')}</div>`;
   }
   // #750: band 3 (rm-head-activity), only while a task runs or a warning shows ('' with nothing): the base check (a green one, or one with no tests, a

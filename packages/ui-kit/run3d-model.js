@@ -20,6 +20,7 @@
   const displayName = typeof module === 'object' && module.exports ? require('@craftorio/shared/display-name.js').displayName : root.displayName;
   // #735: the steps and agents the run's (resolved) inputs rule out, dimmed on the floor like on the run screen
   const RunPlan = typeof module === 'object' && module.exports ? require('@craftorio/shared/run-plan.js') : root.RunPlan;
+  const SessionCost = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/session-cost') : root.SessionCost);
   function notApplyingOf(steps, inputs) {
     if (!RunPlan || !inputs) return {};
     const declared = Object.fromEntries(Object.keys(inputs).map((k) => [k, {}]));
@@ -355,6 +356,8 @@
 
     /** What the run spent: everything, or the turns `filter` keeps ({ agent, step, cost, out }). */
     cost(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.cost : 0), 0); }
+    /** #72: whether that includes a cost the app does not know (drawn "≈"). */
+    costApprox(filter) { return this.spend.some((x) => x.approx && (!filter || filter(x))); }
     tokensOut(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.out : 0), 0); }
     /** #833: the kept turns' tokens by kind, their total and the share of cache reads (0 with no tokens). */
     tokens(filter) {
@@ -462,7 +465,8 @@
       const s = this.sessions[ev.session_id];
       if (!s) return false;
       const u = ev.usage || {};
-      this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: Number(ev.cost_usd) || 0, out: u.output || 0, tokens: tokensOf(u) });
+      const { usd, approx } = SessionCost().turnCost(ev); // #72: a turn of unknown cost counts the CLI's figure, marked
+      this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: usd, approx, out: u.output || 0, tokens: tokensOf(u) });
       const r = this.robot(this.turnOf[ev.session_id]);
       if (r) Object.assign(r, { busy: false, doneAt: this.now, say: short(ev.text, 240) || r.say, tool: '' });
       delete this.turnOf[ev.session_id];

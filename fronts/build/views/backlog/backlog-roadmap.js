@@ -186,7 +186,7 @@
       `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-mode="${esc(v)}"${fixed ? '' : ` data-rm-mode="${esc(v)}"`} aria-pressed="${v === value}"${fixed ? ' disabled' : ''}>${ICON[v] || ''}${esc(text(v))}</button>`).join('')}</span>${note ? `<span class="rm-mode-note muted">${esc(note)}</span>` : ''}</div>`;
   }
 
-  const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const money = (n, approx = false) => `${approx ? '≈ ' : ''}$${Number(n || 0).toFixed(2)}`; // approx (#72): it includes a cost the app does not know
   // #750: the header's money (its numbers and By release) in the interface's locale, the app's format elsewhere
   const cost = (n) => window.I18n?.formatCost?.(n) ?? money(n);
   const mins = (n) => Estimates.formatMinutes(n);
@@ -194,12 +194,12 @@
   // #215: a real value against its estimate, coloured by the verdict (Estimates.verdict) with an
   // arrow, so colour is never the only signal; the difference in the tooltip. `fmt` formats a value,
   // `more`: the tooltip's difference ("$7.03 more"), `extra`: more tooltip lines.
-  function vsBadge(kind, actual, estimate, fmt, more, extra = []) {
+  function vsBadge(kind, actual, estimate, fmt, more, extra = [], approx = false) {
     const v = Estimates.verdict(actual, estimate);
-    if (!v) return `<span class="badge rm-actual rm-${kind}">${fmt(actual)}</span>`;
+    if (!v) return `<span class="badge rm-actual rm-${kind}">${fmt(actual, approx)}</span>`;
     const pct = `${v.percent > 0 ? '+' : v.percent < 0 ? '−' : '±'}${Math.abs(v.percent)}%`;
     const tip = [`${pct}, ${more(v.diff)} than the estimate (${fmt(estimate)})`, ...extra].filter(Boolean).join('\n');
-    return `<span class="badge rm-actual rm-${kind} rm-verdict rm-verdict-${v.level}" title="${esc(tip)}"><span class="rm-sign" aria-hidden="true">${v.sign}</span> <b>${esc(fmt(actual))}</b> / ≈ ${esc(fmt(estimate))}</span>`;
+    return `<span class="badge rm-actual rm-${kind} rm-verdict rm-verdict-${v.level}" title="${esc(tip)}"><span class="rm-sign" aria-hidden="true">${v.sign}</span> <b>${esc(fmt(actual, approx))}</b> / ≈ ${esc(fmt(estimate))}</span>`;
   }
   const moneyMore = (d) => `${money(Math.abs(d))} ${d < 0 ? 'less' : 'more'}`;
   const timeMore = (d) => `${mins(Math.abs(d))} ${d < 0 ? 'less' : 'more'}`;
@@ -223,12 +223,12 @@
     return `<div class="rm-meter" ${id} data-verdict="${m.verdict}"${m.title ? ` title="${esc(m.title)}"` : ''}><div class="rm-meter-row"><span class="rm-meter-label">${t(label)}</span><span class="rm-meter-value">${m.value}</span>${m.of ? `<span class="rm-meter-of muted">${esc(m.of)}</span>` : ''}<span class="spacer"></span>${right}</div>${m.ratio != null ? `<div class="rm-meter-bar" aria-hidden="true">${barInner(m.ratio)}</div>` : ''}</div>`;
   }
   // a real value against its estimate; `running`: within the estimate reads "on track"
-  function againstHtml(kind, actual, estimate, { fmt, more, running = false, extra = [] }) {
+  function againstHtml(kind, actual, estimate, { fmt, more, running = false, extra = [], approx = false }) {
     const v = Estimates.verdict(actual, estimate);
-    if (!v) return meterHtml(kind, { verdict: 'none', value: esc(fmt(actual)) });
+    if (!v) return meterHtml(kind, { verdict: 'none', value: esc(fmt(actual, approx)) });
     const onTrack = running && v.level === 'good';
     const tip = [`${pctText(v.percent)}, ${more(v.diff)} than the estimate (${fmt(estimate)})${running ? ', so far' : ''}`, ...extra].filter(Boolean).join('\n');
-    return meterHtml(kind, { verdict: VERDICT[v.level], level: v.level, value: esc(fmt(actual)), of: t('backlog_roadmap.meter_of', { value: fmt(estimate) }), sign: onTrack ? '' : v.sign, text: onTrack ? t('backlog_roadmap.on_track') : pctText(v.percent), ratio: actual / estimate, title: tip });
+    return meterHtml(kind, { verdict: VERDICT[v.level], level: v.level, value: esc(fmt(actual, approx)), of: t('backlog_roadmap.meter_of', { value: fmt(estimate) }), sign: onTrack ? '' : v.sign, text: onTrack ? t('backlog_roadmap.on_track') : pctText(v.percent), ratio: actual / estimate, title: tip });
   }
   // the time line of a run at work, from its working time against the estimate (timerTone's levels)
   function liveTime(ms, minutes) {
@@ -239,9 +239,9 @@
   }
   function costMeter(x, running) {
     const sim = RoadmapModel.isSimulated(x), e = !sim && x.estimate; // #31: a simulated run spends nothing, whatever its events recorded
-    if (!e) return meterHtml('cost', { verdict: 'none', value: sim ? money(0) : x.actualUsd != null ? (running ? t('backlog_roadmap.meter_so_far', { value: money(x.actualUsd) }) : money(x.actualUsd)) : '—', note: sim ? t('backlog_roadmap.simulated') : t('backlog_roadmap.no_estimate_yet'), title: sim ? '' : t('backlog_roadmap.no_successful_real_run_of_this') });
+    if (!e) return meterHtml('cost', { verdict: 'none', value: sim ? money(0) : x.actualUsd != null ? (running ? t('backlog_roadmap.meter_so_far', { value: money(x.actualUsd, x.actualApprox) }) : money(x.actualUsd, x.actualApprox)) : '—', note: sim ? t('backlog_roadmap.simulated') : t('backlog_roadmap.no_estimate_yet'), title: sim ? '' : [t('backlog_roadmap.no_successful_real_run_of_this'), x.actualApprox ? t('run_list.cost_approx_tip') : ''].filter(Boolean).join('\n') });
     if (x.actualUsd == null) return meterHtml('cost', { verdict: 'estimate', value: `≈ ${money(e.usd)}${e.estimated ? t('backlog_roadmap.meter_est') : ''}`, note: t('backlog_roadmap.meter_estimate'), title: e.basis });
-    return againstHtml('cost', x.actualUsd, e.usd, { fmt: money, more: moneyMore, running, extra: [e.basis] });
+    return againstHtml('cost', x.actualUsd, e.usd, { fmt: money, more: moneyMore, running, extra: [e.basis, x.actualApprox ? t('run_list.cost_approx_tip') : ''], approx: x.actualApprox });
   }
   // `clock`: the run's working time (runClock); while it works, the value is the live timer (#272)
   function timeMeter(x, running, clock) {
@@ -279,7 +279,7 @@
     const runs = plural(e.runs, 'backlog_roadmap.each_from_past_runs');
     const missing = e.missing ? plural(e.missing, 'backlog_roadmap.items_without_estimate') : '';
     if (finished && stage.actualUsd != null) {
-      return vsBadge('cost', stage.actualUsd, e.usd, money, moneyMore, [`The real cost of its items' runs against the sum of their estimates${missing}`])
+      return vsBadge('cost', stage.actualUsd, e.usd, money, moneyMore, [`The real cost of its items' runs against the sum of their estimates${missing}`, stage.actualApprox ? t('run_list.cost_approx_tip') : ''], stage.actualApprox)
         + (stage.actualMinutes && e.minutes ? vsBadge('time', stage.actualMinutes, e.minutes, mins, timeMore, ['Its longest item\'s real duration against its longest estimate (items run in parallel)']) : '');
     }
     return `<span class="badge rm-estimate" title="${esc(t('backlog_roadmap.the_sum_of_its_items_estimates', { runs, missing }))}">≈ ${money(e.usd)}${plus}</span>`

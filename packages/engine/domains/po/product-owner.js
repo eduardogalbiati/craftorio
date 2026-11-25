@@ -29,7 +29,7 @@
 // (a simulated turn streams fake steps first); its `signal` stops the turn, keeping what was written.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
 // Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
-// clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
+// clearing does not touch: usageRuns feeds them to Usage and the monthly budget check (they are in no run).
 // #280: a line is the agents' shared record (packages/engine/domains/agents/agents-usage.js); every call is a one-shot session.
 //
 // #785 (po-chosen-inputs.js): a group keeps only the inputs chosen, with their reasons (`input_reasons`), and
@@ -1347,9 +1347,12 @@ function recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId 
 /** Every recorded call, every project, oldest first (Analytics' Agents tab, #280; `opts`: agentsUsage.readLines'). */
 const usageLines = (backlogDir, opts) => agentsUsage.readLines(usageFile(backlogDir), opts);
 
+/** #72: its spend as summary-like runs, one per local day (usage.computeUsage's `extraRuns`, like the Oracle's). */
+const usageRuns = (backlogDir, timeZone = 'UTC') => agentsUsage.dayRuns(usageLines(backlogDir), { id: 'product-owner', workflow: 'Product Owner', timeZone });
+
 /**
  * The Product Owner's calls this month, every project, as sessions for usage.withPeerUsage
- * ([{ provider, model, tokens, costUsd }]): its spend is in no run, so budgetBaseline misses it.
+ * ([{ provider, model, tokens, costUsd }]). usageRuns already gives them to budgetBaseline: never both.
  * The month is the owner's local one (settings.timeZone, #273; default UTC).
  */
 function monthUsage(backlogDir, now = new Date(), timeZone = 'UTC') {
@@ -1359,7 +1362,7 @@ function monthUsage(backlogDir, now = new Date(), timeZone = 'UTC') {
     .map((u) => ({ provider: u.provider, model: u.model, tokens: u.tokens, costUsd: u.costUsd }));
 }
 
-/** Throws when Claude Code already reached a blocking monthly budget (`budget`: usage.budgetBaseline plus monthUsage). */
+/** Throws when Claude Code already reached a blocking monthly budget (`budget`: usage.budgetBaseline, its own calls included). */
 function checkBudget(budget) {
   const b = budget?.claude;
   if (b?.blockOnLimit && ((b.limitUsd && b.usedUsd >= b.limitUsd) || (b.limitTokens && b.usedTokens >= b.limitTokens))) {
@@ -1703,4 +1706,5 @@ module.exports = {
   sizeGroup,
   testBatchStages,
   usageLines,
+  usageRuns,
 };

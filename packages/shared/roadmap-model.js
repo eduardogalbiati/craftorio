@@ -67,6 +67,8 @@
     const ran = (items || []).filter((x) => !isSimulated(x)).map((x) => x.actualUsd).filter((usd) => typeof usd === 'number');
     return ran.length ? Math.round(ran.reduce((a, usd) => a + usd, 0) * 100) / 100 : null;
   }
+  /** #72: whether that real cost includes one the app does not know (an item's `actualApprox`). */
+  const stageActualApprox = (items) => (items || []).some((x) => x.actualApprox && !isSimulated(x));
   /**
    * #555: a list whose stages carry their cut line (`release`, as written before #555 and as the
    * Roadmap screen saves it): each becomes a release entry right after its stage, every release entry
@@ -587,6 +589,7 @@
     runningStage,
     scopedStage,
     stackDepth,
+    stageActualApprox,
     stageActualUsd,
     stageCount,
     stageNumber,

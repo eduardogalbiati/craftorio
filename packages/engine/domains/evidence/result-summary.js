@@ -88,7 +88,7 @@ function renderResultSummary(runDir, summary = {}) {
     `- Status: **${summary.status || 'unknown'}**${summary.error ? ` (${oneLine(summary.error)})` : ''}`,
     `- Run: \`${summary.run_id || path.basename(runDir)}\`${summary.mock ? ' (simulated)' : ''}`,
     summary.duration_ms != null ? `- Duration: ${duration(summary.duration_ms)}` : '',
-    summary.cost_usd ? `- Cost: $${Number(summary.cost_usd).toFixed(2)}` : '',
+    summary.cost_usd ? `- Cost: ${summary.cost_approx ? '≈ ' : ''}$${Number(summary.cost_usd).toFixed(2)}` : '',
     '',
   ].filter((l, i, a) => l !== '' || a[i - 1] !== '');
   const keys = ['decisions.tsv', 'evidence/manifest.json'].filter((rel) => exists(runDir, rel));

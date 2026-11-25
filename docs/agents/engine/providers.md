@@ -23,7 +23,7 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   set and session mode. Adding a provider: the code map's "A provider".
 - **Where a turn's cost comes from (#369)**: the CLI's own figure when it reports one (Claude Code's
   `total_cost_usd`, the difference with the session's previous total, #233; Grok), else the tokens ×
-  the model's price (`packages/engine/domains/usage/usage.js` `sessionCost`: input, output, cache read, and cache write at the
+  the model's price (`packages/shared/session-cost.js` `sessionCost`: input, output, cache read, and cache write at the
   model's `cache_write` price, else 1.25× input for a 5-minute cache and 2× for an hour). A model's
   price is `settings.prices[model]`, else the adapter's `prices` table (`priceOf`; Claude:
   `claude-haiku-5-5`). One exception: when Claude Code does not know the model it runs, it writes
@@ -31,11 +31,16 @@ Turn timeouts, per-run agent overrides, fallback chains, limits per model, retri
   the turn at another model's rates. Such a turn is priced by the app from its tokens at the session's
   cache tier (`priceUnrecognizedTurn`, `packages/engine/engine/run/costs.js`): its `session.message_received`
   carries `cost_source: 'tokens'` and the CLI's figure as `cli_cost_usd`, the session snapshot a
-  `cost_estimate` `{ source, model, cli_version, cli_cost_usd }`. With no price for the model its cost
+  `cost_estimate` `{ source, model, cli_version, cli_cost_usd, unknown_cli_usd? }`. With no price for the model its cost
   is unknown (`cost_usd: null`, `cost_source: 'unknown'`, `cost_note: 'no price for <model>'`) and the
   run's `max_total_cost_usd` and the budgets count the CLI's figure, so a limit is never skipped. The
   run log warns once per model (`kind: unrecognized_model`, with `claude update`). Turns of models the
   CLI knows keep its cost exactly; past run records are not rewritten.
+  A total never counts such a turn as zero (#72): a session's, a run's (`summary.cost_usd` with
+  `cost_approx`), the roadmap's, the header's and Usage's totals add the CLI's figure of the turns with
+  no price (`unknown_cli_usd`; older records: `cli_cost_usd` of a `source: 'unknown'` session) and are
+  marked "≈", by one rule, `packages/shared/session-cost.js` `runCost`, the renderer's too. A run
+  recorded before is totalled again from its sessions; a price added later does not change it.
 - `timeout` (agent or `defaults`): the limit of one turn, default `30m`; the process is killed
   when it runs out. It may be a template rendered with the run's context (`turnTimeout`), e.g. the
   software-development workflows give grouped runs more time:

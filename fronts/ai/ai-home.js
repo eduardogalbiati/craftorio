@@ -15,7 +15,7 @@
       const w = own.morning?.window;
       const inNight = (r) => !r.mock && Date.parse(r.startedAt) >= Date.parse(w.from) && Date.parse(r.startedAt) <= Date.parse(w.to);
       const night = sp?.night ? [t('dashboard.cost_tonight'), usd(sp.night), t('dashboard.spent_by_real_runs_since_the_night')]
-        : w ? [t('dashboard.cost_last_night'), fmtUsd((d.runs || []).filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0)), t('dashboard.cost_of_the_real_runs_started_during')]
+        : w ? [t('dashboard.cost_last_night'), fmtUsd((d.runs || []).filter(inNight).reduce((a, r) => a + (Number(r.costUsd) || 0), 0), (d.runs || []).some((r) => inNight(r) && r.costApprox)), t('dashboard.cost_of_the_real_runs_started_during')]
           : [t('dashboard.cost_last_night'), '—', t('dashboard.no_night_watch_ended_recently')];
       return [{ order: 20, label: night[0], value: esc(night[1]), title: night[2] }];
     },

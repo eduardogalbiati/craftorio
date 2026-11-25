@@ -3,8 +3,8 @@
 // Night watch's window, from its start: packages/engine/domains/oracle/oracle-actions.js nightWatch), in settings.json
 // (`budget: { dailyUsd, nightlyUsd, raised }`, Settings › Budget). Spending is counted from the runs'
 // recorded session costs (live runs included: their sessions so far), real runs only; a session with
-// no reported cost (Codex) is priced from its tokens × settings.prices (packages/engine/domains/usage/usage.js sessionCost) and
-// the total is marked `estimated`.
+// no reported cost (Codex) is priced from its tokens × settings.prices (packages/shared/session-cost.js) and
+// the total is marked `estimated`, as is one with a turn of unknown cost (#72).
 // The cap stops starts, never runs mid-way or gates: before the roadmap starts an item, `overBudget`
 // says whether its estimate (packages/engine/domains/usage/cost-estimate.js) would pass a cap; the roadmap then pauses with
 // `pauseMessage` ("Budget reached: $X of $Y today; next stage ≈ $Z"), and the owner picks "Raise for
@@ -14,7 +14,7 @@
 // (packages/engine/service/areas/live-roadmap.js). Pure: the service passes the runs and the Night watch state.
 
 const TimeZone = require('../analytics/time-zone');
-const { sessionCost } = require('./usage');
+const { isApprox, sessionCost } = require('@craftorio/shared/session-cost');
 
 const DEFAULTS = Object.freeze({ dailyUsd: null, nightlyUsd: null, raised: null });
 
@@ -42,8 +42,8 @@ function spentSince(runs, since, { prices = {} } = {}) {
     if (r.mock || !(Date.parse(r.startedAt) >= from)) continue;
     count++;
     for (const s of r.sessions || []) {
-      const cost = s.cost_usd ? s.cost_usd : sessionCost(s, prices);
-      if (!s.cost_usd && cost) estimated = true;
+      const cost = sessionCost(s, prices);
+      if ((!s.cost_usd && cost) || isApprox(s, prices)) estimated = true;
       total += cost || 0;
     }
   }

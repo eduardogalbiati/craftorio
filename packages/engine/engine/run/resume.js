@@ -18,6 +18,7 @@
 
 const { checkAttachments, emptyUsage, seedClaudeTotal } = require('../providers');
 const { attemptSummary, noteToolCall } = require('./turns');
+const { unknownUsd } = require('@craftorio/shared/session-cost');
 const { GATE } = require('./field-rules');
 const { prMonitorSeed } = require('./transitions');
 
@@ -181,7 +182,7 @@ function sessionFromSnapshot(snap) {
     ...(snap.estimated_cost_usd ? { estimatedUsd: snap.estimated_cost_usd } : {}),
     ...(snap.cost_not_recorded ? { costNotRecorded: true } : {}),
     ...(snap.cli_total_cost_usd != null ? { cliTotalUsd: snap.cli_total_cost_usd } : {}),
-    ...(snap.cost_estimate ? { costEstimate: { ...snap.cost_estimate } } : {}),
+    ...(snap.cost_estimate ? { costEstimate: { ...snap.cost_estimate }, cliOnlyUsd: unknownUsd(snap.cost_estimate) || 0 } : {}),
     lastTurnAt: at(snap.last_turn_at), contextTokens: snap.context_tokens ?? null, startContextTokens: snap.start_context_tokens ?? null,
   };
 }

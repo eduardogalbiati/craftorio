@@ -1,5 +1,5 @@
 // Screenshot seed of Workflows (--view workflows): its tabs (one menu entry each), the demo roadmap's
-// runs (views/roadmap.js), a parent run with its child runs (demoChildRuns, #174), a long run history
+// runs (views/roadmap.js), a run with a turn of unknown cost (#72, views/usage.js), a parent run with its child runs (demoChildRuns, #174), a long run history
 // (demoRunHistory, #200; both also on Project), edited and custom workflows and pipelines (#137) and a
 // simulated run.
 
@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { gitRepo } = require('../helpers');
 const { demoRoadmap } = require('./roadmap');
+const { demoUnknownCostRun } = require('./usage');
 
 // Workflows › Definitions (#137): declared outputs on an edited default (modified, Restore
 // default), two custom workflows (one in Monitor & Improve, one with an unknown category: Other)
@@ -144,6 +145,7 @@ function seed({ appDir, args, ws, project }) {
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
   demoChildRuns(ws, project.id);
   demoRunHistory(ws, project.id);
+  demoUnknownCostRun(ws, project.id);
   demoPipelines(ws, appDir);
   demoRepositoryWorkflows(project, appDir);
 }

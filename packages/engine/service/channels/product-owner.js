@@ -108,8 +108,8 @@ module.exports = (ctx) => {
     agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
     skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
     resolveCommand,
-    // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-    budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog, new Date(), settings.timeZone), settings.prices),
+    // its own past calls and the Oracle's are in no run: extraRuns adds them to what the runs used this month
+    budget: simulated ? null : usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }),
     language: settings.language, // #327, #328: the turn's [Language] line, the simulated draft's headings
   });
   // What every question to the Product Owner reads: the synced backlog, the runs, the workflows, its agent and budget.

@@ -5,10 +5,9 @@
 //   index when it is open: packages/engine/domains/workspace/store.js; mock runs
 //   are ignored) plus the sessions of the run in progress;
 // - machine: everything the CLIs recorded on this machine (packages/engine/domains/local/local-usage.js), including use
-//   outside the orchestrator. The orchestrator's part is found by provider session id. Cost is what the CLI reported
-// (Claude Code and Grok do), otherwise an estimate from the per-model prices in settings, else the
-// adapter's price table (Codex does not report cost; #369: a Claude turn on a model the CLI does not know). Budgets live in settings.json and are enforced by the
-// engine before each agent turn.
+//   outside the orchestrator. The orchestrator's part is found by provider session id. A session's cost is
+// packages/shared/session-cost.js's, the one rule of every screen (#72); a total that includes an unknown
+// cost has `costApprox`. Budgets live in settings.json and are enforced by the engine before each agent turn.
 
 const fs = require('fs');
 const path = require('path');
@@ -16,7 +15,14 @@ const { installCommand } = require('../machine/install-commands');
 const { readRunSummary } = require('../run/run-record');
 const { runSummaries } = require('../run/runs');
 const registry = require('@craftorio/shared/providers');
-const { cacheWriteUsd } = require('../session/session-cache');
+const {
+  isApprox,
+  priceOf,
+  runCost,
+  sessionCost,
+  tokensCost,
+  totalTokens,
+} = require('@craftorio/shared/session-cost');
 const TimeZone = require('../analytics/time-zone');
 
 // The CLIs, from their adapters (packages/shared/providers/). installCommand: what the Usage screen's play
@@ -32,8 +38,6 @@ const WARN_AT = 0.8;
 
 const TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write', 'reasoning'];
 const emptyTotals = () => ({ tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, total: 0 }, costUsd: 0, unpricedTokens: 0, turns: 0, runs: 0 });
-// reasoning is already counted inside output, so it is not added to the total
-const totalTokens = (t = {}) => (t.input || 0) + (t.output || 0) + (t.cache_read || 0) + (t.cache_write || 0);
 
 // Maps a session's provider (the workflow's provider name or type) to one of PROVIDERS.
 function providerId(p) {
@@ -42,38 +46,25 @@ function providerId(p) {
   return hit ? hit.id : null;
 }
 
-// A model's price (US$ per million tokens): settings.prices, else the price table of a CLI adapter (#369)
-function priceOf(model, prices = {}) {
-  return prices[model] || registry.clis().find((a) => a.prices?.[model])?.prices[model] || null;
-}
-
-// What tokens cost at `price`: input, output, cache reads, and cache writes at the cache's lifetime
-// (packages/engine/domains/session/session-cache.js cacheWriteUsd: 1.25× input for 5 minutes, 2× for an hour, unless the price sets it)
-function tokensCost(t = {}, price, lifetimeMs) {
-  const base = (t.input || 0) * (price.input || 0) + (t.output || 0) * (price.output || 0) + (t.cache_read || 0) * (price.cache_read ?? price.input ?? 0);
-  return base / 1e6 + (cacheWriteUsd(t.cache_write, price, lifetimeMs) || 0);
-}
-
-/**
- * USD for a session: the reported cost, else an estimate from prices, else null. #369: a session the
- * CLI priced at another model's rates and the app has no price for counts the CLI's figure.
- */
-function sessionCost(session, prices = {}) {
-  if (session.cost_usd) return session.cost_usd;
-  const price = priceOf(session.model, prices);
-  if (!price) return session.cost_estimate?.source === 'unknown' ? (session.cost_estimate.cli_cost_usd ?? null) : null;
-  return tokensCost(session.tokens || {}, price, session.cache_lifetime_ms);
+function addTokens(tot, session) {
+  const t = session.tokens || {};
+  for (const k of TOKEN_KEYS) tot.tokens[k] += t[k] || 0;
+  tot.tokens.total += totalTokens(t);
+  tot.turns += session.turns || 0;
 }
 
 function addSession(tot, session, prices) {
-  const t = session.tokens || {};
-  for (const k of TOKEN_KEYS) tot.tokens[k] += t[k] || 0;
-  const total = totalTokens(t);
-  tot.tokens.total += total;
-  tot.turns += session.turns || 0;
+  addTokens(tot, session);
   const cost = sessionCost(session, prices);
-  if (cost == null) tot.unpricedTokens += total;
+  if (cost == null) tot.unpricedTokens += totalTokens(session.tokens);
   else tot.costUsd += cost;
+  if (isApprox(session, prices)) tot.costApprox = true;
+}
+
+// #72: adds a total's cost to another's, with its mark
+function addCost(tot, from) {
+  tot.costUsd += from.costUsd;
+  if (from.costApprox) tot.costApprox = true;
 }
 
 // From the run index when the service has it open (packages/engine/domains/workspace/store.js), else the summary.json files; in
@@ -126,19 +117,19 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
     if (!started) continue;
     const inMonth = monthKey(started, tz) === month;
     const inToday = dayKey(started, tz) === today;
-    const row = { runId: run.run_id, workflow: run.workflow, startedAt: started, status: run.status, tokens: 0, costUsd: 0, byProvider: {} };
+    const row = { runId: run.run_id, workflow: run.workflow, startedAt: started, status: run.status, tokens: 0, costUsd: 0, costApprox: false, byProvider: {} };
     const seen = { month: new Set(), today: new Set() };
     for (const s of run.sessions || []) {
       const id = providerId(s.provider);
       if (!id) continue; // orchestrator / mock
       if (s.provider_session_id) orchSessionIds.add(s.provider_session_id);
-      const cost = sessionCost(s, prices) || 0;
+      const { usd, approx } = runCost([s], prices);
       const tok = totalTokens(s.tokens);
-      row.tokens += tok;
-      row.costUsd += cost;
       row.byProvider[id] ??= { tokens: 0, costUsd: 0 };
-      row.byProvider[id].tokens += tok;
-      row.byProvider[id].costUsd += cost;
+      for (const sum of [row, row.byProvider[id]]) {
+        sum.tokens += tok;
+        addCost(sum, { costUsd: usd, costApprox: approx });
+      }
       const bp = byProvider[id];
       if (inMonth) {
         addSession(bp.month, s, prices);
@@ -168,18 +159,19 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
       const m = machine[r.provider];
       if (!m || !r.ts) continue;
       const inOrch = r.sessionId && orchSessionIds.has(r.sessionId);
-      const session = recordAsSession(inOrch ? { ...r, costUsd: 0 } : r); // orchestrator cost is added below
+      const session = recordAsSession(r);
       const buckets = [];
       if (monthKey(r.ts, tz) === month) buckets.push(m.month, (m.models[r.model] ??= emptyTotals()));
       if (dayKey(r.ts, tz) === today) buckets.push(m.today);
       for (const b of buckets) {
-        addSession(b, session, prices);
-        if (inOrch) b.unpricedTokens -= totalTokens(r.tokens); // priced by the orchestrator's own numbers
+        if (inOrch) addTokens(b, session); // its cost is the orchestrator's own, added below
+        else addSession(b, session, prices);
       }
     }
     for (const p of PROVIDERS) {
-      machine[p.id].month.costUsd += byProvider[p.id].month.costUsd;
-      machine[p.id].today.costUsd += byProvider[p.id].today.costUsd;
+      addCost(machine[p.id].month, byProvider[p.id].month);
+      addCost(machine[p.id].today, byProvider[p.id].today);
+      for (const [model, month] of Object.entries(byProvider[p.id].models)) addCost(machine[p.id].models[model] ??= emptyTotals(), month);
       machine[p.id].month.runs = byProvider[p.id].month.runs;
       machine[p.id].today.runs = byProvider[p.id].today.runs;
     }
@@ -209,7 +201,8 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
       for (const p of PROVIDERS) {
         const x = machine[p.id][k];
         for (const key of Object.keys(t.tokens)) t.tokens[key] += x.tokens[key];
-        t.costUsd += x.costUsd; t.unpricedTokens += x.unpricedTokens; t.turns += x.turns;
+        addCost(t, x);
+        t.unpricedTokens += x.unpricedTokens; t.turns += x.turns;
       }
       t.runs = totals[k].runs;
       return [k, t];

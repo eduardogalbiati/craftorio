@@ -6,10 +6,12 @@
 // (`checkBudget`), the `max_total_context` pause gate (`contextGate`), the supervisor's and the
 // children's spend, the price of a turn on a model Claude Code does not know (`priceUnrecognizedTurn`,
 // #369), and the step timing and context metrics of the summary (`timingSummary`,
-// `contextSummary`). `childRunCost`: what a child run cost from its summary (#175).
+// `contextSummary`). `childRunCost`: what a child run cost from its summary (#175);
+// `childRunTotal`: the same with its mark (#72).
 
 'use strict';
 
+const { unknownUsd } = require('@craftorio/shared/session-cost');
 const {
   priceOf,
   providerId,
@@ -30,6 +32,9 @@ const kTokens = (n) => (n == null ? '?' : n >= 1000 ? `${Math.round(n / 1000)}k`
 
 // What a child run cost from its summary (#175): its own sessions and its own child runs.
 const childRunCost = (summary) => +((+summary?.cost_usd || 0) + (+summary?.children_cost_usd || 0)).toFixed(6);
+
+// #72: that cost and, when it includes one the app does not know, its mark (a child run's result)
+const childRunTotal = (summary) => ({ cost_usd: childRunCost(summary), ...(summary?.cost_approx || (summary?.child_runs || []).some((c) => c.cost_approx) ? { cost_approx: true } : {}) });
 
 const methods = {
   checkLimits() {
@@ -169,8 +174,8 @@ const methods = {
   // stderr): the CLI priced it at another model's rates, so the turn is priced from its tokens at the
   // model's prices (settings.prices, else the adapter's table), cache writes at the session's cache
   // tier. The CLI's figure stays as cli_cost_usd. With no price the turn's cost is unknown (null) and
-  // the CLI's figure counts toward the limits (s.cliOnlyUsd). Rewrites res.costUsd; warns once per
-  // model. Returns the fields of the turn's event ({} for a model the CLI knows).
+  // the CLI's figure counts toward the limits (s.cliOnlyUsd) and, marked, in the totals (unknown_cli_usd,
+  // #72, packages/shared/session-cost.js). Rewrites res.costUsd; warns once per model. Returns the fields of the turn's event ({} for a model the CLI knows).
   priceUnrecognizedTurn(session, res, { tier, stepId, agentName }) {
     const u = res.unrecognized;
     if (!u) return {};
@@ -181,9 +186,12 @@ const methods = {
     const source = cost == null ? 'unknown' : 'tokens';
     res.costUsd = cost;
     if (cost == null) session.cliOnlyUsd = (session.cliOnlyUsd || 0) + (cliCost || 0);
+    const before = unknownUsd(session.costEstimate);
+    const unknown = cost == null ? (before || 0) + (cliCost || 0) : before;
     session.costEstimate = {
       source, model, cli_version: u.cliVersion || null,
       cli_cost_usd: +((session.costEstimate?.cli_cost_usd || 0) + (cliCost || 0)).toFixed(6),
+      ...(unknown != null ? { unknown_cli_usd: +unknown.toFixed(6) } : {}),
     };
     if (!this.unknownModelWarned.has(model)) {
       this.unknownModelWarned.add(model);
@@ -269,6 +277,7 @@ const methods = {
 
 module.exports = {
   childRunCost,
+  childRunTotal,
   kTokens,
   methods,
 };

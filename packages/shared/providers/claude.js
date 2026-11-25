@@ -211,7 +211,8 @@
 
   // US$ per million tokens of the models whose price the app needs (#369: a turn the CLI priced at
   // another model's rates); settings.prices overrides an entry. cache_write unset: 1.25× input for
-  // a 5-minute cache, 2× for an hour (packages/shared/session-cache.js cacheWriteUsd).
+  // a 5-minute cache, 2× for an hour (packages/shared/session-cache.js cacheWriteUsd). claude-fable-5-2
+  // has no entry: no published price is known (#72), so its cost is unknown until settings.prices sets it.
   const PRICES = {
     'claude-haiku-5-5': { input: 0.10, output: 0.50, cache_read: 0.01 },
   };

@@ -56,14 +56,15 @@ function orchestratorSplit(p) {
   const pct = total ? Math.min(100, (part / total) * 100) : 0;
   return `<div class="u-orch">
     <div class="split-bar" title="${t('usage.orchestrator_share_of_this_month_s')}"><span style="width:${pct.toFixed(1)}%"></span></div>
-    <span class="small muted">${t('usage.of_which_orchestrator')} <b class="mono">${fmtTok(part)} ${t('usage.tok')} ${fmtUsd(o.costUsd)}</b>${total ? ` (${pct < 1 && part ? '&lt;1' : Math.round(pct)}%)` : ''}</span>
+    <span class="small muted">${t('usage.of_which_orchestrator')} <b class="mono">${fmtTok(part)} ${t('usage.tok')} ${fmtUsd(o.costUsd, o.costApprox)}</b>${total ? ` (${pct < 1 && part ? '&lt;1' : Math.round(pct)}%)` : ''}</span>
   </div>`;
 }
 
 function providerCard(p, u) {
   const m = p.month || {}, t = m.tokens || {}, b = p.budget || {};
   const meters = [];
-  if (b.monthlyUsd != null) meters.push(meterHtml('Monthly USD budget', p.usedPctUsd, fmtUsd(m.costUsd), fmtUsd(b.monthlyUsd)));
+  const approxTip = (x) => (x?.costApprox ? approxTitle() : ''); // run-list.js (#72)
+  if (b.monthlyUsd != null) meters.push(meterHtml('Monthly USD budget', p.usedPctUsd, fmtUsd(m.costUsd, m.costApprox), fmtUsd(b.monthlyUsd)));
   if (b.monthlyTokens != null) meters.push(meterHtml('Monthly token budget', p.usedPctTokens, fmtTok(t.total), fmtTok(b.monthlyTokens)));
   const models = (p.models || []).filter((x) => x.month?.tokens?.total || x.month?.costUsd);
   return `
@@ -81,8 +82,8 @@ function providerCard(p, u) {
     : `<div class="u-install"><span class="muted small">${I18n.t('usage.install_with')}</span><code>${esc(p.installHint || '')}</code></div>`}
       <div class="u-stats">
         <div class="u-stat"><label>${I18n.t('usage.month_tokens')}</label><b>${fmtTok(t.total)}</b></div>
-        <div class="u-stat"><label>${I18n.t('usage.month_cost')}</label><b>${fmtUsd(m.costUsd)}</b></div>
-        <div class="u-stat"><label>${I18n.t('usage.cost_today')}</label><b>${fmtUsd(p.today?.costUsd)}</b></div>
+        <div class="u-stat"><label>${I18n.t('usage.month_cost')}</label><b data-testid="usage-month-cost"${approxTip(m)}>${fmtUsd(m.costUsd, m.costApprox)}</b></div>
+        <div class="u-stat"><label>${I18n.t('usage.cost_today')}</label><b${approxTip(p.today)}>${fmtUsd(p.today?.costUsd, p.today?.costApprox)}</b></div>
       </div>
       ${orchestratorSplit(p)}
       <div class="u-breakdown mono">
@@ -95,7 +96,7 @@ function providerCard(p, u) {
       ${planBlock(p, u)}
       ${models.length ? `<table class="u-table compact">
         <thead><tr><th>${I18n.t('usage.model')}</th><th class="num">${I18n.t('usage.tokens')}</th><th class="num">${I18n.t('usage.cost')}</th></tr></thead>
-        <tbody>${models.map((x) => `<tr><td class="mono">${esc(x.model)}</td><td class="num mono">${fmtTok(x.month?.tokens?.total)}</td><td class="num mono">${fmtUsd(x.month?.costUsd)}</td></tr>`).join('')}</tbody>
+        <tbody>${models.map((x) => `<tr><td class="mono">${esc(x.model)}</td><td class="num mono">${fmtTok(x.month?.tokens?.total)}</td><td class="num mono"${approxTip(x.month)}>${x.month?.costApprox && !x.month.costUsd ? I18n.t('run_list.cost_unknown') : fmtUsd(x.month?.costUsd, x.month?.costApprox)}</td></tr>`).join('')}</tbody>
       </table>` : `<p class="muted small">${I18n.t('usage.no_usage_this_month')}</p>`}
       <div class="card-actions">
         <span class="muted small">${meters.length ? (b.blockOnLimit ? I18n.t('usage.runs_are_blocked_at_the_limit') : I18n.t('usage.warning_only_runs_are_not_blocked')) : I18n.t('usage.no_budget_set')}${meters.length && b.countOutside ? `<br>${I18n.t('usage.budget_counts_all_usage_on_this')}` : ''}</span>
@@ -265,7 +266,7 @@ registerView({
           <div id="usage-runs" class="s-group table-wrap"></div>
         </div>
 
-        <p class="muted small usage-note">${t('usage.costs_reported_by_the_clis_are')}</p>
+        <p class="muted small usage-note">${t('usage.costs_reported_by_the_clis_are')} ${t('usage.what_the_total_counts')}</p>
       </section>`,
   modals: () => `
   <div id="budget-modal" class="modal hidden">

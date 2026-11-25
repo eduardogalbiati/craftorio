@@ -13,7 +13,9 @@ const runs = require('../../domains/run/runs');
 const projects = require('../../domains/project/projects');
 const backlog = require('../../domains/backlog/backlog');
 const roadmaps = require('../../domains/roadmap/roadmap');
+const workspace = require('../../domains/workspace/workspace');
 const { artifactIndex } = require('../../domains/run/run-artifacts');
+const { runCost } = require('@craftorio/shared/session-cost');
 const { cliReason, sessionView } = require('../common');
 
 const RUN_PAGE = 30;
@@ -56,6 +58,8 @@ module.exports = (ctx) => {
     const wf = ctx.runWorkflow(current ? r.runId : 'disk', r.file);
     const providers = wf.providers || {};
     const { inputs, ...info } = r;
+    // #72: the one total of every screen
+    const cost = runCost(sessions, workspace.readSettings(ctx.ws).prices || {});
     let arts = { count: 0, images: 0 };
     try { arts = await artifactIndex(r.runDir); } catch (e) { console.error(`artifacts of ${r.runId}:`, e.message); }
     return {
@@ -76,7 +80,8 @@ module.exports = (ctx) => {
       groups: r.groups || wf.groups || [],
       // a run in progress: the engine's own trail, not events.jsonl
       progress: current ? run.trail.steps : r.progress,
-      costUsd: current ? sessions.reduce((a, x) => a + (x.costUsd || 0), 0) : r.costUsd,
+      costUsd: cost.usd,
+      costApprox: cost.approx,
       sessions: sessions.map((x) => {
         const why = cliReason(x, providers, current);
         return { ...x, cliAvailable: !why, cliReason: why };

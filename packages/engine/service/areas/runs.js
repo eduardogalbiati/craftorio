@@ -13,10 +13,10 @@ const {
 const { projectPlatform } = require('@craftorio/shared/platforms');
 const { fits } = require('@craftorio/shared/run-inputs');
 const {
-  childRunCost,
   loadWorkflow,
   WorkflowRun,
 } = require('../../engine/workflow');
+const { childRunTotal } = require('../../engine/run/costs');
 const { loadRepositoryWorkflow } = require('../../engine/run/load');
 const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
@@ -463,7 +463,7 @@ module.exports = (ctx) => {
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
       const local = needsLocal ? await ctx.localUsage() : null;
       const baselineAt = Date.now();
-      // the Oracle's spend (in no run folder) counts too
+      // the Oracle's and the Product Owner's spend (in no run folder) counts too
       const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local, extraRuns: ctx.agentUsageRuns() });
       const project = projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId) : null;
       const wfFile = runWorkflowFile(project, file, settings, workspaceWorkflow);
@@ -590,7 +590,7 @@ module.exports = (ctx) => {
     const step = `${parentRun.wf.metadata?.name || path.basename(parentRun.file)}, step ${parent.step_id}${label ? `: ${label}` : ''}`;
     const child = {
       parent, signal,
-      onFinished: (ev) => done({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, cost_usd: childRunCost(ev.summary) }),
+      onFinished: (ev) => done({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, ...childRunTotal(ev.summary) }),
       onSlotWait: (why) => parentRun.emitEvent('log', { level: 'info', step_id: parent.step_id, message: `${parent.step_id}: a child run${label ? ` (${label})` : ''} waits for a free slot: ${why}` }),
       notices: [{ level: 'info', message: `Child run of ${parentRun.runId} (${step}).` }],
     };

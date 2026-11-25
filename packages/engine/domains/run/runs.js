@@ -28,6 +28,7 @@ const {
 } = require('./run-artifacts');
 const { readRunSummary } = require('./run-record');
 const { sessionsOfEvents, upgradeRunRecord } = require('@craftorio/shared/run-record');
+const { runCost } = require('@craftorio/shared/session-cost');
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {
@@ -78,7 +79,7 @@ function fromEvents(file) {
   const children = new Map();
   for (const ev of events) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
-    else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
+    else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}), ...(ev.cost_approx ? { cost_approx: true } : {}) });
   }
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
   // the error of its end (#389: a listing reads a failed run's events once while they do not change)
@@ -192,6 +193,7 @@ function readRun(runsDir, runId) {
   // what a `merge: local` put on the local base (summaries before local_merge: from the events)
   const localMerge = summary && summary.local_merge !== undefined ? summary.local_merge
     : summary?.status === 'success' && summary.worktree?.repo ? fromEvents(path.join(dir, 'events.jsonl')).localMerge : null;
+  const recorded = runCost(sessions, null);
   const inputs = summary?.inputs || started?.inputs || {};
   const startedAt = summary?.started_at || started?.ts || null;
   const issues = issuesOf(summary) || issuesOf(started);
@@ -211,7 +213,9 @@ function readRun(runsDir, runId) {
     durationMs: summary?.duration_ms ?? (startedAt ? Date.now() - Date.parse(startedAt) : 0),
     // of durationMs, the time spent waiting for the owner at human gates (not agent time)
     gateWaitMs: summary?.timing?.gate_wait_ms || 0,
-    costUsd: sessions.reduce((a, s) => a + (s.cost_usd || 0), 0),
+    // #72: what was recorded (the index keeps it); the lists add what settings.prices price (run-lists.js)
+    costUsd: recorded.usd,
+    costApprox: recorded.approx,
     tokens: sumTokens(sessions),
     projectId: summary?.project_id || started?.project_id || null,
     // the issues the run implements (Backlog); runs recorded before groups have one `issue`
@@ -243,6 +247,7 @@ function readRun(runsDir, runId) {
     paused: summary?.status === 'paused' ? summary.paused || null : null,
     // what those child runs cost (#175, their own children included; not in costUsd), 0 without any
     childrenCostUsd: summary?.children_cost_usd ?? (childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0),
+    childrenCostApprox: (childRuns || []).some((c) => c.cost_approx),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
     ...unfinishedOf(dir, summary),
@@ -265,8 +270,8 @@ function readRun(runsDir, runId) {
 // again and its row replaced; rows of deleted folders go. The files stay the source of truth.
 const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json', 'chain.json'];
 // how a row is read: a new reading (#233: corrected past costs; #350: the upgraded run record, its
-// summary indexed upgraded) reads every run again once
-const READ_VERSION = 'run-record';
+// summary indexed upgraded; #72: the cost of unknown models) reads every run again once
+const READ_VERSION = 'unknown-cost';
 function runSignature(dir) {
   return `${SIG_FILES.map((f) => {
     try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }

@@ -254,7 +254,7 @@ function runListRow(r, pv) {
         <span class="pr-meta"><label>${t('run_list.started')}</label>${r.startedAt ? `<span data-testid="run-list-started"${typeof TimeZone !== 'undefined' ? ` title="${esc(TimeZone.titleOf(r.startedAt, TimeZone.current()))}"` : ''}>${esc(dateOf(r.startedAt))}</span>` : '—'}</span>
         <span class="pr-meta"><label>${t('run_list.duration')}</label>${fmtDur(dur)}</span>
         <span class="pr-meta"><label>${t('run_list.tokens')}</label>${fmtTok(r.tokens?.total)}</span>
-        <span class="pr-meta"><label>${t('run_list.cost')}</label>${fmtUsd(r.costUsd)}${r.childrenCostUsd ? ` <span class="muted small" title="${t('run_list.what_its_child_runs_cost_their')}">${t('run_list.childrencostusd_child_runs', { childrenCostUsd: fmtUsd(r.childrenCostUsd) })}</span>` : ''}</span>
+        <span class="pr-meta"><label>${t('run_list.cost')}</label><span data-testid="run-list-cost">${fmtUsd(r.costUsd, r.costApprox)}</span>${r.childrenCostUsd ? ` <span class="muted small" title="${t('run_list.what_its_child_runs_cost_their')}">${t('run_list.childrencostusd_child_runs', { childrenCostUsd: fmtUsd(r.childrenCostUsd, r.childrenCostApprox) })}</span>` : ''}</span>
         <span class="pr-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
         ${runProgressStrip(r)}
       </div>
@@ -500,6 +500,11 @@ function tokensCell(t) {
 function costMarks(estimatedUsd, notRecorded) {
   return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(t('run_list.estimatedusd_of_it_estimated_from_the', { estimatedUsd: fmtUsd(estimatedUsd) }))}">${t('run_list.estimated')}</span>` : ''}${notRecorded ? ` <span class="badge warn" title="${t('run_list.an_attempt_stopped_before_its_result')}">${t('run_list.cost_not_recorded')}</span>` : ''}`;
 }
+// #72: the tooltip of a total that includes a cost the app does not know (drawn "≈")
+const approxTitle = () => ` title="${esc(t('run_list.cost_approx_tip'))}"`;
+// #72: a session's cost when a turn of it is unknown (a model with no price): "unknown", else what it
+// recorded for its other turns, marked; its note says why
+const unknownCostText = (usd, fmt) => (usd ? fmt(usd, true) : t('run_list.cost_unknown'));
 // The Run screen's top-bar cost (app.js renderHeader): the run's sessions' marks after the total.
 function sessionsCostMarks(sessions) {
   const estimated = sessions.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
@@ -527,15 +532,16 @@ function costEstimateNote(estimate) {
 }
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
-  if (s.costEstimate?.source === 'unknown') return `<td class="num mono muted" data-testid="session-cost">—${costEstimateNote(s.costEstimate)}</td>`;
+  if (s.costEstimate?.source === 'unknown') return `<td class="num mono muted" data-testid="session-cost">${unknownCostText(s.costUsd, fmtUsd)}${costEstimateNote(s.costEstimate)}</td>`;
   if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return `<td class="num mono muted" data-testid="session-cost" title="${t('run_list.no_price_for_this_model_see')}">—</td>`;
   return `<td class="num mono" data-testid="session-cost">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}${costEstimateNote(s.costEstimate)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
+  const cost = SessionCost.runCost(sessions, state.usage?.prices); // #72
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
   return `<tfoot><tr class="pr-total"><td colspan="3">${t('run_list.total')}</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
-    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
+    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost"${cost.approx ? approxTitle() : ''}>${fmtUsd(cost.usd, cost.approx)}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
 }
 // #320: how the session's next turn starts (apps/desktop/renderer/session-cache.js): the text leads, the
 // colour follows (warm green, cold orange); — for a closed session. Run screen too (views/run/run.js).

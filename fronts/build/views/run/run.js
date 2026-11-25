@@ -775,6 +775,7 @@ function renderSessions() {
   const estimated = list.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
   const notRecorded = (ss) => ss.some((s) => s.cost_not_recorded || s.costNotRecorded);
   const marks = costMarks; // run-list.js: the badges shared with the run lists and Analytics
+  const sum = totals();
   box.innerHTML = list.map((s) => {
     const isOrch = s.id === 'orchestrator';
     const t = s.tokens || {};
@@ -795,11 +796,11 @@ function renderSessions() {
         ${isOrch ? `
         <div class="metric"><label>${I18n.t('run.steps')}</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
         <div class="metric"><label>${I18n.t('run.child_sessions')}</label><b>${list.length - 1}</b></div>
-        <div class="metric"><label>${I18n.t('run.total_cost')}</label><b>${fmtCost(totals().cost)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
-        <div class="metric" title="${I18n.t('run.what_its_child_runs_cost_their')}"><label>${I18n.t('run.child_runs_cost')}</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
+        <div class="metric"><label>${I18n.t('run.total_cost')}</label><b data-testid="run-total-cost"${sum.approx ? approxTitle() : ''}>${fmtCost(sum.cost, sum.approx)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
+        <div class="metric" title="${I18n.t('run.what_its_child_runs_cost_their')}"><label>${I18n.t('run.child_runs_cost')}</label><b>${fmtCost(childRunsCost(state.run), state.run.childRuns.some((c) => c.cost_approx))}</b></div>` : ''}` : `
         <div class="metric"><label>${I18n.t('run.active')}</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>${I18n.t('run.in_out')}</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>${I18n.t('run.cost')}</label><b data-testid="session-cost">${s.cost_estimate?.source === 'unknown' ? '—' : fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
+        <div class="metric"><label>${I18n.t('run.cost')}</label><b data-testid="session-cost">${sessionCostText(s)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
         ${nextTurnMetric(s)}`}
       </div>
     </div>`;
@@ -810,6 +811,7 @@ function renderSessions() {
   }));
 }
 
+const sessionCostText = (s) => (s.cost_estimate?.source === 'unknown' ? unknownCostText(s.cost_usd, fmtCost) : fmtCost(s.cost_usd));
 // #320: how the session's next turn starts (session-cache.js), like the run lists' Next turn column
 function nextTurnMetric(s) {
   const t = SessionCache.currentTurn(s);
@@ -864,7 +866,7 @@ function renderDetail() {
         <dt>${t('run.opened_at')}</dt><dd>${esc(timeOf(s.opened_at))}${s.closed_at ? ' → ' + esc(timeOf(s.closed_at)) : ''}</dd>
         <dt>${t('run.duration_active_idle')}</dt><dd>${fmtDur(liveDuration(s))} / ${fmtDur(s.active_ms)} / ${fmtDur(s.idle_ms)}</dd>
         <dt>${t('run.tokens')}</dt><dd>${t('run.in_input_cache_r_w_cache', { input: fmtNum(s.tokens?.input), cache_read: fmtNum(s.tokens?.cache_read), cache_write: fmtNum(s.tokens?.cache_write), output: fmtNum(s.tokens?.output) })} ${fmtNum(s.tokens?.reasoning)}</dd>
-        <dt>${t('run.cost')}</dt><dd>${fmtCost(s.cost_usd)}</dd>
+        <dt>${t('run.cost')}</dt><dd>${sessionCostText(s)}${costEstimateNote(s.cost_estimate)}</dd>
       </dl>
     </div>`;
 
@@ -876,7 +878,7 @@ function renderDetail() {
       <div class="turn">
         <div class="turn-head">
           <span class="t">${I18n.t('run.turn')} ${t.n}</span><span class="muted">${esc(t.stepId || '')}</span>
-          <span class="meta">${t.result ? I18n.t('run.duration_in_value_out_output_cost', { duration: fmtDur(t.result.duration), value: fmtNum((t.result.usage?.input || 0) + (t.result.usage?.cache_read || 0)), output: fmtNum(t.result.usage?.output), cost: fmtCost(t.result.cost) }) : I18n.t('run.in_progress')}</span>
+          <span class="meta">${t.result ? I18n.t('run.duration_in_value_out_output_cost', { duration: fmtDur(t.result.duration), value: fmtNum((t.result.usage?.input || 0) + (t.result.usage?.cache_read || 0)), output: fmtNum(t.result.usage?.output), cost: t.result.unknown ? I18n.t('run_list.cost_unknown') : fmtCost(t.result.cost) }) : I18n.t('run.in_progress')}</span>
         </div>
         <div class="turn-body">
           ${t.prompt != null ? detailsBlock(`${s.id}:${t.n}:prompt`, 'prompt', 'prompt sent', t.prompt) : ''}

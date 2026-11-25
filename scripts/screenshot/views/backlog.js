@@ -28,6 +28,7 @@ const {
   demoRoadmap,
   demoWorkItems,
 } = require('./roadmap');
+const { demoUnknownCostItem } = require('./usage');
 
 // The Roadmap's Conflict map (#150): 20 runs, three hot files (one named by merge conflicts), a quiet
 // one, and a long import line most runs changed.
@@ -225,6 +226,7 @@ function seed({ args, ws, project, projects }) {
   // #260: the "Released" badge on the issues the history shipped
   demoReleases(ws, project.id);
   demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
+  demoUnknownCostItem(ws, project.id); // #72
   // #702 (--roadmap test): the work items' plans, one built (Start Test)
   if (args.roadmap === 'test') demoWorkItems(project.folder);
   // #405: the Roadmap's "known failures on the base" line

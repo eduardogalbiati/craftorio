@@ -15,7 +15,8 @@ function fmtTok(n) {
   if (a >= 1e3) return short(n / 1e3, 'K');
   return String(Math.round(n));
 }
-const fmtUsd = (n) => `$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// approx (#72): the amount includes a cost the app does not know
+const fmtUsd = (n, approx = false) => `${approx ? '≈ ' : ''}$${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 // Parses "12.5", "12,5", "$50", "1.5M", "200k" (empty -> null, invalid -> NaN).
 function parseAmount(v) {
   const t = String(v ?? '').trim().replace(/[\s$_]/g, '');
@@ -125,11 +126,11 @@ function renderUsageWidget() {
   const m = u.totals?.month || {};
   const worst = worstStatus(u.providers);
   const machine = u.scope === 'machine';
-  $('#usage-widget-text').textContent = t('usage_widget.total_tok_costusd', { total: fmtTok(m.tokens?.total), costUsd: fmtUsd(m.costUsd) });
+  $('#usage-widget-text').textContent = t('usage_widget.total_tok_costusd', { total: fmtTok(m.tokens?.total), costUsd: fmtUsd(m.costUsd, m.costApprox) });
   $('#usage-widget-dot').className = `u-dot st-${worst}`;
   $('#usage-widget-scope').classList.toggle('hidden', !machine);
-  const params = { month: monthLabel(u.month), total: fmtNum(m.tokens?.total), costUsd: fmtUsd(m.costUsd), status: STATUS_TEXT[worst] };
-  btn.title = machine ? t('usage_widget.machine_usage_in_month', params) : t('usage_widget.orchestrator_usage_in_month', params);
+  const params = { month: monthLabel(u.month), total: fmtNum(m.tokens?.total), costUsd: fmtUsd(m.costUsd, m.costApprox), status: STATUS_TEXT[worst] };
+  btn.title = [machine ? t('usage_widget.machine_usage_in_month', params) : t('usage_widget.orchestrator_usage_in_month', params), m.costApprox ? t('run_list.cost_approx_tip') : ''].filter(Boolean).join('\n');
   renderSpending(u.spending);
 }
 
@@ -192,7 +193,7 @@ function renderUsagePopover() {
   }
   body.innerHTML = (u.providers || []).map((p) => {
     const m = p.month || {}, b = p.budget || {};
-    const bar = p.usedPctUsd != null ? meterHtml('USD budget', p.usedPctUsd, fmtUsd(m.costUsd), fmtUsd(b.monthlyUsd), true)
+    const bar = p.usedPctUsd != null ? meterHtml('USD budget', p.usedPctUsd, fmtUsd(m.costUsd, m.costApprox), fmtUsd(b.monthlyUsd), true)
       : p.usedPctTokens != null ? meterHtml('Token budget', p.usedPctTokens, fmtTok(m.tokens?.total), fmtTok(b.monthlyTokens), true)
       : `<div class="muted small">${t('usage_widget.no_budget')}</div>`;
     return `<div class="up-row">
@@ -201,7 +202,7 @@ function renderUsagePopover() {
         <span class="u-inst ${p.installed ? 'on' : 'off'}">${p.installed ? 'installed' : t('usage_widget.not_installed')}</span>
         ${planWorst(p) != null ? `<span class="u-plan-pct st-${pctStatus(planWorst(p) / 100)}" title="${t('usage_widget.most_used_plan_rate_limit_window')}">${t('usage_widget.plan_p', { p: Math.round(planWorst(p)) })}</span>` : ''}
         <span class="spacer"></span>
-        <span class="mono small">${fmtTok(m.tokens?.total)} ${t('usage_widget.tok')} ${fmtUsd(m.costUsd)}</span>
+        <span class="mono small">${fmtTok(m.tokens?.total)} ${t('usage_widget.tok')} ${fmtUsd(m.costUsd, m.costApprox)}</span>
       </div>
       ${bar}
     </div>`;
@@ -221,14 +222,14 @@ function runsTableHtml(u) {
   const names = Object.fromEntries((u.providers || []).map((p) => [p.id, p.name]));
   return `<table class="u-table">
     <thead><tr><th>${t('usage_widget.date')}</th><th>${t('usage_widget.workflow')}</th><th>${t('usage_widget.status')}</th><th class="num">${t('usage_widget.tokens')}</th><th class="num">${t('usage_widget.cost')}</th><th>${t('usage_widget.by_provider')}</th></tr></thead>
-    <tbody>${runs.map((r) => `<tr title="${esc(r.runId)}">
+    <tbody>${runs.map((r) => `<tr title="${esc(r.runId)}" data-testid="usage-run" data-run="${esc(r.runId)}">
       <td class="nowrap">${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</td>
       <td>${esc(r.workflow || '—')}</td>
       <td>${r.status ? StatusPill.statusPill(r.status) : '<span class="pill pill-idle">—</span>'}</td>
       <td class="num mono">${fmtTok(r.tokens)}</td>
-      <td class="num mono">${fmtUsd(r.costUsd)}</td>
+      <td class="num mono" data-testid="usage-run-cost"${r.costApprox ? approxTitle() : ''}>${fmtUsd(r.costUsd, r.costApprox)}</td>
       <td><div class="u-split">${Object.entries(r.byProvider || {}).map(([id, v]) =>
-        `<span class="badge p-${esc(id)}" title="${esc(names[id] || id)}">${esc(id)} ${fmtTok(v.tokens)} · ${fmtUsd(v.costUsd)}</span>`).join('')}</div></td>
+        `<span class="badge p-${esc(id)}" title="${esc(names[id] || id)}">${esc(id)} ${fmtTok(v.tokens)} · ${fmtUsd(v.costUsd, v.costApprox)}</span>`).join('')}</div></td>
     </tr>`).join('')}</tbody>
   </table>`;
 }

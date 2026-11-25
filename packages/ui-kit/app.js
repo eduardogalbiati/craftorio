@@ -20,7 +20,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // numbers, costs and dates in the interface language (#329, shared/i18n.js); English stays en-US
 const uiLocale = () => { const l = window.I18n?.getLanguage(); return !l || l === 'en' ? 'en-US' : l; };
 const fmtNum = (n) => (n || 0).toLocaleString(uiLocale());
-const fmtCost = (n) => (n == null ? '—' : uiLocale() === 'en-US' ? `$${Number(n).toFixed(4)}` : window.I18n.formatCost(n, uiLocale(), 4));
+const fmtCost = (n, approx = false) => (n == null ? '—' : `${approx ? '≈ ' : ''}${uiLocale() === 'en-US' ? `$${Number(n).toFixed(4)}` : window.I18n.formatCost(n, uiLocale(), 4)}`);
 function fmtDur(ms) {
   if (ms == null) return '—';
   const s = Math.floor(ms / 1000);
@@ -591,7 +591,7 @@ const RUN_EVENT_REDUCERS = {
   },
   'workflow.child_finished': (v, ev) => {
     const c = v.run?.childRuns?.find((x) => x.run_id && x.run_id === ev.child_run_id);
-    if (c) Object.assign(c, { status: ev.status, cost_usd: ev.cost_usd || 0 });
+    if (c) Object.assign(c, { status: ev.status, cost_usd: ev.cost_usd || 0, ...(ev.cost_approx ? { cost_approx: true } : {}) });
     orch(ev, `child run ${ev.child_run_id || '(not started)'} ${ev.status}${ev.label ? ` (${ev.label})` : ''}${ev.error ? `: ${ev.error}` : ''}`, ev.status === 'success' ? 'transition' : 'error');
   },
   'workflow.finished': (v, ev, sess, effects) => {
@@ -637,7 +637,7 @@ const RUN_EVENT_REDUCERS = {
   'session.message_received': (v, ev, sess, effects) => {
     if (sess) {
       const own = upgradedTail(v, ev).at(-1);
-      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, duration: ev.duration_ms };
+      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, ...(own.cost_source === 'unknown' ? { unknown: true } : {}), duration: ev.duration_ms };
       Object.assign(sess, own.session);
       orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
     }
@@ -884,10 +884,10 @@ function renderTicking() {
 }
 
 function totals(sessions = state.sessions) {
-  const t = { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0 };
+  const { usd: cost, approx } = SessionCost.runCost([...sessions.values()], state.usage?.prices); // #72
+  const t = { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, cost, approx };
   sessions.forEach((s) => {
     for (const k of ['input', 'output', 'cache_read', 'cache_write', 'reasoning']) t[k] += s.tokens?.[k] || 0;
-    t.cost += s.cost_usd || 0;
   });
   return t;
 }

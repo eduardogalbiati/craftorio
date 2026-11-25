@@ -68,7 +68,8 @@ const {
   turnWatchLimits,
 } = require('./run/turns');
 const { methods: accountsMethods } = require('./run/accounts');
-const { childRunCost, methods: costsMethods } = require('./run/costs');
+const { runCost } = require('@craftorio/shared/session-cost');
+const { childRunCost, childRunTotal, methods: costsMethods } = require('./run/costs');
 const { methods: gatesMethods } = require('./run/gates');
 const { methods: supervisionMethods } = require('./run/supervision');
 const { methods: checkoutMethods } = require('./run/checkout');
@@ -854,7 +855,7 @@ class WorkflowRun extends EventEmitter {
       let summary = null;
       try { summary = JSON.parse(fs.readFileSync(path.join(this.ctx.runs_dir, path.basename(previous.run_id), 'summary.json'), 'utf8')); } catch { /* not finished */ }
       if (summary?.status === 'success') {
-        return { runId: summary.run_id || path.basename(previous.run_id), reused: true, stop: () => {}, finished: Promise.resolve({ status: 'success', outputs: summary.outputs || {}, error: null, cost_usd: childRunCost(summary) }) };
+        return { runId: summary.run_id || path.basename(previous.run_id), reused: true, stop: () => {}, finished: Promise.resolve({ status: 'success', outputs: summary.outputs || {}, error: null, ...childRunTotal(summary) }) };
       }
     }
     const bundled = bundledDir('workflows');
@@ -869,7 +870,7 @@ class WorkflowRun extends EventEmitter {
       notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
     });
     const finished = new Promise((resolve) => child.on('event', (ev) => {
-      if (ev.type === 'workflow.finished') resolve({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, cost_usd: childRunCost(ev.summary) });
+      if (ev.type === 'workflow.finished') resolve({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, ...childRunTotal(ev.summary) });
     }));
     this.children.set(child.runId, child);
     this.emit('child', child);
@@ -891,6 +892,7 @@ class WorkflowRun extends EventEmitter {
     const tokens = emptyUsage();
     sessions.forEach((s) => addUsage(tokens, s.tokens));
     const outputs = this.computeOutputs();
+    const cost = runCost(sessions, null); // #72: with the turns of unknown cost, marked
     const summary = {
       run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
       started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
@@ -900,7 +902,7 @@ class WorkflowRun extends EventEmitter {
       local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
       // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
       ...(this.ctx.release ? { release: this.ctx.release } : {}),
-      tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
+      tokens, cost_usd: +cost.usd.toFixed(6), ...(cost.approx ? { cost_approx: true } : {}), cost_accounting: 'per_turn',
       // #277: a multi-result Claude turn records its highest total (packages/shared/run-record.js upgrades older runs on read)
       turn_cost: 'max_result',
       context: this.contextSummary(),
