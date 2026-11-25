@@ -27,6 +27,7 @@ const {
 } = require('../worktree');
 const capabilities = require('../capabilities');
 const checkStep = require('../check-step');
+const { foundChecks } = require('../check-tools');
 const depsCache = require('../deps-cache');
 const { scratchWorkspace } = require('../../domains/local/local-preview');
 const { render } = require('./templates');
@@ -107,7 +108,7 @@ const methods = {
   },
 
   // #472 (SEC-7): one `log` event, before the install and the first step, naming the commands the
-  // run executes from the repository (its dependency install, its check script, its test command),
+  // run executes from the repository (its dependency install, its check script or the checks found in it #50, its test command),
   // so the recording shows the repository code the run is about to run
   logRepoCommands(dir) {
     if (!dir) return;
@@ -117,13 +118,17 @@ const methods = {
     if (d?.manager && !d.notCached) install = `\`${d.manager} ${depsCache.installArgs(d, this.ignoreInstallScripts).join(' ')}\``;
     else if (d?.notCached) install = `none by the run (${d.lockfile} is not cached: ${d.notCached})`;
     else if (hasPackage) install = 'none by the run (package.json without a lockfile: npm scripts run only when an agent runs them)';
-    const check = checkStep.checkCommand(dir);
+    const off = checkStep.checksOff(this.ctx?.inputs?.check_command);
+    const checks = off ? [] : checkStep.checkCommands(dir);
+    // #50: said here too, for a workflow whose route skips a check step with nothing to run
+    const rewrites = off || checkStep.checkCommand(dir) ? [] : foundChecks(dir).rewrites;
     const tests = this.suiteCommand();
     const parts = [
       install && `dependency install ${install}`,
-      check && `check \`${check}\``,
+      checks.length && `check ${checks.map((c) => `\`${c}\``).join(', ')}`,
       tests && `tests \`${tests}\``,
     ].filter(Boolean);
+    for (const r of rewrites) this.emitEvent('log', { level: 'info', message: `rule checks: \`${r.name}\` is not run: it rewrites files (${r.why})` });
     if (!parts.length) return;
     this.emitEvent('log', { level: 'info', message: `repository commands: this run executes the repository's own scripts: ${parts.join('; ')}` });
   },

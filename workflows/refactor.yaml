@@ -1,9 +1,9 @@
 # =============================================================================
 # Workflow: Refactor (#355): one refactor, done safely, in any language
 # -----------------------------------------------------------------------------
-#   pin_behaviour ─► green_check ─► refactor ─► suite ─► build ─► review ──merge: local──► end
-#        ▲               │             ▲          │        │        │
-#        └──(red: fails on the unchanged code)    └────────┴────────┘ (behaviour changed, or not simpler)
+#   pin_behaviour ─► green_check ─► refactor ─► rule_check ─► suite ─► build ─► review ──merge: local──► end
+#        ▲               │             ▲             │          │        │        │
+#        └──(red: fails on the unchanged code)       └──────────┴────────┴────────┘ (behaviour changed, or not simpler)
 #
 # Structure only gets worse when every run adds behaviour: this workflow improves it, one target at a
 # time, behind deterministic gates, with the behaviour pinned before the change (Kent Beck: never mix
@@ -19,6 +19,10 @@
 #      test (the existing ones included) and `protect_files` locks the pinned tests (#220's guard).
 #      Never: a behaviour change, a dependency upgrade, a rename of a public interface the issue does
 #      not name.
+#      rule_check (no agent, #50): the project's rule checks after each commit, as feature's: the
+#      check_command, the `check` script, else its own linter and type checker, only for what the change
+#      added. Back to refactor at most twice, then check_failed; an environment failure (#30) stops at
+#      check_environment.
 #   5. Gates: the project's full suite (suite, no agent; in this repository it includes the
 #      code-health ratchets) and the build audit (build, build-audit-<language>).
 #   6. review: one question, "same behaviour, simpler structure?", from the target's before/after
@@ -87,6 +91,13 @@ inputs:
     default: ""
     label: Test command
     description: "The project's whole-suite command the orchestrator runs (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
+
+  # #50: the project's fast rule checks, run after each developer commit (rule_check)
+  check_command:
+    type: string
+    default: ""
+    label: Check command
+    description: "The project's fast rule checks (lint, types...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script (npm run check), else the linter and the type checker the project itself configures and has installed (only what the change added goes back); a project with none skips the step. off: no checks."
 
 # -----------------------------------------------------------------------------
 providers:
@@ -224,9 +235,9 @@ groups:
   - name: Pin
     steps: [pin_behaviour, green_check, pin_failed]
   - name: Refactor
-    steps: [refactor]
+    steps: [refactor, rule_check]
   - name: Gates
-    steps: [suite, build, tests_failed, build_failed]
+    steps: [suite, build, check_failed, check_environment, tests_failed, build_failed]
   - name: Review
     steps: [review, review_blocked]
   - name: Merge
@@ -346,6 +357,11 @@ steps:
       structure: {{ review.simpler_structure }}):
       {{ review.findings | to_yaml }}
       Fix it on the same branch with a new structural commit and answer each finding in `summary`.
+      {% elif previous_step == 'rule_check' and steps.rule_check.output and steps.rule_check.output.status == 'fail' %}
+      The orchestrator ran the project's rule checks after your commit, and they fail:
+      {{ steps.rule_check.output.message }}
+      Fix what they report on the same branch with a new structural commit (never weaken a rule, never
+      change a test).
       {% else %}
       The behaviour is pinned on branch `{{ pin.branch }}` (commit {{ pin.commit }}) by these
       characterization tests: {{ pin.tests_added | join(', ') }}; they pass on the unchanged code.
@@ -373,11 +389,31 @@ steps:
         commit_sha:    { type: string }
     transitions:
       - when: "output.committed"
-        goto: suite
+        goto: rule_check
       - when: "true"
         goto: refactor
         max_visits: 3
         on_exhausted: fail
+
+  # #50: the project's rule checks after each commit (no agent), as feature.yaml's rule_check (#404): the
+  # check_command, the `check` script, else the project's own linter and type checker; none: skipped.
+  # Findings go back at most twice (a pass resets the count), then to you at check_failed.
+  - id: rule_check
+    display: Rule checks
+    type: check
+    command: "{{ inputs.check_command }}"
+    transitions:
+      # #30: the environment, not the code: no round counted
+      - when: "output.status == 'fail' and output.failure_kind == 'environment'"
+        goto: check_environment
+      - when: "output.status == 'fail' and (vars.check_returns or 0) | int < 2"
+        goto: refactor
+        set: { check_returns: "{{ (vars.check_returns or 0) | int + 1 }}" }
+      - when: "output.status == 'fail'"
+        goto: check_failed
+      - when: "true"
+        goto: suite
+        set: { check_returns: "0" }
 
   # The project's whole suite, without an agent (#177): the pinned tests, the existing ones and, in
   # this repository, the code-health ratchets.
@@ -403,6 +439,51 @@ steps:
         goto: suite
         max_visits: 2
         on_exhausted: tests_failed
+
+  # #404: still failing after the developer's rounds. A decision: neither the supervisor nor a retry answers it
+  - id: check_failed
+    type: human_approval
+    summary: |
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s) (`{{ steps.rule_check.output.command }}`).
+      - ✖ {{ (steps.rule_check.output.cause or steps.rule_check.output.findings | last) | one_line(240) }}
+    message: |
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s): {{ steps.rule_check.output.cause }}
+      {{ steps.rule_check.output.message }}
+      The change is on branch `{{ steps.refactor.output.branch }}`.
+    choices:
+      - { id: continue, label: "Continue to the suite anyway", help: "The suite, the build and the review run; the change is reported as not passing the rule checks." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      - when: "true"
+        goto: suite
+        set: { check_returns: "0" }
+
+  # #30: the checks cannot run here (dependencies not installed, a command missing): you fix the environment
+  # and try again; no round counted. A decision, like check_failed
+  - id: check_environment
+    type: human_approval
+    summary: |
+      The project's rule checks cannot run: {{ steps.rule_check.output.cause }}
+    message: |
+      {{ steps.rule_check.output.cause }}
+      No developer round was counted. Fix the environment, then try again: the rule checks run again.
+    environment: rule_check
+    choices:
+      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed.", help_key: engine.check_environment_retry_help }
+      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it.", help_key: engine.check_environment_stop_help }
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      # 3 retries at most: a gate answered by its first choice must not loop forever
+      - when: "true"
+        goto: rule_check
+        max_visits: 3
+        on_exhausted: end
+        status: failed
 
   - id: tests_failed
     type: human_approval

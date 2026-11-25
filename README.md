@@ -508,6 +508,38 @@ It is a human gate: no timeout, no supervisor, no retry ever answers it. The tim
 you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms`, the Details
 panel and the Time tooltip).
 
+### Rule checks: what is found in a project (#50)
+
+After each developer commit, Feature, Fix and Refactor run the project's rule checks (`rule_check`, no
+agent). What runs, in order: the `check_command` given; the `check` script of `package.json`; else, in the
+project's folder (its root), every tool below that its files configure **and** that is installed. Nothing is
+downloaded and nothing is rewritten.
+
+| Language | Configured by | Installed | What runs |
+| --- | --- | --- | --- |
+| JavaScript, TypeScript | a `lint` script | | `npm run lint` |
+| | no `lint` script, an ESLint configuration (`eslint.config.*`, `.eslintrc*`, `eslintConfig`) | `node_modules/.bin/eslint` | `eslint .` |
+| | a `typecheck` script | | `npm run typecheck` |
+| | no `typecheck` script, `tsconfig.json` | `node_modules/.bin/tsc` | `tsc --noEmit` |
+| Python | `ruff.toml`, `.ruff.toml`, `[tool.ruff]` | `ruff` on the PATH | `ruff check --no-fix` |
+| | `mypy.ini`, `.mypy.ini`, `[tool.mypy]`, `[mypy]` in `setup.cfg` | `mypy` on the PATH | `mypy` |
+| Go | `go.mod` or `go.work`, and `.golangci.*` | `golangci-lint` on the PATH | `golangci-lint run` (`GOPROXY=off`) |
+| Rust | `clippy.toml`, `[lints.clippy]` | `cargo` and `cargo-clippy` on the PATH | `cargo clippy --frozen` (`--offline` without a `Cargo.lock`) |
+| Java | `maven-checkstyle-plugin` in `pom.xml` | `mvn` on the PATH | `mvn -o checkstyle:check` |
+| C# | the .NET analyzers (a root `*.csproj`, `Directory.Build.props` or `.editorconfig`), with a `*.csproj` or solution in the root | `dotnet` on the PATH | `dotnet build --no-restore` |
+
+- **Rewrites files**: a script with `--fix`, `--write` and the like (its `pre` and `post` scripts and the scripts
+  it runs included), or a golangci-lint configuration with `fix: true`, does not run; the run says so.
+- **Only what the change added**: when a found command fails, the same command runs in the run's checkout of
+  the base. A finding is the same when its file and its text are, whatever its line. Those the base has do not
+  send the developer back, and the run says how many there are. A command that cannot be compared (no base
+  checkout, not on the base, could not run there, no place in its output, a time limit) is said and reported
+  without blocking. A `check_command` or a `check` script is not compared.
+- **Cannot run here** (dependencies not installed, a command not found): `check_environment`, as before (#30).
+- **Before a run**: the project's settings (Projects › a project) and the Start panel show the commands. In the
+  settings, **Check commands** replaces the ones found, and **Run the project's checks** turns them off
+  (`check_command: off`).
+
 **Answering gates from the phone** (#226, Settings › Phone gates). The running app can serve a
 small page with only the open gates (each gate's summary, recommendation, evidence links and
 buttons) on `http://127.0.0.1:7400`, this computer only; nothing else of the app (runs control,
@@ -888,8 +920,9 @@ use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `gla
 
 ## Fix (`workflows/fix.yaml`)
 
-Code & Build (#630). A bug from its reproduction to the merge: reproduce → develop → code review →
-suite → verify → merge. The developer first gets one command that shows the bug for the reported
+Code & Build (#630). A bug from its reproduction to the merge: reproduce → develop → rule checks
+→ code review → suite → verify → merge. The rule checks (#50, no agent) run after each fix commit, with
+Feature's rounds and gates (Rule checks: what is found in a project). The developer first gets one command that shows the bug for the reported
 reason (a failing regression test when it can), then fixes the root cause with the regression test
 that failed before it (skill `bug-diagnosis`). `mode` works as in Feature: `local` merges into the
 local base and pushes it, `remote` opens a PR/MR and waits for its CI. `hotfix` marks the urgent lane:
@@ -1059,7 +1092,8 @@ mix structural and behavioural changes in one commit):
    (`edits_tests: false`) and the pinned tests are locked (`protect_files`): a turn that changes one
    is refused. No behaviour change, no dependency upgrade, no rename of a public interface the issue
    does not name.
-4. **Gates**: the project's full suite (`suite`, no agent; in this repository it includes the
+4. **Gates**: the project's rule checks after each commit (`rule_check`, no agent, #50: Feature's rounds and
+   gates), the project's full suite (`suite`, no agent; in this repository it includes the
    code-health ratchets) and the build audit (`build`).
 5. **Review** (`review`): one question, "same behaviour, simpler structure?", answered from the
    before/after figures of the target (lines, files touched by the change, complexity, or the
@@ -1393,7 +1427,8 @@ Where each input of feature, fix and release gets its project value:
 | `base_branch` | the repository's default branch |
 | `base_behind` | no workflow input: what a roadmap does when its local base is behind origin (#805). `update` fast-forwards it first, `continue` goes on from it; empty asks at Start and goes on when nobody is there. Project settings |
 | `test_command` (release: `unit_command`) | the profile's test command, else discovery (`package.json`, `go.mod`, `Cargo.toml` → `cargo test`, …) |
-| `check_command` | the profile's check command, else the project's check discovery |
+| `check_command` | the profile's check command, else the project's `check` script; `off` (Project settings) runs none |
+| `check_commands` | no workflow input: what the rule check runs without a `check_command` (#50), the `check` script or the linter and type checker found; shown in Project settings and Start |
 | `e2e_tests` (release: `e2e_suite`) | `off` for a backend, a unit-only profile or no E2E suite found |
 | `e2e_command` | the profile's E2E command or the suite found (Playwright / Cypress config); empty otherwise |
 | `ui_folders` | the UI folders found; empty for a backend |

@@ -6,6 +6,8 @@
 // project's run default base_branch, #735: empty follows the repository's default branch), what a roadmap does
 // when its local base is behind origin (#805, the run default base_behind: empty asks at Start), Local preview
 // (install / command / URL, with the command detected in the folder, #115: api.suggestLocalPreview, "Use it"),
+// the rule checks of a run (#50: "Run the project's checks" and "Check commands", the run default check_command,
+// `off` when unchecked; data-testid="project-check-commands" lists what was found in the folder),
 // "Install without scripts" (#472, data-testid="project-ignore-scripts") and "Prefer the repository's workflows"
 // (#554, data-testid="project-prefer-repository-workflows"). The workflows (project-workflows.js) and the
 // ways of working (project-ways-of-working.js) stay where they are, on the same page. Save (project-settings-save)
@@ -35,6 +37,37 @@
       <div class="hint">${esc(t('project.settings_base_behind_hint'))}</div>
     </div>`;
 
+  const checksAreOff = (p) => window.WorkflowInputs.checksOf(p.runDefaults?.check_command).off;
+
+  // #50: off, the box is not used
+  function checks(p) {
+    const off = checksAreOff(p);
+    return `${check('ps-checks-on', 'project-checks-on', t('project.settings_checks_on'), t('project.settings_checks_on_hint'), !off)}
+      <div class="field">
+        <label for="ps-checks">${esc(t('project.settings_checks'))}</label>
+        <input type="text" id="ps-checks" data-testid="project-checks" value="${esc(off ? '' : p.runDefaults?.check_command || '')}"${off ? ' disabled' : ''} />
+        <div class="hint">${esc(t('project.settings_checks_hint'))}</div>
+        <div id="ps-checks-found" class="hint" data-testid="project-check-commands">${esc(t('project.settings_checks_looking'))}</div>
+      </div>`;
+  }
+
+  // #50: what the folder gives (the saved analysis' command, else the script or the tools found in it)
+  async function showChecks(p) {
+    let hints = null;
+    try { hints = await api.projectInputHints?.(p.id); } catch { /* an unreadable folder: said below */ }
+    const box = $('#ps-checks-found');
+    if (!box || cur?.id !== p.id) return;
+    const defaults = hints?.runDefaults;
+    if (!defaults) { box.textContent = t('project.settings_checks_unread'); return; }
+    const given = p.runDefaults?.check_command ? '' : defaults.check_command;
+    box.innerHTML = `${esc(t('project.settings_checks_found'))} ${window.WorkflowInputs.checksHtml(window.WorkflowInputs.checksOf(given, defaults))}`;
+  }
+
+  // the run default check_command the form asks for: off, the owner's commands, or null (what is found)
+  function checkCommandOf(val) {
+    return $('#ps-checks-on')?.checked === false ? 'off' : val('#ps-checks') || null;
+  }
+
   function markup(p, open) {
     const lp = p.localPreview || {};
     return `<details class="pr-settings panel" data-testid="project-settings"${open ? ' open' : ''}>
@@ -58,6 +91,7 @@
           <div id="ps-lp-detected" class="hint pj-lp-detected hidden"></div>
           <div class="hint">${esc(t('projects.how_to_run_a_run_s'))}</div>
         </div>
+        ${checks(p)}
         ${check('ps-ignore-scripts', 'project-ignore-scripts', t('projects.install_without_scripts'), t('projects.install_without_scripts_hint'), p.ignoreInstallScripts)}
         ${check('ps-prefer-repo-workflows', 'project-prefer-repository-workflows', t('projects.prefer_repository_workflows'), t('projects.prefer_repository_workflows_hint'), p.preferRepositoryWorkflows)}
         ${check('ps-delete-branch', 'project-delete-branch-after-merge', t('projects.delete_branch_after_merge'), t('projects.delete_branch_after_merge_hint'), p.deleteBranchAfterMerge)}
@@ -104,7 +138,7 @@
       ignoreInstallScripts: !!$('#ps-ignore-scripts')?.checked,
       preferRepositoryWorkflows: !!$('#ps-prefer-repo-workflows')?.checked,
       deleteBranchAfterMerge: !!$('#ps-delete-branch')?.checked,
-      runDefaults: { ...(p.runDefaults || {}), base_branch: base || null, base_behind: val('#ps-base-behind') || null },
+      runDefaults: { ...(p.runDefaults || {}), base_branch: base || null, base_behind: val('#ps-base-behind') || null, check_command: checkCommandOf(val) },
     };
     $('#ps-error').textContent = '';
     if (!patch.name) { $('#ps-error').textContent = t('project.settings_name_required'); return; }
@@ -118,6 +152,7 @@
       state.projects = (state.projects || []).map((x) => (x.id === p.id ? { ...x, ...record } : x));
       if (state.pv?.id === p.id) state.pv.project = { ...(state.pv.project || {}), ...record };
       window.CurrentProject?.refresh?.();
+      window.WorkflowInputs.forgetHints(p.id); // #50: the Start panel reads the saved defaults
       cur.dirty = false;
       showToast(t('project.settings_saved', { name: record.name || patch.name }));
       show(state.pv?.project || record, box, { open: true, force: true });
@@ -129,7 +164,7 @@
   }
 
   // the fields the form shows: the page redraws on run events, the form only when these change
-  const signature = (p) => JSON.stringify([p.name, p.description, p.repo, p.folder, p.localPreview, p.runDefaults?.base_branch, p.runDefaults?.base_behind,
+  const signature = (p) => JSON.stringify([p.name, p.description, p.repo, p.folder, p.localPreview, p.runDefaults?.base_branch, p.runDefaults?.base_behind, p.runDefaults?.check_command,
     !!p.ignoreInstallScripts, !!p.preferRepositoryWorkflows, !!p.deleteBranchAfterMerge]);
 
   function show(p, box, { open = false, force = false } = {}) {
@@ -152,6 +187,7 @@
     form.onchange = () => { cur.dirty = true; };
     form.onsubmit = (e) => save(e, p, box);
     $('#ps-cancel').onclick = () => show(p, box, { open: true, force: true });
+    $('#ps-checks-on').onchange = () => { $('#ps-checks').disabled = !$('#ps-checks-on').checked; };
     $('#ps-pick').onclick = async () => {
       const d = await api.pickFolder();
       if (!d) return;
@@ -161,6 +197,7 @@
     };
     if (open) box.scrollIntoView?.({ block: 'start' });
     detect(p);
+    showChecks(p);
   }
 
   window.ProjectSettings = { show };

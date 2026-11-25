@@ -8,7 +8,9 @@
 //   may be null) and the facts read from the project's files (projectFacts): mode, test_order and
 //   variant (#785: the wizard's pick, `*-code` is code_first, `*-e2e` e2e_first), language (#785:
 //   every detected one, comma-separated), base_branch (the repository's default branch),
-//   test_command, check_command, e2e_tests, e2e_command, ui_folders, screenshots, steps_folders and
+//   test_command, check_command, check_commands (#50: no workflow input, what the check runs without a
+//   check_command: the `check` script, else the linter and type checker found in the folder) and
+//   check_rewrites (those it does not run because they rewrite files: { name, why }), e2e_tests, e2e_command, ui_folders, screenshots, steps_folders and
 //   the project's kind (backend / frontend / full-stack). No Node assumption: an `npm …` command only
 //   when the project's package.json has that script; no E2E unless an E2E suite was found (and the
 //   profile does not say unit tests only). A backend project gets no UI default: ui_folders [],
@@ -27,7 +29,8 @@
 const fs = require('fs');
 const path = require('path');
 const oracleSeeds = require('../oracle/oracle-seeds');
-const { checkCommand } = require('../../engine/check-step');
+const { checkCommand, checkCommands } = require('../../engine/check-step');
+const { foundChecks } = require('../../engine/check-tools');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { detectLanguage, listBranches } = require('./project-inputs');
 const {
@@ -146,6 +149,8 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
     base_branch: defaultBranch,
     test_command: str(p.testCommand) || detectTestCommand(folder) || '',
     check_command: str(p.checkCommand) || checkCommand(folder) || '',
+    check_commands: checkCommands(folder),
+    check_rewrites: checkCommand(folder) ? [] : foundChecks(folder).rewrites,
     e2e_tests: e2eOff ? 'off' : 'write_and_run',
     e2e_command: e2eOff ? '' : suite,
     ui_folders: noUi ? [] : facts.uiFolders,

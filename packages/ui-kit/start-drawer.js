@@ -13,6 +13,8 @@
 // An analysis workflow (ANALYSIS_WORKFLOWS, analyze-project.yaml, #378/#631) shows its model turn's
 // estimate from api.architectureEstimate (#wf-estimate) before the start; #846: its Start is refused
 // (#start-error) while the project's onboarding still runs (window.ProjectWizard.analyzing, the build front).
+// #50: #start-checks (start-check-commands) shows, for a workflow with a check_command and a project, the rule checks
+// the run will use: the Check command field's, else those found in the project; `data-state="off"` when off.
 // #69: #start-real-note, above Start, says a real run uses the CLI subscriptions; hidden while Simulation is checked.
 
 const LS_KEY = 'craftorio.inputs';
@@ -30,6 +32,7 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   state.pendingProject = project;
   // a workflow asked for by name is listed even when the Setup hid it from Start (#319)
   state.drawerForced = workflow;
+  WorkflowInputs.forgetHints?.(); // #50: the project's files and settings may have changed since they were read
   [state.workflows, state.projects, state.settings, state.pipelines] = await Promise.all([
     api.listWorkflows(), api.listProjects(), api.getSettings(),
     (api.listPipelines ? api.listPipelines() : Promise.resolve([])).catch(() => []),
@@ -322,7 +325,9 @@ async function pastedImages() {
 // project, so the project's own language wins over them.
 function applyProjectHints() {
   const projectId = $('#project-select').value;
-  if (state.wf && projectId) WorkflowInputs.applyHints($('#drawer'), state.wf.inputs, projectId);
+  const hinted = state.wf && projectId ? WorkflowInputs.applyHints($('#drawer'), state.wf.inputs, projectId) : null;
+  // through window: the drawer's unit tests load this function on its own
+  Promise.resolve(hinted).then(() => window.renderStartChecks?.());
   // #39: an issue run on a project with no repository has no platform to choose (the engine records `local`);
   // another workflow's field is left to its own show_if
   if (!window.DefaultWorkflow?.namesOf('issue.yaml').includes(String(state.wf?.file).replace(/\.yaml$/, ''))) return;
@@ -330,6 +335,23 @@ function applyProjectHints() {
   const project = state.projects.find((p) => p.id === projectId);
   if (platform) platform.hidden = !!project && !project.repo;
 }
+
+// #50: the rule checks the run will use, once the project's hints are in the fields (applyProjectHints), and again as
+// the Check command field changes
+async function renderStartChecks() {
+  const box = $('#start-checks');
+  if (!box) return;
+  const wf = state.wf;
+  const projectId = $('#project-select').value;
+  const hints = wf?.inputs?.check_command && projectId && api.projectInputHints ? await WorkflowInputs.hintsOf(projectId).catch(() => null) : null;
+  if (state.wf !== wf || $('#project-select').value !== projectId) return;
+  box.classList.toggle('hidden', !hints);
+  if (!hints) { box.innerHTML = ''; return; }
+  const checks = WorkflowInputs.checksOf(WorkflowInputs.read($('#adv-form'), { all: true }).check_command, hints.runDefaults);
+  box.dataset.state = checks.off ? 'off' : 'on';
+  box.innerHTML = `<b>${esc(t('start_drawer.checks'))}</b> ${WorkflowInputs.checksHtml(checks)}`;
+}
+window.renderStartChecks = renderStartChecks;
 
 // #805: what run:start's baseCheck says, in the interface's language
 function baseNoticeText({ base, behind, state: where }) {
@@ -427,6 +449,7 @@ function initStartDrawer() {
   $('#wf-select').onchange = () => selectWorkflow($('#wf-select').value);
   $('#project-select').onchange = renderProjectInfo;
   $('#mock-toggle').onchange = renderRealNote;
+  $('#adv-form').oninput = renderStartChecks;
   $('#btn-drawer-new-project').onclick = () => window.Actions.call('openProjectWizard'); // #741: the wizard only
   $('#btn-start').onclick = () => startRun();
   $('#btn-start-another').onclick = () => startRun({ keepOpen: true });

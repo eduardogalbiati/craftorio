@@ -188,12 +188,12 @@ tpl.addFilter('mockups', (text) => uiReviewChecks.issueMockups(text));
 tpl.addFilter('expected_docs', (text) => expectedFiles.docsEntries(expectedFiles.parseExpectedFiles(String(text ?? ''))));
 
 // The project's check command of a checkout (#404, packages/engine/engine/check-step.js): the given one (the
-// check_command input), else `npm run check` when its package.json has a `check` script; '' when
-// none or without a folder, so a route to the check step is skipped.
+// check_command input), else `npm run check` when its package.json has a `check` script, else the linter and type
+// checker found in it (#50, joined with ` && `); '' when none, off or without a folder, so a route to the check step is skipped.
 //   when: "worktree_dir | check_command(inputs.check_command)"
 tpl.addFilter('check_command', (dir, command) => {
   if (!dir || !fs.existsSync(String(dir))) return '';
-  return checkStep.checkCommand(String(dir), command) || '';
+  return checkStep.checkCommands(String(dir), command).join(' && ');
 });
 
 // The numbers of the run's issues (#223: their BDD tags @issue-<n>), from `issue` and `issues` (URLs

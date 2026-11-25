@@ -83,6 +83,7 @@ const {
   writeFileList,
 } = require('./suite-command-line');
 const { saveCoverage } = require('../domains/evidence/coverage-summary');
+const { clean, fileOf } = require('./output-lines');
 const { suiteSlotRun } = require('./suite-slot');
 const { noTests, notRunMessage, suiteWithoutCommand } = require('./suite-no-command'); // #71
 const { excusedOnBase } = require('./suite-last-green');
@@ -140,18 +141,7 @@ function detectTestCommand(dir) {
   return null;
 }
 
-const clean = (s) => String(s || '').replace(/\x1b\[[0-9;]*m/g, '');
 const firstLines = (lines) => lines.map((l) => l.trim()).filter(Boolean).slice(0, ERROR_LINES).join('\n').slice(0, 400);
-// 'C:\\x\\test\\a.test.js:12:3' / 'file:///x/a.test.js:12:3' → the file, relative to cwd when inside it
-function fileOf(loc, cwd) {
-  let f = String(loc || '').trim().replace(/^'|'$/g, '').replace(/\\\\/g, '\\').replace(/^file:\/\/\/?/, '').replace(/:\d+(?::\d+)?$/, '');
-  if (cwd && path.isAbsolute(f)) {
-    const rel = path.relative(cwd, f);
-    if (!rel.startsWith('..')) f = rel;
-  }
-  return f.split(path.sep).join('/');
-}
-
 // The failing tests of a suite's output: [{ test, file, error }], at most MAX_FAILURES, deduplicated.
 // The agent reporter's JSON (#219) is read as is, with the failure's `line` and `kind` (file: a test
 // file that could not run); the runners' text formats are scraped otherwise.
