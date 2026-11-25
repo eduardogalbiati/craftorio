@@ -26,7 +26,7 @@ The upstream board: Triage → Shape → Define → Ready. A card gains a type, 
 
 ## Backlog
 
-The project's issues, synced from GitHub or GitLab, as a list, a board or by epic. From here an issue is assigned to a workflow or planned on the roadmap.
+The project's issues, synced from GitHub or GitLab, as a list, a board or by epic. From here an issue is assigned to a workflow or planned on the roadmap. A project with no repository keeps its issues in the workspace: a run that merges locally closes the ones it implemented.
 
 ![Backlog](../assets/screens/backlog.jpg "Backlog: the board")
 

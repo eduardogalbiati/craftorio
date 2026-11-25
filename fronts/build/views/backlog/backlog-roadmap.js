@@ -1143,7 +1143,7 @@
     const head = `<div class="rm-head" data-testid="roadmap-head">${row}${live?.statsHtml(r, { minutes: mins, money: cost }) || ''}${act}${filters}</div>`;
     // #354: the files and lines most runs change (#150) moved to the project's Conflict map tab: a link under the stages
     const cmapHtml = window.ProjectConflictMap ? window.ProjectConflictMap.linkHtml() : '';
-    return `<div class="rm">${head}${lostHtml()}${stages}${liveHtml}${cmapHtml}${importBox}</div>`;
+    return `<div class="rm">${head}${lostHtml()}${stages}${liveHtml}${cmapHtml}${view.local && !r.stages.length ? '' : importBox}</div>`; // #39: an empty local roadmap ends with its empty state
   }
 
   // #287: a save refused because its item (or its stage) was removed elsewhere: the reason and the

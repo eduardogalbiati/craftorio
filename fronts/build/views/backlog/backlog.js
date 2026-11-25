@@ -3,6 +3,8 @@
 // syncs again in the background each time the screen opens. The platform is the project's (#745,
 // window.Platforms.projectPlatform: its host or the platform stored on it), shown as a badge; the
 // select appears only for a host that can't tell it, and its pick is saved on the project.
+// A project with no repository has a local backlog (#35): the page says so, with no platform, sync line
+// (#39) or unknown push status (#73).
 // A repository with Issues turned off (#845: the sync's issuesDisabled) shows that state with a
 // link to its settings (backlog-issues-disabled), not a sync error.
 // Selected To do issues can be assigned to a workflow: Add to roadmap plans them as a new last
@@ -74,7 +76,13 @@
   // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)
   const ORGANIZE = 'Organize the open issues into epics';
   // #238: Archived = closed with the `archived` label; Closed shows the other closed issues
-  const FILTERS = ['open', 'closed', 'archived', 'all'];
+  // the state chips, each with its test id (written out, so a search for one finds it)
+  const FILTERS = [
+    ['open', 'backlog-state-open'],
+    ['closed', 'backlog-state-closed'],
+    ['archived', 'backlog-state-archived'],
+    ['all', 'backlog-state-all'],
+  ];
   // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
   const COLUMNS = ['todo', 'in_progress', 'waiting', 'local', 'done'];
 
@@ -418,7 +426,7 @@
   // project with no repository has a local backlog, so New issue works there too.
   function newIssue() {
     if (!project()) return;
-    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: platformOf(bl.platform).short } });
+    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: project().repo ? { git_platform: platformOf(bl.platform).short } : null });
   }
 
   // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
@@ -1091,7 +1099,8 @@
         ],
       }];
     }
-    if (!l.error || !(bl.data?.issues || []).some((i) => i.column === 'local')) return [];
+    // #73: with no remote there is no push to know about (an older version cached "origin/main not found")
+    if (!l.error || !project()?.repo || !(bl.data?.issues || []).some((i) => i.column === 'local')) return [];
     return [{
       id: `push-unknown:${bl.projectId}`,
       level: 'warning',
@@ -1252,29 +1261,52 @@
     return '';
   }
 
+  // The text under the title: what the page shows, where its issues are and their folder.
+  function renderDescription(roadmap, local) {
+    const where = roadmap ? '' : t('backlog.a_project_s_issues_synced_from');
+    $b('#bl-hint').textContent = [
+      roadmap ? t('backlog.ordered_stages_of_runs_each_stage') : '',
+      local ? t('backlog.local_backlog_description') : where,
+    ].filter(Boolean).join(' ');
+    $b('#bl-kept').textContent = t(local ? 'backlog.local_backlog_folder' : 'backlog.the_last_sync_is_kept_in');
+  }
+
+  function renderPlatform() {
+    const plat = $b('#bl-platform');
+    plat.innerHTML = Object.entries(PLATFORMS).map(([id, def]) => `<option value="${id}">${esc(def.label)}${def.soon ? ` ${t('backlog.soon')}` : ''}</option>`).join('');
+    plat.value = bl.platform || DEFAULT_PLATFORM;
+    // #745: a known platform as a badge; the select only for a host the URL can't tell (saved on the project)
+    // #39: neither for a local backlog
+    const p = project(), local = !!p && !p.repo;
+    const known = local ? null : knownPlatform(), badge = $b('#bl-platform-badge');
+    plat.classList.toggle('hidden', !!known || local);
+    badge.classList.toggle('hidden', !known);
+    Object.assign(badge, { textContent: known ? PLATFORMS[known]?.label || known : '', title: known ? t('backlog.platform_of_the_project') : '' });
+  }
+
+  // "Synced … from GitHub" ('' for a local backlog: nothing is synced)
+  function syncedText(local) {
+    if (bl.syncing) return t('backlog.syncing');
+    if (!bl.data || local) return '';
+    return t('backlog.synced_syncedat_from_value', { syncedAt: dateOf(bl.data.syncedAt), value: PLATFORMS[bl.data.platform]?.label || bl.data.platform });
+  }
+
   function render() {
     // #254: the Backlog screen (Board and Epics tabs) or the Roadmap screen, in the same section
     const roadmap = onRoadmapTab();
     $b('#bl-title').textContent = roadmap ? t('backlog.roadmap') : t('backlog.backlog');
-    $b('#bl-hint').textContent = roadmap
-      ? t('backlog.ordered_stages_of_runs_each_stage')
-      : t('backlog.a_project_s_issues_synced_from');
+    const p = project();
+    // #39: a project with no repository has a local backlog: no platform, nothing synced
+    const local = !!p && !p.repo;
+    renderDescription(roadmap, local);
     $b('#bl-tabs').classList.toggle('hidden', roadmap);
     // #269: the Roadmap draws its own filter row (the epic with its view filters), above its bar
     $b('#bl-toolbar').classList.toggle('hidden', roadmap);
-    const plat = $b('#bl-platform');
-    plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ` ${t('backlog.soon')}` : ''}</option>`).join('');
-    plat.value = bl.platform || DEFAULT_PLATFORM;
-    // #745: a known platform as a badge; the select only for a host the URL can't tell (saved on the project)
-    const known = knownPlatform(), badge = $b('#bl-platform-badge');
-    plat.classList.toggle('hidden', !!known);
-    badge.classList.toggle('hidden', !known);
-    Object.assign(badge, { textContent: known ? PLATFORMS[known]?.label || known : '', title: known ? t('backlog.platform_of_the_project') : '' });
+    renderPlatform();
 
-    const p = project();
     const btn = $b('#btn-bl-sync');
     // #35: a local backlog (no repository) has nothing to sync with: Sync is hidden, New issue stays on
-    btn.classList.toggle('hidden', !!p && !p.repo);
+    btn.classList.toggle('hidden', local);
     btn.disabled = !p?.repo || bl.syncing || !!PLATFORMS[bl.platform]?.soon;
     btn.textContent = bl.syncing ? t('backlog.syncing') : t('backlog.sync');
     $b('#btn-bl-new-issue').disabled = !p || (!!p.repo && !!PLATFORMS[bl.platform]?.soon);
@@ -1319,14 +1351,14 @@
     const count = (f) => board.filter((i) => f === 'all' || issueState(i) === f).length;
     const filters = $b('#bl-filters');
     filters.classList.toggle('hidden', bl.mode !== 'list');
-    filters.innerHTML = FILTERS.map((f) =>
-      `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}" data-testid="backlog-state-${f}">${t(`backlog.filter_${f}`)} <span class="muted">${count(f)}</span></button>`).join('');
+    filters.innerHTML = FILTERS.map(([f, testId]) =>
+      `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}" data-testid="${testId}">${t(`backlog.filter_${f}`)} <span class="muted">${count(f)}</span></button>`).join('');
     renderLabelFilter(board);
     renderEpicFilter(board);
     // (after renderLabelFilter, which shows the labels button whenever there are labels)
     for (const id of ['#bl-search', '#bl-label-active']) $b(id).classList.toggle('hidden', tab === 'roadmap');
     if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
-    $b('#bl-synced').textContent = bl.syncing ? t('backlog.syncing') : bl.data ? t('backlog.synced_syncedat_from_value', { syncedAt: dateOf(bl.data.syncedAt), value: PLATFORMS[bl.data.platform]?.label || bl.data.platform }) : '';
+    $b('#bl-synced').textContent = syncedText(local);
     const prError = bl.data?.pullRequestsError ? `Open ${platformOf(bl.data.platform).request.short}s could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
     // (#269: an empty error line takes no room between the alerts, the filter row and the list)
@@ -1340,7 +1372,7 @@
       list.innerHTML = listState;
     } else {
       // (#491: the Roadmap keeps its item rows when only their content changed)
-      if (bl.mode === 'roadmap') window.BacklogRoadmap.patch(list, window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, synced: $b('#bl-synced').textContent }));
+      if (bl.mode === 'roadmap') window.BacklogRoadmap.patch(list, window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, release: bl.release, project: bl.projectId, local, synced: $b('#bl-synced').textContent }));
       else { list.innerHTML = bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board); bindIssueMenu(); } // #748: an open card menu, redrawn, bound again
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
@@ -1563,7 +1595,7 @@
         <div class="page-head">
           <div>
             <h1 id="bl-title">${t('backlog.backlog')}</h1>
-            <p class="muted small"><span id="bl-hint">${t('backlog.a_project_s_issues_synced_from')}</span> ${t('backlog.the_last_sync_is_kept_in')} <span id="backlog-dir" class="mono"></span></p>
+            <p class="muted small" data-testid="backlog-description"><span id="bl-hint">${t('backlog.a_project_s_issues_synced_from')}</span> <span id="bl-kept">${t('backlog.the_last_sync_is_kept_in')}</span> <span id="backlog-dir" class="mono"></span></p>
           </div>
           <div class="row">
             <span id="bl-platform-badge" class="badge hidden" data-testid="backlog-platform"></span>

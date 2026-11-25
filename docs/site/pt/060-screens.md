@@ -26,7 +26,7 @@ O quadro a montante: Triage → Shape → Define → Ready. Um card ganha tipo, 
 
 ## Backlog
 
-As issues do projeto, sincronizadas do GitHub ou do GitLab, como lista, quadro ou por épico. Daqui uma issue é atribuída a um workflow ou planejada no roadmap.
+As issues do projeto, sincronizadas do GitHub ou do GitLab, como lista, quadro ou por épico. Daqui uma issue é atribuída a um workflow ou planejada no roadmap. Um projeto sem repositório guarda as issues no workspace: uma run que mescla localmente fecha as que implementou.
 
 ![Backlog](../assets/screens/backlog.jpg "Backlog: o quadro")
 

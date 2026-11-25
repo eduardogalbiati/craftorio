@@ -3,7 +3,8 @@
 // stage, alone or as one group item, with an optional chain #134 and "Run now" #446); the issue
 // tracker's epic placement after a run filed issues (#138); the Backlog Refresh banner and the sync
 // after a refresh run (#161, packages/engine/domains/backlog/backlog-refresh.js). "Create and plan" is a chain
-// (packages/engine/service/areas/chain.js).
+// (packages/engine/service/areas/chain.js). A run's end files its drafts into the local backlog (#35, fileRunLocally)
+// and closes the local issues it merged (#73, closeMergedIssues).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -214,9 +215,20 @@ module.exports = (ctx) => {
     ctx.events?.emit('backlog:changed', { projectId: project.id, file: 'local-issues', watching: !!ctx.backlogWatching?.() });
   }
 
+  // #73: a run that merged locally and ended well closes the local issues it was started for (no push ever does).
+  // Only at its end: a run that merged and then failed or was stopped closes none, a simulated run merges nothing,
+  // and an issue a person reopened since stays open until a new run on it merges.
+  function closeMergedIssues(run, ev) {
+    const commit = run.ctx.local_merge?.commit;
+    if (!run.projectId || run.mock || ev.status !== 'success' || !commit) return;
+    const closed = localIssues.closeMergedLocalIssues(ctx.ws.backlog, run.projectId, backlog.runIssues(run), { runId: run.runId, commit });
+    if (closed.length) ctx.events?.emit('backlog:changed', { projectId: run.projectId, file: 'local-issues', watching: !!ctx.backlogWatching?.() });
+  }
+
   return {
     afterBacklogRefresh,
     assignWorkflow,
+    closeMergedIssues,
     fileRunLocally,
     placeFiledInEpic,
     withIssueRuns,

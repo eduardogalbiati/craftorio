@@ -91,8 +91,9 @@ inputs:
     enum: [gh, gl]
     default: gh
     label: Platform
-    options: { gh: GitHub, gl: GitLab }
-    # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the issue-creator skill.
+    options: { gh: GitHub, gl: GitLab, local: Local }
+    # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the issue-creator skill. `local` is never offered
+    # (not in the enum): the engine records it for a project with no repository (#39), where the filer runs nothing.
     description: Where the issue is filed.
   related:
     label: "Related issues"
@@ -167,7 +168,7 @@ agents:
     effort: medium
     session: ephemeral
     capabilities: *read_vcs
-    skills: [issue-triage, "issue-creator-{{ inputs.git_platform }}"]
+    skills: [issue-triage, "issue-creator-{% if inputs.git_platform == 'gl' %}gl{% else %}gh{% endif %}"]
     system_prompt: |
       You are the code analyzer of an issue tracker. Before an issue is written, you find the
       code a request touches, describe today's behaviour with file:line evidence, estimate the
@@ -198,7 +199,7 @@ agents:
     effort: low
     session: ephemeral
     capabilities: *vcs_only
-    skills: ["issue-creator-{{ inputs.git_platform }}"]
+    skills: ["issue-creator-{% if inputs.git_platform == 'gl' %}gl{% else %}gh{% endif %}"]
     system_prompt: |
       You are the issue filer. The owner approved the drafts at the review gate; you file them
       exactly as approved with {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} (create, comment or edit), with their labels, and

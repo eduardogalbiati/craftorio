@@ -528,7 +528,7 @@ const methods = {
   // pushBase: a normal push, or a fast-forward of the person's own repository when origin is a local folder
   // with the base checked out); no model call. Never fails the run: a push that cannot go (origin moved,
   // uncommitted changes or a diverged base there, an error) leaves it merged locally, with the reason and the
-  // commands in the output and the run's chat (a warn log). → { kind, pushed, summary, target, how, reason,
+  // commands in the output and the run's chat (a warn log; #73 a repository with no origin: an info one). → { kind, pushed, summary, target, how, reason,
   // commands }: pushed and summary as the agent's output had them.
   async runPushBaseStep(step) {
     const wt = this.worktree;
@@ -539,24 +539,27 @@ const methods = {
       return output;
     }
     let output;
+    let noRemote = false;
     try {
       const r = await this.machine.pushBase({ repo: wt.repo, base: wt.base });
       const n = (r.commits || []).length;
       const where = r.target ? ` to ${r.target}` : '';
-      const said = r.pushed
+      const said = r.noRemote ? 'Merged locally, this project has no remote.' : r.pushed
         ? `${r.how === 'fast-forward' ? 'Fast-forwarded' : 'Pushed'} ${n} commit${n === 1 ? '' : 's'} of ${wt.base}${where}.`
         : r.reason || (n ? `Nothing pushed${where}.` : `Nothing to push: origin/${wt.base} already has the local ${wt.base}.`);
       const commands = r.commands || [];
       // the run's summary carries the commands once; the reason stays short (the chat shows each log line apart)
       const summary = commands.length ? `${said}\nTo bring the commits over:\n${commands.join('\n')}` : said;
-      output = out(!!r.pushed, summary, { target: r.target || null, how: r.how || null, reason: r.reason || said, commands, rejected: !!r.rejected, issues: r.issues || [] });
+      output = out(!!r.pushed, summary, { target: r.target || null, how: r.how || null, reason: r.noRemote ? said : r.reason || said, commands, rejected: !!r.rejected, issues: r.issues || [] });
+      noRemote = !!r.noRemote;
     } catch (e) {
-      output = out(false, `Could not push ${wt.base}: ${e.message.split('\n')[0]}. The run is merged locally; push it from the Backlog.`);
+      output = out(false, `Could not push ${wt.base}: ${e.message.split('\n')[0].replace(/\.+$/, '')}. The run is merged locally; push it from the Backlog.`);
     }
     this.ctx.local_push = { pushed: output.pushed, target: output.target, how: output.how, reason: output.reason };
     // the reason, then each command in a log line of its own: the run's chat clips a warning at 400 characters,
     // and a long macOS path must not cut a command
-    const level = output.pushed ? 'info' : 'warn';
+    // (#73: no remote is no warning, there is nothing to push to)
+    const level = output.pushed || noRemote ? 'info' : 'warn';
     this.emitEvent('log', { level, kind: 'push_base', step_id: step.id, message: output.commands.length ? `${output.reason} To bring the commits over, run:` : output.summary });
     for (const command of output.commands) this.emitEvent('log', { level, kind: 'push_base', step_id: step.id, message: command });
     return output;

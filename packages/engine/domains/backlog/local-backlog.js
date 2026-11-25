@@ -6,7 +6,8 @@
 // added later: backlog.js syncBacklog). Reading and writing them never calls a platform CLI or git: nothing leaves the machine.
 // packages/engine/domains/backlog/backlog.js readBacklog joins these issues to the synced ones; once a repository
 // is added the owner may file them on the platform (fileLocalIssues, backlog:file-local: a preview, then the only
-// CLI call here, on the owner's click), which removes the filed ones from here.
+// CLI call here, on the owner's click), which removes the filed ones from here. No push closes a local issue: the run
+// that merged it locally does (#73, closeMergedLocalIssues, when the run ends well), with the run and the commit in `closedBy`.
 
 const fs = require('fs');
 const path = require('path');
@@ -79,8 +80,23 @@ function updateLocalIssue(dir, projectId, number, { title, body } = {}) {
   }));
 }
 
-function closeLocalIssue(dir, projectId, number) {
-  return patchLocalIssue(dir, projectId, number, (i) => ({ ...i, state: 'closed', closedAt: new Date().toISOString() }));
+/** Closes an issue; #73 `closedBy`: { runId, commit } of the run whose local merge closed it (null: a person did). */
+function closeLocalIssue(dir, projectId, number, closedBy = null) {
+  return patchLocalIssue(dir, projectId, number, (i) => ({ ...i, state: 'closed', closedAt: new Date().toISOString(), ...(closedBy ? { closedBy } : {}) }));
+}
+
+/**
+ * #73: closes the open local issues among `refs` (a run's issues, backlog.js runIssues) and answers their numbers.
+ * A ref with a url is the platform's issue, even when a local one has its number; an earlier number of a renumbered
+ * issue (renumberedFrom) is that issue. One already closed keeps its record.
+ */
+function closeMergedLocalIssues(dir, projectId, refs, closedBy) {
+  const own = readLocalIssues(dir, projectId) || [];
+  const moved = renumberedFrom(own);
+  const numbers = new Set((refs || []).filter((r) => !r.url).map((r) => moved.get(Number(r.number)) ?? Number(r.number)));
+  const open = own.filter((i) => i.state === 'open' && numbers.has(i.number)).map((i) => i.number);
+  for (const number of open) closeLocalIssue(dir, projectId, number, closedBy);
+  return open;
 }
 
 const isLocal = (dir, projectId, number) => (readLocalIssues(dir, projectId) || []).some((i) => i.number === Number(number));
@@ -110,10 +126,10 @@ function archiveLocalIssues(dir, projectId, { numbers, issues = [] }) {
   });
 }
 
-/** Restore: open again, without the `archived` label. */
+/** Restore: open again, without the `archived` label and what closed it. */
 function restoreLocalIssues(dir, projectId, { numbers }) {
   return eachIssue(dir, projectId, numbers, (number) => patchLocalIssue(dir, projectId, number, (i) => {
-    const { closedAt: _closed, ...rest } = i;
+    const { closedAt: _closed, closedBy: _by, ...rest } = i;
     return { ...rest, state: 'open', labels: (i.labels || []).filter((l) => !sameLabel(l, ARCHIVED_LABEL)) };
   }));
 }
@@ -238,6 +254,7 @@ function localSaveCommand({ dir, projectId, number, mode, text = '' }) {
 module.exports = {
   archiveLocalIssues,
   closeLocalIssue,
+  closeMergedLocalIssues,
   createLocalIssue,
   filedIssue,
   fileLocalIssues,

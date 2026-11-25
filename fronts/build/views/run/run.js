@@ -263,7 +263,8 @@ function renderRunSummary() {
   askPrStates([r]);
   askScratch(r.id);
   askResumed(r);
-  const all = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  // (#39: a run on a local backlog has no platform to show)
+  const all = Object.entries(r.inputs || {}).filter(([k, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length) && !(k === 'git_platform' && v === 'local'));
   // #216: the choices (enum and yes/no inputs) as the shared pills, with their labels; the rest
   // (task, paths, numbers) as key / value
   const wf = (state.workflows || []).find((w) => w.file === r.file || w.name === r.workflow) || null;

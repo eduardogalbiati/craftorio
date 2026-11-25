@@ -8,7 +8,7 @@ order: 600
 Plan & Design (#648: the former issue tracker; `issue-tracker.yaml` is an alias of it). Turns a request in a few words (any language), or a signed-off spec (the `spec` input, e.g. `docs/work/<item>/spec.md`), into triaged GitHub/GitLab issues.
 Start it from the Backlog's **New issue…** button (the selected project and platform are filled in)
 or from the Start panel. Inputs: `request`, `project_path`, `mode` (**Validated**, the default, or
-**Automatic**, shown next to the request), `git_platform` (`gh`/`gl`), and the optional `related`
+**Automatic**, shown next to the request), `git_platform` (`gh`/`gl`; on a project with no repository it is not asked and is recorded as `local`, #39), and the optional `related`
 ("#41, #79"), `attachments` (screenshots, logs), `max_revisions` and `assign_workflow`.
 
 | Step | Agent | What it does |

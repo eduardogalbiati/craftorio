@@ -35,6 +35,12 @@ const refExists = async (repo, ref) => {
   return !!((await tryGit(args, repo)) || (await tryGit(args, repo)));
 };
 
+// origin's URL, or null when the repository has none (asked twice, as refExists: a lost git process is not a missing remote).
+const originUrl = async (repo) => {
+  const args = ['remote', 'get-url', 'origin'];
+  return (await tryGit(args, repo)) || (await tryGit(args, repo));
+};
+
 // The repository's default branch: origin/HEAD, else the branch checked out, else main.
 async function defaultBase(repo) {
   const head = await tryGit(['symbolic-ref', '--short', '-q', 'refs/remotes/origin/HEAD'], repo);
@@ -55,15 +61,17 @@ async function closingCommits(root, args) {
 }
 
 /**
- * What the local <base> has that origin/<base> has not.
+ * What the local <base> has that origin/<base> has not. #73: a repository with no origin has nothing to push
+ * (`noRemote`), which is no error.
  * @param {{ repo: string, base?: string, fetch?: boolean }} o fetch: false reads the last fetch (no network)
  * @returns {Promise<{ repo, base, ahead, behind, commits: { sha, subject, issues }[], issues: number[],
- *   fetchError: string|null, error: string|null, checkedAt: string }>}
+ *   fetchError: string|null, error: string|null, noRemote?: boolean, checkedAt: string }>}
  */
 async function localStatus({ repo, base = null, fetch = true }) {
   const root = await repoRoot(repo);
   if (!root) throw new Error(`${repo || '(no folder)'} is not a git repository.`);
   base = base || await defaultBase(root);
+  if (!(await originUrl(root))) return { repo: root, base, ahead: 0, behind: 0, commits: [], issues: [], fetchError: null, error: null, noRemote: true, checkedAt: new Date().toISOString() };
   const { ahead, behind, compared, fetchError } = await compareWithOrigin({ root, base, fetch });
   const out = { repo: root, base, ahead: 0, behind: 0, commits: [], issues: [], fetchError, error: null, checkedAt: new Date().toISOString() };
   if (!(await refExists(root, `refs/heads/${base}`))) return { ...out, error: `The local branch ${base} does not exist.` };
@@ -116,7 +124,8 @@ async function fastForwardLocalOrigin(before, origin) {
 /**
  * Pushes the local <base> to origin/<base> (fetched first, to report what goes). #861: when origin is the
  * person's own repository on this machine with <base> checked out, fastForwardLocalOrigin moves it instead.
- * @returns {Promise<{ pushed: boolean, rejected?: boolean, error?: string, how?: 'push'|'fast-forward',
+ * #73: with no origin there is nowhere to push: `noRemote`, with the reason, never an error.
+ * @returns {Promise<{ pushed: boolean, rejected?: boolean, noRemote?: boolean, error?: string, how?: 'push'|'fast-forward',
  *   target?: string, reason?: string, commands?: string[], commits, issues, status }>}
  *   rejected: origin/<base> has commits the local <base> has not (see updateAndPush); target: origin's folder or URL;
  *   commands: what to run by hand when nothing moved (local origin, dirty or diverged).
@@ -125,10 +134,11 @@ async function pushBase({ repo, base = null }) {
   const before = await localStatus({ repo, base });
   const { commits, issues } = before;
   if (before.error) throw new Error(before.error);
+  if (before.noRemote) return { pushed: false, noRemote: true, reason: 'This project has no remote: there is nothing to push to.', commits, issues, status: before };
   if (!commits.length) return { pushed: false, commits, issues, status: before };
   const origin = await localOrigin(before.repo, before.base);
   if (origin?.checkout) return fastForwardLocalOrigin(before, origin);
-  const target = origin?.dir || await tryGit(['remote', 'get-url', 'origin'], before.repo);
+  const target = origin?.dir || await originUrl(before.repo);
   try {
     await git(['push', 'origin', `refs/heads/${before.base}:refs/heads/${before.base}`], before.repo, { timeout: PUSH_TIMEOUT_MS, auth: true });
   } catch (e) {

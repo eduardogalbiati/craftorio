@@ -281,6 +281,7 @@ async function shipRelease({ repo, base = null, tag, expect = null }) {
   const tags = await tagsAt(root, name, commit);
   const result = await pushBase({ repo: root, base });
   if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
+  if (result.noRemote) throw new Error(`${result.reason} Nothing was tagged.`); // #73
   // #861: a local-folder origin left untouched (uncommitted changes or a diverged base there): no tag without the base
   if (!result.pushed && result.commands?.length) throw new Error(`${result.reason} Nothing was tagged.`);
   await pushTag(root, name, commit, tags);

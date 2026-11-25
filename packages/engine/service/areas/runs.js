@@ -6,7 +6,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { aliasInputs } = require('@craftorio/shared/default-workflow');
+const {
+  aliasInputs,
+  namesOf,
+} = require('@craftorio/shared/default-workflow');
+const { projectPlatform } = require('@craftorio/shared/platforms');
+const { fits } = require('@craftorio/shared/run-inputs');
 const {
   childRunCost,
   loadWorkflow,
@@ -270,6 +275,8 @@ module.exports = (ctx) => {
   function afterRunFinished(run, ev) {
     // #35: an issue run on a project with no remote files its drafts locally, before its chain reads `issues`
     try { ctx.fileRunLocally?.(run, ev); } catch (e) { console.error('local backlog:', e.message); }
+    // #73: a run that merged locally closes its local issues, before the chain and the roadmap read them
+    try { ctx.closeMergedIssues?.(run, ev); } catch (e) { console.error('local backlog:', e.message); }
     // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
     ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
       .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
@@ -361,6 +368,16 @@ module.exports = (ctx) => {
       if (Object.keys(pick).length) agents[name] = pick;
     }
     return Object.keys(agents).length ? { agents, providers: mine.providers || {} } : null;
+  }
+
+  // #39: the issue workflow's run on a project with no repository uses no platform and records `local` (an older
+  // copy of the workflow that does not name it keeps its own value); resumed once the project has a repository,
+  // it takes that one's platform.
+  function issuePlatform(project, file, inputs) {
+    if (!project || !namesOf('issue.yaml').includes(path.basename(file, '.yaml'))) return inputs;
+    if (project.repo) return inputs?.git_platform === 'local' ? { ...inputs, git_platform: projectPlatform(project)?.short } : inputs;
+    const def = loadWorkflow(file).inputs?.git_platform;
+    return def && fits(def, 'local') ? { ...inputs, git_platform: 'local' } : inputs;
   }
 
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
@@ -459,7 +476,7 @@ module.exports = (ctx) => {
       run = new WorkflowRun({
         // #630: an old workflow name brings its variant's inputs, under the run's own (an old
         // `mode: validated` is the validation, so the alias's mode stays)
-        file: wfFile.file, inputs: aliasInputs(wfFile, inputs), mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
+        file: wfFile.file, inputs: issuePlatform(project, wfFile.file, aliasInputs(wfFile, inputs)), mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),

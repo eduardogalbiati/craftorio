@@ -48,6 +48,9 @@ function demoLocalBacklog(backlogFile, ws, projectId) {
   const issues = (data.issues || []).map(({ epic, isEpic, ...i }) => ({ ...i, url: null, local: true, author: null }));
   fs.unlinkSync(backlogFile);
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.local-issues.json`), JSON.stringify({ projectId, issues }, null, 2));
+  // #73: no remote, so no push status (the demo's local merge has nothing to push)
+  const status = { base: 'main', ahead: 0, behind: 0, commits: [], issues: [], fetchError: null, error: null, noRemote: true, checkedAt: new Date().toISOString() };
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.local.json`), JSON.stringify(status, null, 2));
 }
 
 module.exports = {
