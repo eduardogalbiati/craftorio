@@ -170,6 +170,24 @@ test('#360 seeds:setTool records a command: listed as the tool, the estimate fre
   assert.equal(rowOf(cleared, SEED).tool, null);
 });
 
+test('#74 seeds:estimate is the project\'s own runs\' for every seed but Ways of working, whose estimate is the interview\'s', async (t) => {
+  const { service, api, repo, projectId } = await setup(t);
+  const other = await api['projects:create']({ name: 'other', folder: repo.dir });
+  const save = (id, run) => {
+    const dir = path.join(service.workspace().root, 'architecture', id, 'seeds', SEED, '2026-11-25');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ at: '2026-11-25T10:00:00.000Z', simulated: false, ...run }));
+  };
+  const estimate = (seedId) => call(api, 'seeds:estimate', { projectId, seedId });
+  save(other.id, { source: 'oracle', costUsd: 0.5 });
+  assert.deepEqual(await estimate(SEED), { costUsd: null, free: false, basis: 0 });
+  save(projectId, { source: 'tool', costUsd: 0.1 });
+  assert.deepEqual(await estimate(SEED), { costUsd: null, free: false, basis: 0 }, 'a tool\'s run says nothing of the model\'s cost');
+  save(projectId, { source: 'oracle', costUsd: 0.25 });
+  assert.deepEqual(await estimate(SEED), { costUsd: 0.25, free: false, basis: 1 });
+  assert.deepEqual(await estimate('ways-of-working'), { costUsd: 0, free: true, basis: 0 }, 'a simulation calls no model');
+});
+
 test('#360 seeds:makeTool in simulation files nothing: a preview with a title and no url', async (t) => {
   const { api, projectId } = await setup(t);
   const out = await call(api, 'seeds:makeTool', { projectId, seedId: SEED });

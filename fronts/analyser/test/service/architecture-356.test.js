@@ -13,6 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const arch = require('@craftorio/engine/domains/oracle/oracle-architecture');
 const { makeService } = require('@craftorio/engine/test/service/helpers');
 
 const CHANNELS = [
@@ -212,6 +213,29 @@ test('#356 architecture:estimate is null when every saved report is simulated', 
   await analyzed(api, projectId);
   const out = await call(api, 'architecture:estimate', { projectId });
   assert.equal(out.estimate, null);
+});
+
+test('#74 architecture:estimate with others falls back to the other projects\' real analyses, its own first; a non-boolean is refused', async (t) => {
+  const { service, api, projectId } = await setup(t);
+  const other = await api['projects:create']({ name: 'other', folder: fixtureRepo(t).dir });
+  const root = path.join(service.workspace().root, 'architecture');
+  const save = (id, costUsd) => arch.saveReport(root, id, { date: new Date().toISOString(), costUsd, simulated: false, report: { summary: 's', areas: [], findings: [] } });
+  const estimate = async (opts) => (await call(api, 'architecture:estimate', { projectId, ...opts })).estimate;
+  save(other.id, 0.5);
+  assert.equal(await estimate({}), null);
+  assert.equal(await estimate({ others: false }), null);
+  assert.deepEqual(await estimate({ others: true }), { usd: 0.5, basis: 1 });
+  save(projectId, 0.25);
+  assert.deepEqual(await estimate({ others: true }), { usd: 0.25, basis: 1 });
+  await assert.rejects(async () => estimate({ others: 'yes' }));
+});
+
+test('#74 in a simulation the costs\' E2E hook is the project map\'s estimate', async (t) => {
+  const { api, projectId } = await setup(t);
+  const before = process.env.CRAFTORIO_E2E_ONBOARDING_COSTS;
+  t.after(() => { if (before === undefined) delete process.env.CRAFTORIO_E2E_ONBOARDING_COSTS; else process.env.CRAFTORIO_E2E_ONBOARDING_COSTS = before; });
+  process.env.CRAFTORIO_E2E_ONBOARDING_COSTS = '{"projectMap":0.74}';
+  assert.deepEqual((await call(api, 'architecture:estimate', { projectId })).estimate, { usd: 0.74, basis: 1 });
 });
 
 // ---------- schemas ----------

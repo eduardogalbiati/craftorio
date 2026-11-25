@@ -334,7 +334,7 @@ test('#725 amounts: a failed job reads "—", a done job its cost or "grátis", 
   await emit(app, MAP_FAILED);
   await app.settle(10);
   assert.equal(amountOf(part(app, 'projectMap')), '—', 'the failed project map\'s amount');
-  // the free jobs carry no data-part: the facts are the second job row (clone, facts, profile, project map)
+  // the facts carry no data-part (#74: only the analyses that may cost do): they are the second job row (clone, facts, profile, project map)
   const rows = H.findAll(byTestId(wizardMarkup(app), 'wizard-cost')?.outer || '', (e) => e.name === 'li' && /\bwizard-job\b/.test(e.attrs.class || ''));
   const facts = amountOf(rows[1]);
   assert.doesNotMatch(facts, /ainda não estimado/i, `the done facts' amount: "${facts}"`);

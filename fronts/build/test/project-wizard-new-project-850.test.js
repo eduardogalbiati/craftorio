@@ -128,6 +128,19 @@ test('#850 new project step 3: nothing reads "Not known yet" and there is no "Sk
   }
 });
 
+test('#74 new project step 3: its profile is its own answers, free and never estimated, and nothing says a cost beside the workflows', { timeout: 30000 }, async () => {
+  const app = await newAtAnalysis();
+  const profile = H.findAll(costBlock(app).outer, (e) => e.name === 'li').find((li) => W.byTestId(li.outer, 'wizard-profile'));
+  assert.equal(textOf(H.findEl(profile.outer, (e) => W.classesOf(e).includes('wizard-amount'))), 'free');
+  assert.equal(app.callsTo('seedEstimate').length, 0);
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-choice-cost') == null, true);
+});
+
+test('#74 new project: the review has no costs of analyses', { timeout: 30000 }, async () => {
+  const app = await newAtReview();
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-review-costs') == null, true);
+});
+
 test('#850 the model: a new project reaches step 3 with analyzeLater set; an import does not', () => {
   delete require.cache[require.resolve(MODEL)];
   const M = require(MODEL);
