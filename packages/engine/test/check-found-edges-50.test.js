@@ -44,6 +44,8 @@ for (const [what, s, why] of [
   ['a script run with npm run --silent', { lint: 'npm run --silent lint:js', 'lint:js': 'eslint . --fix' }, '--fix'],
   ['a script run with npm run -s', { lint: 'npm run -s lint:js', 'lint:js': 'eslint . --fix' }, '--fix'],
   ['a script run with pnpm --silent', { lint: 'pnpm --silent lint:js', 'lint:js': 'eslint . --fix' }, '--fix'],
+  ['a script run with pnpm --filter', { lint: 'pnpm --filter app run lint:js', 'lint:js': 'eslint . --fix' }, '--fix'],
+  ['a script run with npm run --loglevel', { lint: 'npm run --loglevel error lint:js', 'lint:js': 'eslint . --fix' }, '--fix'],
 ]) {
   test(`#50 a lint script that rewrites files is said, not run: ${what}`, (t) => {
     const found = foundChecks(tmp(t, scripts(s)), { env: NO_PATH });
@@ -54,6 +56,7 @@ for (const [what, s, why] of [
 for (const [what, s] of [
   ['scripts that run each other', { lint: 'npm run a', a: 'npm run lint' }],
   ['a fixing script it does not run', { lint: 'eslint .', 'lint:fix': 'eslint . --fix' }],
+  ['an argument named like a fixing script', { lint: 'npm run ok -- fix', ok: 'eslint .', fix: 'eslint . --fix' }],
   ['cargo fmt --check', { lint: 'cargo fmt --check' }],
   ['prettier --check', { lint: 'prettier --check .' }],
 ]) {
