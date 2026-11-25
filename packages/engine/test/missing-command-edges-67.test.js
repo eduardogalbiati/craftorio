@@ -46,9 +46,23 @@ for (const command of [
   '1>out.txt tool',
   '2>>err.log tool --check',
   'D: && tool',
+  '"D:" && tool',
 ]) {
   test(`#67 not missing: ${command}`, (t) => {
     assert.equal(programMissing(command, { code: 1, cwd: tmpDir(t), env: winEnv(t), platform: 'win32' }), false);
+  });
+}
+
+test('#67 a digit at the end of the name belongs to it, before a redirection too', (t) => {
+  const env = { PATH: tmpDir(t, { 'py3.cmd': '' }), PATHEXT: '.exe;.cmd' };
+  const missing = (command) => programMissing(command, { code: 1, cwd: tmpDir(t), env, platform: 'win32' });
+  for (const command of ['py3>&1', 'py3>nul', 'py3 2>&1']) assert.equal(missing(command), false, command);
+  for (const command of ['py>&1', 'py2>&1', 'py 3>&1']) assert.equal(missing(command), true, command);
+});
+
+for (const command of [`${GONE} 2>nul`, `${GONE} --check 2>&1`, `${GONE} 1>out.txt 2>>err.log`, `${GONE} && D:`]) {
+  test(`#67 still missing: ${command}`, (t) => {
+    assert.equal(programMissing(command, { code: 1, cwd: tmpDir(t), env: winEnv(t), platform: 'win32' }), true);
   });
 }
 
