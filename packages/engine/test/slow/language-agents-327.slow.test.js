@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
+const { simInputs } = require('../helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..', '..');
 const load = () => require('@craftorio/shared/language');
@@ -19,7 +20,7 @@ test('#327 software-development with agents in pt-BR: every step output parses a
   const run = new WorkflowRun({
     // #630: software-development is feature.yaml in remote mode (the alias of packages/shared/default-workflow.js)
     file: path.join(root, 'workflows', 'feature.yaml'),
-    inputs: { task: 'Engine test', repo_path: root, mode: 'remote', check_command: 'node --version' }, mock: true, runsDir, language: () => PT,
+    inputs: simInputs({ task: 'Engine test', repo_path: root, mode: 'remote' }), mock: true, runsDir, language: () => PT,
   });
   const events = [];
   run.on('event', (ev) => {

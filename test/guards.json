@@ -8,6 +8,7 @@
   "test/decisions-log-332.test.js",
   "test/docs-topic-indexes-573.test.js",
   "test/docs-usage-rules.test.js",
+  "test/simulation-trivial-checks.test.js",
   "test/test-fixture-rule-695.test.js",
   "test/test-suite-layout-305-306.test.js"
 ]

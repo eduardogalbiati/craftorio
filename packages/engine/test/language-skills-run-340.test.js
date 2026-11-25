@@ -9,6 +9,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
+const { simInputs } = require('./helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..');
 const NAMES = ['unit-test-writer-{{ inputs.language }}', 'build-audit-{{ inputs.language }}', 'long-commands'];
@@ -28,7 +29,7 @@ function tmpDir(t, prefix) {
 const put = (dir, rel, text = 'x') => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
 
 function newRun(t, inputs) {
-  return new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Rust skills', repo_path: root, ...inputs }, mock: true, runsDir: tmpDir(t, 'runs-340-') });
+  return new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: simInputs({ task: 'Rust skills', repo_path: root, ...inputs }), mock: true, runsDir: tmpDir(t, 'runs-340-') });
 }
 
 // A repository with a JS file on main, then a branch that changes `files`: the run's worktree.

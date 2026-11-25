@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
+const { simInputs } = require('../helpers/sim-inputs');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..', '..', '..', '..');
@@ -17,7 +18,7 @@ async function runTestBatch({ mockSequences, answers = {}, inputs = {}, issues }
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'test-backfill.yaml'),
-    inputs: { repo_path: root, ...inputs },
+    inputs: simInputs({ repo_path: root, ...inputs }),
     mock: true,
     runsDir,
     mockSequences,

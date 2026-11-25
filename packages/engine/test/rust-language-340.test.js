@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const skills = require('../domains/agents/skills');
 const { loadWorkflow, WorkflowRun } = require('../engine/workflow');
+const { simInputs } = require('./helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..');
 const SKILLS = path.join(root, 'skills');
@@ -88,7 +89,7 @@ test('every agent allowed the language toolchains may run cargo (the Rust skills
 function newRun(t, file, inputs) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-340-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
-  return new WorkflowRun({ file: path.join(root, 'workflows', file), inputs: { task: 'Rust skills', repo_path: root, project_path: root, ...inputs }, mock: true, runsDir });
+  return new WorkflowRun({ file: path.join(root, 'workflows', file), inputs: simInputs({ task: 'Rust skills', repo_path: root, project_path: root, ...inputs }), mock: true, runsDir });
 }
 
 test('language: a comma-separated list of known languages is accepted ("js,rust", "rust, js")', (t) => {

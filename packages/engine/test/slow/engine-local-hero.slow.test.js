@@ -9,9 +9,9 @@ const evidence = require('../../domains/evidence/evidence');
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root } = require('../engine-helpers');
 const { repoFromTemplate } = require('../helpers/git-fixture');
-// as engine-helpers.js: a trivial rule check (#705: the repository's own takes most of a run's time) and no
+// helpers/sim-inputs.js, as engine-helpers.js: a trivial rule check (#705: the repository's own takes most of a run's time) and no
 // secret scan of this checkout's own commits (#49)
-const FAST = { check_command: 'node --version', secret_scan: 'off' };
+const { simInputs } = require('../helpers/sim-inputs');
 
 test('release workflow: a simulated E2E suite fails once, the developer fixes it, both suites pass again, the review writes the summary and the run ships', { timeout: 60000 }, async (t) => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
@@ -42,7 +42,7 @@ test('release workflow: a simulated E2E suite fails once, the developer fixes it
 });
 test('feature workflow (local mode): a simulated run merges right after verify_change, pushes the local base at push_main and ends as success', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
-  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', ...FAST, repo_path: root }, mock: true, runsDir });
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: simInputs({ task: 'Engine test', repo_path: root }), mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -71,7 +71,7 @@ test('feature workflow (local mode): validated mode stops at developer_check wit
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'feature.yaml'),
-    inputs: { task: 'Engine test', ...FAST, repo_path: root, mode: 'validated' },
+    inputs: simInputs({ task: 'Engine test', repo_path: root, mode: 'validated' }),
     mock: true, runsDir,
   });
   const events = [];
@@ -102,7 +102,7 @@ test('feature workflow (local mode): validated mode stops at developer_check wit
 });
 test('feature workflow (local mode): a successful run saves <run>/e2e/scenarios.feature and scenarios.json; the acceptance tests step reports them pending (#199, #223)', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
-  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', ...FAST, repo_path: root }, mock: true, runsDir });
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: simInputs({ task: 'Engine test', repo_path: root }), mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);

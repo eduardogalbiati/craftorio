@@ -8,6 +8,7 @@ const evidence = require('../../domains/evidence/evidence');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
 const { root, runLoopBlocked, runConditionalAction, tempWorkflow, until } = require('../engine-helpers');
+const { simInputs } = require('../helpers/sim-inputs');
 
 test('computeOutputs: each declared output is the template rendered over the finished run, parsed for its type; empty or unparsable stays null (with a warning)', async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
@@ -28,7 +29,7 @@ test('/goal + /loop: repeats the step, delegates the failure and passes on the r
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(__dirname, '..', 'fixtures', 'loop-goal.yaml'),
-    inputs: { repo_path: root },
+    inputs: simInputs({ repo_path: root }),
     mock: true,
     runsDir,
   });

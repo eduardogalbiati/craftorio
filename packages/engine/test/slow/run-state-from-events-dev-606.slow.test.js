@@ -11,6 +11,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { root, readLog, liveState, replayState, recordedRun } = require('../run-state-606');
 const { repoFromTemplate } = require('../helpers/git-fixture');
+const { simInputs } = require('../helpers/sim-inputs');
 
 const bundled = (name) => path.join(root, 'workflows', name);
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
@@ -29,12 +30,12 @@ function assertReplayMatches(run) {
 }
 
 test('software-development: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: { task: 'Engine test', repo_path: root, mode: 'remote' }, mockSequences: { preview_status: ['success'] } });
+  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: simInputs({ task: 'Engine test', repo_path: root, mode: 'remote' }), mockSequences: { preview_status: ['success'] } });
   assertReplayMatches(run);
 });
 
 test('software-development-local-hero: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: { task: 'Engine test', repo_path: root } });
+  const run = await recordedRun(t, { file: bundled('feature.yaml'), inputs: simInputs({ task: 'Engine test', repo_path: root }) });
   assertReplayMatches(run);
 });
 
@@ -48,7 +49,7 @@ test('ai-development-local-hero: the replay of its mock run gives the in-memory 
 });
 
 test('test-batch: the replay of its mock run gives the in-memory state', async (t) => {
-  const run = await recordedRun(t, { file: bundled('test-backfill.yaml'), inputs: { repo_path: root } });
+  const run = await recordedRun(t, { file: bundled('test-backfill.yaml'), inputs: simInputs({ repo_path: root }) });
   assertReplayMatches(run);
 });
 
