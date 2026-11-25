@@ -1,5 +1,6 @@
 // #366: the E2E behaviour lane's workers default to `auto`, sized from the machine:
-// clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5))). A number in CRAFTORIO_E2E_WORKERS
+// clamp(1, 4, min(floor(threads / 4), floor((freeGB - 4) / 1.5))) (8 threads per worker until the retune
+// of 2026-11-25, measured in scripts/e2e-workers.js). A number in CRAFTORIO_E2E_WORKERS
 // still wins; an invalid value falls back to auto with a warning. The suite says what it chose in one line.
 // Seams: scripts/e2e-workers.js's e2eWorkers({ value, threads, freeBytes }) -> { workers, line, warning }
 // (pure: the env value and the machine passed in), and playwright.config.js loaded with the machine
@@ -19,11 +20,12 @@ const AUTO_LINE = (n, threads) => new RegExp(`^E2E: ${n} workers? \\(auto: ${thr
 
 // [threads, GB free, workers]; the free memory is picked so that GB or GiB give the same answer
 const MACHINES = [
-  [20, 11, 2], // the owner's machine (i9-10900KF), measured in #366
-  [8, 16, 1], // a laptop with 8 threads
+  [20, 11, 4], // the owner's machine (i9-10900KF), measured in #366 (2 before the retune)
+  [16, 13, 4], // the owner's WSL Ubuntu, measured in the retune (2026-11-25)
+  [8, 16, 2], // a laptop with 8 threads
   [20, 6, 1], // 16 GB with 6 GB free
   [4, 14, 1], // a 4-vCPU CI runner
-  [24, 20, 3],
+  [12, 20, 3],
   [32, 7, 2], // memory decides
   [64, 64, 4], // never more than 4
   [20, 3, 1], // under 4 GB free: never less than 1
@@ -52,7 +54,7 @@ test('#366 an invalid CRAFTORIO_E2E_WORKERS falls back to auto with a warning th
   const { e2eWorkers } = load();
   for (const value of ['abc', '0', '-2']) {
     const r = e2eWorkers({ value, threads: 20, freeBytes: 11 * GB });
-    assert.equal(r.workers, 2, `CRAFTORIO_E2E_WORKERS=${value}`);
+    assert.equal(r.workers, 4, `CRAFTORIO_E2E_WORKERS=${value}`);
     assert.equal(typeof r.warning, 'string', `a warning for ${value}`);
     assert.match(r.warning, /CRAFTORIO_E2E_WORKERS/);
     assert.equal(r.warning.includes(value), true, `the warning quotes ${value}: ${r.warning}`);
@@ -62,8 +64,8 @@ test('#366 an invalid CRAFTORIO_E2E_WORKERS falls back to auto with a warning th
 
 test('#366 the start line says what was chosen: auto with the machine, or the variable', () => {
   const { e2eWorkers } = load();
-  assert.match(e2eWorkers({ value: undefined, threads: 20, freeBytes: 11.2 * GB }).line, AUTO_LINE(2, 20));
-  assert.match(e2eWorkers({ value: 'nope', threads: 20, freeBytes: 11.2 * GB }).line, AUTO_LINE(2, 20));
+  assert.match(e2eWorkers({ value: undefined, threads: 20, freeBytes: 11.2 * GB }).line, AUTO_LINE(4, 20));
+  assert.match(e2eWorkers({ value: 'nope', threads: 20, freeBytes: 11.2 * GB }).line, AUTO_LINE(4, 20));
   assert.equal(e2eWorkers({ value: '3', threads: 20, freeBytes: 11.2 * GB }).line, 'E2E: 3 workers (CRAFTORIO_E2E_WORKERS)');
 });
 
@@ -94,7 +96,7 @@ function configOn(t, value, { threads, free }) {
 
 test('#366 the config sizes the behaviour lane and the pool from the machine by default; the visual lane stays at one worker', (t) => {
   const own = configOn(t, undefined, { threads: 20, free: 11 });
-  assert.deepEqual([own.pool, own.behaviour, own.visual], [2, 2, 1]);
+  assert.deepEqual([own.pool, own.behaviour, own.visual], [4, 4, 1]);
   const ci = configOn(t, 'auto', { threads: 4, free: 14 });
   assert.deepEqual([ci.pool, ci.behaviour, ci.visual], [1, 1, 1]);
   const big = configOn(t, undefined, { threads: 64, free: 64 });
@@ -106,7 +108,7 @@ test('#366 the config: a number wins over the machine, an invalid value falls ba
   assert.deepEqual([forced.pool, forced.behaviour, forced.visual], [3, 3, 1]);
   for (const value of ['', '0', 'abc']) {
     const r = configOn(t, value, { threads: 20, free: 11 });
-    assert.deepEqual([r.pool, r.behaviour, r.visual], [2, 2, 1], `CRAFTORIO_E2E_WORKERS=${JSON.stringify(value)}`);
+    assert.deepEqual([r.pool, r.behaviour, r.visual], [4, 4, 1], `CRAFTORIO_E2E_WORKERS=${JSON.stringify(value)}`);
   }
 });
 
@@ -114,7 +116,7 @@ test('#366 loading the config prints one start line with the choice, and a warni
   const auto = configOn(t, undefined, { threads: 20, free: 11 });
   const lines = auto.printed.filter((l) => l.startsWith('E2E: '));
   assert.equal(lines.length, 1, `start lines: ${JSON.stringify(auto.printed)}`);
-  assert.match(lines[0], AUTO_LINE(2, 20));
+  assert.match(lines[0], AUTO_LINE(4, 20));
 
   const forced = configOn(t, '3', { threads: 20, free: 11 });
   assert.deepEqual(forced.printed.filter((l) => l.startsWith('E2E: ')), ['E2E: 3 workers (CRAFTORIO_E2E_WORKERS)']);

@@ -17,10 +17,10 @@
 //               machine's screenshot slot (#199), so a run capturing screenshots elsewhere on the
 //               machine still makes this lane wait.
 // E2E_WORKERS (#366): CRAFTORIO_E2E_WORKERS unset or `auto` sizes it from the machine's threads and
-// free memory, clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5))); the constants and the
+// free memory, clamp(1, 4, min(floor(threads / 4), floor((freeGB - 4) / 1.5))); the constants and the
 // measurements behind them are in scripts/e2e-workers.js. A number N (>= 1) forces N; an invalid value
 // falls back to auto with a warning. The suite prints its choice at start, e.g.
-// "E2E: 2 workers (auto: 20 threads, 11.2 GB free)".
+// "E2E: 4 workers (auto: 16 threads, 13.2 GB free)".
 // CRAFTORIO_E2E_WORKERS=1 gives back the old one-Electron-at-a-time suite. Shared state checked for
 // the parallel lane: each scenario has its own scratch workspace, user-data and HOME; servers listen
 // on port 0 (the phone gates fall back to it when their port is taken); the OS clipboard is used by

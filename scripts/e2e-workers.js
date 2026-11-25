@@ -1,17 +1,20 @@
 // The E2E behaviour lane's workers (#366): `CRAFTORIO_E2E_WORKERS=N` (N >= 1) forces N; unset or
-// `auto` sizes them from the machine, clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5))).
+// `auto` sizes them from the machine, clamp(1, 4, min(floor(threads / 4), floor((freeGB - 4) / 1.5))).
 // An invalid value falls back to auto with a warning. `e2eWorkers` is pure (the value and the machine
 // passed in) and returns the start line playwright.config.js prints, e.g.
-// "E2E: 2 workers (auto: 20 threads, 11.2 GB free)".
+// "E2E: 4 workers (auto: 16 threads, 13.2 GB free)".
 
 'use strict';
 
 // Measured on 2026-10-13 on a 20-thread, 32 GB machine (i9-10900KF), whole suite at a70fa5b (#366):
-// each worker beyond the first cost about 18 points of CPU (around 4 busy threads, more at p95, so
-// 8 threads per worker leaves room for the app) and under 1 GB of RAM (1.5 GB per worker, plus 4 GB
-// kept free for the system and the app).
+// each worker beyond the first cost about 18 points of CPU (around 4 busy threads, more at p95) and
+// under 1 GB of RAM (1.5 GB per worker, plus 4 GB kept free for the system and the app: the memory
+// guard, unchanged). 8 threads per worker gave 2 workers there.
+// Retuned on 2026-11-25 to 4 threads per worker, measured in WSL Ubuntu on 16 threads with 13 GB free,
+// the analyser front's features (node scripts/e2e.js --front analyser): 249 s with 2 workers, 150 s
+// with 4, 128 s with 6. 4 workers is most of the gain and stays inside the 4 busy threads a worker takes.
 const AUTO = {
-  threadsPerWorker: 8,
+  threadsPerWorker: 4,
   reservedGB: 4,
   gbPerWorker: 1.5,
   min: 1,
