@@ -645,9 +645,10 @@ function coverage({ root = ROOT } = {}) {
   return { checked: files.filter((f) => optedIn.has(f)).length, total: files.length };
 }
 
-// [{ file, kind: 'opted-out' | 'unlisted' | 'leave-list' | 'new-file', message }]; UNCHECKED is this
-// repository's record, another root has none unless it is given
-function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked = root === ROOT ? UNCHECKED : [] } = {}) {
+// [{ file, kind: 'opted-out' | 'unlisted' | 'leave-list' | 'new-file', message }]; UNCHECKED holds on any
+// checkout, but a file of it that another root does not have is no problem there (unless it is given)
+function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked = UNCHECKED } = {}) {
+  const mustExist = { NEXT: next, UNCHECKED: root !== ROOT && unchecked === UNCHECKED ? [] : unchecked };
   const optedIn = new Set(findOptedIn({ root }));
   const problems = [];
   for (const file of checked) {
@@ -658,7 +659,7 @@ function checkRatchet({ root = ROOT, checked = CHECKED, next = NEXT, unchecked =
     if (next.includes(file)) problems.push({ file, kind: 'leave-list', message: `${file} opted in with // @ts-check: remove it from NEXT in scripts/typecheck.js` });
     if (unchecked.includes(file)) problems.push({ file, kind: 'leave-list', message: `${file} opted in with // @ts-check: remove it from UNCHECKED in scripts/typecheck.js` });
   }
-  for (const [name, list] of Object.entries({ NEXT: next, UNCHECKED: unchecked })) {
+  for (const [name, list] of Object.entries(mustExist)) {
     for (const file of list) {
       if (!fs.existsSync(path.join(root, ...file.split('/')))) problems.push({ file, kind: 'leave-list', message: `${file} does not exist any more: remove it from ${name} in scripts/typecheck.js` });
     }
@@ -703,20 +704,20 @@ function checkSilenced({ root = ROOT, recorded = SILENCED } = {}) {
   return problems;
 }
 
-// [{ file, line, message }] from the checker on one jsconfig of root (line is 1-based)
+// [{ file, line, column, message }] from the checker on one jsconfig of root (line and column are 1-based)
 function typecheckConfig(configPath, checkJs) {
   const ts = require('typescript');
   const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} });
-  if (!parsed) return [{ file: configPath, line: 0, message: `${path.basename(configPath)} cannot be read` }];
+  if (!parsed) return [{ file: configPath, line: 0, column: 0, message: `${path.basename(configPath)} cannot be read` }];
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: { ...parsed.options, checkJs }, projectReferences: parsed.projectReferences });
   const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
   return diagnostics
     .filter((d) => d.category === ts.DiagnosticCategory.Error)
     .map((d) => {
       const message = ts.flattenDiagnosticMessageText(d.messageText, '\n');
-      if (!d.file) return { file: configPath, line: 0, message };
-      const { line } = d.file.getLineAndCharacterOfPosition(d.start || 0);
-      return { file: d.file.fileName, line: line + 1, message };
+      if (!d.file) return { file: configPath, line: 0, column: 0, message };
+      const { line, character } = d.file.getLineAndCharacterOfPosition(d.start || 0);
+      return { file: d.file.fileName, line: line + 1, column: character + 1, message };
     });
 }
 
@@ -725,7 +726,7 @@ function typecheckConfig(configPath, checkJs) {
 function typecheck({ root = ROOT, checkJs = false } = {}) {
   const [main, ...others] = CONFIGS.map((name) => path.join(root, name));
   const errors = [main, ...others.filter((file) => fs.existsSync(file))].flatMap((file) => typecheckConfig(file, checkJs));
-  return Promise.resolve([...new Map(errors.map((e) => [`${e.file}:${e.line} ${e.message}`, e])).values()]);
+  return Promise.resolve([...new Map(errors.map((e) => [`${e.file}:${e.line}:${e.column} ${e.message}`, e])).values()]);
 }
 
 const relative = (root, file) => path.relative(root, file).replace(/\\/g, '/');
