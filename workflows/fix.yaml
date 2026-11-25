@@ -1,6 +1,6 @@
 # =============================================================================
 # Workflow: Fix (#630, spec R8)
-#   reproduce ─► develop ─► rule_check ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
+#   reproduce ─► develop ─► rule_check ─► secret_scan ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
 #                                                                                └─ Remote: ci (PR + CI) ─► pr_monitor ─► end
 #   - reproduce (the developer): one command that shows the bug for the reported reason, a failing
 #     regression test when it can; no production code yet (fragments/fix-pipeline.yaml).
@@ -9,6 +9,8 @@
 #     check_command, the `check` script, else its own linter and type checker, only for what the change
 #     added. Back to develop at most twice, then check_failed; an environment failure (#30) stops at
 #     check_environment (fragments/check-pipeline.yaml).
+#   - secret_scan (no agent, #49): gitleaks on the run's own commits; a finding goes back to develop at
+#     most twice, then secret_found (fragments/secret-scan-pipeline.yaml).
 #   - code_review, suite, verify_change, verify_failed: fragments/dev-pipeline.yaml.
 #   - Local mode: the run's branch is merged into the local base (resolve_merge / merge_blocked on a
 #     conflict, fragments/local-merge-pipeline.yaml), then push_main pushes it (the project auto-push
@@ -119,6 +121,17 @@ inputs:
     default: ""
     label: Check command
     description: "The project's fast rule checks (lint, types...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script (npm run check), else the linter and the type checker the project itself configures and has installed (only what the change added goes back); a project with none skips the step. off: no checks."
+  # #49: gitleaks on the run's own commits (secret_scan); off for a project that has its own scan
+  secret_scan:
+    type: string
+    enum: ["on", "off"]
+    default: "on"
+    label: Secret scan
+    label_key: workflow_texts.feature_secret_scan_label
+    help_key: workflow_texts.feature_secret_scan_desc
+    options_key: workflow_texts.feature_secret_scan_opt
+    options: { "on": "On", "off": "Off" }
+    description: "Before the code review, gitleaks looks for secrets in the commits of the run (no agent). On: a finding goes back to the developer, at most twice, then to you; nothing is merged or pushed while it is open. Without gitleaks installed the run goes on and says that secrets were not scanned. Off: for a project that has its own scan."
   # #71: the owner's policy for a project with no test command and no test file
   no_tests:
     type: string
@@ -180,6 +193,8 @@ agents:
     # #633: the SDLC documents are the pre-flow's (write-doc) and the post-flow's (sdlc-*), never the run's
     protect_files:
       - "docs/work/**"
+    # #49: the secret scan's findings
+    skills: [secret-triage]
     system_prompt: |
       You are the developer. You reproduce the bug, then fix its root cause on the run's branch with a
       small change that follows the project's conventions and a regression test that failed before
@@ -245,8 +260,42 @@ steps:
       - when: "output.status == 'fail'"
         goto: check_failed
       - when: "true"
-        goto: code_review
+        goto: secret_scan
         set: { check_returns: "0" }
+  # #49: gitleaks on the run's own commits (base to HEAD), no agent, no model call. The last agent-less step before the review.
+  # A finding goes back to the developer at most twice (a pass resets the count), then to you at
+  # secret_found; not installed or turned off: skipped, said as "secrets not scanned", never as passed.
+  - id: secret_scan
+    fragment: secret-scan-pipeline
+    transitions:
+      # gitleaks failed, or its range could not be read: you, never a pass nor the developer's round
+      - when: "output.status == 'error'"
+        goto: secret_scan_error
+      - when: "output.status == 'fail' and (vars.secret_returns or 0) | int < 2"
+        goto: develop
+        set: { secret_returns: "{{ (vars.secret_returns or 0) | int + 1 }}" }
+      # returns used up: the owner decides (a goto, not on_exhausted: no supervisor wake-up first)
+      - when: "output.status == 'fail'"
+        goto: secret_found
+      - when: "true"
+        goto: code_review
+        set: { secret_returns: "0" }
+
+  # #49: a finding that stays. Every way on goes through the scan again
+  - id: secret_found
+    fragment: secret-scan-pipeline
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      - when: "choice == 'rescan'"
+        goto: secret_scan
+      - when: "true"
+        goto: develop
+        set: { secret_returns: "0" }
+
+  - id: secret_scan_error
+    fragment: secret-scan-pipeline
   - id: code_review
     fragment: dev-pipeline
     agent: reviewer
@@ -335,7 +384,7 @@ steps:
         goto: end
         status: failed
       - when: "true"
-        goto: code_review
+        goto: secret_scan
         set: { check_returns: "0" }
 
   # #30: the checks cannot run here (dependencies not installed, a command missing): you fix the environment
@@ -363,11 +412,11 @@ steps:
 
 groups:
   - name: Develop
-    steps: [reproduce, develop, rule_check]
+    steps: [reproduce, develop, rule_check, secret_scan]
   - name: Review
     steps: [code_review]
   - name: Validate
-    steps: [suite, check_failed, check_environment, verify_change, validate, verify_failed]
+    steps: [suite, check_failed, check_environment, secret_found, secret_scan_error, verify_change, validate, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked, push_main, ci, ci_failed, pr_monitor]
 

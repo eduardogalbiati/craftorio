@@ -398,6 +398,12 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
   PR comments an agent reads can try to steer it, with the tools its workflow gives it. Isolated
   agents never load the checkout's `.claude/settings*.json`, but treat a repository's hooks as code
   that may run until #468 is closed.
+- **The secret scan does not find every secret.** Feature, Fix, Release and this repository's own
+  workflows run gitleaks on the commits a run made, before the review (Release: before Ship). It
+  knows patterns: a password in plain words, an encoded or split value, a merge commit's own changes
+  and what is committed after the scan (the test writer, a merge conflict) can pass. Without
+  gitleaks, or turned off, the run says "secrets not scanned". It hides values from the records; a
+  value an agent prints itself is only covered by the redaction of known formats.
 - **Workflows, skills and seeds are code**: a workflow runs shell commands and templates in the
   app's process, a skill or a seed tells agents with tools what to do. In short, workflows, skills
   and seeds are code: install only ones you trust.
@@ -927,6 +933,27 @@ reason (a failing regression test when it can), then fixes the root cause with t
 that failed before it (skill `bug-diagnosis`). `mode` works as in Feature: `local` merges into the
 local base and pushes it, `remote` opens a PR/MR and waits for its CI. `hotfix` marks the urgent lane:
 the smallest change, meant for a patch release from the last tag.
+
+## Secret scan
+
+Feature, Fix and Release look for secrets in the commits a run made (#49), with
+[gitleaks](https://github.com/gitleaks/gitleaks) and no agent: the base to HEAD, after the developer's
+commits and before the code review (Release: the commits since the product's last tag, the whole history
+without one, before the Ship gate).
+
+- **Found**: the developer gets the rule, the file, the line and the commit, never the value, at most
+  twice; then the run stops at a gate. Nothing is merged or pushed while a finding is open. The developer
+  takes it out of every commit of the run; a commit already on the base is never rewritten.
+- **A real secret** is leaked: the skill `secret-triage` tells you to revoke it, since deleting it from the
+  commit is not enough. No agent tests or uses the value.
+- **A false positive** is an entry in `.gitleaksignore` (or the project's `.gitleaks.toml`), committed with
+  its reason. The code review sees each new entry and can refuse it.
+- **Not installed**: the run goes on and the run, its gate and its result say "secrets not scanned".
+  Setup and Settings › Agents & CLIs list gitleaks as optional, with its install command; a run never
+  installs it. An error of gitleaks is not a pass: the run stops at a gate.
+- **Off**: the input *Secret scan*, for a project that has its own scan.
+
+It does not find every secret: see the Security model.
 
 ## Release (`workflows/release.yaml`)
 
@@ -1531,6 +1558,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `rfc-writing` | arena, Write & Review (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
 | `run-retrospective` | run retrospective | Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence |
 | `run-supervisor` | the AI supervisor (a failed step, or on demand) | Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human) |
+| `secret-triage` | developer, reviewer | Real: leaked, the owner revokes it and the run's own commits are rewritten; false positive: a `.gitleaksignore` entry with its reason, in the same commit |
 | `spec-writing` | write-doc (`document: spec`) | Spec structure (requirements R1…, design, areas of concern, open questions) and scoring rubric |
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |

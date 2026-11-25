@@ -15,7 +15,7 @@
   const node = typeof module === 'object' && module.exports;
   // the catalog's helper, at call time (in the browser i18n.js may load after this file)
   const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
-  const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git' };
+  const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git', gitleaks: 'Gitleaks' };
   const SHORT = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok', git: 'Git' };
   const REQUIRED = ['claude', 'git'];
   const forge = () => t('setup.forge');
@@ -34,6 +34,7 @@
   function toolRequirement(id) {
     if (REQUIRED.includes(id)) return t('setup.required');
     if (id === 'gh' || id === 'glab') return t('setup.optional_forge');
+    if (id === 'gitleaks') return t('setup.optional_secret_scan');
     return t('setup.optional_models');
   }
 

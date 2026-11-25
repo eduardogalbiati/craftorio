@@ -14,6 +14,13 @@ function refuseReal(what) {
   if (simulationOnly()) throw new Error(`Simulation only (${ENV}=1): refusing to start ${what}. Automated checks never call real models; start the run as a simulation (mock: true).`);
 }
 
+// #740, #49: the CLIs the E2E hook CRAFTORIO_E2E_CLI_MISSING=<id>[,<id>] makes missing (none outside
+// simulation): domains/machine/simulated-clis.js for the probes, secret-scan.js for a run's gitleaks
+function missingIds(env = process.env) {
+  if (!simulationOnly(env)) return [];
+  return String(env.CRAFTORIO_E2E_CLI_MISSING || '').split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 // #795: the E2E hook of a simulated run (fronts/build/features/steps/run-chat-orchestrator.steps.js):
 // CRAFTORIO_E2E_SUITE_DELAY_MS with CRAFTORIO_E2E_SUITE_DELAY_STEP=<step id> keeps that suite step's
 // simulated round running that long (suite-step.js runSuite, its log header written); null otherwise
@@ -42,6 +49,7 @@ module.exports = {
   e2eOnboardingCosts,
   e2eSuiteDelay,
   ENV,
+  missingIds,
   refuseReal,
   simulationOnly,
 };

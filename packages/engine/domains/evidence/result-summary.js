@@ -2,7 +2,7 @@
 // (WorkflowRun.finish, before workflow.finished) from the run's summary (the event's `summary`):
 // the status, what was done per issue (the last step output with an `issues` list), the commits
 // (the worktree branch and head, the local merge), the tests (each suite step: pass/fail and
-// counts; the coverage summary), the screenshots (the final evidence set, new elements #185) and
+// counts; the coverage summary), a secret scan that did not run (#49), the screenshots (the final evidence set, new elements #185) and
 // links to the key artifacts. It is the first artifact of the run (category `result`,
 // packages/engine/domains/evidence/artifact-categories.js) and what the owner opens. No model call.
 const fs = require('fs');
@@ -68,6 +68,13 @@ function testsSection(runDir, summary) {
   return lines.length ? ['## Tests', '', ...lines, ''] : [];
 }
 
+// #49: a scan that did not run is said, never shown as passed
+function secretsSection(summary) {
+  const lines = outputs(summary).filter((s) => s.output.kind === 'secret_scan' && s.output.status === 'skipped')
+    .map(({ id, output: o }) => `- \`${id}\`: ${oneLine(o.message || 'Secrets not scanned')}`);
+  return lines.length ? ['## Secrets', '', ...lines, ''] : [];
+}
+
 function screenshotsSection(runDir, summary) {
   const lines = [];
   for (const { output: o } of outputs(summary).filter((s) => s.output.kind === 'screenshots')) {
@@ -97,6 +104,7 @@ function renderResultSummary(runDir, summary = {}) {
     ...issuesSection(summary),
     ...commitsSection(summary),
     ...testsSection(runDir, summary),
+    ...secretsSection(summary),
     ...screenshotsSection(runDir, summary),
     ...(keys.length ? ['## Key artifacts', '', ...keys.map((rel) => `- ${link(rel)}`), ''] : []),
   ].join('\n');

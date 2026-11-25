@@ -154,6 +154,21 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   without a check command): `missing` goes back to develop with the list at most once per review
   round (`vars.docs_returns`, reset when it goes on), then `developer_check` (validated mode) or
   the review.
+- A **secret scan step** (`type: secret_scan`, no agent, no model call, #49; `runSecretScanStep` in `run/secret-scan-step.js` →
+  `packages/engine/engine/secret-scan.js`): gitleaks on the run's own commits, real in a mock run too. The
+  range: from the base of the run's worktree (Remote: the fetched origin's, a stacked run's parent and a
+  fork's upstream with it), else `base` (a template), to HEAD; `since` (a template, release) scans from
+  that tag instead, the whole history when it is empty. `enabled` (a template): `off` skips it. Output
+  `{ kind: 'secret_scan', status: pass | fail | skipped | error, findings: [{ rule, file, line, commit }],
+  ignored, config, message, round }`: `ignored` are the `.gitleaksignore` entries the run adds (with their
+  reason), `config` says it changed `.gitleaks.toml`, both for the review's prompt. `fail` also when one
+  of those files is changed and not committed. `skipped` (off, not installed, no checkout, a simulation
+  without the base) and `error` (gitleaks failed, the range cannot be read) say "Secrets not scanned";
+  only a whole scan with an empty report passes. feature, fix and the AI Development heroes run it as
+  the last agent-less step before the owner's gate or the review, release before the review of the Ship
+  gate (`fragments/secret-scan-pipeline.yaml`): a finding goes back to the developer at most twice
+  (`vars.secret_returns`), then to `secret_found`; an error goes to `secret_scan_error`. What is
+  committed after it (the test step, the healer, a conflict resolution) is not scanned again.
 - A **record docs step** (`type: record_docs`, no agent, no model call, #702; `runRecordDocsStep` →
   `packages/engine/engine/record-docs-step.js`): the SDLC post-flow's record of a successful Code &
   Build run in its work item's documents (`docs/work/<item>/`), in the run's own worktree. It reads

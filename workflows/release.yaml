@@ -1,7 +1,7 @@
 # =============================================================================
 # Workflow: Release (#260)
 # -----------------------------------------------------------------------------
-#   version ──► unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► [review] ──► ship (you)
+#   version ──► unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► secret_scan ──► [review] ──► ship (you)
 #                 ▲   │                               │                                            ├─ Ship ─► push the local base + tag ─► end
 #                 │   └──────────(red)──► fix ◄─(red)─┘                                            └─ Hold ─► end (nothing pushed)
 #                 └──────────────────── (developer)
@@ -44,7 +44,10 @@
 #           keeps the whole rerun. Each round's output records its commit (`suite_scope` shows it).
 #           Both suites run with `base_check: false`: the worktree is the base, so nothing that
 #           fails there is "pre-existing".
-# 3. fix:   only for a red suite: the developer gets the history since the last release (the runs,
+# 2b. secret_scan (#49): no agent; gitleaks on the commits since the product's last tag (the whole history
+#           without one), once the suites are green. A finding goes to fix at most twice, then to your
+#           gate secret_found; not installed or off: the Ship gate says "secrets not scanned".
+# 3. fix:   for a red suite (or a finding of the secret scan): the developer gets the history since the last release (the runs,
 #           their issues, decisions and handoff notes, the commits), finds the change that broke it
 #           and fixes the production code on the run's branch; then both suites run again.
 # 3b. review: after the last green suite of a run that needed a fix (or a second round), a cheap
@@ -127,6 +130,17 @@ inputs:
     type: string
     default: ""
     description: "Optional: a command Ship runs after the push and the tag (e.g. npm run package). Empty: no build."
+  # #49: gitleaks since the last tag (secret_scan); off for a project that has its own scan
+  secret_scan:
+    type: string
+    enum: ["on", "off"]
+    default: "on"
+    label: Secret scan
+    label_key: workflow_texts.feature_secret_scan_label
+    help_key: workflow_texts.release_secret_scan_desc
+    options_key: workflow_texts.feature_secret_scan_opt
+    options: { "on": "On", "off": "Off" }
+    description: "Before the Ship gate, gitleaks looks for secrets in the commits since the last tag of the product, or in the whole history without one (no agent). On: a finding goes to the developer, at most twice, then to you; nothing is pushed while it is open. Without gitleaks installed the run goes on and says that secrets were not scanned. Off: for a project that has its own scan."
   release_ci:
     label: "Release CI"
     type: string
@@ -203,7 +217,7 @@ agents:
     # the tests and scenarios are the specification the release is checked against
     edits_tests: false
     # developer-self-review (#756): the shared reuse pass and the issue's tasks before handing over
-    skills: [long-commands, bug-diagnosis, context-economy, decision-log, developer-self-review]
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log, developer-self-review, secret-triage]
     system_prompt: |
       You are a senior software engineer fixing a regression a release check found: a test that
       passed when its change merged and fails now, on the sum of the runs merged since the last
@@ -246,7 +260,7 @@ agents:
 
 groups:
   - name: Regression
-    steps: [version, unit, e2e, suite_blocked]
+    steps: [version, unit, e2e, suite_blocked, secret_scan, secret_found, secret_scan_error]
   - name: Fix
     steps: [fix, regression_failed]
   - name: Ship
@@ -278,12 +292,9 @@ steps:
     # "that fails on the base too" to wave through (#211)
     base_check: false
     transitions:
-      # a project without an E2E suite (e2e_suite: skip): the unit suite alone decides; after a fix
-      # or a second round, the release summary first (#290)
-      - when: "output.status == 'pass' and inputs.e2e_suite == 'skip' and (steps.fix.visits or steps.unit.visits > 1)"
-        goto: review
+      # a project without an E2E suite (e2e_suite: skip): the unit suite alone decides
       - when: "output.status == 'pass' and inputs.e2e_suite == 'skip'"
-        goto: ship
+        goto: secret_scan
       - when: "output.status == 'pass'"
         goto: e2e
       - when: "output.status == 'blocked'"
@@ -307,12 +318,8 @@ steps:
     timeout: "{{ inputs.time_budget_minutes }}m"
     base_check: false
     transitions:
-      # after a fix or a second round of a suite, the release summary first (#290); one green round
-      # of each suite: nothing to review
-      - when: "output.status == 'pass' and (steps.fix.visits or steps.unit.visits > 1 or steps.e2e.visits > 1)"
-        goto: review
       - when: "output.status == 'pass'"
-        goto: ship
+        goto: secret_scan
       - when: "output.status == 'blocked'"
         goto: suite_blocked
         set: { red_suite: e2e }
@@ -322,11 +329,69 @@ steps:
         max_visits: "{{ inputs.max_rounds }}"
         on_exhausted: regression_failed
 
+  # #49: gitleaks on the run's own commits (base to HEAD), no agent, no model call. From the product's last tag
+  # (the whole history without one), once the suites are green and before the Ship gate.
+  # A finding goes back to the developer at most twice (a pass resets the count), then to you at
+  # secret_found; not installed or turned off: skipped, said as "secrets not scanned", never as passed.
+  - id: secret_scan
+    fragment: secret-scan-pipeline
+    since: "{{ steps.version.output.previous_version or '' }}"
+    transitions:
+      # gitleaks failed, or its range could not be read: you, never a pass nor the developer's round
+      - when: "output.status == 'error'"
+        goto: secret_scan_error
+      - when: "output.status == 'fail' and (vars.secret_returns or 0) | int < 2"
+        goto: fix
+        set: { secret_returns: "{{ (vars.secret_returns or 0) | int + 1 }}" }
+      # returns used up: the owner decides (a goto, not on_exhausted: no supervisor wake-up first)
+      - when: "output.status == 'fail'"
+        goto: secret_found
+      # passed or skipped: after a fix or a second round of a suite, the release summary first (#290); one
+      # green round of each suite: nothing to review
+      - when: "steps.fix.visits or steps.unit.visits > 1 or (steps.e2e and steps.e2e.visits > 1)"
+        goto: review
+        set: &secrets_scanned { secret_returns: "0" }
+      - when: "true"
+        goto: ship
+        set: *secrets_scanned
+
+  # #49: a finding that stays. Every way on goes through the scan again
+  - id: secret_found
+    fragment: secret-scan-pipeline
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      - when: "choice == 'rescan'"
+        goto: secret_scan
+      - when: "true"
+        goto: fix
+        set: { secret_returns: "0" }
+
+  - id: secret_scan_error
+    fragment: secret-scan-pipeline
+
   - id: fix
     display: Fix the regression
     agent: developer
     prompt: |
       {{ inputs.task }}
+      {% if previous_step in ['secret_scan', 'secret_found'] %}
+      The suites are green on the local `{{ inputs.base_branch }}`; the secret scan stopped the release.
+      {% if previous_step in ['secret_scan', 'secret_found'] and steps.secret_scan.output and steps.secret_scan.output.status == 'fail' %}
+      The orchestrator scanned the run's commits for secrets (gitleaks, #49) and found (the secret-triage skill says how to judge each one):
+      {% for f in steps.secret_scan.output.findings %}{% if loop.index <= 50 %}- {{ f.rule }} in {{ f.file }}:{{ f.line }} (commit {{ f.commit }})
+      {% endif %}{% else %}{{ steps.secret_scan.output.message }}
+      {% endfor %}Never print, copy, test or use a value. A false positive gets an entry in `.gitleaksignore` with its
+      reason above it, in the same commit. A real secret is leaked: name it in `summary` (rule, file, line) so that
+      the owner revokes it, and take it out of the run's own commits too, by rewriting them (a fixup commit and
+      `git rebase --autosquash`): a new commit that deletes it leaves it in the history. Never rewrite a commit that is already on the base (`{{ inputs.base_branch }}`).
+      Commit, and answer again in full.
+      {% endif %}
+      A finding in a commit that is already on the local base stays there: record it when it is a false
+      positive, else change nothing and say in `summary` what the owner must revoke (they decide at the gate).
+      Work on your branch and report the commit hash.
+      {% else %}
       The release check of the local `{{ inputs.base_branch }}` is red.
       {% if vars.red_suite == 'e2e' %}The {{ 'E2E feature files that failed in the previous round' if steps.e2e.output.scope == 'files' else 'whole E2E suite' }} (`{{ steps.e2e.output.command }}`, round {{ steps.e2e.visits }}) fail: {{ steps.e2e.output.message }}
       {{ steps.e2e.output | suite_failures }}
@@ -354,6 +419,7 @@ steps:
       Diagnose following bug-diagnosis, fix the production code on your branch, run a focused
       check, commit and report the commit hash. In `regression`, name the change that broke it
       (commit, run, issue). A test you think is wrong goes in `test_notes` with why; do not change it.
+      {% endif %}
     output_schema:
       type: object
       required: [branch, summary, committed]
@@ -453,17 +519,19 @@ steps:
       {{ steps.version.output.tag or inputs.version or 'The release' }}: {{ 'the unit suite is' if inputs.e2e_suite == 'skip' else 'both suites are' }} green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
       Unit: {{ steps.unit.output.message | one_line(160) }}
       E2E: {{ 'skipped (the project has no E2E suite)' if inputs.e2e_suite == 'skip' else (steps.e2e.output.message | one_line(160)) }}
+      {% if steps.secret_scan.output and steps.secret_scan.output.status == 'skipped' %}{{ steps.secret_scan.output.message | one_line(160) }}{% endif %}
     message: |
       {% if steps.review.output and not steps.review.output.release_summary %}The release summary is missing: its step failed ({{ steps.review.output.error | one_line(200) }}); the run's chat has the rounds.
       {% endif %}Release {{ steps.version.output.tag or inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
       Unit: {{ steps.unit.output.message }}
       {% if inputs.e2e_suite != 'skip' %}E2E: {{ steps.e2e.output.message }}{% endif %}
+      {% if steps.secret_scan.output %}{{ steps.secret_scan.output.message if steps.secret_scan.output.status == 'skipped' else 'Secret scan: ' ~ steps.secret_scan.output.message }}{% endif %}
       {% if steps.version.output.change %}Version: {{ steps.version.output.change }}{% if steps.version.output.commit %} (commit {{ steps.version.output.commit | truncate(8, true, '') }} on `release-fix-{{ run_id }}`, checked by both suites){% else %} (a simulation: not written){% endif %}.
       {% elif steps.version.output.message %}Version: unchanged: {{ steps.version.output.message | one_line(200) }}
       {% endif %}{% if steps.version.output.missing_changesets | length %}Merged issues of {{ steps.version.output.product }} with no changeset (not in its changelog): #{{ steps.version.output.missing_changesets | join(', #') }}. You can ship anyway.
       {% endif %}
       {% if steps.fix.visits %}
-      A regression was fixed on branch `release-fix-{{ run_id }}` ({{ steps.fix.visits }} round(s)): {{ steps.fix.output.summary }}
+      {{ 'A regression was fixed' if vars.red_suite else 'The secret scan\'s findings were handled' }} on branch `release-fix-{{ run_id }}` ({{ steps.fix.visits }} round(s)): {{ steps.fix.output.summary }}
       {% if steps.fix.output.regression %}What broke it: {{ steps.fix.output.regression }}{% endif %}
       Show the diff to read the fix before you ship.
       {% endif %}

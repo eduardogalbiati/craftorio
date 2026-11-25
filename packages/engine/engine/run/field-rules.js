@@ -64,6 +64,7 @@
     'refactor_proposals',
     'release_version',
     'screenshots',
+    'secret_scan',
     'suite',
     'test_ids',
     'visual_baselines',
@@ -101,7 +102,7 @@
 
   // Where a step field applies: every step type, a list of types, or every type except some
   const AGENT_STEPS = { except: MACHINE_STEP_TYPES };
-  const NO_AGENT_TYPES = ['check', 'docs_check', 'pr_monitor', 'project_map', 'push_base', 'record_docs', 'refactor_proposals', 'release_version', 'screenshots', 'suite', 'test_ids', 'visual_baselines'];
+  const NO_AGENT_TYPES = ['check', 'docs_check', 'pr_monitor', 'project_map', 'push_base', 'record_docs', 'refactor_proposals', 'release_version', 'screenshots', 'secret_scan', 'suite', 'test_ids', 'visual_baselines'];
   // The protected gates: only the person ends them; human_edit (#647) also takes the person's edit
   // requests, each a turn of its named agent, while it waits
   const GATE = ['human_approval', 'human_edit'];
@@ -179,6 +180,9 @@
     // sdlc-test's own record: the Test stage's status (in review | passed | failed) and its summary
     text('stage', ['record_docs']),
     text('stage_summary', ['record_docs']),
+    // `type: secret_scan` (#49): the input that turns it off, and the tag a release scans from (empty: the whole history)
+    text('enabled', ['secret_scan']),
+    text('since', ['secret_scan']),
     // `type: pr_monitor` (#809): the PR/MR the run waits to see merged (a template; empty: the ci or pr_open step's pr_url)
     text('target', ['pr_monitor']),
     // `type: project_map` (#372): the project map's machine steps, `from` the step whose output they read

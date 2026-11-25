@@ -1,0 +1,10 @@
+# Findings of gitleaks that are not secrets (#49), each group under its reason; how to judge one: skills/secret-triage/SKILL.md.
+
+# The Supabase publishable key: public by design, it ships in the app and the site (docs/readme/030-account-and-privacy.md)
+033dcbcd6c3a6760d5609d538f4bfa2517e37be8:src/auth-config.js:generic-api-key:10
+2c95f6c08d00ab81c25944570f274bddc8b1b768:site/main.js:generic-api-key:7
+6cebe89cd689915d273854abe2cde693b66f4d2e:site/24x7/main.js:generic-api-key:7
+
+# Made up GitHub tokens of the redaction tests: they fail the token's checksum
+7248ec50b4b06318b8aa4e2252ba0cfbc4fc930c:test/findings-361.test.js:github-pat:47
+a93079ac3758613897905365426c747a6fb805f7:test/recorder-baseline-redact-475.test.js:github-pat:81

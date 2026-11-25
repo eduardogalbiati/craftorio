@@ -33,7 +33,7 @@
   ];
   const ACTION = { install: () => t('setup.install'), signIn: () => t('setup.sign_in') };
   // the CLIs the setup checks, in their rows' order (also Settings › Agents & CLIs', #740)
-  const TOOL_IDS = ['claude', 'codex', 'grok', 'gh', 'glab', 'git'];
+  const TOOL_IDS = ['claude', 'codex', 'grok', 'gh', 'glab', 'git', 'gitleaks'];
   const setup = {
     step: 0,
     open: false,

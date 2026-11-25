@@ -3,8 +3,8 @@ name: code-review
 description: Reviews a diff/branch on three separate axes - correctness (bugs, security, tests), spec (does it do what the task asked) and standards (repo conventions plus market best practices) - applying per-language rules from rules/<language>.md. Use whenever you review code changes.
 summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, Rust, SQL, Shell/CI) and `rules/smells.md`"
 used_by: "reviewer"
-# the reuse pass is one text shared with the developer's self-review (#756)
-uses: [reuse-pass]
+# the reuse pass is one text shared with the developer's self-review (#756), the secret triage with the developer a finding goes back to (#49)
+uses: [reuse-pass, secret-triage]
 ---
 
 # Code review
@@ -70,7 +70,8 @@ a security hole. Do not let a strong axis hide a weak one.
   resources released on every path.
 - **Security** (OWASP as the minimum): external input never reaches SQL, shell, file paths,
   HTML, regex, eval, deserialization or outbound URLs raw (injection, path traversal, XSS, SSRF,
-  ReDoS). No secrets in code or logs. Authorization checked on the server at the point of use.
+  ReDoS). No secrets in code or logs; judge each entry the change adds to `.gitleaksignore` and
+  each change of `.gitleaks.toml` with the secret-triage skill, and refuse one without a good reason. Authorization checked on the server at the point of use.
   No home-made crypto, no MD5/SHA1 for passwords, secure randomness for tokens. New
   dependencies are needed, maintained and free of known vulnerabilities.
 - **Contracts**: changes to public APIs, schemas, file formats, events or environment variables

@@ -36,7 +36,8 @@ the workspace folder.
   `scripts/ctl.js`). `test/session/session-tail-342.test.js` and `test/ctl-342.test.js` build the two
   binaries in release on their first run, like `craftorio-mcp`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
-  `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
+  `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional, `gitleaks` optional (#49, the secret scan of
+  a run's commits; never installed by a run). Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).
   A shell opened outside the app may still lack it on PATH.
 - macOS and Linux (#316): `resolveCommand` (`packages/engine/engine/providers.js`) returns the absolute path
@@ -51,7 +52,7 @@ the workspace folder.
   (`packages/engine/service/common.js`: command, shell, Sessions and supervisor terminals) and agent turns use it.
 - macOS without Homebrew (#398): `installCommands(platform, { brew })` (`packages/engine/domains/machine/install-commands.js`)
   offers brew commands only when `brew` resolves; otherwise git gets `xcode-select --install` and
-  gh, glab and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
+  gh, glab, gitleaks and whisper-cli get prose (`MAC_NO_BREW_TEXT`). The command terminal's allowlist uses the
   same list.
 - **Packaging per OS** (#317, `apps/desktop/scripts/package.js`): `npm run package` builds for the current
   machine into `dist/Craftorio-<platform>-<arch>/`; `-- --platform win32|darwin|linux

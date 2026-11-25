@@ -6,7 +6,7 @@
 # only: the run starts from base_branch; the release workflow ships the patch). A step
 # `{ id, fragment: fix-pipeline }` gets the body under its id; the step's own keys win
 # (packages/engine/engine/run/load.js, expandFragments). The bodies read only the inputs task, issue,
-# hotfix and base_branch and the steps reproduce, develop, rule_check (#50, fix.yaml only), code_review,
+# hotfix and base_branch and the steps reproduce, develop, rule_check (#50) and secret_scan (#49, both fix.yaml only), code_review,
 # suite, e2e and verify_change.
 
 steps:
@@ -42,6 +42,16 @@ steps:
       {% if steps.reproduce.output %}It reproduces with `{{ steps.reproduce.output.command }}`: {{ steps.reproduce.output.observed }}
       {% endif %}{% if inputs.hotfix %}Hotfix: the smallest change that removes the bug, nothing else.
       {% endif %}{% else %}Back on your fix:
+      {% if previous_step in ['secret_scan', 'secret_found'] and steps.secret_scan.output and steps.secret_scan.output.status == 'fail' %}
+      The orchestrator scanned the run's commits for secrets (gitleaks, #49) and found (the secret-triage skill says how to judge each one):
+      {% for f in steps.secret_scan.output.findings %}{% if loop.index <= 50 %}- {{ f.rule }} in {{ f.file }}:{{ f.line }} (commit {{ f.commit }})
+      {% endif %}{% else %}{{ steps.secret_scan.output.message }}
+      {% endfor %}Never print, copy, test or use a value. A false positive gets an entry in `.gitleaksignore` with its
+      reason above it, in the same commit. A real secret is leaked: name it in `summary` (rule, file, line) so that
+      the owner revokes it, and take it out of the run's own commits too, by rewriting them (a fixup commit and
+      `git rebase --autosquash`): a new commit that deletes it leaves it in the history. Never rewrite a commit that is already on the base (`{{ inputs.base_branch }}`).
+      Commit, and answer again in full.
+      {% endif %}
       {% if previous_step == 'rule_check' and steps.rule_check.output and steps.rule_check.output.status == 'fail' %}The orchestrator ran the project's rule checks after your commit, and they fail (never weaken a rule or a test): {{ steps.rule_check.output.message }}
       {% elif steps.code_review.output and not steps.code_review.output.approved %}The reviewer asked for changes:
       {% for f in steps.code_review.output.findings %}- {{ f }}

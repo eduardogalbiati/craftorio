@@ -31,6 +31,8 @@ const TOOLS = [
   { id: 'gh', name: 'GitHub CLI', args: ['--version'], auth: ['auth', 'status'] },
   { id: 'glab', name: 'GitLab CLI', args: ['--version'], auth: ['auth', 'status'] },
   { id: 'git', name: 'Git', args: ['--version'] },
+  // #49: optional, the secret scan of a run's commits
+  { id: 'gitleaks', name: 'Gitleaks', args: ['version'] },
 ];
 
 // the account a sign-in probe names ("Logged in to github.com account eduardo", "Logged in to gitlab.com as eduardo")

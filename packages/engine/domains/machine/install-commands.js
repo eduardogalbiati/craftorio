@@ -3,9 +3,9 @@
 // runs them in a terminal (the 'command' terminal kind, packages/engine/service/areas/terminals.js, which refuses
 // any command that is not suggested here or by packages/engine/domains/usage/actions-usage.js). Per platform; a tool without a
 // one-line installer has no command, only the prose of INSTALL_TEXT. Linux has no single package
-// manager (#316): gh, git and glab get prose that names the distro package instead of a command.
+// manager (#316): gh, git, glab and gitleaks (#49) get prose that names the distro package instead of a command.
 // macOS (#398): the brew commands only when `brew` resolves; without Homebrew, git installs with
-// Apple's Command Line Tools and gh, glab and whisper-cli get the prose of MAC_NO_BREW_TEXT.
+// Apple's Command Line Tools and gh, glab, gitleaks and whisper-cli get the prose of MAC_NO_BREW_TEXT.
 // A utility (#401): it never requires the engine. Whether Homebrew is installed comes from the
 // callers that resolve commands (`{ brew }`); without it, from the lookup packages/engine/engine/providers.js
 // registers when it loads (`setBrewLookup`), else no Homebrew.
@@ -28,6 +28,7 @@ function installCommands(platform = process.platform, { brew } = {}) {
     gh: win ? 'winget install --id GitHub.cli -e' : mac ? brewOr('brew install gh') : null,
     git: win ? 'winget install --id Git.Git -e' : mac ? brewOr('brew install git', 'xcode-select --install') : null,
     glab: win ? 'winget install --id GLab.GLab -e' : mac ? brewOr('brew install glab') : null,
+    gitleaks: win ? 'winget install --id Gitleaks.Gitleaks -e' : mac ? brewOr('brew install gitleaks') : null,
     grok: null,
     'whisper-cli': mac ? brewOr('brew install whisper-cpp') : null,
   };
@@ -36,6 +37,7 @@ function installCommands(platform = process.platform, { brew } = {}) {
 const INSTALL_TEXT = {
   gh: 'install the GitHub CLI with your distribution\'s package manager (e.g. sudo apt install gh, sudo dnf install gh); see https://cli.github.com',
   git: 'install git with your distribution\'s package manager (e.g. sudo apt install git, sudo dnf install git)',
+  gitleaks: 'install gitleaks with your distribution\'s package manager or from https://github.com/gitleaks/gitleaks/releases',
   glab: 'install the GitLab CLI with your distribution\'s package manager or from https://gitlab.com/gitlab-org/cli/-/releases',
   grok: 'install Grok Build from x.ai (it lands in ~/.grok/bin, which must be on the PATH)',
 };
@@ -43,6 +45,7 @@ const INSTALL_TEXT = {
 // #398: macOS without Homebrew: what the one-click install needs, and the official alternative.
 const MAC_NO_BREW_TEXT = {
   gh: 'the one-click install needs Homebrew (https://brew.sh); without it, install the GitHub CLI with the macOS installer from https://cli.github.com',
+  gitleaks: 'the one-click install needs Homebrew (https://brew.sh); without it, download gitleaks for macOS from https://github.com/gitleaks/gitleaks/releases',
   glab: 'the one-click install needs Homebrew (https://brew.sh); without it, download the GitLab CLI for macOS from https://gitlab.com/gitlab-org/cli/-/releases',
   'whisper-cli': 'whisper-cli installs with Homebrew: install Homebrew (https://brew.sh), then come back here for the one-click install',
 };

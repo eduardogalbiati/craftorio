@@ -865,5 +865,6 @@ module.exports = {
   retireWorktree,
   syncForkBase,
   syncWithBase,
+  tryGit,
   worktreeRuns,
 };

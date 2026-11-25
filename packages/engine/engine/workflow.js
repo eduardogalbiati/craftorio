@@ -78,6 +78,7 @@ const { methods: machineStepsMethods } = require('./run/machine-steps');
 const { methods: projectMapStepsMethods } = require('./run/project-map-steps');
 const { methods: refactorProposalsStepsMethods } = require('./run/refactor-proposals-steps');
 const { methods: releaseStepsMethods } = require('./run/release-steps');
+const { methods: secretScanStepMethods } = require('./run/secret-scan-step');
 const { methods: testRequestsMethods } = require('./run/test-requests');
 const { methods: resumeMethods, pausedError } = require('./run/resume');
 const { methods: setupMethods } = require('./run/setup');
@@ -90,7 +91,7 @@ const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || nul
 // output says what was written, only a product's release (#46) fails the run; test_ids (#246): the missing test ids; check
 // (#404): the project's rule checks (its command sweeps what it leaves running); visual_baselines
 // (#696): the missing baselines of the issues' @visual scenarios; docs_check (#757): the docs the
-// issues expect that the diff does not touch; record_docs (#702): a Code & Build run in its work item's docs;
+// issues expect that the diff does not touch; record_docs (#702): a Code & Build run in its work item's docs; secret_scan (#49): gitleaks on the run's commits;
 // push_base (#861): a Local run's push_main, the engine pushes the local base (never fails the run)
 const PLAIN_MACHINE_STEPS = {
   check: 'runCheckStep',
@@ -100,6 +101,7 @@ const PLAIN_MACHINE_STEPS = {
   record_docs: 'runRecordDocsStep',
   refactor_proposals: 'runRefactorProposalsStep',
   release_version: 'runReleaseVersionStep',
+  secret_scan: 'runSecretScanStep',
   test_ids: 'runTestIdsStep',
   visual_baselines: 'runVisualBaselinesStep',
 };
@@ -153,7 +155,7 @@ const testedSummary = (ctx) => (ctx.vars?.tested ? { tested: ctx.vars.tested, te
 // never a human_edit gate (#647), which only the person ends
 const supervisedGate = (step, exhausted) => step.type === 'human_approval' && (step.kind === 'escalation' || !!exhausted);
 
-/** @typedef {import('../../shared/types').RunFields & typeof accountsMethods & typeof checkoutMethods & typeof costsMethods & typeof gatesMethods & typeof machineStepsMethods & typeof outputsMethods & typeof projectMapStepsMethods & typeof refactorProposalsStepsMethods & typeof releaseStepsMethods & typeof resumeMethods & typeof sessionsMethods & typeof setupMethods & typeof supervisionMethods & typeof testRequestsMethods & typeof transitionsMethods & typeof turnsMethods} RunParts */
+/** @typedef {import('../../shared/types').RunFields & typeof accountsMethods & typeof checkoutMethods & typeof costsMethods & typeof gatesMethods & typeof machineStepsMethods & typeof outputsMethods & typeof projectMapStepsMethods & typeof refactorProposalsStepsMethods & typeof releaseStepsMethods & typeof resumeMethods & typeof secretScanStepMethods & typeof sessionsMethods & typeof setupMethods & typeof supervisionMethods & typeof testRequestsMethods & typeof transitionsMethods & typeof turnsMethods} RunParts */
 class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** @type {unknown} */ (EventEmitter)) {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see packages/engine/domains/usage/usage.js); prices: USD per 1M tokens by model.
@@ -974,6 +976,7 @@ mixin(
   projectMapStepsMethods,
   refactorProposalsStepsMethods,
   releaseStepsMethods,
+  secretScanStepMethods,
   testRequestsMethods,
   resumeMethods,
   setupMethods,

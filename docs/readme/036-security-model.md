@@ -15,6 +15,12 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
   PR comments an agent reads can try to steer it, with the tools its workflow gives it. Isolated
   agents never load the checkout's `.claude/settings*.json`, but treat a repository's hooks as code
   that may run until #468 is closed.
+- **The secret scan does not find every secret.** Feature, Fix, Release and this repository's own
+  workflows run gitleaks on the commits a run made, before the review (Release: before Ship). It
+  knows patterns: a password in plain words, an encoded or split value, a merge commit's own changes
+  and what is committed after the scan (the test writer, a merge conflict) can pass. Without
+  gitleaks, or turned off, the run says "secrets not scanned". It hides values from the records; a
+  value an agent prints itself is only covered by the redaction of known formats.
 - **Workflows, skills and seeds are code**: a workflow runs shell commands and templates in the
   app's process, a skill or a seed tells agents with tools what to do. In short, workflows, skills
   and seeds are code: install only ones you trust.

@@ -4,7 +4,7 @@
 # (the wiring the interview's answers choose), which win over the body's (packages/engine/engine/run/load.js,
 # expandFragments). The project's facts (test command, languages, skills) are in the composed
 # workflow's agents, not here. The bodies read only the inputs task, issue and base_branch and the
-# steps develop, code_review, suite, e2e, verify_change and validate.
+# steps develop, code_review, suite, e2e, verify_change, validate and secret_scan (#49, fix.yaml only).
 
 steps:
   develop:
@@ -39,6 +39,12 @@ steps:
     prompt: |
       Review the change on branch `{{ steps.develop.output.branch }}` against `{{ inputs.base_branch }}`
       (`git diff {{ inputs.base_branch }}...HEAD`): {{ steps.develop.output.summary }}
+      {% if steps.secret_scan.output and ((steps.secret_scan.output.ignored or []) | length or (steps.secret_scan.output.config or []) | length) %}
+      Secret scan (#49, secret-triage skill): the change makes gitleaks skip the following. Judge each one, and refuse (a blocker finding) an entry that may be a real secret or has no good reason:
+      {% for e in steps.secret_scan.output.ignored %}- `{{ e.entry }}`: {{ e.reason or 'no reason given' }}
+      {% endfor %}{% for c in steps.secret_scan.output.config %}- `{{ c }}` changed: read its diff
+      {% endfor %}{% endif %}{% if steps.secret_scan.output and steps.secret_scan.output.status == 'skipped' %}{{ steps.secret_scan.output.message }} Look for secrets in the diff yourself.
+      {% endif %}
       Check that it does what the task asks, follows the project's conventions and has tests.
       Answer approved: true when it can go on; otherwise approved: false with one finding per line
       (file:line and what to change). Change nothing yourself.
@@ -91,6 +97,7 @@ steps:
       Branch `{{ steps.develop.output.branch }}`: {{ steps.develop.output.summary }}
       Verification: {{ steps.verify_change.output.verdict }} ({{ steps.verify_change.output.claim }})
       {% if steps.suite.output %}Tests: {{ steps.suite.output.message }}{% endif %}
+      {% if steps.secret_scan.output and steps.secret_scan.output.status == 'skipped' %}{{ steps.secret_scan.output.message }}{% endif %}
       Approve to let it land; reject to send your note back to the developer.
 
   verify_failed:

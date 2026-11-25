@@ -4,15 +4,9 @@
 // Install of it (packages/engine/service/areas/cli-setup.js), which installs nothing and leaves the CLI
 // "installed, not signed in" for the re-check that follows. Outside simulation the hook does nothing.
 
-const simulation = require('../../engine/simulation');
+const { missingIds } = require('../../engine/simulation');
 
 const installed = new Set();
-
-// the ids the hook makes missing (none outside simulation)
-function missingIds(env = process.env) {
-  if (!simulation.simulationOnly(env)) return [];
-  return String(env.CRAFTORIO_E2E_CLI_MISSING || '').split(',').map((s) => s.trim()).filter(Boolean);
-}
 
 // 'missing' | 'installed' for a CLI the hook covers, else null (the real probes answer)
 function simulatedState(id, env = process.env) {
