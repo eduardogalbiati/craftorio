@@ -7,7 +7,7 @@
 // - Finish and Skip never turn settings.developerMode on, nor off for a workspace that has it on;
 // - the Start drawer says that a real run uses the CLI subscription: #start-real-note
 //   (data-testid="start-real-note") in the page's Start drawer, its text set when the drawer opens; it has the class
-//   `hidden` while the Simulation box is offered (developer mode on);
+//   `hidden` while the Simulation box is checked (developer mode on; start-real-note-69.test.js);
 // - no setup.try.* key is left in the catalogs, nor named by the page's sources.
 // Harness: renderer-app-harness.js (the real page in a vm with a fake DOM). appInfo answers simulationOnly: false
 // here, as in the owner's app: simulation only (the automated checks) counts as developer mode.

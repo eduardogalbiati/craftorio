@@ -16,7 +16,12 @@ const PROFILE = {
   line: ENGLISH_LINE, suggestion: null,
 };
 
-async function machineLineIn(lang) {
+// a machine whose threads and memory could not be read: no proposal, the engine's English sentence
+const UNREAD_LINE = "This machine's threads and memory couldn't be read: 2 runs at once, 1 test worker per run.";
+const UNREAD = { state: 'unknown', concurrentRuns: 2, testWorkers: 1, machine: null, proposal: null, line: UNREAD_LINE, suggestion: null };
+const UNREAD_PT = 'Não foi possível ler os threads e a memória desta máquina.';
+
+async function machineLineIn(lang, machineProfile = async () => JSON.parse(JSON.stringify(PROFILE))) {
   let saved = { setupDone: true, language: { interface: lang } };
   const app = loadApp({
     api: {
@@ -25,7 +30,7 @@ async function machineLineIn(lang) {
       listWorkflows: async () => [],
       listProjects: async () => [],
       envDetails: async () => [],
-      machineProfile: async () => JSON.parse(JSON.stringify(PROFILE)),
+      machineProfile,
     },
   });
   await app.boot();
@@ -51,4 +56,16 @@ test('#23 #69 Settings › Execution in pt-BR: the machine line still carries th
 
 test('#23 guard: Settings › Execution in English shows the machine line as today', { timeout: 30000 }, async () => {
   assert.equal(await machineLineIn('en'), ENGLISH_LINE);
+});
+
+test('#69 Settings › Execution in pt-BR: a machine that could not be read says so in Portuguese', { timeout: 30000 }, async () => {
+  assert.equal(await machineLineIn('pt-BR', async () => ({ ...UNREAD })), UNREAD_PT);
+});
+
+test('#69 Settings › Execution in English: a machine that could not be read shows the engine\'s line', { timeout: 30000 }, async () => {
+  assert.equal(await machineLineIn('en', async () => ({ ...UNREAD })), UNREAD_LINE);
+});
+
+test('#69 Settings › Execution in pt-BR: a machine profile that fails to load says so in Portuguese', { timeout: 30000 }, async () => {
+  assert.equal(await machineLineIn('pt-BR', async () => { throw new Error('no engine'); }), UNREAD_PT);
 });
