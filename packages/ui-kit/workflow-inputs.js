@@ -402,7 +402,7 @@
   /** { off, commands, rewrites }: what the check runs for a `check_command` (blank: what was found). */
   function checksOf(given, runDefaults) {
     const own = String(given ?? '').trim();
-    if (/^off$/i.test(own)) return { off: true, commands: [], rewrites: [] };
+    if (runInputs().checksOff(own)) return { off: true, commands: [], rewrites: [] };
     if (own) return { off: false, commands: [own], rewrites: [] };
     return { off: false, commands: runDefaults?.check_commands || [], rewrites: runDefaults?.check_rewrites || [] };
   }

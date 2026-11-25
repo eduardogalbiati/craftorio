@@ -1,0 +1,48 @@
+# The rule-check steps shared by feature, fix and refactor (#50): rule_check (no agent, #404, the project's
+# checks after each developer commit) and the gates check_failed (still failing after the developer's
+# rounds) and check_environment (#30: the checks cannot run here, no round counted). A step
+# `{ id, fragment: check-pipeline }` gets the body under its id; the step's own keys win
+# (packages/engine/engine/run/load.js, expandFragments). The workflow keeps rule_check's transitions (its
+# developer step and the step after a pass) and check_failed's choices and transitions. The bodies read the
+# input check_command, `vars.check_returns` and the steps rule_check and develop (refactor, in refactor.yaml).
+
+steps:
+  rule_check:
+    display: Rule checks
+    type: check
+    command: "{{ inputs.check_command }}"
+
+  # a decision: neither the supervisor nor a retry answers it
+  check_failed:
+    type: human_approval
+    summary: |
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s) (`{{ steps.rule_check.output.command }}`).
+      - ✖ {{ (steps.rule_check.output.cause or steps.rule_check.output.findings | last) | one_line(240) }}
+    message: |
+      The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s): {{ steps.rule_check.output.cause }}
+      {{ steps.rule_check.output.message }}
+      The change is on branch `{{ (steps.develop or steps.refactor).output.branch }}`; its code review has not run yet.
+
+  # the owner fixes the environment and tries again, which reruns rule_check; a decision, like check_failed
+  check_environment:
+    type: human_approval
+    summary: |
+      The project's rule checks cannot run: {{ steps.rule_check.output.cause }}
+    message: |
+      {{ steps.rule_check.output.cause }}
+      No developer round was counted. Fix the environment, then try again: the rule checks run again.
+    environment: rule_check
+    choices:
+      - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed.", help_key: engine.check_environment_retry_help }
+      - { id: stop,  label: "Stop the run as failed", label_key: engine.check_environment_stop, help: "Ends the run as failed; its branch keeps the work to resume it.", help_key: engine.check_environment_stop_help }
+    transitions:
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+      # a gate answered by its first choice (--auto-approve, the simulated automations) must not loop
+      # forever on an environment nobody fixes: 3 retries, then the run ends as failed
+      - when: "true"
+        goto: rule_check
+        max_visits: 3
+        on_exhausted: end
+        status: failed

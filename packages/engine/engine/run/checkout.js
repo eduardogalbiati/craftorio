@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { checksOff } = require('@craftorio/shared/run-inputs');
 const {
   currentBranch,
   git,
@@ -118,10 +119,10 @@ const methods = {
     if (d?.manager && !d.notCached) install = `\`${d.manager} ${depsCache.installArgs(d, this.ignoreInstallScripts).join(' ')}\``;
     else if (d?.notCached) install = `none by the run (${d.lockfile} is not cached: ${d.notCached})`;
     else if (hasPackage) install = 'none by the run (package.json without a lockfile: npm scripts run only when an agent runs them)';
-    const off = checkStep.checksOff(this.ctx?.inputs?.check_command);
-    const checks = off ? [] : checkStep.checkCommands(dir);
+    const given = this.ctx?.inputs?.check_command;
+    const checks = checkStep.checkCommands(dir, given);
     // #50: said here too, for a workflow whose route skips a check step with nothing to run
-    const rewrites = off || checkStep.checkCommand(dir) ? [] : foundChecks(dir).rewrites;
+    const rewrites = checksOff(given) || checkStep.checkCommand(dir, given) ? [] : foundChecks(dir).rewrites;
     const tests = this.suiteCommand();
     const parts = [
       install && `dependency install ${install}`,

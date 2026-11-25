@@ -2,7 +2,7 @@
 // Templates and expressions of a run (#250, from packages/engine/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
-// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `expected_docs`, `issue_numbers`,
+// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `checks_off`, `expected_docs`, `issue_numbers`,
 // `issue_lines`, `one_line`, `suite_lines`, `tests_plan_text`, `translated`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
@@ -16,6 +16,7 @@ const { execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
 const I18n = require('@craftorio/shared/i18n');
+const { checksOff } = require('@craftorio/shared/run-inputs');
 const checkStep = require('../check-step');
 const expectedFiles = require('../expected-files');
 const gateSummary = require('../gate-summary');
@@ -195,6 +196,10 @@ tpl.addFilter('check_command', (dir, command) => {
   if (!dir || !fs.existsSync(String(dir))) return '';
   return checkStep.checkCommands(String(dir), command).join(' && ');
 });
+
+// #50: the check_command input turns the rule checks off
+//   {% if inputs.check_command | checks_off %}
+tpl.addFilter('checks_off', (command) => checksOff(command));
 
 // The numbers of the run's issues (#223: their BDD tags @issue-<n>), from `issue` and `issues` (URLs
 // ending in the number), without duplicates; [] without an issue.

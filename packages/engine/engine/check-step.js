@@ -21,6 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const I18n = require('@craftorio/shared/i18n');
+const { checksOff } = require('@craftorio/shared/run-inputs');
 const { compareFindings, parseFindings } = require('./check-findings');
 const { foundChecks } = require('./check-tools');
 const { programMissing } = require('./command-missing');
@@ -31,9 +32,6 @@ const { oneLine } = require('./gate-summary');
 // the findings a prompt shows at most (the log keeps all of it)
 const MAX_FINDING_LINES = 40;
 const DEFAULT_TIMEOUT_MS = 10 * 60e3;
-
-// #50: the checks are turned off (the check_command input, the project's run default)
-const checksOff = (command) => /^off$/i.test(String(command || '').trim());
 
 // The command to run: the given one, else the project's `check` script, else null
 function checkCommand(dir, command) {
@@ -237,7 +235,6 @@ async function runCheck({ baseCheckout = /** @type {(() => Promise<{ dir: string
 module.exports = {
   checkCommand,
   checkCommands,
-  checksOff,
   findingLines,
   runCheck,
 };

@@ -16,6 +16,8 @@ const { programOnPath } = require('./command-missing');
 
 const read = (dir, rel) => { try { return fs.readFileSync(path.join(dir, rel), 'utf8'); } catch { return ''; } };
 const listDir = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
+// the section `name` of an INI or TOML text, its header included, up to the next header; '' without it
+const sectionOf = (text, name) => text.split(/^(?=[ \t]*\[)/m).find((s) => s.trimStart().startsWith(`[${name}]`)) || '';
 const firstOf = (dir, names) => names.find((n) => fs.existsSync(path.join(dir, n))) || null;
 
 // ---- commands that rewrite files -----------------------------------------------------------------
@@ -83,17 +85,13 @@ function javascript({ dir, platform }) {
 function python({ dir, installed }) {
   const pyproject = read(dir, 'pyproject.toml');
   const ruff = firstOf(dir, ['ruff.toml', '.ruff.toml']) || /^\s*\[tool\.ruff[.\]]/m.test(pyproject);
-  const mypyConfig = [
-    read(dir, 'mypy.ini'),
-    read(dir, '.mypy.ini'),
-    /^\s*\[tool\.mypy\]/m.test(pyproject) ? pyproject : '',
-    /^\s*\[mypy\]/m.test(read(dir, 'setup.cfg')) ? read(dir, 'setup.cfg') : '',
-  ].find(Boolean);
-  // mypy checks the files its configuration names, else the whole folder
-  const target = /^\s*(?:files|modules|packages)\s*=/m.test(mypyConfig || '') ? '' : ' .';
+  const mypyIni = read(dir, 'mypy.ini') || read(dir, '.mypy.ini');
+  const mypyConfig = mypyIni ? sectionOf(mypyIni, 'mypy') : sectionOf(pyproject, 'tool.mypy') || sectionOf(read(dir, 'setup.cfg'), 'mypy');
+  // mypy checks the files its own section names (never another tool's `packages`), else the whole folder
+  const target = /^\s*(?:files|modules|packages)\s*=/m.test(mypyConfig) ? '' : ' .';
   return [
     ruff && installed('ruff') && { command: 'ruff check --no-fix --output-format concise .', tool: 'ruff' },
-    mypyConfig && installed('mypy') && { command: `mypy --no-pretty --no-install-types --no-error-summary${target}`, tool: 'mypy' },
+    (mypyIni || mypyConfig) && installed('mypy') && { command: `mypy --no-pretty --no-install-types --no-error-summary${target}`, tool: 'mypy' },
   ];
 }
 
