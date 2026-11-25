@@ -4,7 +4,10 @@
 const projects = require('../../domains/project/projects');
 const projectInputs = require('../../domains/project/project-inputs');
 const { runDefaultsOf } = require('../seed-runs');
-const { withAliases } = require('../../domains/project/project-run-defaults');
+const {
+  projectFacts,
+  withAliases,
+} = require('../../domains/project/project-run-defaults');
 const { clientError, requireId, requireObject } = require('../common');
 const {
   ANY,
@@ -71,7 +74,9 @@ module.exports = (ctx) => [
     fn: async (id) => {
       const p = projectOf(ctx, id);
       const hints = await projectInputs.inputHints(p?.folder || null);
-      return { ...hints, runDefaults: p ? withAliases(await runDefaultsOf(ctx, p)) : null };
+      // #75: the kind the files say now, apart from the picked one (`kind` on the record) and from a saved analysis
+      const detectedKind = p ? projectFacts(p.folder).kind : null;
+      return { ...hints, detectedKind, runDefaults: p ? withAliases(await runDefaultsOf(ctx, p)) : null };
     },
   },
 ];

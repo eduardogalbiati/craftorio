@@ -23,7 +23,8 @@
 // next-step-release-ci / next-step-screenshots shown disabled (later phases), their reason in the button's
 // tooltip and a line (#744); #22: the idea step shows next-step-idea-done instead of its button once the
 // project's Inbox has a card (api.listDiscoveryCards, read once per page), and the screenshots step is
-// left out for a project of kind 'backend' (no user interface); #30: next-step-install-deps, shown while the
+// left out for a project with no user interface (#75: its picked `kind` is 'backend' or, with none picked, its files
+// say so, no code included: api.projectInputHints' detectedKind); #30: next-step-install-deps, shown while the
 // clone has a lockfile and no node_modules (api.onboardingStatus's deps), names the command and runs it
 // (api.installOnboardingDeps: npm ci, --ignore-scripts per the project's setting);
 // #35: a project with no repository (created without a remote) has a local backlog, so its first entry is the PO's too;
@@ -108,6 +109,26 @@ function loadNextStepDeps(pv) {
   });
 }
 
+// #75: the kind the project's files say (api.projectInputHints), read once per page and again on the way back (show()
+// clears nextStepKindRead; the kind read before stays until then); '' when it could not be read
+function loadNextStepKind(pv) {
+  if (nextSteps()[pv.id] !== 'open' || pv.nextStepKindRead) return;
+  const read = new Promise((resolve) => resolve(api.projectInputHints?.(pv.id))).then((hints) => hints?.detectedKind || '', () => '');
+  pv.nextStepKindRead = read;
+  read.then((kind) => {
+    if (pv.nextStepKindRead !== read) return; // a newer read answers
+    pv.nextStepKind = kind;
+    if (state.pv === pv && state.view === 'project') renderProjectView();
+  });
+}
+
+// #75: whether the screenshots step is offered: the picked kind decides, else the detected one (not yet read: no;
+// not readable: offered, as before)
+function hasInterface(pv) {
+  const kind = pv.project?.kind || pv.nextStepKind;
+  return kind !== undefined && kind !== 'backend';
+}
+
 // #30: npm ci in the clone (the service honours the project's "ignore install scripts"), then the entry again
 function installNextStepDeps(pv) {
   if (!pv?.nextStepDeps || pv.nextStepDeps.status === 'installing') return;
@@ -167,10 +188,10 @@ function nextStepsMarkup(pv) {
       ${button(step, action, reasonOf(step, later))}
     </li>`;
   // #744: no refactors step once the proposals are read and there are none (never "File and add 0")
-  // #22: no screenshots spike for a project without a user interface (the wizard's kind 'backend')
+  // #22, #75: no screenshots spike for a project without a user interface (picked or detected)
   // #35: the PO's entry stays first with or without a repository (a project with none has a local backlog)
   const shown = PV_NEXT_STEPS.filter(([step]) => (step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length)
-    && (step !== 'screenshots' || pv.project?.kind !== 'backend')
+    && (step !== 'screenshots' || hasInterface(pv))
     && (step !== 'install-deps' || ['missing', 'installing', 'failed'].includes(pv.nextStepDeps?.status)));
   // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
   // ranking made proposals
@@ -214,7 +235,7 @@ function newProjectPage(id) {
   const tab = projectTabs()[id];
   return {
     id, project: state.projects.find((p) => p.id === id) || null, runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map(),
-    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepDeps: undefined, nextStepPicked: new Set(),
+    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepDeps: undefined, nextStepKind: undefined, nextStepKindRead: null, nextStepPicked: new Set(),
     tab: PV_TABS.some(([t]) => t === tab) ? tab : 'overview',
   };
 }
@@ -302,6 +323,7 @@ function renderProjectView() {
   loadNextStepProposals(pv);
   loadNextStepIdeas(pv);
   loadNextStepDeps(pv);
+  loadNextStepKind(pv);
   $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv);
   $('#project-info').innerHTML = `
     <dl class="kv">
@@ -409,7 +431,10 @@ registerView({
     // the header's project changed while the page was open: the page switches to it
     const current = window.CurrentProject?.get();
     if (current && state.pv?.id !== current) state.pv = newProjectPage(current);
-    else if (state.pv) state.pv.nextStepIdeas = undefined; // #22: the Inbox read again on the way back
+    else if (state.pv) {
+      state.pv.nextStepIdeas = undefined; // #22: the Inbox read again on the way back
+      state.pv.nextStepKindRead = null; // #75: and the kind (a user interface may have been added)
+    }
     renderProjectView();
     loadProjectRuns(state.pv?.runs ? 'refresh' : 'reset');
   },

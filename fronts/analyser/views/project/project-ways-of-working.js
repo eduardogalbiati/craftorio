@@ -15,7 +15,7 @@
 // on reopening) a loader shows the elapsed time and the turn's last item (workflows:interviewState, polled
 // every second); a failure shows its reason and Retry.
 // The drawer is added next to the Start drawer (#drawer) and removed when it closes. Uses app.js
-// globals ($, esc, errMsg, showToast).
+// globals ($, esc, errMsg, showToast, state) and project.js's renderProjectView.
 
 (function () {
   // the proposed workflow's category as the owner reads it: solo / team (#487) and feature (#630) are the
@@ -361,6 +361,14 @@
     try {
       const saved = await api.updateProject(c.project.id, patch);
       c.project = { ...c.project, ...(saved || patch) };
+      // #75: the open page follows the saved kind (its Next steps card)
+      if (typeof state !== 'undefined') {
+        state.projects = (state.projects || []).map((x) => (x.id === c.project.id ? { ...x, ...(saved || patch) } : x));
+        if (state.pv?.id === c.project.id) {
+          state.pv.project = { ...(state.pv.project || {}), ...(saved || patch) };
+          if (state.view === 'project') renderProjectView();
+        }
+      }
       if (cur === c) showToast(t('ways_of_working.run_defaults_saved'));
     } catch (e) {
       if (cur === c) { c.error = errMsg(e); render(); }

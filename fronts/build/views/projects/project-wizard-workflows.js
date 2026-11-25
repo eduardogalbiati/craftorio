@@ -227,11 +227,14 @@
 
     // #790: the repository's workflows manifest (api.projectManifest: the clone's folder once the record has it,
     // else the URL), for step 3's Default row and Finish's default; read again when the folder becomes known
+    // #76: a new project with no repository has nothing to read until then (projects:manifest refuses an empty target)
     function loadManifest() {
       const pid = cur().projectId;
       if (!pid || typeof api.projectManifest !== 'function') return;
       const folder = recordOf(pid)?.folder || '';
-      const target = folder ? { folder } : { url: cur().model.repository };
+      const url = String(cur().model.repository || '').trim();
+      if (!folder && !url) return;
+      const target = folder ? { folder } : { url };
       const key = JSON.stringify(target);
       if (cur().manifestFor === key) return;
       cur().manifestFor = key;

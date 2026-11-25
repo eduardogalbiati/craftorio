@@ -167,7 +167,9 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
 
 The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to
 file and add, the first idea, the refactor cadence ("Turn on" opens the Health tab, #730: there the findings become
-issues; it turns nothing on itself), and release CI and screenshots, shown disabled (later phases). Its heading adds "· city and
+issues; it turns nothing on itself), and release CI and screenshots, shown disabled (later phases). The screenshots entry is
+left out for a project with no user interface (#75): the kind picked in the wizard or in Ways of working decides, else what the
+files say now (`projects:inputHints`' `detectedKind`; no code is `backend`, and the detected kind is never saved as the picked one). Its heading adds "· city and
 refactor backlog done" once the refactor proposals are there, and the number of the project's workflows
 only when the project has its own set (a wizard import has none, so no count).
 

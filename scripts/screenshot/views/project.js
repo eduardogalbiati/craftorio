@@ -399,6 +399,14 @@ function seed({ appDir, args, projects, ws, project }) {
   // spike) whose Inbox already has the idea noted on the Review ("Capture the first idea" shown done);
   // --mode next-steps-empty: a frontend project with an empty Inbox (the card as before);
   // #25: --mode next-steps-no-repo: a project created with no remote (Add a repository leads)
+  // #75: --mode next-steps-detected: no kind picked, its files (PHP) say backend (no screenshots spike)
+  if (!args.tab && args.mode === 'next-steps-detected') {
+    projects.updateProject(ws.projects, project.id, { kind: null });
+    fs.writeFileSync(path.join(project.folder, 'composer.json'), JSON.stringify({ name: 'acme/cpf', require: { php: '>=8.2' } }, null, 2));
+    fs.mkdirSync(path.join(project.folder, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(project.folder, 'src', 'Cpf.php'), '<?php\n\nfinal class Cpf\n{\n}\n');
+    return;
+  }
   if (!args.tab && args.mode?.startsWith('next-steps')) {
     projects.updateProject(ws.projects, project.id, { kind: args.mode === 'next-steps' ? 'backend' : 'frontend', ...(args.mode === 'next-steps-no-repo' ? { repo: '' } : {}) });
     if (args.mode === 'next-steps') {
@@ -509,7 +517,7 @@ async function afterOpen({ args, click, js, project }) {
 
 module.exports = {
   afterOpen,
-  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-deps', 'next-steps-deps-failed', 'next-steps-empty', 'next-steps-no-repo', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
+  modes: ['analyzing', 'city', 'city-agents', 'city-issue', 'city-large', 'city-no-folder', 'city-release', 'city-stage', 'city-unmeasured', 'empty', 'error', 'facts-large', 'large', 'loading', 'map-refresh', 'never', 'next-steps', 'next-steps-deps', 'next-steps-deps-failed', 'next-steps-detected', 'next-steps-empty', 'next-steps-no-repo', 'no-folder', 'no-runs', 'not-git', 'seeds', 'seeds-error', 'seeds-running', 'workflows'],
   open,
   run: true,
   seed,

@@ -64,6 +64,11 @@ const { servedFronts, serviceFiles } = require('./fronts');
 
 const AREAS_DIR = path.join(__dirname, 'areas');
 
+// #76: the most listeners one event of `events` has before Node warns of a leak. 'run:event' has a dozen, each
+// made once as the service and its host start (none per run, project or window), over Node's default of 10;
+// finite, so a listener added again and again still warns.
+const MAX_EVENT_LISTENERS = 20;
+
 // Every area file exports (ctx) => { helpers }; its properties (getters included, e.g. `ws`) are
 // defined on ctx as they are. Refuses a name already on ctx (two areas would shadow each other).
 // The files come from this folder and from each served front's engine/areas/ (phase 4, #590;
@@ -86,6 +91,7 @@ function loadAreas(ctx, fronts = [], dir = AREAS_DIR) {
 // the kernel's; a channel of a front not served is unknown (the server answers 404).
 function createService({ host, fronts = null, installed = undefined }) {
   const events = new EventEmitter();
+  events.setMaxListeners(MAX_EVENT_LISTENERS);
   // the code this process started with, to tell a window it runs newer code (#83)
   const code = createCodeVersion({ appVersion: host.appVersion, isPackaged: host.isPackaged });
   const served = servedFronts(fronts, installed);
