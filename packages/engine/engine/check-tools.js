@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { programOnPath } = require('./command-missing');
+const { packageScript } = require('./server-commands');
 
 const read = (dir, rel) => { try { return fs.readFileSync(path.join(dir, rel), 'utf8'); } catch { return ''; } };
 const listDir = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
@@ -27,12 +28,12 @@ const REWRITES = [
   /\b(?:gofmt|prettier)\b[^&|;]*\s(-w)(?![\w-])/,
   /\b((?:dotnet|ruff) format|cargo fmt)\b(?![^&|;]*--(?:check|diff|verify-no-changes))/,
 ];
-const SCRIPT_RUN = /\b(?:bun|npm|pnpm|yarn)\s+(?:run(?:-script)?\s+)?([\w:.-]+)/g;
+const SCRIPT_RUN = /\b(bun|npm|pnpm|yarn)(?=\s+([^&|;\n]+))/g; // a lookahead: the words may hold another run
 const SCRIPT_LIST = /\b(?:npm-run-all2?|run-[ps])\s+([^&|;]+)/g;
 
-// the scripts of package.json a script's text runs (`npm run x`, `run-s lint:*`)
+// the scripts of package.json a script's text runs (`npm run --silent x`, `run-s lint:*`)
 function scriptsRun(text, scripts) {
-  const names = [...text.matchAll(SCRIPT_RUN)].map((m) => m[1]);
+  const names = [...text.matchAll(SCRIPT_RUN)].map((m) => packageScript(m[1], m[2].replace(/["'`()]/g, '').trim().split(/\s+/)));
   const listed = [...text.matchAll(SCRIPT_LIST)].flatMap((m) => m[1].trim().split(/\s+/));
   const globs = listed.map((g) => new RegExp(`^${g.replace(/["']/g, '').replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*+/g, '.*')}$`));
   return Object.keys(scripts).filter((s) => names.includes(s) || globs.some((g) => g.test(s)));

@@ -23,7 +23,8 @@
 #     code_review still checks the acceptance files are unchanged (`git diff`), as a second line.
 #   - rule_check (no agent, #404): after each develop commit (after the test-id check and the
 #     screenshots, before the owner's gate or the review) the orchestrator runs the project's
-#     rule checks (`check_command`, or the `check` script of its package.json; none: skipped). A
+#     rule checks (`check_command`, or the `check` script of its package.json, else the linter and
+#     type checker it configures and has installed, #50; none or `check_command: off`: skipped). A
 #     failure goes back to develop with the findings, at most twice per review round, then to the
 #     owner at check_failed; never to the test writer. The suite still runs every test after it.
 #     An environment failure (#30: no dependencies installed, a command not found) never goes back
@@ -329,7 +330,7 @@ inputs:
     default: ""
     label: Check command
     group: Checks
-    description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check); a project without one skips the step."
+    description: "The project's fast rule checks (lint, layers, docs...) the orchestrator runs after each developer commit; failures go back to the developer. Empty: the project's `check` script from its package.json (npm run check), else the linter and the type checker the project itself configures and has installed (only what the change added goes back); a project with none skips the step. off: no checks."
   # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
   # continue, a suite red only outside the change goes on to the build without the test_failed gate.
   suite_red_outside_change:
@@ -1143,10 +1144,16 @@ steps:
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
       {% endif %}
-      Before your final answer, run the project's check command (`{{ inputs.check_command or 'npm run check' }}`
+      {% if inputs.check_command | checks_off %}
+      The project's rule checks are turned off for this run: run none (`checks: off`).
+      {% else %}
+      Before your final answer, run the project's check command (`{{ worktree_dir | check_command(inputs.check_command) or inputs.check_command or 'npm run check' }}`
       when it has one; no check command: say so) in the foreground, output in a log, fix what it
       reports and commit. Record the result in `checks` (`checks: pass` or the findings left). The
-      orchestrator runs it again after your commit and sends failures back here.
+      orchestrator runs it again after your commit and sends failures back here. With no check
+      command nor `check` script these are the project's own linter and type checker (#50): only what
+      your change added goes back, leave the findings the base has.
+      {% endif %}
       Your turn ends at green acceptance tests and a commit: answer once the ```run-tests block
       passes and the change is committed. The code_review step reviews your diff next, in its own
       session: never start a sub-agent to review your diff.

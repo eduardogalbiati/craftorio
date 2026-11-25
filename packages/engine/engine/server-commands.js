@@ -23,7 +23,7 @@ const WRAPPERS = new Set(['bunx', 'env', 'eval', 'exec', 'nohup', 'npx', 'sudo',
 const WRAPPER_PAIRS = /^(bundle|npm|pnpm|yarn) (dlx|exec)$/;
 const PACKAGE_MANAGERS = new Set(['bun', 'npm', 'pnpm', 'yarn']);
 // package-manager options that take a value (`pnpm --filter web dev`, `yarn workspace web dev`)
-const PM_VALUE_FLAGS = new Set(['--filter', '-F', '--dir', '-C', '--prefix', '--cwd', '--workspace', 'workspace']);
+const PM_VALUE_FLAGS = new Set(['--filter', '-F', '--dir', '-C', '--loglevel', '--prefix', '--reporter', '--cwd', '--workspace', 'workspace']);
 // per manager: npm's `-w <name>` is --workspace; pnpm's `-w` (--workspace-root) takes no value (`pnpm -w dev`)
 const PM_OWN_VALUE_FLAGS = { npm: new Set(['-w']) };
 // scripts that start a server: dev, start, serve (and `dev:web`-like variants)
@@ -100,4 +100,5 @@ function isServerCommand(command) {
 
 module.exports = {
   isServerCommand,
+  packageScript,
 };
