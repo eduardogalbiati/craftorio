@@ -986,7 +986,7 @@
   "backlog.loading_issues": "Loading issues…",
   "backlog.local_backlog_description": "Local backlog: the project's issues stay in this workspace.",
   "backlog.local_backlog_folder": "Folder:",
-  "backlog.local_issues_file":"File on {platform}…",
+  "backlog.local_issues_file": "File on {platform}…",
   "backlog.local_issues_file_confirm": "File",
   "backlog.local_issues_file_failed": "Not filed: {list}",
   "backlog.local_issues_file_message": { "one": "{count} local issue is filed on {repo}, one command each; once filed it leaves the local backlog and comes back with the next sync.", "other": "{count} local issues are filed on {repo}, one command each; once filed they leave the local backlog and come back with the next sync." },

@@ -40,6 +40,8 @@ const { projectVersion } = require('../../engine/project-version');
 const {
   closingCommits,
   defaultBase,
+  NO_REMOTE,
+  originUrl,
   pushBase,
 } = require('../local/local-push');
 const { readManifest } = require('../project/project-manifest');
@@ -277,11 +279,11 @@ async function shipRelease({ repo, base = null, tag, expect = null }) {
   const commit = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${base}^{commit}`], root).catch(() => null);
   if (!commit) throw new Error(`The local branch ${base} does not exist.`);
   if (expect && commit !== expect) throw new Error(`The local ${base} is at ${commit.slice(0, 8)}, not at the commit the release was checked on (${String(expect).slice(0, 8)}): check the release again. Nothing was pushed.`);
+  if (!(await originUrl(root))) throw new Error(`${NO_REMOTE} Nothing was tagged.`); // #73: before the tag is asked on origin
   // the tag is checked before anything goes out: one that names another commit, here or on origin, ships nothing more
   const tags = await tagsAt(root, name, commit);
   const result = await pushBase({ repo: root, base });
   if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
-  if (result.noRemote) throw new Error(`${result.reason} Nothing was tagged.`); // #73
   // #861: a local-folder origin left untouched (uncommitted changes or a diverged base there): no tag without the base
   if (!result.pushed && result.commands?.length) throw new Error(`${result.reason} Nothing was tagged.`);
   await pushTag(root, name, commit, tags);

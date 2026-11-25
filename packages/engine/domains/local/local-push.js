@@ -35,6 +35,8 @@ const refExists = async (repo, ref) => {
   return !!((await tryGit(args, repo)) || (await tryGit(args, repo)));
 };
 
+const NO_REMOTE = 'This project has no remote: there is nothing to push to.';
+
 // origin's URL, or null when the repository has none (asked twice, as refExists: a lost git process is not a missing remote).
 const originUrl = async (repo) => {
   const args = ['remote', 'get-url', 'origin'];
@@ -134,7 +136,7 @@ async function pushBase({ repo, base = null }) {
   const before = await localStatus({ repo, base });
   const { commits, issues } = before;
   if (before.error) throw new Error(before.error);
-  if (before.noRemote) return { pushed: false, noRemote: true, reason: 'This project has no remote: there is nothing to push to.', commits, issues, status: before };
+  if (before.noRemote) return { pushed: false, noRemote: true, reason: NO_REMOTE,commits, issues, status: before };
   if (!commits.length) return { pushed: false, commits, issues, status: before };
   const origin = await localOrigin(before.repo, before.base);
   if (origin?.checkout) return fastForwardLocalOrigin(before, origin);
@@ -224,6 +226,8 @@ module.exports = {
   conflictTask,
   defaultBase,
   localStatus,
+  NO_REMOTE,
+  originUrl,
   pushBase,
   updateAndPush,
 };

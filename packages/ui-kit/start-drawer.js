@@ -323,10 +323,12 @@ async function pastedImages() {
 function applyProjectHints() {
   const projectId = $('#project-select').value;
   if (state.wf && projectId) WorkflowInputs.applyHints($('#drawer'), state.wf.inputs, projectId);
-  // #39: an issue run on a project with no repository has no platform to choose (the engine records `local`)
+  // #39: an issue run on a project with no repository has no platform to choose (the engine records `local`);
+  // another workflow's field is left to its own show_if
+  if (!window.DefaultWorkflow?.namesOf('issue.yaml').includes(String(state.wf?.file).replace(/\.yaml$/, ''))) return;
   const platform = $('#drawer').querySelector('.wi-field[data-wi-key="git_platform"]');
   const project = state.projects.find((p) => p.id === projectId);
-  if (platform) platform.hidden = !!project && !project.repo && !!window.DefaultWorkflow?.namesOf('issue.yaml').includes(String(state.wf?.file).replace(/\.yaml$/, ''));
+  if (platform) platform.hidden = !!project && !project.repo;
 }
 
 // #805: what run:start's baseCheck says, in the interface's language
