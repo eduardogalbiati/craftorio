@@ -30,8 +30,8 @@ test('release workflow: a simulated E2E suite fails once, the developer fixes it
   assert.equal(finished.status, 'success', finished.error);
 
   const visited = events.filter((e) => e.type === 'step.finished').map((e) => e.step_id);
-  // workflows/release.yaml: version, unit, e2e (red) > fix > unit, e2e (green) > review (after a fix) > ship
-  assert.deepEqual(visited, ['version', 'unit', 'e2e', 'fix', 'unit', 'e2e', 'review', 'ship']);
+  // workflows/release.yaml: version, unit, e2e (red) > fix > unit, e2e (green) > secret_scan (#49) > review (after a fix) > ship
+  assert.deepEqual(visited, ['version', 'unit', 'e2e', 'fix', 'unit', 'e2e', 'secret_scan', 'review', 'ship']);
   const e2eOutputs = events.filter((e) => e.type === 'step.finished' && e.step_id === 'e2e').map((e) => e.output);
   assert.deepEqual(e2eOutputs.map((o) => o.status), ['fail', 'pass']);
   // the developer only went through the fix loop once (max_rounds), so no regression_failed gate
@@ -39,7 +39,7 @@ test('release workflow: a simulated E2E suite fails once, the developer fixes it
 });
 test('feature workflow (local mode): a simulated run merges right after verify_change, pushes the local base at push_main and ends as success', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
-  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', secret_scan: 'off', repo_path: root }, mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);
@@ -68,7 +68,7 @@ test('feature workflow (local mode): validated mode stops at developer_check wit
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'feature.yaml'),
-    inputs: { task: 'Engine test', repo_path: root, mode: 'validated' },
+    inputs: { task: 'Engine test', secret_scan: 'off', repo_path: root, mode: 'validated' },
     mock: true, runsDir,
   });
   const events = [];
@@ -89,17 +89,17 @@ test('feature workflow (local mode): validated mode stops at developer_check wit
   // #223: the scenarios are written first, with the acceptance tests, so the gate already lists them
   assert.match(gate.message, /E2E scenarios \(written by the test writer[^)]*\): /);
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
-  // #246/#404: develop's commit goes through testid_check, the screenshots and rule_check before the
-  // owner's gate; after the owner approved, a review fix round skips the gate (rule_check>code_review)
-  const gateRoute = transitions.filter((x) => /developer_check|developer_screenshots/.test(x));
-  assert.deepEqual(gateRoute.slice(0, 4), [
-    'testid_check>developer_screenshots', 'developer_screenshots>rule_check', 'rule_check>developer_check', 'developer_check>code_review',
+  // #246/#404/#49: develop's commit goes through testid_check, the screenshots, rule_check and the secret scan
+  // before the owner's gate; after the owner approved, a review fix round skips the gate (secret_scan>code_review)
+  const gateRoute = transitions.filter((x) => /developer_check|developer_screenshots|secret_scan/.test(x));
+  assert.deepEqual(gateRoute.slice(0, 5), [
+    'testid_check>developer_screenshots', 'developer_screenshots>rule_check', 'rule_check>secret_scan', 'secret_scan>developer_check', 'developer_check>code_review',
   ]);
   assert.equal(transitions.filter((x) => x.endsWith('>developer_check')).length, 1, 'the owner is asked once');
 });
 test('feature workflow (local mode): a successful run saves <run>/e2e/scenarios.feature and scenarios.json; the acceptance tests step reports them pending (#199, #223)', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
-  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'feature.yaml'), inputs: { task: 'Engine test', secret_scan: 'off', repo_path: root }, mock: true, runsDir });
   const events = [];
   run.on('event', (ev) => {
     events.push(ev);

@@ -1,7 +1,7 @@
 {
-  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events); then #630 (local mode pushes main): verify_change goes to push_main, a developer turn, then to end, so the sessions close and the run finishes in push_main#1 (201 events, re-recorded by #710); then #756: the developer loads developer-self-review (one more 'skill loaded' log in develop#1 run) and code-review pulls reuse-pass through uses (one more in code_review#1 run) (203 events); then #861 (the engine pushes the local base): push_main is a machine step (type: push_base), no developer turn, so no session events there and the sessions close at verify_change (190 events).",
+  "_comment": "#250 baseline, reshaped by #323 (test/run-event-lanes.js): recorded on a4dd9ab (two runs, identical), then one intended move from #387 (3732ed2): the developer loads design-system, so its 'skill loaded' log is one more in develop#1 run and one less in code_review#1 run; then #418: merge-conflict-resolver loads on resolve_merge only, so develop#1 run has one 'skill loaded' log less (181 events); then #465: a machine step announces its log with step.log, once in red_check and twice in suite (focused round, then the whole suite) (184 events); then #630 (local mode pushes main): verify_change goes to push_main, a developer turn, then to end, so the sessions close and the run finishes in push_main#1 (201 events, re-recorded by #710); then #756: the developer loads developer-self-review (one more 'skill loaded' log in develop#1 run) and code-review pulls reuse-pass through uses (one more in code_review#1 run) (203 events); then #861 (the engine pushes the local base): push_main is a machine step (type: push_base), no developer turn, so no session events there and the sessions close at verify_change (190 events); then #49: secret_scan (no agent: started, log, finished, transition) runs between developer_screenshots and code_review, and the developer loads secret-triage (one more log in develop#1 run) (195 events).",
   "status": "success",
-  "count": 190,
+  "count": 195,
   "steps": [
     "workflow.started",
     "step.started acceptance_tests",
@@ -19,7 +19,10 @@
     "step.transition develop>developer_screenshots",
     "step.started developer_screenshots",
     "step.finished developer_screenshots",
-    "step.transition developer_screenshots>code_review",
+    "step.transition developer_screenshots>secret_scan",
+    "step.started secret_scan",
+    "step.finished secret_scan",
+    "step.transition secret_scan>code_review",
     "step.started code_review",
     "step.finished code_review",
     "step.transition code_review>suite",
@@ -132,13 +135,20 @@
       "log",
       "log",
       "log",
+      "log",
       "step.finished develop",
       "step.transition develop>developer_screenshots"
     ],
     "developer_screenshots#1 run": [
       "step.started developer_screenshots",
       "step.finished developer_screenshots",
-      "step.transition developer_screenshots>code_review"
+      "step.transition developer_screenshots>secret_scan"
+    ],
+    "secret_scan#1 run": [
+      "step.started secret_scan",
+      "log secret_scan",
+      "step.finished secret_scan",
+      "step.transition secret_scan>code_review"
     ],
     "code_review#1 reviewer · ui_reviewer": [
       "step.started code_review"

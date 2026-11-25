@@ -155,7 +155,8 @@ test('#404 run: a pass gives the next review round its two returns again', { tim
 test('#404 run: in validated mode the rule checks run before the owner tries the change', { timeout: 180000 }, async (t) => {
   const { transitions, finished } = await runLocalHero(t, { inputs: { mode: 'validated', screenshots: 'off' }, onTurn: (repo, n) => n === 1 && fix(repo) });
   assert.ok(finished, 'the run ends');
-  const toGate = transitions.indexOf('rule_check>developer_check');
-  assert.ok(toGate >= 0, `rule_check goes on to developer_check (got ${transitions.join(', ')})`);
+  // #49: through the secret scan
+  const toGate = transitions.indexOf('rule_check>secret_scan');
+  assert.ok(toGate >= 0 && transitions[toGate + 1] === 'secret_scan>developer_check', `rule_check goes on to developer_check (got ${transitions.join(', ')})`);
   assert.ok(transitions.slice(0, toGate).includes('develop>rule_check'), 'right after develop');
 });

@@ -57,6 +57,6 @@ test('e2e-release: the replay of its mock run gives the in-memory state', async 
   // `version`); the template repository declares none
   const run = await recordedRun(t, { file: bundled('release.yaml'), inputs: { task: 'Release check', repo_path: repoFromTemplate(t) }, mockSequences: { verdict: ['approved'], suite: { e2e: ['fail', 'pass'] } } });
   const visited = readLog(run.runDir).events.filter((ev) => ev.type === 'step.finished').map((ev) => ev.step_id);
-  assert.deepEqual(visited, ['version', 'unit', 'e2e', 'fix', 'unit', 'e2e', 'review', 'ship']);
+  assert.deepEqual(visited, ['version', 'unit', 'e2e', 'fix', 'unit', 'e2e', 'secret_scan', 'review', 'ship']);
   assertReplayMatches(run);
 });

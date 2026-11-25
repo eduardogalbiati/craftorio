@@ -15,10 +15,12 @@ const { loadWorkflow, evalExpr, render } = require('../engine/workflow');
 const WORKFLOW = path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml');
 const stepOf = (id) => loadWorkflow(WORKFLOW).steps.find((s) => s.id === id);
 
-// the goto of the first transition of a step whose `when` holds in this scope (the engine's order)
+// the goto of the first transition of a step whose `when` holds in this scope (the engine's order); a
+// route to the secret scan (#49) is followed to where a pass sends it (vars.after_scan)
 function firstGoto(step, scope) {
   const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, scope));
-  return tr && tr.goto;
+  if (!tr || tr.goto !== 'secret_scan') return tr && tr.goto;
+  return firstGoto(stepOf('secret_scan'), { ...scope, vars: { ...scope.vars, ...tr.set }, output: { status: 'pass' } });
 }
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });

@@ -58,6 +58,14 @@ test('#670 develop\'s prompt carries the issue\'s mockups', () => {
   }
 });
 
+// the first transition whose `when` holds; a route to the secret scan (#49) is followed to where a pass
+// sends it (vars.after_scan)
+function firstTransition(wf, id, ctx) {
+  const tr = wf.steps.find((s) => s.id === id).transitions.find((x) => x.when === undefined || evalExpr(x.when, ctx));
+  if (tr?.goto !== 'secret_scan') return tr;
+  return firstTransition(wf, 'secret_scan', { ...ctx, vars: { ...ctx.vars, ...tr.set }, output: { status: 'pass' } });
+}
+
 // ---- develop's routing: a UI change always has screenshots -------------------------------------------
 
 function emptyDir(t) {
@@ -68,7 +76,6 @@ function emptyDir(t) {
 
 // develop's first matching transition for a committed answer, automatic mode, no E2E, no check command
 function developRoute(wf, worktree, output) {
-  const step = wf.steps.find((s) => s.id === 'develop');
   const ctx = {
     inputs: { mode: 'auto', screenshots: 'all', ui_folders: ['src/renderer/'], issues: [], e2e_tests: 'off', check_command: '', base_branch: 'main' },
     vars: {},
@@ -76,8 +83,7 @@ function developRoute(wf, worktree, output) {
     worktree_dir: worktree,
     output: { committed: true, left_out: [], issues: [], ...output },
   };
-  const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, ctx));
-  return tr?.goto ?? null;
+  return firstTransition(wf, 'develop', ctx)?.goto ?? null;
 }
 
 test('#670 develop changing files under the UI folders with no screen in `screenshots` goes back to develop', (t) => {
@@ -106,7 +112,6 @@ test('#670 a change without UI files and without screenshots goes on to the revi
 const MOCKUP_TASK = 'Home screen\n\n- [ ] The home screen matches `mock-1.jpg`: layout, icons, texts, controls, order\n\n![mock-1.jpg](https://example.com/files/mock-1.jpg)';
 // the step's first matching transition: [goto, set] (set as plain JSON)
 function route(wf, id, { worktree, inputs = {}, vars = {}, steps = {}, output = {}, previous_step } = {}) {
-  const step = wf.steps.find((s) => s.id === id);
   const ctx = {
     inputs: { mode: 'auto', screenshots: 'all', ui_folders: ['src/renderer/'], issues: [], e2e_tests: 'off', check_command: '', base_branch: 'main', task: 'A task without mockups.', ...inputs },
     vars,
@@ -115,7 +120,7 @@ function route(wf, id, { worktree, inputs = {}, vars = {}, steps = {}, output = 
     output,
     previous_step,
   };
-  const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, ctx));
+  const tr = firstTransition(wf, id, ctx);
   return [tr?.goto ?? null, JSON.parse(JSON.stringify(tr?.set || {}))];
 }
 

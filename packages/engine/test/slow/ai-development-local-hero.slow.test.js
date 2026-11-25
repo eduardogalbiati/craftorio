@@ -80,7 +80,8 @@ test('ai-development-local-hero: the normal path runs the acceptance tests, the 
     'warm_up>develop',
     // #151: the mock developer lists one screen, so its screenshots are taken in automatic mode too
     'develop>developer_screenshots',
-    'developer_screenshots>code_review',
+    'developer_screenshots>secret_scan',
+    'secret_scan>code_review',
     'code_review>suite',
     'suite>build',
     'build>evidence',
@@ -190,8 +191,9 @@ test('ai-development-local-hero (#151): a mock run with a UI change takes the sc
   const { events, transitions, finished } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] } } });
   assert.equal(finished.status, 'success', finished.error);
   assert.ok(transitions.indexOf('develop>developer_screenshots') >= 0, 'the screenshots run after develop');
-  assert.ok(transitions.indexOf('developer_screenshots>code_review') > transitions.indexOf('develop>developer_screenshots'), 'then the review, without the owner\'s gate');
-  assert.ok(!transitions.includes('developer_screenshots>developer_check'), 'automatic mode has no developer_check gate');
+  const scan = transitions.indexOf('developer_screenshots>secret_scan');
+  assert.ok(scan > transitions.indexOf('develop>developer_screenshots') && transitions[scan + 1] === 'secret_scan>code_review', 'then the secret scan (#49) and the review, without the owner\'s gate');
+  assert.ok(!transitions.some((x) => x.endsWith('>developer_check')), 'automatic mode has no developer_check gate');
   const sessions = sessionsOf(events, 'code_review');
   assert.ok(sessions.reviewer?.length, 'the reviewer ran in code_review');
   assert.ok(sessions.ui_reviewer?.length, 'the ui_reviewer ran in code_review');
@@ -222,7 +224,7 @@ test('ai-development-local-hero (#151): a blocking UI finding goes back to devel
   const back = transitions.indexOf('code_review>develop');
   const later = transitions.findIndex((x) => /^(test|suite|e2e|build|evidence)>/.test(x) || /^code_review>(test|suite|e2e|build)$/.test(x));
   assert.ok(back >= 0 && later > back, 'the UI fix round happens before any test/suite/E2E/build');
-  assert.equal(transitions.filter((x) => x === 'developer_screenshots>code_review').length, 2, 'the fixed change is captured and reviewed again');
+  assert.equal(transitions.filter((x) => x === 'secret_scan>code_review').length, 2, 'the fixed change is captured and reviewed again');
   assert.equal(prompts.length, 2);
   assert.match(prompts[1], /\(simulated\) problem/, 'the developer is given the blocking UI finding');
 });
@@ -261,7 +263,7 @@ test('ai-development-local-hero (#151): after the UI round, a code-only fix roun
 test('ai-development-local-hero (#151): code_review visits with different reviewer verdicts are not a same-answer stall', { timeout: 120000 }, async (t) => {
   const { events, transitions, finished } = await runAiDev(t, { mockSequences: UI_THEN_CODE });
   assert.equal(finished.status, 'success', finished.error);
-  assert.equal(transitions.filter((x) => x === 'developer_screenshots>code_review').length, 3, 'code_review is visited 3 times');
+  assert.equal(transitions.filter((x) => x === 'secret_scan>code_review').length, 3, 'code_review is visited 3 times');
   const stalls = events.filter((e) => e.type === 'log' && e.kind === 'stall' && e.stall === 'same_output' && e.step_id === 'code_review');
   assert.deepEqual(stalls.map((e) => e.message), []);
 });
@@ -300,15 +302,17 @@ test('ai-development-local-hero (#247): changed criteria: acceptance_tests, the 
     mockSequences: { suite: { red_check: ['fail', 'fail'], suite: ['pass'] }, criteria_changed: [true] },
   });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions.slice(0, 9), [
+  assert.deepEqual(transitions.slice(0, 11), [
     'acceptance_tests>red_check',
     'red_check>warm_up',
     'warm_up>develop',
-    'develop>developer_check',
+    'develop>secret_scan',
+    'secret_scan>developer_check',
     'developer_check>acceptance_tests',
     'acceptance_tests>red_check',
     'red_check>develop',
-    'develop>developer_check',
+    'develop>secret_scan',
+    'secret_scan>developer_check',
     'developer_check>code_review',
   ]);
   assert.equal(prompts.length, 2);
@@ -324,14 +328,16 @@ test('ai-development-local-hero (#247): a simple change no test covers goes from
     mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, criteria_changed: [false] },
   });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions.slice(0, 7), [
+  assert.deepEqual(transitions.slice(0, 9), [
     'acceptance_tests>red_check',
     'red_check>warm_up',
     'warm_up>develop',
-    'develop>developer_check',
+    'develop>secret_scan',
+    'secret_scan>developer_check',
     'developer_check>acceptance_tests',
     'acceptance_tests>develop',
-    'develop>developer_check',
+    'develop>secret_scan',
+    'secret_scan>developer_check',
   ]);
   assert.equal(transitions.filter((x) => x === 'acceptance_tests>red_check').length, 1, 'the red check runs only after the first visit');
   assert.ok(prompts[1].includes(REQUEST), 'the developer receives the owner\'s request');
@@ -364,13 +370,14 @@ test('ai-development-local-hero (#247): changed tests the red check cannot run g
   });
   assert.equal(finished.status, 'success', finished.error);
   const gate = transitions.indexOf('developer_check>acceptance_tests');
-  assert.deepEqual(transitions.slice(gate, gate + 6), [
+  assert.deepEqual(transitions.slice(gate, gate + 7), [
     'developer_check>acceptance_tests',
     'acceptance_tests>red_check',
     'red_check>acceptance_tests',
     'acceptance_tests>red_check',
     'red_check>develop',
-    'develop>developer_check',
+    'develop>secret_scan',
+    'secret_scan>developer_check',
   ]);
   const fix = withoutSkills(promptsOf('acceptance_tests')[2]);
   assert.match(fix, /cannot run/, 'the test writer is told which changed files cannot run');

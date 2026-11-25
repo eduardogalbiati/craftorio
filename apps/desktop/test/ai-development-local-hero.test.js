@@ -46,10 +46,13 @@ test('ai-development-local-hero: quality first by default, the change\'s unit te
 // machine takes in every mode; the final evidence step only collects evidence, it no longer judges the UI.
 const fsRead = (...p) => fs.readFileSync(path.join(__dirname, '..', '..', '..', ...p), 'utf8');
 
-// the goto of the first transition of a step whose `when` holds in this scope (the engine's order)
+// the goto of the first transition of a step whose `when` holds in this scope (the engine's order); a
+// route to the secret scan (#49) is followed to where a pass sends it (vars.after_scan)
 function firstGoto(step, scope) {
   const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, scope));
-  return tr && tr.goto;
+  if (!tr || tr.goto !== 'secret_scan') return tr && tr.goto;
+  const scan = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'secret_scan');
+  return firstGoto(scan, { ...scope, vars: { ...scope.vars, ...tr.set }, output: { status: 'pass' } });
 }
 // develop's answer and the run's state when it finishes a committed turn
 function developScope({ mode = 'auto', screenshots = [], files = ['packages/engine/engine/workflow.js'] } = {}) {

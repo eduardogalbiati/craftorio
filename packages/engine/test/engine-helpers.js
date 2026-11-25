@@ -39,7 +39,8 @@ async function runConditionalAction(t, cleanup) {
 // first choice), like --auto-approve. `answers[step]` (and `feedback[step]`) may be a list, one
 // per visit to that gate (shifted as it is visited again; the last one repeats past the end).
 // The rule check runs a trivial command: the repository's own `npm run check` would take most of
-// the test's time on every visit of rule_check (#705).
+// the test's time on every visit of rule_check (#705). The secret scan is off (#49): gitleaks, where it is
+// installed, would read this checkout's own commits and a finding there would change the route.
 // #737: the runs of a test process share the mock's code → tests map of the repository (seconds of
 // synchronous CPU per run otherwise; the mock never changes the checkout), and a run that stops
 // progressing fails at once, naming its step (helpers/run-watch.js), instead of at the test's timeout.
@@ -49,7 +50,7 @@ async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = 
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', file),
-    inputs: { task: 'Engine test', repo_path: root, ...(file === 'feature.yaml' ? { mode: 'remote', check_command: 'node --version' } : {}), ...inputs },
+    inputs: { task: 'Engine test', repo_path: root, ...(file === 'feature.yaml' ? { mode: 'remote', check_command: 'node --version', secret_scan: 'off' } : {}), ...inputs },
     mock: true,
     runsDir,
     mockSequences,

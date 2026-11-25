@@ -14,9 +14,9 @@ const { root, runSoftwareDevelopment } = require('../engine-helpers');
 
 // ---- #104: validated mode (validation input, developer_check gate) ------------------------
 
-// #246/#404: develop's commit goes through testid_check, the screenshots and rule_check before the gate
-const GATE_ROUTE = ['testid_check>developer_screenshots', 'developer_screenshots>rule_check', 'rule_check>developer_check'];
-const gateRoute = (transitions) => transitions.filter((x) => /developer_check|developer_screenshots/.test(x));
+// #246/#404/#49: develop's commit goes through testid_check, the screenshots, rule_check and the secret scan before the gate
+const GATE_ROUTE = ['testid_check>developer_screenshots', 'developer_screenshots>rule_check', 'rule_check>secret_scan', 'secret_scan>developer_check'];
+const gateRoute = (transitions) => transitions.filter((x) => /developer_check|developer_screenshots|secret_scan/.test(x));
 
 test('feature.yaml (remote): validated mode stops at developer_check with the diff and worktree details; auto mode (the default) skips it', { timeout: 120000 }, async () => {
   const validated = await runSoftwareDevelopment({ inputs: { validation: 'validated' } });
@@ -33,12 +33,12 @@ test('feature.yaml (remote): validated mode stops at developer_check with the di
   assert.match(gate.message, /Files changed:/);
   assert.match(gate.feedback.label, /Your change request for the developer/);
   // #630: the default mock verdicts run one review fix round after the gate; only the first route matters here
-  assert.deepEqual(gateRoute(validated.transitions).slice(0, 4), [...GATE_ROUTE, 'developer_check>code_review']);
+  assert.deepEqual(gateRoute(validated.transitions).slice(0, 5), [...GATE_ROUTE, 'developer_check>code_review']);
 
   const auto = await runSoftwareDevelopment({}); // validation defaults to "auto"
   assert.equal(auto.finished.status, 'success', auto.finished.error);
   assert.ok(!auto.events.some((e) => e.type === 'approval.requested' && e.step_id === 'developer_check'));
-  assert.ok(auto.transitions.includes('rule_check>code_review'), auto.transitions.join(' '));
+  assert.ok(auto.transitions.includes('secret_scan>code_review'), auto.transitions.join(' '));
 });
 // #630: approve_merge is gone; developer_check is the gate of the happy path that lists the scenarios
 test('feature.yaml (remote): developer_check\'s message shows the Dev/QA line and the test writer\'s E2E scenarios (#143)', { timeout: 120000 }, async () => {
@@ -106,9 +106,9 @@ test('feature.yaml (remote): validated mode — a review fix round does not reop
   });
   assert.equal(once.finished.status, 'success', once.finished.error);
   assert.ok(once.transitions.includes('code_review>develop'));
-  // the fix round goes through the screenshots and rule_check, then straight to the review
-  assert.equal(once.transitions.filter((x) => x === 'rule_check>developer_check').length, 1, once.transitions.join(' '));
-  assert.equal(once.transitions.filter((x) => x === 'rule_check>code_review').length, 1, once.transitions.join(' '));
+  // the fix round goes through the screenshots, rule_check and the secret scan, then straight to the review
+  assert.equal(once.transitions.filter((x) => x === 'secret_scan>developer_check').length, 1, once.transitions.join(' '));
+  assert.equal(once.transitions.filter((x) => x === 'secret_scan>code_review').length, 1, once.transitions.join(' '));
 
   const every = await runSoftwareDevelopment({
     inputs: { validation: 'validated', validate_every_round: 'true' },
