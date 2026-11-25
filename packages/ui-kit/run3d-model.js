@@ -54,7 +54,8 @@
     // #404: the rule checks, skipped when the project has none
     if (o.kind === 'check') return o.status === 'fail' ? 'failed' : 'done';
     // #49: a finding, or a gitleaks that failed; a skipped scan is never shown as done
-    if (o.kind === 'secret_scan') return o.status === 'pass' ? 'done' : o.status === 'skipped' ? 'not_run' : 'failed';
+    if (o.kind === 'secret_scan' && o.status === 'skipped') return 'not_run';
+    if (o.kind === 'secret_scan') return o.status === 'pass' ? 'done' : 'failed';
     if (o.results) return Object.values(o.results).some((r) => r && r.verdict && r.verdict !== 'approved') ? 'changes' : 'done';
     if (o.verdict) return o.verdict === 'not_verified' ? 'failed' : 'done';
     if (o.tests_status) return o.tests_status === 'pass' ? 'done' : 'failed';
