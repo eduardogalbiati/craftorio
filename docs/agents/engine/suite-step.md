@@ -137,7 +137,9 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
     skipped with that reason, and a timed-out file reruns alone (always short). A round the shell
     refused ("The command line is too long.", "Argument list too long": the log's last line, no test
     result) is `blocked`, not `fail`: the test writer is not sent to fix it, the gate says the suite
-    could not run. Filter `suite_scope` (`{{ o | suite_scope('scenario') }}`): a round as "focused on
+    could not run. So is a round whose command was not found: exit code 127 (9009 on Windows) without
+    a failing test or, on Windows in any language, no test ran and the program exists nowhere (#67,
+    command-missing.js). Filter `suite_scope` (`{{ o | suite_scope('scenario') }}`): a round as "focused on
     2 files: …, 1.5 min; then whole: …" or "whole: …", for the release summary.
 
 ## The whole round's own command (`whole_command`, T6)

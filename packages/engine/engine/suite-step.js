@@ -72,6 +72,7 @@ const { spawn } = require('child_process');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
 const { parseAgentReport } = require('./agent-test-report');
 const { childEnv: allowlistedEnv } = require('./child-env');
+const { isMissingCode, programMissing } = require('./command-missing'); // #67
 const {
   fitsCommandLine,
   listIgnored,
@@ -503,14 +504,15 @@ function narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform,
   return { measure: true, tooLong, list: false };
 }
 
-// #400: why the shell refused the command line (its last log line) when no test ran, or null: not a
-// failure an agent can fix.
+// Whether the output shows that tests ran: the runner's counts, or a failure
+const testsRan = (text, cwd) => Object.values(parseCounts(text)).some((n) => n != null) || parseFailures(text, { cwd }).length > 0;
+
+// #400: why the shell refused the command line (its last log line) when no test ran, or null: not a failure an agent can fix.
 function shellRefusal(r, text, report, cwd) {
   if (r.code === 0 || r.timedOut || report) return null;
   const last = clean(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
   if (!SHELL_REFUSALS.some((re) => re.test(last))) return null;
-  const counts = parseCounts(text);
-  if (counts.passed != null || counts.failed != null || parseFailures(text, { cwd }).length) return null;
+  if (testsRan(text, cwd)) return null;
   return `the shell refused the command, no test ran (exit ${r.code ?? '?'}): ${last}`;
 }
 
@@ -837,9 +839,9 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     const report = parseAgentReport(clean(text));
     if (report?.files) out.file_counts = report.files;
     if (report && fs.existsSync(humanLog(logFile))) out.human_log = path.relative(runDir, humanLog(logFile)).split(path.sep).join('/');
-    // the shell's "not recognized" / "not found": the command itself is missing
+    // the command itself is missing: the shell's exit code, or on Windows (any language, #67) its program exists nowhere
     if (r.code == null && r.error && !r.timedOut) { out.reason = `the command could not start: ${r.error}`; out.duration_ms = Date.now() - t0; return finish(); }
-    if ((r.code === 127 || (process.platform === 'win32' && r.code === 9009)) && !parseFailures(text, { cwd }).length) {
+    if (isMissingCode(r.code, platform) ? !parseFailures(text, { cwd }).length : !testsRan(text, cwd) && programMissing(out.command, { ...r, cwd, env: childEnv.env, platform })) {
       out.reason = `the command was not found (\`${out.command}\`, exit ${r.code})`;
       out.duration_ms = Date.now() - t0;
       return finish();

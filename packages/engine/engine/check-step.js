@@ -8,12 +8,14 @@
 // #30: a failure says what kind it is (`failure_kind`) with a one-line `cause` for the gates. An
 // environment failure (a lockfile with no installed dependencies, deps-cache's missingDeps, and a missing
 // module or command, or a command not found) is no developer's to fix: the workflows stop at check_environment instead of develop.
+// #67: on Windows the command's program is looked up (command-missing.js), whatever the system's language.
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const I18n = require('@craftorio/shared/i18n');
+const { programMissing } = require('./command-missing');
 const { runCommand } = require('./suite-step');
 const { missingDeps } = require('./deps-cache');
 const { oneLine } = require('./gate-summary');
@@ -44,7 +46,8 @@ function findingLines(text) {
 
 // #30: what a missing module or command prints (node, POSIX shells, Windows' cmd). A missing command is
 // exit code 127 first; the text only as the shell's own line (`sh: 1: x: not found`, `bash: line 1: x:
-// command not found`, `zsh: command not found: x`), never a check's finding like `docs: a.md: not found`
+// command not found`, `zsh: command not found: x`), never a check's finding like `docs: a.md: not found`.
+// cmd's text is translated: the English one only finds a command missing inside a script (#67)
 const MODULE_MISSING = /Cannot find module|MODULE_NOT_FOUND|Cannot find package/;
 const COMMAND_MISSING = /^(?:\S*\/)?(?:sh|bash|dash|zsh|ksh)(?::| \d+:)? (?:line \d+: |\d+: )?(?:\S+: (?:command )?not found|command not found: \S+)\s*$|is not recognized as an internal or external command/m;
 // a stack trace's lines: never the cause of a gate's brief
@@ -53,8 +56,8 @@ const CAUSE_MAX = 240;
 
 // #30: { reason, dir, command } (+ manager, install for deps_missing) when the failure comes from the
 // environment, else null; missing dependencies: deps-cache's missingDeps, the onboarding's rule too
-function environmentOf(dir, cmd, code, text) {
-  const commandMissing = code === 127 || COMMAND_MISSING.test(text);
+function environmentOf(dir, cmd, text, { code, env, platform }) {
+  const commandMissing = code === 127 || COMMAND_MISSING.test(text) || programMissing(cmd, { code, cwd: dir, env, platform });
   const deps = missingDeps(dir);
   if (deps && (commandMissing || MODULE_MISSING.test(text))) return { reason: 'deps_missing', dir, command: cmd, manager: deps.manager, install: deps.install };
   if (commandMissing) return { reason: 'command_missing', dir, command: cmd };
@@ -83,7 +86,8 @@ function ruleCause(cmd, why, findings) {
 // onLog({ command }) (#465): called before the command starts, its output going to logFile
 // sweep (#390): false when dir is not a folder the run owns (a mock run checks repo_path itself):
 // the command's own tree is still stopped, never the other processes running from dir (#705)
-async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = DEFAULT_TIMEOUT_MS, signal, sweep = true, onLog = /** @type {((info: { command: string }) => void) | null} */ (null) }) {
+// run, platform (#67): the child process and the platform, as runSuite's
+async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = DEFAULT_TIMEOUT_MS, signal, sweep = true, run = runCommand, platform = process.platform, onLog = /** @type {((info: { command: string }) => void) | null} */ (null) }) {
   const base = { kind: 'check', command: null, findings: [], log: null };
   if (!dir || !fs.existsSync(dir)) return { ...base, status: 'skipped', message: 'Rule checks skipped: the run has no checkout.' };
   const cmd = checkCommand(dir, command);
@@ -91,7 +95,7 @@ async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = 
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   onLog?.({ command: cmd });
   const t0 = Date.now();
-  const r = await runCommand({ command: cmd, cwd: dir, env, timeoutMs, signal, logFile, sweep });
+  const r = await run({ command: cmd, cwd: dir, env, timeoutMs, signal, logFile, sweep });
   let text = '';
   try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
   const findings = findingLines(text);
@@ -99,7 +103,7 @@ async function runCheck({ dir, command, logFile, env = process.env, timeoutMs = 
   if (r.code === 0) return { ...out, status: 'pass', message: `\`${cmd}\` passes.` };
   const why = r.timedOut ? `timed out after ${Math.round(timeoutMs / 1000)} s` : r.code == null ? `could not start (${r.error})` : `exited with code ${r.code}`;
   const fail = { ...out, status: 'fail', message: `\`${cmd}\` ${why}:\n${findings.join('\n')}` };
-  const environment = r.timedOut ? null : environmentOf(dir, cmd, r.code, text);
+  const environment = r.timedOut ? null : environmentOf(dir, cmd, text, { code: r.code, env, platform });
   if (!environment) return { ...fail, failure_kind: 'rules', cause: ruleCause(cmd, why, findings) };
   return { ...fail, failure_kind: 'environment', cause: environmentCause(environment), environment };
 }

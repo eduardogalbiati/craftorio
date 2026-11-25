@@ -127,7 +127,10 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   `repository` step); the processes of that folder are never swept. It runs
   in a mock run too (a local, free check, like the test id step). Output `{ kind: 'check', status:
   pass | fail | skipped, command, findings, message, round }`: `findings` are the command's last 40
-  lines, `skipped` when there is no checkout or no command. ai-development-local-hero runs it as
+  lines, `skipped` when there is no checkout or no command. A missing command is an environment
+  failure (#30): exit code 127 or the shell's own line, and on Windows (exit code 1, a translated text)
+  the command's program, or the one its npm script starts, found nowhere (#67,
+  `packages/engine/engine/command-missing.js`). ai-development-local-hero runs it as
   `rule_check` after each develop commit (input `check_command`), the last agent-less step before
   the owner's gate or the review; the routes into it test `worktree_dir | check_command(...)` (the
   template filter), so a project without a check command never visits it. A failure goes back to
