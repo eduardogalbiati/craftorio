@@ -1,6 +1,6 @@
 # File size, code health and type checking
 
-The file size ratchet (#334), the code health check (#344) and type checking (#346).
+The file size ratchet (#334), the code health check (#344) and type checking (#346): how a file opts in, silenced lines and the next files (#52).
 
 ## File size ratchet (#334)
 

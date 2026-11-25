@@ -6,7 +6,7 @@ Read this before writing or changing tests, and before any check that could star
 
 - [Affected tests and session streams](testing/affected-tests.md): The affected tests, the slow suite and who runs what (#212); reading a session stream (#574).
 - [Channel tests](testing/channel-tests.md): The channel sweep (#333), the channel contract (#338) and the contract tests over HTTP with the version handshake (#339).
-- [File size, code health and type checking](testing/code-health.md): The file size ratchet (#334), the code health check (#344) and type checking (#346).
+- [File size, code health and type checking](testing/code-health.md): The file size ratchet (#334), the code health check (#344) and type checking (#346): how a file opts in, silenced lines and the next files (#52).
 - [Machine independence, the mock provider and real CLIs](testing/mock-and-real-clis.md): Machine-independent tests, the mock provider, simulated machine actions (#353) and when real CLIs cost money.
 - [Running tests and where a new test goes](testing/running-and-placement.md): What `npm test` runs, CI, and the folder and file a new test belongs in.
 - [Whole simulated runs](testing/simulated-runs.md): The whole mock runs of the bundled workflows (#305, #306), their inventory and the production files no test reaches.
