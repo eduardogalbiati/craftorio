@@ -68,6 +68,23 @@ for (const name of ['feature', 'local hero', 'remote hero']) {
   });
 }
 
+// the skills the engine resolves for a turn of the step: the agent's, then the step's (a template may resolve to none)
+const skillsFor = (wf, step, scope) => {
+  const run = Object.assign(Object.create(WorkflowRun.prototype), { worktree: null, ctx: scope });
+  return run.skillNames([...(wf.agents[step.agent].skills || []), ...(step.skills || [])], scope).filter(Boolean);
+};
+for (const name of ['feature', 'local hero', 'remote hero']) {
+  test(`#49 ${name}: the developer loads secret-triage only on a turn a finding sends back (#418)`, () => {
+    const wf = load(name);
+    const develop = wf.steps.find((s) => s.id === 'develop');
+    const on = (previous, language) => skillsFor(wf, develop, { inputs: { ...defaults(wf), task: 't', language }, vars: {}, steps: {}, previous_step: previous }).filter((k) => k === 'secret-triage').length;
+    for (const language of ['js', 'js, python']) {
+      for (const previous of ['secret_scan', 'secret_found']) assert.equal(on(previous, language), 1, `${previous} (${language})`);
+      for (const previous of ['', 'warm_up', 'developer_check', 'code_review', 'suite']) assert.equal(on(previous, language), 0, `${previous || 'first step'} (${language})`);
+    }
+  });
+}
+
 test('#49 report: result.md names a scan that failed and an open finding', () => {
   const text = (output) => renderResultSummary('/no/such/run', { workflow: 'Fix', run_id: 'r', status: 'failed', steps: { secret_scan: { output } } });
   assert.match(text({ kind: 'secret_scan', status: 'error', findings: [], message: 'Secrets not scanned: gitleaks failed (exit code 1).' }), /## Secrets\n\n- `secret_scan`: Secrets not scanned: gitleaks failed/);

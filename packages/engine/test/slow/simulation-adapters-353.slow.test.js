@@ -22,7 +22,8 @@
 // #756: the developer loads developer-self-review and code-review pulls reuse-pass through `uses`:
 // one more "skill loaded" log in develop and one in code_review: 449.
 // #49: the secret scan (off in this run, engine-helpers.js) is a step before code_review, visited
-// twice (5 events for 1 each time), and the developer loads secret-triage (one log): 458.
+// twice (5 events for 1 each time), and code-review pulls secret-triage through `uses` (one log in
+// code_review; the developer loads it only on a turn a finding sends back): 458.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
