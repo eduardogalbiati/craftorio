@@ -68,7 +68,7 @@ function providerCard(p, u) {
   if (b.monthlyTokens != null) meters.push(meterHtml('Monthly token budget', p.usedPctTokens, fmtTok(t.total), fmtTok(b.monthlyTokens)));
   const models = (p.models || []).filter((x) => x.month?.tokens?.total || x.month?.costUsd);
   return `
-    <div class="card usage-card" data-provider="${esc(p.id)}">
+    <div class="card usage-card" data-testid="usage-provider-card" data-provider="${esc(p.id)}">
       <div class="card-head">
         <span class="card-icon p-${esc(p.id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 16 10 11 5 6" /><line x1="12" y1="18" x2="19" y2="18" /></svg></span>
         <b class="card-title">${esc(p.name)}</b>

@@ -602,13 +602,12 @@ function childRunsStrip(r) {
   if (!p?.run_id && !kids.length) return '';
   const link = (id, text, tip) => `<button type="button" class="link-btn small" data-run-link="${esc(id)}" title="${esc(tip)}">${esc(text)}</button>`;
   const parent = p?.run_id ? `<span class="muted small">${t('run.child_run_of')}</span> ${link(p.run_id, p.workflow || p.run_id, `Open run ${p.run_id} (step ${p.step_id || '?'})`)}${Number.isInteger(p.index) ? ` <span class="badge">${t('run.item')} ${p.index + 1}</span>` : ''}` : '';
-  const cost = childRunsCost(r);
-  const children = kids.length ? `<span class="muted small">${t('run.child_runs')}${cost ? ` · ${esc(fmtCost(cost))}` : ''}</span> ${kids.map((k) => {
+  const children = kids.length ? `<span class="muted small">${t('run.child_runs')}${childRunsCost(r) ? ` · ${esc(childRunsCostText(r))}` : ''}</span> ${kids.map((k) => {
     const name = k.label || (Number.isInteger(k.index) ? `item ${k.index + 1}` : k.workflow || k.run_id);
     // a resumed parent's children (#175): reused when they had succeeded, else resumed
     const how = k.reused ? `, reused from the previous run` : k.resumed_from ? `, resumes ${k.resumed_from}` : '';
     return k.run_id
-      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} ${StatusPill.statusPill(k.status)}${k.reused ? ` <span class="badge">${t('run.reused')}</span>` : k.resumed_from ? ` <span class="badge">${t('run.resumed')}</span>` : ''}</span>`
+      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd, k.cost_approx)}` : ''})`)} ${StatusPill.statusPill(k.status)}${k.reused ? ` <span class="badge">${t('run.reused')}</span>` : k.resumed_from ? ` <span class="badge">${t('run.resumed')}</span>` : ''}</span>`
       : `<span class="child-run muted small">${esc(name)} ${StatusPill.statusPill(k.status)}</span>`;
   }).join('')}` : '';
   return `<div class="chain-banner-pipe child-runs">${parent}${children}</div>`;
@@ -616,6 +615,7 @@ function childRunsStrip(r) {
 
 // What a run's child runs cost so far (#175): the finished ones, their own children included.
 const childRunsCost = (r) => (r?.childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0);
+const childRunsCostText = (r) => fmtCost(childRunsCost(r), r.childRuns.some((c) => c.cost_approx)); // #72
 
 async function onChainBannerClick(e) {
   const link = e.target.closest('[data-run-link]');
@@ -797,10 +797,10 @@ function renderSessions() {
         <div class="metric"><label>${I18n.t('run.steps')}</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
         <div class="metric"><label>${I18n.t('run.child_sessions')}</label><b>${list.length - 1}</b></div>
         <div class="metric"><label>${I18n.t('run.total_cost')}</label><b data-testid="run-total-cost"${sum.approx ? approxTitle() : ''}>${fmtCost(sum.cost, sum.approx)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
-        <div class="metric" title="${I18n.t('run.what_its_child_runs_cost_their')}"><label>${I18n.t('run.child_runs_cost')}</label><b>${fmtCost(childRunsCost(state.run), state.run.childRuns.some((c) => c.cost_approx))}</b></div>` : ''}` : `
+        <div class="metric" title="${I18n.t('run.what_its_child_runs_cost_their')}"><label>${I18n.t('run.child_runs_cost')}</label><b>${childRunsCostText(state.run)}</b></div>` : ''}` : `
         <div class="metric"><label>${I18n.t('run.active')}</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>${I18n.t('run.in_out')}</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>${I18n.t('run.cost')}</label><b data-testid="session-cost">${sessionCostText(s)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
+        <div class="metric"><label>${I18n.t('run.cost')}</label><b data-testid="session-cost">${sessionCostText(s, fmtCost)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}${costEstimateNote(s.cost_estimate)}</b></div>
         ${nextTurnMetric(s)}`}
       </div>
     </div>`;
@@ -811,7 +811,6 @@ function renderSessions() {
   }));
 }
 
-const sessionCostText = (s) => (s.cost_estimate?.source === 'unknown' ? unknownCostText(s.cost_usd, fmtCost) : fmtCost(s.cost_usd));
 // #320: how the session's next turn starts (session-cache.js), like the run lists' Next turn column
 function nextTurnMetric(s) {
   const t = SessionCache.currentTurn(s);
@@ -866,7 +865,7 @@ function renderDetail() {
         <dt>${t('run.opened_at')}</dt><dd>${esc(timeOf(s.opened_at))}${s.closed_at ? ' → ' + esc(timeOf(s.closed_at)) : ''}</dd>
         <dt>${t('run.duration_active_idle')}</dt><dd>${fmtDur(liveDuration(s))} / ${fmtDur(s.active_ms)} / ${fmtDur(s.idle_ms)}</dd>
         <dt>${t('run.tokens')}</dt><dd>${t('run.in_input_cache_r_w_cache', { input: fmtNum(s.tokens?.input), cache_read: fmtNum(s.tokens?.cache_read), cache_write: fmtNum(s.tokens?.cache_write), output: fmtNum(s.tokens?.output) })} ${fmtNum(s.tokens?.reasoning)}</dd>
-        <dt>${t('run.cost')}</dt><dd>${sessionCostText(s)}${costEstimateNote(s.cost_estimate)}</dd>
+        <dt>${t('run.cost')}</dt><dd>${sessionCostText(s, fmtCost)}${costEstimateNote(s.cost_estimate)}</dd>
       </dl>
     </div>`;
 

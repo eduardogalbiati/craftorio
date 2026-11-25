@@ -502,9 +502,17 @@ function costMarks(estimatedUsd, notRecorded) {
 }
 // #72: the tooltip of a total that includes a cost the app does not know (drawn "≈")
 const approxTitle = () => ` title="${esc(t('run_list.cost_approx_tip'))}"`;
-// #72: a session's cost when a turn of it is unknown (a model with no price): "unknown", else what it
-// recorded for its other turns, marked; its note says why
-const unknownCostText = (usd, fmt) => (usd ? fmt(usd, true) : t('run_list.cost_unknown'));
+// #72: a session's cost (`s`: a list's view or a snapshot), with the rule and the prices of its total
+// (session-cost.js), for the run lists and the Run screen. With a turn of unknown cost: "unknown", or
+// what its other turns recorded, marked. Tokens with no cost (a model with no price, not a free
+// session): "—".
+function sessionCostText(s, fmt) {
+  const prices = state.usage?.prices;
+  const recorded = s.cost_usd ?? s.costUsd;
+  if (SessionCost.unknownUsd(s.cost_estimate || s.costEstimate) != null) return `<span class="muted"${approxTitle()}>${recorded ? fmt(recorded, true) : t('run_list.cost_unknown')}</span>`;
+  if (SessionCost.isApprox(s, prices) && !s.cost_not_recorded && !s.costNotRecorded) return `<span class="muted" title="${esc(t('run_list.no_price_for_this_model_see'))}">—</span>`;
+  return fmt(SessionCost.sessionCost(s, prices) ?? recorded);
+}
 // The Run screen's top-bar cost (app.js renderHeader): the run's sessions' marks after the total.
 function sessionsCostMarks(sessions) {
   const estimated = sessions.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
@@ -530,11 +538,8 @@ function costEstimateNote(estimate) {
     ? ` <span class="badge warn" data-testid="session-cost-note" title="${esc(t('run_list.why_add_a_price_for_model', { why, model }))}">${t('run_list.no_price_for')} ${esc(model)}</span>`
     : ` <span class="badge" data-testid="session-cost-note" title="${esc(why)}">${t('run_list.estimated_from_tokens')}</span>`;
 }
-// Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
-  if (s.costEstimate?.source === 'unknown') return `<td class="num mono muted" data-testid="session-cost">${unknownCostText(s.costUsd, fmtUsd)}${costEstimateNote(s.costEstimate)}</td>`;
-  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return `<td class="num mono muted" data-testid="session-cost" title="${t('run_list.no_price_for_this_model_see')}">—</td>`;
-  return `<td class="num mono" data-testid="session-cost">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}${costEstimateNote(s.costEstimate)}</td>`;
+  return `<td class="num mono" data-testid="session-cost">${sessionCostText(s, fmtUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}${costEstimateNote(s.costEstimate)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
