@@ -155,6 +155,9 @@
 .wizard-review-refactor { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .wizard-rank { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); font-size: 11px; color: var(--muted); }
 .wizard-review-refactor .check { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* #74: an analysis and what it cost, then their total */
+.wizard-review-cost { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wizard-review-cost-total { padding-top: 6px; border-top: 1px solid var(--border); }
 .wizard-review-badges { display: flex; align-items: center; gap: 4px; }
 /* #852: one loading look on the review: the running indicator of a card (spinner + "running", beside its action) and
    the languages' skeleton bar until the facts arrive */

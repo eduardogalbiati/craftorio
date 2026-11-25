@@ -4,12 +4,15 @@
 // (project-map.js drawMap: the cartographer's turn, validated and saved) then runs the Oracle's report
 // (analyzeMap), so the project's City is grouped by the plan after the onboarding. #730: the report's
 // findings stay findings (no Refactor proposal, no Product Owner ranking): the wizard's review files them.
-// The free part (facts and profile, spec R5) runs once the clone is ready; the paid part (the project
-// map) only after onboardingAnalyze ("analyze later" never calls it). The project map takes the
+// The free part (facts and what git tells of the profile, spec R5) runs once the clone is ready; the paid part (the
+// project map and, #74, the Oracle's turn on the profile fields git leaves open) only after onboardingAnalyze
+// ("analyze later" never calls it, nor does a restart): until then such a profile job is `waiting` with git's
+// profile. A done analysis says what it cost, costUsd, when its record does. The project map takes the
 // machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so it waits for
 // other heavy work on the machine. The state of each project is kept in memory:
 //   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: no-access | clone-failed,
-//     reason?, jobs: { clone, facts, profile, projectMap: { status: waiting | running | done | failed | skipped, error? } },
+//     reason?, wanted? (#74: analyze asked during the clone, runs when it ends),
+//     jobs: { clone, facts, profile, projectMap: { status: waiting | running | done | failed | skipped, error?, costUsd? } },
 //     #725: a failed job is { status: 'failed', error (the full error), code: cli-missing | invalid-ranking |
 //     no-folder | refused | timeout | failed, reason (≤ 160 characters), cli? } (failureOf); once the paid
 //     part ended the status is analyzed even with a failed job, and analyzing again runs only what is not done;
@@ -114,6 +117,19 @@ function e2eJobs(jobs) {
     if (hold.includes(name)) return new Promise(() => {});
     if (fail.includes(name)) throw new Error(`The simulated ${name} failed (e2e).`);
     return run(input);
+  }]));
+}
+
+// #74: the E2E hook of a simulated run (simulation.js e2eOnboardingCosts): a job named there acts as a paid one
+// with that cost, the profile as one the Oracle completes only once the analysis is asked for
+function e2eCosts(jobs) {
+  const costs = simulation.e2eOnboardingCosts();
+  if (!costs) return jobs;
+  return Object.fromEntries(Object.entries(jobs).map(([name, run]) => [name, async (input) => {
+    const result = await run(input);
+    if (!Number.isFinite(costs[name])) return result;
+    const paid = { ...result, simulated: false };
+    return name === 'profile' && !input.oracle ? { ...paid, needsOracle: true } : { ...paid, costUsd: costs[name], cost_usd: costs[name] };
   }]));
 }
 
@@ -269,7 +285,8 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
 /**
  * The onboarding of new projects: { start, status, analyze, retry } (the state is documented above).
  * git: projects.js's git (ls-remote and clone); cli(provider) → { installed, signedIn };
- * jobs: { facts, profile, projectMap }, each async ({ projectId, folder, facts }) => result;
+ * jobs: { facts, profile, projectMap }, each async ({ projectId, folder, facts }) => result; #74: profile also gets
+ * oracle (the analysis was asked for: it may call the model), else it answers needsOracle: true when a model would;
  * slotsDir: the machine slots' folder (default: the machine's); pollMs: the slot's poll (default:
  * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
  * a new project's private repository (default: gh / glab, machineRemote); #30: install(cmd, args, { cwd }) →
@@ -277,7 +294,8 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  */
 function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts) }) {
   const states = new Map();
-  // per project: { wanted (analyze was asked), facts (the facts job's promise), free, paid (the running parts), cli }
+  // per project: { wanted (analyze was asked during the clone), asked (the paid part was started), oracle (the
+  // profile waits for the Oracle's turn), facts (the facts job's promise), free, paid (the running parts), cli }
   const work = new Map();
   const workOf = (id) => { if (!work.has(id)) work.set(id, {}); return work.get(id); };
   const snapshot = (s) => JSON.parse(JSON.stringify(s));
@@ -324,8 +342,15 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile); #738: its mode
       // follows the fork choice (no push access: an external contribution)
       const profile = result?.profile ? withForkMode(result.profile, states.get(id)?.fork) : null;
+      // #74: git's profile, the rest of it paid: it waits for the analysis (startPaid)
+      if (name === 'profile') workOf(id).oracle = !!result.needsOracle;
+      if (result?.needsOracle) {
+        change(id, {}, { [name]: { status: 'waiting', profile } });
+        return { result };
+      }
+      const cost = result?.costUsd ?? result?.cost_usd; // the interview's, the project map's
       // #781: simulated: no model turn, the wizard's Oracle line reads "not needed" after a restart too
-      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}), ...(result?.simulated ? { simulated: true } : {}) } });
+      change(id, {}, { [name]: { status: 'done', ...(profile ? { profile } : {}), ...(result?.simulated ? { simulated: true } : {}), ...(Number.isFinite(cost) ? { costUsd: cost } : {}) } });
       return { result };
     } catch (e) {
       // #725: the full error (the wizard's tooltip) and its short reason
@@ -338,30 +363,46 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
 
   const inputOf = (id) => ({ projectId: id, folder: projects.readProject(projectsDir, id).folder });
 
-  // the free part: the facts, then the profile
-  function startFree(id) {
+  // the profile job; #74: the Oracle only once the analysis was asked for
+  const runProfile = (id, facts) => runJob(id, 'profile', () => ({ ...inputOf(id), facts: facts?.result ?? null, oracle: !!workOf(id).asked }));
+
+  // the free part: the facts, then the profile (#74: `profile` false: only the facts, a profile kept is not paid twice)
+  function startFree(id, { profile = true } = {}) {
     const w = workOf(id);
     w.facts = runJob(id, 'facts', () => inputOf(id));
-    w.free = w.facts.then((facts) => runJob(id, 'profile', () => ({ ...inputOf(id), facts: facts?.result ?? null })))
+    w.free = w.facts.then((facts) => (profile ? runProfile(id, facts) : null))
       .finally(() => { w.free = null; });
   }
 
-  // the paid part: the project map once the facts are known (#730: no ranking after it); analyzed once all ended.
+  // #74: the Oracle's turn on a profile git left open (or a profile failed before the analysis was asked for),
+  // after the free part
+  async function completeProfile(id, facts) {
+    const w = workOf(id);
+    const again = !w.free && states.get(id)?.jobs?.profile?.status === 'failed';
+    await w.free;
+    if (w.oracle || again) await runProfile(id, facts);
+  }
+
+  // the paid part: the project map once the facts are known (#730: no ranking after it) and, beside it, the profile's
+  // Oracle turn (#74); analyzed once all ended.
   // #725: only the jobs not done run (a done project map is not paid twice), and a failed job is a state of
   // the analysis: the onboarding ends analyzed with it, never back to ready
   function startPaid(id) {
     const w = workOf(id);
     w.wanted = false;
+    w.asked = true;
     const s0 = states.get(id);
     const done = (job) => s0?.jobs?.[job]?.status === 'done';
     const todo = Object.fromEntries(PAID.filter((job) => !done(job)).map((job) => [job, { status: 'waiting' }]));
-    change(id, { status: 'analyzing' }, todo);
+    change(id, { status: 'analyzing', wanted: undefined }, todo);
     w.paid = (async () => {
       const facts = await w.facts;
       const input = () => ({ ...inputOf(id), facts: facts?.result ?? null });
+      const profile = completeProfile(id, facts);
       const map = done('projectMap') ? { result: w.map ?? null } : await runJob(id, 'projectMap', input, { heavy: true });
       if (map) w.map = map.result;
-      await w.free;
+      await profile;
+      await w.free; // a profile retried meanwhile
       if (states.get(id)) change(id, { status: 'analyzed' });
     })().catch((e) => stopped(id, e)).finally(() => { w.paid = null; });
   }
@@ -594,7 +635,10 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const w = workOf(projectId);
     if (w.paid) return status(projectId);
     if (s.status === 'ready' || s.status === 'analyzed') startPaid(projectId);
-    else w.wanted = true;
+    else {
+      w.wanted = true;
+      change(projectId, { wanted: true });
+    }
     return status(projectId);
   }
 
@@ -624,7 +668,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       const answersProfile = s.jobs.facts.status === 'skipped';
       const noProfile = profileDone && !answersProfile
         && OnboardingModel.workflowsColumnState({ mode: 'analyze', profileJob: s.jobs.profile }) === 'failed';
-      if (!w.free && (failed('facts') || failed('profile') || noProfile)) startFree(projectId);
+      const keep = s.jobs.profile.status === 'running' || (profileDone && !noProfile);
+      if (!w.free && (failed('facts') || failed('profile') || noProfile)) startFree(projectId, { profile: !keep });
       if (!w.paid && PAID.some(failed)) startPaid(projectId);
     }
     return status(projectId);
@@ -716,7 +761,8 @@ module.exports = (ctx) => {
     const jobs = {
       facts: ({ projectId, folder }) => projectMap.mapFacts({ folder, archRoot, projectId }),
       // { refused } (an interview already running, the Oracle's budget) fails the job, so Retry runs it again
-      profile: ({ projectId }) => ctx.workflowInterview({ projectId }),
+      // #74: the free read until the analysis is asked for
+      profile: ({ projectId, oracle }) => ctx.workflowInterview({ projectId, free: !oracle }),
       // #731: the city plan first (the cartographer's turn, validated and saved), then the Oracle's report with
       // both turns' cost: a refused plan never pays the Oracle; after a saved plan and a failed report,
       // Retry runs only the report.
@@ -733,7 +779,7 @@ module.exports = (ctx) => {
         return out;
       },
     };
-    const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs: e2eJobs(jobs), emit: (event, state) => ctx.events.emit(event, state) });
+    const ob = createOnboarding({ projectsDir: ws.projects, reposDir: ws.repos, jobs: e2eJobs(e2eCosts(jobs)), emit: (event, state) => ctx.events.emit(event, state) });
     current = { ws, ob };
     return ob;
   }

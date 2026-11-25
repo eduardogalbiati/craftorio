@@ -21,8 +21,8 @@
 //   name; cleared, it follows again), wizard-clone-into (the clone's folder, OnboardingModel.repoNameFromUrl);
 //   #743: once Next is pressed, the access check and the clone are one wait in place: wizard-next shows
 //   wizard-spinner and "Cloning <name>…" (disabled only while onboarding:start is in flight, #641), the fields read-only, no status card, then the analysis
-//   step at once), analysis (the jobs from the clone on in wizard-cost, with wizard-cost-total and the paid part data-part="projectMap"
-//   (#730: no Product Owner ranking any more) before the click, checked and locked, a running row with a spinner (#724),
+//   step at once), analysis (the jobs from the clone on in wizard-cost, with wizard-cost-total and the analyses that may cost, data-part="profile" | "projectMap"
+//   (#74, project-wizard-costs.js; #730: no Product Owner ranking any more) before the click, the paid one checked and locked, a running row with a spinner (#724),
 //   wizard-clone-progress in the footer (data-status = the clone job's status, wizard-spinner while it runs, its reason and Retry when it
 //   failed), and wizard-skip (#850: a new project's projectMap is left for later, OnboardingModel.next: unticked, wizard-job-later-projectMap
 //   says why, no amount, no wizard-skip; its profile line wizard-profile says "from your answers"); a
@@ -34,7 +34,7 @@
 //   city: Finish, then the project's City tab) / -findings / -backlog, each data-state="ready" | "pending" (its analysis still running: words
 //   say so, #852 and wizard-review-running, spinner + "running", beside the card's action) | "failed" | "skipped" (its analysis answered without
 //   a result) | "later" (the analyses were skipped), #730: one wizard-review-finding data-finding="<index>" per report
-//   finding with wizard-review-create-issue / -prioritize, then its link wizard-review-finding-issue, and the idea field
+//   finding with wizard-review-create-issue / -prioritize, then its link wizard-review-finding-issue, #74 wizard-review-costs (what each analysis cost and the total), and the idea field
 //   wizard-review-idea (an answer arriving while it has the focus renders at its blur). Navigation in the
 //   footer: wizard-cancel (step 1: closes, nothing imported) or wizard-back, then wizard-next (step 3:
 //   "Continue", enabled whatever the analysis does; #20: an import's analysis not started yet starts, never skipped) or, on the review,
@@ -57,7 +57,7 @@
 // - #onboarding-tray (project-wizard-tray.js) follows onboarding:changed (api.onOnboardingChanged, subscribed when the script loads); #724: hidden while the wizard is open, the wizard shows the progress itself.
 // - #732: onboarding:changed also reads api.listProjects again into state.projects (a new project, a status change such as the clone done), so the screens reading the cached list see the project and its folder.
 // Channels: onboarding:start / create / analyze / retry (packages/engine/service/channels/onboarding.js),
-// architecture:estimate (the project map's cost), and for the review architecture:city / facts / report,
+// architecture:estimate and seeds:estimate (what the analyses may cost), and for the review architecture:city / facts / report,
 // architecture:createIssue (never runNow), the backlog and api.createDiscoveryCard (an Inbox idea).
 // window.ProjectWizard = { analyzing(projectId), close, open }: #846 analyzing is true while that project's onboarding clones or analyses it (ACTIVE, from onboarding:changed); the Start drawer then refuses analyze-project.
 // Uses app.js globals (esc, t, showToast, errMsg), window.Actions and window.ProjectWizardCli.
@@ -75,7 +75,7 @@
   const ACTIVE = ['cloning', 'analyzing'];
 
   let root = null;
-  // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, busy, provider (the
+  // { model: OnboardingModel state, projectId, onboarding: the engine's state, estimate, profileEstimate, busy, provider (the
   // toggle's pick while the URL names none), and the
   // review's: review { backlog, city, facts, report } (undefined: not read yet), reading, filing (the finding
   // whose issue is being filed), idea }
@@ -91,7 +91,6 @@
   const platformById = (id) => window.Platforms?.findPlatform?.(id) || null;
   const usd = (n) => (window.I18n?.formatCost ? window.I18n.formatCost(n) : `$${Number(n).toFixed(2)}`);
   const money = (n) => (n > 0 && n < 0.01 ? `< ${usd(0.01)}` : usd(n));
-  const costText = (n) => (n == null ? t('onboarding.cost_not_known') : money(n));
   const statusText = (s) => t(`onboarding.status_${s}`);
   // #725: Continue on the analysis step never waits for the analysis (running, done or failed)
   const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model)
@@ -99,7 +98,7 @@
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
   const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
-  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
+  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), costHint: () => costs.estimateText(), phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur, recommended: column.recommended }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
@@ -107,7 +106,6 @@
     kindField,
     pickedWorkflows,
     profileOf,
-    textOf,
     workflowsColumn,
   } = column;
   // the repository step's notices (CLI missing or signed out; #738 no push access)
@@ -137,6 +135,7 @@
     root: () => root,
   });
   const retryButton = (id) => `<button type="button" class="btn sm" data-act="retry" data-testid="wizard-job-retry-${id}">${esc(t('onboarding.retry'))}</button>`;
+  const costs = window.ProjectWizardCosts({ column, cur: () => cur, jobOf: (id) => jobOf(id), jobs: JOBS, money, paid: PAID, renderSoon: () => renderSoon(), retryButton }); // #74
 
   function stepper() {
     const at = M.STEPS.findIndex((s) => s.id === cur.model.step);
@@ -372,51 +371,6 @@
     if (folder) folder.textContent = newFolder();
   }
 
-  // mock-4's left column: one row per job from the clone on (its status dot, what it reads, its cost), the
-  // paid ones data-part, then the estimated total with "Skip, analyze later" before the click
-  function costBlock(started) {
-    const jobs = cur.onboarding?.jobs || {};
-    const loading = cur.estimate === undefined;
-    const later = (id) => ['facts', ...PAID].includes(id) && cur.model.source === 'new' && !!cur.model.analyzeLater; // #850 (#21: facts too): left for later, saying why
-    const sum = M.costSummary(PAID.map((id) => ({ id, estimate: id === 'projectMap' ? cur.estimate : null, checked: true })));
-    // #725: a failed job has no amount ("—"); a done one its cost, "free" for a free job, "—" for a paid
-    // one whose cost is not known (#850: or left for later)
-    const amount = (id) => {
-      const s = jobs[id]?.status;
-      const p = sum.parts.find((x) => x.id === id);
-      if (s === 'failed' || later(id)) return '—';
-      if (s === 'done') return p ? (Number.isFinite(p.estimate) ? money(p.estimate) : '—') : t('onboarding.cost_free');
-      return p ? (loading ? t('onboarding.estimating') : costText(p.estimate)) : t('onboarding.cost_free');
-    };
-    const row = (id) => {
-      const s = jobs[id]?.status || 'waiting';
-      // #630 (mock-4): the profile row says the ways of working it found once its job is done
-      const found = id === 'profile' && textOf(M.profileLine(profileOf())); // #726: keys, in the interface's language
-      const line = id === 'clone' ? cur.model.repository : found ? t(column.profileSourceKey(), { profile: found }) : t(`onboarding.job_${id}_${later(id) ? 'later_new' : 'text'}`);
-      const testid = id === 'profile' ? ' data-testid="wizard-profile"' : later(id) ? ` data-testid="wizard-job-later-${id}"` : '';
-      // mock-4's pick of a paid analysis: both run in this phase (shown checked, disabled; #850 unchecked when left for later)
-      const pick = PAID.includes(id) ? `<input type="checkbox"${later(id) ? '' : ' checked'} disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
-      // #725: a failed job says why under its title (the full error on hover), with its Retry
-      const failed = s === 'failed' && id !== 'clone'
-        ? `<span class="small wizard-job-error" data-testid="wizard-job-error-${id}" title="${esc(jobs[id].error || jobs[id].reason || '')}">${esc(jobReason(jobs[id]))}</span>` : '';
-      const retry = failed ? retryButton(id) : '';
-      return `<li class="wizard-job"${PAID.includes(id) ? ` data-part="${id}"` : ''}>
-          <span class="${s === 'running' ? 'spinner wizard-job-spinner' : 'wizard-dot'} job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
-          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(line)}">${esc(line)}</span>${failed}</span>
-          <span class="wizard-amount muted">${esc(amount(id))}</span>${retry}
-        </li>`;
-    };
-    const unknown = !loading && sum.total != null && sum.unknown.length
-      ? `<span class="muted small">${esc(t('onboarding.cost_partial'))}</span>` : '';
-    const skip = started || later(PAID[0]) ? '' : `<button type="button" class="btn sm" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>`;
-    return `<div class="wizard-cost" data-testid="wizard-cost">
-        <ul class="wizard-jobs">${(cur.model.source === 'new' ? JOBS : ['clone', ...JOBS]).map(row).join('')}</ul>
-        <div class="card wizard-cost-total-row"><span>${esc(t('onboarding.cost_real_models'))}</span>
-          <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(later(PAID[0]) ? t('onboarding.cost_free') : loading ? t('onboarding.estimating') : costText(sum.total))}</strong>${skip}</div>
-        ${unknown}
-      </div>`;
-  }
-
   function analysisStep() {
     const o = cur.onboarding || {};
     const started = ['analyzing', 'analyzed'].includes(o.status);
@@ -425,7 +379,7 @@
         <div class="wizard-column">
           <h2 id="project-wizard-title">${esc(t(column.sourceKey('onboarding.analyze_title'), { name: cur.model.name }))}</h2>
           <p class="muted">${esc(t(column.sourceKey('onboarding.read_only')))}</p>
-          ${costBlock(started)}
+          ${costs.costBlock(started)}
           ${said}
           ${o.status === 'failed' ? errorBlock(o) : ''}
           ${cliWarning(o.cli)}
@@ -554,6 +508,7 @@
         </div>
         <div class="wizard-review-more">
           ${reviewSection('backlog', 'onboarding.review_backlog_title', null, r.backlog !== undefined, activity.backlogBody, activity.backlogLine, '', activity.backlogFailure())}
+          ${costs.reviewCosts()}
           <label class="wizard-field"><span>${esc(t('onboarding.review_idea_label'))}</span>
             <textarea id="wizard-review-idea" data-testid="wizard-review-idea" rows="2">${esc(cur.idea)}</textarea>
             <span class="muted small">${esc(t('onboarding.review_idea_help'))}</span></label>
@@ -623,6 +578,7 @@
 
   function remember(state) {
     if (!state?.projectId) return;
+    costs.onState(states.get(state.projectId), state); // #74: the header's cost
     states.delete(state.projectId);
     states.set(state.projectId, state);
     tray.scheduleLeave(state);
@@ -644,6 +600,7 @@
       // #738: the fork suggestion holds the repository step until the owner chooses
       if (cur.model.step === 'repository' && CLONED.includes(state.status) && !forkPending(state)) toAnalysis();
       else if (CLONED.includes(state.status)) column.loadManifest(); // #790: the clone's folder may be known now
+      if (cur.model.step === 'analysis' && CLONED.includes(state.status)) costs.readEstimates(); // #74: git says now what is left open
       if (cur.model.step === 'review') loadReview(); // an analysis done meanwhile: read what it made
       activity.followAnalysis(); // #781
       renderSoon();
@@ -710,13 +667,7 @@
   function toAnalysis() {
     cur.model = { ...(cur.model.step === 'repository' ? M.next(cur.model) : cur.model), step: 'analysis' }; // #850: the model's move (analyzeLater)
     column.loadManifest();
-    if (cur.estimate !== undefined) return;
-    const pid = cur.projectId;
-    Promise.resolve(api.architectureEstimate?.(pid)).then((r) => {
-      if (!cur || cur.projectId !== pid) return;
-      cur.estimate = Number.isFinite(r?.estimate?.usd) ? r.estimate.usd : null;
-      render();
-    }).catch(() => { if (cur?.projectId === pid) { cur.estimate = null; render(); } });
+    costs.readEstimates();
   }
 
   async function call(fn) {
@@ -839,6 +790,15 @@
     return true;
   }
 
+  // Analyze the repository (only an import offers it); #74: before the analysis started it runs a failed profile
+  // too (Retry alone never pays)
+  async function analyze() {
+    cur.workflowsMode = 'analyze';
+    cur.model = { ...cur.model, analyzeLater: false };
+    const again = jobOf('profile').status === 'failed' && ['analyzing', 'analyzed'].includes(cur.onboarding?.status);
+    await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId)));
+  }
+
   async function onClick(e) {
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
     if (!act || !cur) return;
@@ -859,16 +819,12 @@
     else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));
     // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part too; #20: an earlier Skip no longer holds), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
-    else if (act === 'workflows-analyze' && cur.projectId) {
-      cur.workflowsMode = 'analyze'; cur.model = { ...cur.model, analyzeLater: false }; // only an import offers the choice
-      const again = jobOf('profile').status === 'failed';
-      await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId)));
-    }
+    else if (act === 'workflows-analyze' && cur.projectId) await analyze();
     else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
     else if (act === 'finish') finish();
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, ...freshReview() };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }
@@ -943,7 +899,7 @@
       document.body.appendChild(root);
     }
     // Import is selected when the wizard opens (mock-1); #632: the create step's choices start at mock-3's
-    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, workModel: undefined, nameTyped: false, ...freshReview() };
+    cur = { model: { ...M.initialState(), source: 'import' }, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, busy: false, accounts: undefined, repos: {}, starts: 'readme', remote: false, remoteProvider: null, answers: { ...M.CREATE_DEFAULTS }, workflowsMode: undefined, workModel: undefined, nameTyped: false, ...freshReview() };
     root.hidden = false;
     render();
     tray.refresh(); // #724: hidden while the wizard is open

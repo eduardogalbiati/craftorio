@@ -27,7 +27,19 @@ function e2eSuiteDelay(stepId, signal, env = process.env) {
   });
 }
 
+// #74: the E2E hook of a simulated onboarding (features/steps/onboarding.steps.js):
+// CRAFTORIO_E2E_ONBOARDING_COSTS=<JSON { profile, projectMap }>, what each analysis is estimated at and records as
+// its cost, with no model call (areas/project-onboarding.js, areas/workflow-interview.js, architecture:estimate); null otherwise
+function e2eOnboardingCosts(env = process.env) {
+  if (!simulationOnly(env) || !env.CRAFTORIO_E2E_ONBOARDING_COSTS) return null;
+  try {
+    const costs = JSON.parse(env.CRAFTORIO_E2E_ONBOARDING_COSTS);
+    return costs && typeof costs === 'object' ? costs : null;
+  } catch { return null; }
+}
+
 module.exports = {
+  e2eOnboardingCosts,
   e2eSuiteDelay,
   ENV,
   refuseReal,

@@ -175,5 +175,6 @@ module.exports = {
   resolveRunInputs,
   runDefaultsWith,
   savedProfile,
+  WAYS_OF_WORKING,
   withAliases,
 };

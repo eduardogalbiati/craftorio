@@ -10,6 +10,7 @@
 //                 ends too fast to capture)
 //   access-error  a repository the app cannot reach: wizard-error data-error="no-access", its Retry and Edit
 //   analysis      a local git repository imported (file://, no network): the jobs and the cost, before the click
+//                 (#74: the simulation-only hook CRAFTORIO_E2E_ONBOARDING_COSTS gives the analyses their amounts)
 //   review        that repository analysed (simulated) and the review step
 //   new-workflows Create new project named "garden-log" (no answer changed), its step 3 (#21: its own heading,
 //                 the suggestions from the answers, no row left waiting without its reason)
@@ -85,6 +86,7 @@ function seed({ args, ws, project, projects, workspace }) {
     const folder = path.join(ws.root, 'onboarding-demo', 'billing-api');
     fs.rmSync(folder, { recursive: true, force: true });
     reachableRepo = sampleRepository(folder);
+    process.env.CRAFTORIO_E2E_ONBOARDING_COSTS = JSON.stringify({ profile: 0.42, projectMap: 0.74 }); // #74
   }
 }
 

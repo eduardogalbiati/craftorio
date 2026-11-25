@@ -1,9 +1,10 @@
 /* global api, DefaultWorkflow, esc, state, t */
 // #725: the new-project wizard's step 3 right column, "Suggested workflows" (mock-4, #630), split out of
-// project-wizard.js (its size cap). window.ProjectWizardColumn({ cur, jobOf, phasesHtml }) gives the wizard, over
+// project-wizard.js (its size cap). window.ProjectWizardColumn({ costHint, cur, jobOf, phasesHtml }) gives the wizard, over
 // its own state (`cur()`: the onboarding, the model, the owner's picks and cur.workflowsMode):
 // - workflowsColumn(): wizard-workflows-column data-state = OnboardingModel.workflowsColumnState: choose
-//   (wizard-workflows-choice-analyze / -manual, no rows), analyzing (wizard-workflows-rows aria-busy, inert,
+//   (wizard-workflows-choice-analyze / -manual, no rows; #74: Analyze says what it may cost, costHint(),
+//   wizard-workflows-choice-cost), analyzing (wizard-workflows-rows aria-busy, inert,
 //   selects disabled, under wizard-workflows-analyzing with the analysis' activity lines, #781 phasesHtml(),
 //   project-wizard-activity.js), failed (wizard-workflows-failed: an ActivityLine with the reason and
 //   wizard-workflows-retry, then Define manually), analyzed (the lines ended when the analysis ran in this wizard,
@@ -30,7 +31,7 @@
 (function () {
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
 
-  window.ProjectWizardColumn = function ({ cur, jobOf, phasesHtml, renderSoon }) {
+  window.ProjectWizardColumn = function ({ costHint, cur, jobOf, phasesHtml, renderSoon }) {
     const M = window.OnboardingModel;
     const jobReason = (job) => {
       const reason = job?.reason || job?.error || t('onboarding.no_reason');
@@ -128,12 +129,20 @@
     }
 
     // the column's state: a new project's (#632) profile is its three answers, so its rows show at once
-    const columnState = () => M.workflowsColumnState({ mode: cur().workflowsMode || (cur().model.source === 'new' ? 'analyze' : undefined), profileJob: { ...jobOf('profile'), profile: profileOf() } });
+    // #74: git's profile waiting for an analysis nobody asked for (a restart before its Oracle turn ended) is a choice again
+    const unasked = () => cur().workflowsMode === 'analyze' && !cur().busy && cur().onboarding?.status === 'ready'
+      && jobOf('profile').status === 'waiting' && !!jobOf('profile').profile;
+    const columnMode = () => (unasked() ? undefined : cur().workflowsMode || (cur().model.source === 'new' ? 'analyze' : undefined));
+    const columnState = () => M.workflowsColumnState({ mode: columnMode(), profileJob: { ...jobOf('profile'), profile: profileOf() } });
 
     // one of the two ways in (Analyze the repository / Define manually): a card with its hint, or a plain
     // button (`inline`, beside Retry); #851: Analyze the repository is the recommended one
+    const choiceCost = (id, inline) => {
+      const cost = id === 'analyze' && !inline ? costHint() : '';
+      return cost ? `<span class="muted small" data-testid="wizard-workflows-choice-cost">${esc(cost)}</span>` : '';
+    };
     const choiceButton = (id, inline = false) => `<button type="button" class="${inline ? 'btn' : 'card wizard-workflows-choice'}" data-act="workflows-${id}" data-testid="wizard-workflows-choice-${id}">
-        <strong>${esc(t(`onboarding.workflows_choice_${id}`))}${id === 'analyze' ? recommended() : ''}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}</button>`;
+        <strong>${esc(t(`onboarding.workflows_choice_${id}`))}${id === 'analyze' ? recommended() : ''}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}${choiceCost(id, inline)}</button>`;
 
     // by its state: the two choices first; then the rows, dimmed under a loading notice while the profile
     // job runs, with the profile's reasons once it is done, without reasons when defined by hand; a failed

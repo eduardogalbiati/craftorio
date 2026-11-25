@@ -18,6 +18,9 @@
 // phases: { git: { status, found: { commits, merges, tags, authors } }, files: { status, found: { languages,
 // testCommand, ci } }, oracle: { status, since, reading } }; status: pending | running | done | failed | not-needed
 // (oracle only: no model turn). Kept in this engine until the next interview; absent before the first one.
+// #74: workflowInterview({ free: true }), the onboarding's read after the clone, never calls a model: with a field
+// left open it saves no run and answers git's profile with needsOracle: true (or the project's last real answer,
+// with its cost); workflowInterviewEstimate says what the interview may cost before it runs. Both say costUsd.
 // #844: the free profile tells the truth: authors are people (identities with one name or one e-mail merged),
 // the mode is weighed by who merges (outside pull requests merged by an owner who pushes straight to main are a
 // local flow), and a repository with no test command and no test file has tests 'none'.
@@ -25,6 +28,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const arch = require('../../domains/oracle/oracle-architecture');
 const builder = require('../../domains/workflow/workflow-builder');
 const compose = require('../../domains/workflow/workflow-compose');
 const oracleSeeds = require('../../domains/oracle/oracle-seeds');
@@ -34,7 +38,11 @@ const seeds = require('../../domains/seed/seeds');
 const simulation = require('../../engine/simulation');
 const { checkCommand } = require('../../engine/check-step');
 const { detectLanguage } = require('../../domains/project/project-inputs');
-const { detectE2eCommand, projectFacts } = require('../../domains/project/project-run-defaults');
+const {
+  detectE2eCommand,
+  projectFacts,
+  WAYS_OF_WORKING: SEED_ID,
+} = require('../../domains/project/project-run-defaults');
 const { detectTestCommand } = require('../../engine/suite-step');
 const { hasTestFiles } = require('../../engine/test-paths');
 const { firstBuild } = require('@craftorio/shared/default-workflow');
@@ -47,7 +55,6 @@ const {
 const { inProjectDir } = require('@craftorio/shared/project-dir');
 const { clientError } = require('../common');
 
-const SEED_ID = 'ways-of-working';
 const { git } = seedRuns;
 const count = (out) => (out == null ? 0 : out.split('\n').filter((l) => l.trim()).length);
 
@@ -190,8 +197,23 @@ module.exports = (ctx) => {
     return model.simulated ? free || simulatedProfile(p) : null;
   }
 
-  /** Runs the analysis → { profile, evidence, questions, simulated }, or { refused } (busy, or the Oracle's budget). */
-  async function workflowInterview({ projectId }) {
+  // #74: whether a run calls the model for this free profile: a field git left open, no simulation, no recorded tool
+  const needsOracle = (p, free) => !simulation.simulationOnly() && !seedRuns.toolOf(p, SEED_ID) && Object.values(free.profile).some(open);
+
+  // #74: the project's last real answer over the free profile, with what it cost, or null; a project imported
+  // again under the same id does not take an earlier one's
+  async function paidAnswer(p, free) {
+    const last = oracleSeeds.listSeedRuns(root(), p.id, SEED_ID)[0];
+    if (!last || last.simulated || (p.createdAt && Date.parse(last.at) < Date.parse(p.createdAt))) return null;
+    const found = await lastProfile(p, free);
+    return found && { ...found, costUsd: last.costUsd };
+  }
+
+  /**
+   * Runs the analysis → { profile, evidence, questions, simulated, costUsd }, or { refused } (busy, or the Oracle's
+   * budget). #74 `free`: no model is called; { ..., needsOracle: true } when the profile waits for one.
+   */
+  async function workflowInterview({ projectId, free: freeOnly = false }) {
     const p = projectOf(projectId);
     const seed = seeds.readSeed(ctx.ws.seeds, SEED_ID);
     if (!seed) throw clientError(`The analysis seed ${SEED_ID} is missing from the workspace.`);
@@ -203,6 +225,12 @@ module.exports = (ctx) => {
       });
       const { languages, testCommand, ci } = free.profile;
       at.files = { status: 'done', found: { languages, testCommand, ci } };
+      if (freeOnly && needsOracle(p, free)) {
+        const paid = await paidAnswer(p, free);
+        at.oracle = { status: paid ? 'done' : 'pending' };
+        const found = paid || { ...free, simulated: false, needsOracle: true };
+        return { ...found, questions: compose.openQuestions(found.profile) };
+      }
       const ask = !simulation.simulationOnly() && Object.values(free.profile).some(open);
       at.oracle = { status: ask ? 'running' : 'not-needed' };
       const out = await seedRuns.runSeed(ctx, { project: p, seed, mock: !ask });
@@ -213,13 +241,28 @@ module.exports = (ctx) => {
       const found = await lastProfile(p, free);
       if (!found) throw new Error(`The ${SEED_ID} analysis answered no profile.`);
       if (ask) at.oracle = { status: 'done' };
-      return { ...found, questions: compose.openQuestions(found.profile) };
+      return { ...found, questions: compose.openQuestions(found.profile), costUsd: out.costUsd ?? null };
     } catch (e) {
       // the phase it stopped at: the first one not ended
       const stopped = ['git', 'files'].find((id) => at[id].status === 'running') || 'oracle';
       at[stopped] = { status: 'failed' };
       throw e;
     }
+  }
+
+  /**
+   * #74: what the interview may cost → { costUsd | null (not known), free, basis }: free when no model is called (git
+   * settles every field, a recorded tool, a simulation), else the mean of the project's last real runs, or of the
+   * other projects'. Runs nothing.
+   */
+  async function workflowInterviewEstimate({ projectId }) {
+    const p = projectOf(projectId);
+    const e2e = simulation.e2eOnboardingCosts()?.profile;
+    if (Number.isFinite(e2e)) return { costUsd: e2e, free: false, basis: 1 };
+    if (!needsOracle(p, await simulatedProfile(p))) return { costUsd: 0, free: true, basis: 0 };
+    const runsOf = (id) => oracleSeeds.listSeedRuns(root(), id, SEED_ID).filter((r) => r.source === 'oracle').map((r) => ({ ...r, date: r.at }));
+    const est = arch.estimateFromOthers(root(), p.id, runsOf);
+    return { costUsd: est ? est.usd : null, free: false, basis: est ? est.basis : 0 };
   }
 
   /** #733: the last saved run → { profile, evidence, questions, simulated, date, costUsd }, or null; runs nothing. */
@@ -288,6 +331,7 @@ module.exports = (ctx) => {
   return {
     workflowCompose,
     workflowInterview,
+    workflowInterviewEstimate,
     workflowInterviewLast,
     workflowInterviewState,
   };

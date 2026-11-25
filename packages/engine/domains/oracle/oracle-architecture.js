@@ -82,6 +82,18 @@ function estimateCost(saved) {
   return { usd: real.reduce((sum, r) => sum + Number(r.costUsd), 0) / real.length, basis: real.length };
 }
 
+/**
+ * #74: estimateCost of the project's own records (`listOf(projectId)`), else of the other projects' under `root`
+ * (<workspace>/architecture, one folder per project): a project just imported has no run of its own.
+ */
+function estimateFromOthers(root, projectId, listOf) {
+  const own = estimateCost(listOf(projectId));
+  if (own) return own;
+  let others = [];
+  try { others = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== projectId).map((d) => d.name); } catch { /* nothing saved yet */ }
+  return estimateCost(others.flatMap(listOf));
+}
+
 // ---------- the turn ----------
 
 const hotspotLine = (r) => `- ${r.file}: ${r.lines} lines, ${r.commits} commits, rank ${r.rank}${r.complexity != null ? `, complexity ${r.complexity} (worst function ${r.worst}, ${r.quadrant})` : ''}${r.co_change ? `, changes with ${r.co_change.file} (${Math.round(r.co_change.share * 100)}%)` : ''}`;
@@ -265,6 +277,7 @@ module.exports = {
   analyze,
   compareReports,
   estimateCost,
+  estimateFromOthers,
   findingKey,
   KINDS,
   listReports,

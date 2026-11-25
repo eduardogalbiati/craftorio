@@ -119,7 +119,8 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    remote only when asked and signed in; a failed remote leaves `remote.status = 'failed'` and the local
    project). The project is ready at once, the stepper's third pill reads "Workflows" and step 3 follows.
 3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
-   click (`wizard-cost`, `wizard-cost-total`, one `data-part` per paid analysis, `wizard-skip`). A failed
+   click (`wizard-cost`, `wizard-cost-total`, one `data-part` per analysis that may cost, `wizard-skip`). #74
+   (`project-wizard-costs.js`, its header): "free" only when no model is called, "Not known yet" without an estimate. A failed
    job is a state of the analysis, never "not started": its row reads the reason in the error colour
    (`wizard-job-error-<id>`, the engine's `code` — cli-missing, no-folder, refused,
    timeout, failed — translated, the full error on hover), "—" as its amount, and Retry
@@ -157,7 +158,7 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    that it is empty; the count grows because this sync, `backlog:sync` with `followed`, reads the list in steps, the adapter's `issueListSteps`: gh has
    no offset, so it reads again with a higher limit (40, 100, 200, 300), glab reads pages, and `issueCountCommand`
    gives the total; a sync no screen follows keeps the single read; a read that fails shows its reason with `wizard-review-backlog-retry`, and a project with no platform to read from is an
-   empty backlog) and an idea for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with
+   empty backlog), #74 what each analysis cost (`wizard-review-costs`, absent when skipped) and an idea for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with
    its severity and Create issue (`wizard-review-create-issue`) / Create issue and prioritize
    (`wizard-review-create-issue-prioritize`), both through `architecture:createIssue`; once filed the
    issue's link (`wizard-review-finding-issue`) replaces the buttons. `wizard-finish` never waits: the

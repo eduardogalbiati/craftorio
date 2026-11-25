@@ -1,6 +1,7 @@
 // Analysis seeds on a project's Architecture tab (#360): the workspace's seeds (packages/engine/domains/seed/seeds.js) with
 // each one's last run, its recorded tool and the commits since (seeds:list); the cost estimate
-// (free with a tool; else the mean of the seed's last real runs); a run (packages/engine/domains/oracle/oracle-seeds.js: one
+// (free with a tool; else the mean of the seed's last real runs; #74: the Ways of working's is the interview's own,
+// workflowInterviewEstimate in areas/workflow-interview.js); a run (packages/engine/domains/oracle/oracle-seeds.js: one
 // Oracle turn read-only in its daily budget, or the project's tool, simulated under mock or
 // CRAFTORIO_SIMULATION_ONLY; one run per project and seed at a time, shared with the Ways of working
 // interview: packages/engine/service/seed-runs.js); the history and one result
@@ -17,6 +18,7 @@ const seedRuns = require('@craftorio/engine/service/seed-runs');
 const toolIssue = require('../domains/seed-tool-issue');
 const workspace = require('@craftorio/engine/domains/workspace/workspace');
 const simulation = require('@craftorio/engine/engine/simulation');
+const { WAYS_OF_WORKING } = require('@craftorio/engine/domains/project/project-run-defaults');
 const { clientError, requireId } = require('@craftorio/engine/service/common');
 const {
   args,
@@ -70,6 +72,7 @@ module.exports = (ctx) => {
   function estimate({ projectId, seedId }) {
     const p = projectOf(projectId);
     const seed = seedOf(seedId);
+    if (seed.id === WAYS_OF_WORKING) return ctx.workflowInterviewEstimate({ projectId });
     if (toolOf(p, seed.id)) return { costUsd: 0, free: true };
     const runs = oracleSeeds.listSeedRuns(root(), p.id, seed.id).filter((r) => r.source === 'oracle').map((r) => ({ ...r, date: r.at }));
     const est = arch.estimateCost(runs);

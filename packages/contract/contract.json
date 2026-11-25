@@ -1,5 +1,5 @@
 {
- "hash": "23685fd36e2c",
+ "hash": "85bd9fb597df",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -1034,7 +1034,8 @@
    "channel": "architecture:estimate",
    "method": "architectureEstimate",
    "params": [
-    "projectId"
+    "projectId",
+    "...opts"
    ],
    "schema": {
     "params": {
@@ -1047,6 +1048,12 @@
        "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
        "title": "project id",
        "description": "A project id (projects/<projectId>.json)."
+      },
+      "others": {
+       "type": [
+        "boolean",
+        "null"
+       ]
       }
      },
      "required": [

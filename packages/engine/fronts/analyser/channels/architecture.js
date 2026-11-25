@@ -9,6 +9,8 @@
 // planned in the roadmap's disabled stage waiting for the owner's OK (#435); the report says where each
 // filed finding went (`filed`: its issue and stage) and the Refactor proposal it became before #730
 // (`proposal`, packages/engine/domains/refactor/refactor-proposals.js, read only).
+// #74: architecture:estimate with `others` (the import wizard) falls back to the other projects' analyses when the
+// project has none of its own; without it the estimate is this project's only.
 // The project city (#371): architecture:city is the facts grouped by the saved city plan (folder
 // districts without one) with its edges and validation (packages/engine/domains/project/architecture-facts.js readCity, core
 // packages/shared/city-model.js); architecture:savePlan checks a plan against CITY_PLAN_SCHEMA and saves
@@ -179,6 +181,15 @@ module.exports = (ctx) => {
   };
   // #730: a Refactor proposal made from a finding before #730, readable under it
   const proposalView = (x, stages) => (x ? { id: x.id, title: x.title || null, status: x.status || null, issue: x.issue ?? null, issueUrl: x.issueUrl || null, where: filedAt(x, stages) } : null);
+
+  // the mean cost of the last real analyses; #74: the other projects' too under `others`
+  function estimate({ projectId, others = false }) {
+    const e2e = simulation.e2eOnboardingCosts()?.projectMap;
+    if (Number.isFinite(e2e)) return { estimate: { usd: e2e, basis: 1 } };
+    const reportsOf = (id) => arch.listReports(root(), id);
+    const { id } = projectOf(projectId);
+    return { estimate: others ? arch.estimateFromOthers(root(), id, reportsOf) : arch.estimateCost(reportsOf(id)) };
+  }
 
   function reportView({ projectId, reportId = null }) {
     const p = projectOf(projectId);
@@ -403,9 +414,9 @@ module.exports = (ctx) => {
     {
       channel: 'architecture:estimate',
       method: 'architectureEstimate',
-      params: ['projectId'],
-      schema: { params: args({ projectId: PROJECT_ID }, ['projectId']), result: ESTIMATE },
-      fn: ({ projectId }) => ({ estimate: arch.estimateCost(arch.listReports(root(), projectOf(projectId).id)) }),
+      params: ['projectId', '...opts'],
+      schema: { params: args({ projectId: PROJECT_ID, others: FLAG }, ['projectId']), result: ESTIMATE },
+      fn: estimate,
     },
     {
       channel: 'architecture:createIssue',
