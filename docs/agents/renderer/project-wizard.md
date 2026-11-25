@@ -165,13 +165,11 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    project's page opens with the Next steps card and the idea goes to the Inbox; nothing is filed without
    its own click.
 
-The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to
-file and add, the first idea, the refactor cadence ("Turn on" opens the Health tab, #730: there the findings become
-issues; it turns nothing on itself), and release CI and screenshots, shown disabled (later phases). The screenshots entry is
-left out for a project with no user interface (#75): the kind picked in the wizard or in Ways of working decides, else what the
-files say now (`projects:inputHints`' `detectedKind`; no code is `backend`, and the detected kind is never saved as the picked one). Its heading adds "· city and
-refactor backlog done" once the refactor proposals are there, and the number of the project's workflows
-only when the project has its own set (a wizard import has none, so no count).
+The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to file and add, the first
+idea, the refactor cadence ("Turn on" only opens the Health tab, #730: there the findings become issues), and release CI and
+screenshots, shown disabled (later phases). #75: no screenshots entry without a user interface: the picked kind decides, else what
+the files say now (`projects:inputHints`' `detectedKind`: `backend` with no code, never saved as the picked kind). The heading adds
+"· city and refactor backlog done" once the proposals are there, and the workflow count for a project's own set (an import has none).
 
 The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`;
 its code is `fronts/build/views/projects/project-wizard-tray.js` (`window.ProjectWizardTray`, over the
