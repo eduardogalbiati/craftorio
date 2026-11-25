@@ -4,8 +4,8 @@
 //   npm run icons [-- <source.png>]   (default source: apps/desktop/assets/icon-source.png, square, 1024 px or more)
 // With no source image it first draws a placeholder (a graph of three agents) into
 // apps/desktop/assets/icon-source.png: replace that file with the real artwork and run it again.
-// The artwork is apps/desktop/assets/icon-source.svg (a hub conducting five agents); after editing it,
-// render it to icon-source.png at 1024 px (transparent outside the rounded square), then run this.
+// The artwork is apps/desktop/assets/icon-source.png (a gear and circuit "C" on a dark rounded square, 1024 px,
+// transparent outside the square); its centre mark alone is apps/desktop/assets/logo.png, the header's logo.
 
 const fs = require('fs');
 const path = require('path');

@@ -61,7 +61,7 @@
   <header class="topbar">
     <!-- #254: the bar's own content (it wraps, #208; its children keep their indentation), then the top right corner -->
     <div class="topbar-main">
-    <div class="brand">Craft<span>orio</span></div>
+    <div class="brand"><img class="brand-logo" src="../../desktop/assets/logo.png" alt="" />Craft<span>orio</span></div>
     <!-- #329: data-i18n (the text), data-i18n-title and data-i18n-aria-label name catalog keys; interface-language.js paints them in the interface language -->
     <span id="sim-only-badge" class="sim-only-badge hidden" title="CRAFTORIO_SIMULATION_ONLY is set: real runs and CLI terminals are refused, only simulations run." data-i18n="shell.sim_only" data-i18n-title="shell.sim_only_title">Simulation only</span>
     <!-- #603: the pushed channel (WebSocket) is down; app.js initNotifications shows it -->
@@ -274,7 +274,7 @@
   <!-- ================= Sign-in ================= -->
   <div id="login-screen" class="login-screen hidden" data-testid="login-screen">
     <div class="login-card">
-      <div class="brand">Craft<span>orio</span></div>
+      <div class="brand"><img class="brand-logo" src="../../desktop/assets/logo.png" alt="" />Craft<span>orio</span></div>
       <h3 data-i18n="shell.sign_in">Sign in</h3>
       <p class="muted" data-i18n="shell.sign_in_lead">Create a free account. It only tells us how many people use the app.</p>
       <div id="login-providers" class="login-providers"></div>
