@@ -1,6 +1,6 @@
 // @ts-check
 // `type: secret_scan` (#49): the secret scan of a run's own commits, a step without an agent as those of
-// machine-steps.js (`runSecretScanStep`; `secretScan` what it answers, `secretScanBase` the refs whose
+// machine-steps.js (`runSecretScanStep`; `secretScan` what it answers, `secretScanRefs` the refs whose
 // commits are not the run's). packages/engine/engine/secret-scan.js runs gitleaks and reads its report.
 
 'use strict';
@@ -14,9 +14,8 @@ const { render } = require('./templates');
 
 const methods = {
   // `type: secret_scan` (#49): gitleaks on the run's own commits (packages/engine/engine/secret-scan.js), real in
-  // a simulation too. `enabled`: a template, the input that turns it off ('off'); `base`: a template, the base
-  // branch of a run without a worktree of its own; `since`: a template, the tag a release scans from (empty: the
-  // whole history). Output: { kind: 'secret_scan', status: pass | fail | skipped | error, findings: [{ rule, file,
+  // a simulation too. `enabled`: a template, the input that turns it off ('off'); `since`: a template, the tag a
+  // release scans from (empty: the whole history). Output: { kind: 'secret_scan', status: pass | fail | skipped | error, findings: [{ rule, file,
   // line, commit }], ignored, config, message, round }: skipped (off, no gitleaks, no checkout) and error (gitleaks
   // failed) both say "Secrets not scanned"; a simulation without the base's commits is skipped, a real run is an error.
   async runSecretScanStep(step, st) {
@@ -38,7 +37,7 @@ const methods = {
     try {
       // gitleaks reads its ignore file and its configuration from the repository's top folder
       dir = await git(['rev-parse', '--show-toplevel'], worktree);
-      range = await secretScan.commitRange(dir, step.since != null ? { since: given('since') } : { refs: this.secretScanBase(step.base != null ? given('base') : '') });
+      range = await secretScan.commitRange(dir, step.since != null ? { since: given('since') } : { refs: this.secretScanRefs() });
     } catch (e) {
       const why = `the run's commits could not be read (${String(e.message).split('\n')[0]})`;
       return this.machine.simulated ? skipped(why) : { status: 'error', message: `${secretScan.NOT_SCANNED}: ${why}.` };
@@ -48,20 +47,13 @@ const methods = {
     return { ...scanned, ...(await secretScan.newEntries(dir, range)) };
   },
 
-  // The refs whose commits are not the run's, in groups of alternatives. A Remote run takes the fetched base
-  // only (a local one may hold commits that were never pushed), with the parent's branch of a stacked run (#807)
-  // and upstream's base of a fork (#738).
-  secretScanBase(fallback) {
-    const wt = this.worktree;
-    const base = wt?.base || fallback;
-    if (!base) return [];
-    if (!wt?.remote) return [[`refs/heads/${base}`, `refs/remotes/origin/${base}`]];
+  // baseRefs (run/checkout.js), as the test guard reads them. A Remote run leaves the local base out (it may hold
+  // commits that were never pushed) and adds the parent's branch of a stacked run (#807).
+  secretScanRefs() {
+    const refs = this.baseRefs();
+    if (!this.worktree?.remote) return refs;
     const parent = String(this.ctx.inputs?.parent_branch ?? '').trim();
-    return [
-      [`refs/remotes/origin/${base}`],
-      ...(parent ? [[`refs/remotes/origin/${parent}`]] : []),
-      ...(wt.fork ? [[`refs/remotes/upstream/${base}`]] : []),
-    ];
+    return [...refs.filter((ref) => !ref.startsWith('refs/heads/')), ...(parent ? [`refs/remotes/origin/${parent}`] : [])];
   },
 };
 

@@ -5356,6 +5356,7 @@
   "run3d.status_changes": "Changes requested",
   "run3d.status_done": "Done",
   "run3d.status_failed": "Failed",
+  "run3d.status_not_run": "Not run",
   "run3d.status_queued": "Queued",
   "run3d.status_running": "Running",
   "run3d.status_waiting": "Waiting for you",

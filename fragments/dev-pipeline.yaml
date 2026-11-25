@@ -39,12 +39,7 @@ steps:
     prompt: |
       Review the change on branch `{{ steps.develop.output.branch }}` against `{{ inputs.base_branch }}`
       (`git diff {{ inputs.base_branch }}...HEAD`): {{ steps.develop.output.summary }}
-      {% if steps.secret_scan.output and ((steps.secret_scan.output.ignored or []) | length or (steps.secret_scan.output.config or []) | length) %}
-      Secret scan (#49, secret-triage skill): the change makes gitleaks skip the following. Judge each one, and refuse (a blocker finding) an entry that may be a real secret or has no good reason:
-      {% for e in steps.secret_scan.output.ignored %}- `{{ e.entry }}`: {{ e.reason or 'no reason given' }}
-      {% endfor %}{% for c in steps.secret_scan.output.config %}- `{{ c }}` changed: read its diff
-      {% endfor %}{% endif %}{% if steps.secret_scan.output and steps.secret_scan.output.status == 'skipped' %}{{ steps.secret_scan.output.message }} Look for secrets in the diff yourself.
-      {% endif %}
+      {{ steps.secret_scan.output | secret_review }}
       Check that it does what the task asks, follows the project's conventions and has tests.
       Answer approved: true when it can go on; otherwise approved: false with one finding per line
       (file:line and what to change). Change nothing yourself.

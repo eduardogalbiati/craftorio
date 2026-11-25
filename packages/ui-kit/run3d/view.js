@@ -27,6 +27,7 @@ export const STATUS = {
   changes: label('run3d.status_changes'),
   failed: label('run3d.status_failed'),
   waiting: label('run3d.status_waiting'),
+  not_run: label('run3d.status_not_run'),
 };
 /** A provider's name ("Claude Code") from its id or type (the provider registry, window.Providers), or ''. */
 export const providerLabel = (provider) => (provider && window.Providers?.resolve(provider)?.label) || '';
@@ -98,6 +99,7 @@ export function sceneKey(player) {
   return `${player.epoch}|${m.cartGoal(layout)}|${m.farthest(layout)}|${m.finished}|${!!m.merged}|${m.activeId}`;
 }
 /** A state's colour in the theme. */
+// a state with no colour of its own (not_run, #49) is grey, as a queued one
 export const statusColor = (status) => view.theme.status[status] || view.theme.status.pending;
 
 /**

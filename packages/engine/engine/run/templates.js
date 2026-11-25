@@ -3,7 +3,7 @@
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
 // `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `checks_off`, `expected_docs`, `issue_numbers`,
-// `issue_lines`, `one_line`, `suite_lines`, `tests_plan_text`, `translated`), `evalExpr` for `when:` conditions, and `testsPlan` (the
+// `issue_lines`, `one_line`, `secret_findings`, `secret_review`, `suite_lines`, `tests_plan_text`, `translated`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
 
@@ -22,6 +22,7 @@ const expectedFiles = require('../expected-files');
 const gateSummary = require('../gate-summary');
 const { projectVersion } = require('../project-version');
 const scenarios = require('../scenarios');
+const secretScan = require('../secret-scan');
 const suiteStep = require('../suite-step');
 const testIds = require('../test-ids');
 const uiReviewChecks = require('../ui-review-checks');
@@ -156,6 +157,13 @@ tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
 // whole suite) or whole, with its tests and minutes; '' when the output is not a suite's.
 //   {% for o in steps.e2e.outputs %}{{ o | suite_scope('scenario') }}{% endfor %}
 tpl.addFilter('suite_scope', (output, noun) => suiteStep.suiteScope(output, noun || undefined));
+
+// A `type: secret_scan` step's output for a prompt (#49, packages/engine/engine/secret-scan.js): the findings for
+// the developer, and what the change makes gitleaks skip (or that nothing was scanned) for the code review;
+// '' when there is nothing to say. Never a value.
+//   {{ steps.secret_scan.output | secret_findings(inputs.base_branch) }}   {{ steps.secret_scan.output | secret_review }}
+tpl.addFilter('secret_findings', (output, base) => secretScan.findingsPrompt(output, base));
+tpl.addFilter('secret_review', (output) => secretScan.reviewPrompt(output));
 
 // The test ids the E2E step definitions of a checkout use and its renderer lacks (#246, the rule of
 // packages/engine/engine/test-ids.js), one line per id with the step files that use it; '' when none or without

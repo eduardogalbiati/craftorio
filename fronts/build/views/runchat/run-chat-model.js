@@ -101,8 +101,10 @@
   function machineOutcome(it, ev) {
     const o = ev.output || {};
     const failed = !!ev.error || (o.status != null && !ENDED_WELL.includes(o.status));
+    // #49: a secret scan that was skipped is never shown as passed
+    const notRun = o.status === 'not_run' || (o.kind === 'secret_scan' && o.status === 'skipped');
     Object.assign(it, {
-      state: failed ? 'failed' : o.status === 'not_run' ? 'not_run' : 'passed', finishedAt: ev.ts || null, durationMs: ev.duration_ms ?? o.duration_ms ?? null,
+      state: failed ? 'failed' : notRun ? 'not_run' : 'passed', finishedAt: ev.ts || null, durationMs: ev.duration_ms ?? o.duration_ms ?? null,
       round: o.round ?? it.round, log: logRel(o.log) || it.log, command: o.command || it.command, waitingReason: null,
       counts: machineCounts(o, it.counts), failures: machineFailures(o),
       scope: o.scope || it.scope, why: o.selection?.why ? firstLine(o.selection.why, it.step) : it.why,

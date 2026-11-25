@@ -70,7 +70,7 @@ const Pill = ({ status, text }) => (
 // end); a replay knows the end: `progress` (0..1) fills it
 function Bar({ status, color, progress = null }) {
   const running = status === 'running' || status === 'waiting', open = running && progress == null;
-  return <span className={'r3d-bar' + (open ? ' open' : '')} style={{ '--c': color }}><i style={{ width: status === 'pending' ? 0 : running && !open ? `${Math.round(progress * 100)}%` : '100%' }} /></span>;
+  return <span className={'r3d-bar' + (open ? ' open' : '')} style={{ '--c': color }}><i style={{ width: status === 'pending' || status === 'not_run' ? 0 : running && !open ? `${Math.round(progress * 100)}%` : '100%' }} /></span>;
 }
 
 const runState = (m) => (m.live ? 'live' : m.finished ? (m.run.final === 'interrupted' ? 'interrupted' : 'completed') : 'loading');

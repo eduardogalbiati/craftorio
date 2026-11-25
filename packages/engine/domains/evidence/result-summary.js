@@ -2,13 +2,14 @@
 // (WorkflowRun.finish, before workflow.finished) from the run's summary (the event's `summary`):
 // the status, what was done per issue (the last step output with an `issues` list), the commits
 // (the worktree branch and head, the local merge), the tests (each suite step: pass/fail and
-// counts; the coverage summary), a secret scan that did not run (#49), the screenshots (the final evidence set, new elements #185) and
+// counts; the coverage summary), a secret scan that did not pass (#49), the screenshots (the final evidence set, new elements #185) and
 // links to the key artifacts. It is the first artifact of the run (category `result`,
 // packages/engine/domains/evidence/artifact-categories.js) and what the owner opens. No model call.
 const fs = require('fs');
 const path = require('path');
 const { readEvidence } = require('./evidence');
 
+const MAX_FINDINGS = 10;
 const posix = (p) => String(p).split(path.sep).join('/');
 const link = (rel, text = rel) => `[${text}](${encodeURI(posix(rel))})`;
 const exists = (runDir, rel) => { try { return fs.statSync(path.join(runDir, rel)).isFile(); } catch { return false; } };
@@ -68,10 +69,15 @@ function testsSection(runDir, summary) {
   return lines.length ? ['## Tests', '', ...lines, ''] : [];
 }
 
-// #49: a scan that did not run is said, never shown as passed
+// #49: a scan that did not run, failed or still finds something is said, never shown as passed
 function secretsSection(summary) {
-  const lines = outputs(summary).filter((s) => s.output.kind === 'secret_scan' && s.output.status === 'skipped')
-    .map(({ id, output: o }) => `- \`${id}\`: ${oneLine(o.message || 'Secrets not scanned')}`);
+  const lines = outputs(summary).filter((s) => s.output.kind === 'secret_scan' && s.output.status !== 'pass')
+    .flatMap(({ id, output: o }) => {
+      const found = o.status === 'fail' ? o.findings || [] : [];
+      const shown = found.slice(0, MAX_FINDINGS).map((f) => `  - ${oneLine(f.rule)} \`${oneLine(f.file)}:${f.line}\``);
+      if (found.length > shown.length) shown.push(`  - and ${found.length - shown.length} more`);
+      return [`- \`${id}\`: ${found.length ? `**${found.length} open finding(s)**` : oneLine(o.message || 'Secrets not scanned')}`, ...shown];
+    });
   return lines.length ? ['## Secrets', '', ...lines, ''] : [];
 }
 

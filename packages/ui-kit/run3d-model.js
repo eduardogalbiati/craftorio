@@ -33,7 +33,7 @@
   const DONE_MS = 5000; // a robot that finished a turn shows `done` this long, then `idle`
   const SUPERVISOR_DONE_MS = 6000;
   const MAX_FEED = 80;
-  const STATUS_LABELS = { pending: 'Queued', running: 'Running', done: 'Done', changes: 'Changes requested', failed: 'Failed', waiting: 'Waiting for you' };
+  const STATUS_LABELS = { pending: 'Queued', running: 'Running', done: 'Done', changes: 'Changes requested', failed: 'Failed', waiting: 'Waiting for you', not_run: 'Not run' };
   const WRITES = /^(Edit|MultiEdit|Write|NotebookEdit|file_change|apply_patch)$/;
   // #833: the token kinds of a turn's usage, as Analytics reads them (engine's run-analysis.js TOKEN_KINDS); a missing kind counts 0
   const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
@@ -47,14 +47,14 @@
     .replace(/\\/g, '/');
   const short = (s, n) => { const t = clean(s); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
-  /** How a step ended, from its output: done, failed or changes (a reviewer asked for changes). */
+  /** How a step ended, from its output: done, failed, changes (a reviewer asked for changes) or not_run. */
   function outcome(o) {
     if (!o || typeof o !== 'object') return 'done';
     if (o.kind === 'suite' || o.kind === 'test_ids') return ['pass', 'not_run'].includes(o.status) ? 'done' : 'failed'; // #71: a project with no tests
     // #404: the rule checks, skipped when the project has none
     if (o.kind === 'check') return o.status === 'fail' ? 'failed' : 'done';
-    // #49: a finding, or a gitleaks that failed
-    if (o.kind === 'secret_scan') return ['fail', 'error'].includes(o.status) ? 'failed' : 'done';
+    // #49: a finding, or a gitleaks that failed; a skipped scan is never shown as done
+    if (o.kind === 'secret_scan') return o.status === 'pass' ? 'done' : o.status === 'skipped' ? 'not_run' : 'failed';
     if (o.results) return Object.values(o.results).some((r) => r && r.verdict && r.verdict !== 'approved') ? 'changes' : 'done';
     if (o.verdict) return o.verdict === 'not_verified' ? 'failed' : 'done';
     if (o.tests_status) return o.tests_status === 'pass' ? 'done' : 'failed';

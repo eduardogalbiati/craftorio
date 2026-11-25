@@ -329,7 +329,7 @@ steps:
         max_visits: "{{ inputs.max_rounds }}"
         on_exhausted: regression_failed
 
-  # #49: gitleaks on the run's own commits (base to HEAD), no agent, no model call. From the product's last tag
+  # #49: gitleaks on the commits since the product's last tag, no agent, no model call
   # (the whole history without one), once the suites are green and before the Ship gate.
   # A finding goes back to the developer at most twice (a pass resets the count), then to you at
   # secret_found; not installed or turned off: skipped, said as "secrets not scanned", never as passed.
@@ -382,16 +382,7 @@ steps:
       {{ inputs.task }}
       {% if previous_step in ['secret_scan', 'secret_found'] %}
       The suites are green on the local `{{ inputs.base_branch }}`; the secret scan stopped the release.
-      {% if previous_step in ['secret_scan', 'secret_found'] and steps.secret_scan.output and steps.secret_scan.output.status == 'fail' %}
-      The orchestrator scanned the run's commits for secrets (gitleaks, #49) and found (the secret-triage skill says how to judge each one):
-      {% for f in steps.secret_scan.output.findings %}{% if loop.index <= 50 %}- {{ f.rule }} in {{ f.file }}:{{ f.line }} (commit {{ f.commit }})
-      {% endif %}{% else %}{{ steps.secret_scan.output.message }}
-      {% endfor %}Never print, copy, test or use a value. A false positive gets an entry in `.gitleaksignore` with its
-      reason above it, in the same commit. A real secret is leaked: name it in `summary` (rule, file, line) so that
-      the owner revokes it, and take it out of the run's own commits too, by rewriting them (a fixup commit and
-      `git rebase --autosquash`): a new commit that deletes it leaves it in the history. Never rewrite a commit that is already on the base (`{{ inputs.base_branch }}`).
-      Commit, and answer again in full.
-      {% endif %}
+      {{ steps.secret_scan.output | secret_findings(inputs.base_branch) }}
       A finding in a commit that is already on the local base stays there: record it when it is a false
       positive, else change nothing and say in `summary` what the owner must revoke (they decide at the gate).
       Work on your branch and report the commit hash.

@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import {
-  agentDef, entityPos, geoOf, inMotion, lanePoint, rbox, rig, robotStateOf, sceneKey, STATUS, svgTexture,
+  agentDef, entityPos, geoOf, inMotion, lanePoint, rbox, rig, robotStateOf, sceneKey, STATUS, statusColor, svgTexture,
   TAG_LIFT, tagEls, textTexture, canvasTexture, fitText, useModel, usePlayer, useTheme, view, VIEW_DIR, wrapText,
 } from './view.js';
 
@@ -135,7 +135,7 @@ function SelectionRing({ r = 2.5 }) {
 // The pad every station stands on; its front light shows the step's status.
 function Pad({ st, width = 4.1, selected }) {
   const status = useModel((m) => m.state[st.id]?.status || 'pending');
-  const light = useRef(), T = useTheme(), col = T.status[status];
+  const light = useRef(), T = useTheme(), col = statusColor(status);
   useFrame(({ clock }) => {
     const live = status === 'running' || status === 'failed' || status === 'waiting';
     light.current.material.emissiveIntensity = live ? 0.75 + 0.45 * Math.sin(clock.elapsedTime * 5) : status === 'pending' ? 0.05 : 0.7;
@@ -203,7 +203,7 @@ function Station({ st, selected, onSelect }) {
 function Machine({ st, selected, onSelect }) {
   const status = useModel((m) => m.state[st.id]?.status || 'pending');
   const note = useModel((m) => m.state[st.id]?.note || '');
-  const beacon = useRef(), T = useTheme(), K = T.machine, col = T.status[status];
+  const beacon = useRef(), T = useTheme(), K = T.machine, col = statusColor(status);
   const tex = canvasTexture(`machine:${st.id}:${status}:${note}`, 560, 300, (g, w) => {
     g.fillStyle = K.screen; g.fillRect(0, 0, w, 300);
     g.textBaseline = 'middle';

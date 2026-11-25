@@ -156,8 +156,8 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   the review.
 - A **secret scan step** (`type: secret_scan`, no agent, no model call, #49; `runSecretScanStep` in `run/secret-scan-step.js` →
   `packages/engine/engine/secret-scan.js`): gitleaks on the run's own commits, real in a mock run too. The
-  range: from the base of the run's worktree (Remote: the fetched origin's, a stacked run's parent and a
-  fork's upstream with it), else `base` (a template), to HEAD; `since` (a template, release) scans from
+  range: from the run's base (`baseRefs`, every ref that exists; Remote: not the local one, and a stacked
+  run's parent with them) to HEAD; `since` (a template, release) scans from
   that tag instead, the whole history when it is empty. `enabled` (a template): `off` skips it. Output
   `{ kind: 'secret_scan', status: pass | fail | skipped | error, findings: [{ rule, file, line, commit }],
   ignored, config, message, round }`: `ignored` are the `.gitleaksignore` entries the run adds (with their

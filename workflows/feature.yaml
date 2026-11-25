@@ -1181,15 +1181,7 @@ steps:
       Fix what they report in the production code or the docs (never weaken a rule or an acceptance
       test), run the check command again, commit, and answer again in full.
       {% endif %}
-      {% if previous_step in ['secret_scan', 'secret_found'] and steps.secret_scan.output and steps.secret_scan.output.status == 'fail' %}
-      The orchestrator scanned the run's commits for secrets (gitleaks, #49) and found (the secret-triage skill says how to judge each one):
-      {% for f in steps.secret_scan.output.findings %}{% if loop.index <= 50 %}- {{ f.rule }} in {{ f.file }}:{{ f.line }} (commit {{ f.commit }})
-      {% endif %}{% else %}{{ steps.secret_scan.output.message }}
-      {% endfor %}Never print, copy, test or use a value. A false positive gets an entry in `.gitleaksignore` with its
-      reason above it, in the same commit. A real secret is leaked: name it in `summary` (rule, file, line) so that
-      the owner revokes it, and take it out of the run's own commits too, by rewriting them (a fixup commit and
-      `git rebase --autosquash`): a new commit that deletes it leaves it in the history. Never rewrite a commit that is already on the base (`{{ inputs.base_branch }}`).
-      Commit, and answer again in full.
+      {% if previous_step in ['secret_scan', 'secret_found'] %}{{ steps.secret_scan.output | secret_findings(inputs.base_branch) }}
       {% endif %}
       {% if previous_step == 'docs_check' and steps.docs_check.output.status == 'missing' %}
       The orchestrator compared your diff with the docs the issue lists under `## Expected files` (#757):
@@ -1423,12 +1415,15 @@ steps:
         goto: docs_check
       - when: "inputs.validation == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: secret_scan
+        set: { after_scan: "gate" }
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       - when: "output.no_change and steps.code_review.output"
         goto: secret_scan
+        set: { after_scan: "review" }
       - when: "output.committed"
         goto: secret_scan
+        set: { after_scan: "review" }
       # #453: no commit this turn and no gaps, but the branch already has commits since the base
       # (e.g. the test writer's commit already fixes the issue): the rule checks and the review judge
       # those commits instead of develop looping until max_visits; a branch without any commit since
@@ -1437,6 +1432,7 @@ steps:
         goto: rule_check
       - when: "not output.committed and worktree_dir | git_commits(inputs.base_branch)"
         goto: secret_scan
+        set: { after_scan: "review" }
       - when: "true"
         goto: develop
         max_visits: 3
@@ -1470,10 +1466,10 @@ steps:
       # then the owner's gate in validated mode, else the review
       - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: secret_scan
-        set: *checks_passed
+        set: { check_returns: "0", after_scan: "gate" }
       - when: "true"
         goto: secret_scan
-        set: *checks_passed
+        set: { check_returns: "0", after_scan: "review" }
 
   # #757: the docs the run's issues list under `## Expected files` (under docs/, README.md, any
   # *.md) against the run's diff since the base (packages/engine/engine/expected-files.js), no agent,
@@ -1494,10 +1490,10 @@ steps:
       # passed, skipped or the return used up: the owner's gate in validated mode, else the review
       - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: secret_scan
-        set: &docs_checked { docs_returns: "0" }
+        set: { docs_returns: "0", after_scan: "gate" }
       - when: "true"
         goto: secret_scan
-        set: *docs_checked
+        set: { docs_returns: "0", after_scan: "review" }
 
   # #49: gitleaks on the run's own commits (base to HEAD), no agent, no model call. Last of the agent-less steps after
   # develop: every route to the owner's gate or the review goes through it, and it picks between the two.
@@ -1515,8 +1511,9 @@ steps:
       # returns used up: the owner decides (a goto, not on_exhausted: no supervisor wake-up first)
       - when: "output.status == 'fail'"
         goto: secret_found
-      # passed or skipped: the owner's gate in validated mode, else the review
-      - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round) and (steps.develop.output.committed or previous_step != 'develop')"
+      # passed or skipped: where the round was going (vars.after_scan, set by each route to the scan: gate,
+      # review, or ui_review right after its screenshots), also after one of the scan's own gates
+      - when: "vars.after_scan == 'gate'"
         goto: developer_check
         set: &secrets_scanned { secret_returns: "0" }
       - when: "true"
@@ -1578,8 +1575,10 @@ steps:
         goto: docs_check
       - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: secret_scan
+        set: { after_scan: "gate" }
       - when: "true"
         goto: secret_scan
+        set: { after_scan: "review" }
 
   # Screenshots of the developer's UI states before the owner's check (#144) and the UI Reviewer
   # (#151): no agent, no model cost. The project's screenshot command runs once per entry of
@@ -1607,8 +1606,10 @@ steps:
       # validated mode: the owner's gate first (the same rounds as develop's transitions)
       - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: secret_scan
+        set: { after_scan: "gate" }
       - when: "true"
         goto: secret_scan
+        set: { after_scan: "ui_review" }
 
   # Validated mode (inputs.mode): the owner tries the developer's work before any review or test
   # token is spent. Ask for changes goes to the test writer's triage (#247), then back to the
@@ -1693,7 +1694,7 @@ steps:
         set: *accepted_gaps
       - when: "(choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
         goto: secret_scan
-        set: *accepted_gaps
+        set: { <<: *accepted_gaps, after_scan: "gate" }
       - when: "choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_screenshots
         set: *accepted_gaps
@@ -1703,7 +1704,7 @@ steps:
         set: *accepted_gaps
       - when: "choice == 'continue'"
         goto: secret_scan
-        set: *accepted_gaps
+        set: { <<: *accepted_gaps, after_scan: "review" }
       - when: "choice == 'stop'"
         goto: end
         status: failed
@@ -1736,8 +1737,10 @@ steps:
         goto: docs_check
       - when: "choice == 'continue' and inputs.validation == 'validated' and vars.owner_validated != 'yes'"
         goto: secret_scan
+        set: { after_scan: "gate" }
       - when: "choice == 'continue'"
         goto: secret_scan
+        set: { after_scan: "review" }
       - when: "choice == 'stop'"
         goto: end
         status: failed
@@ -1754,7 +1757,7 @@ steps:
     required_agents: [reviewer]
     agent_when:
       second_reviewer: "inputs.review == 'multi_model'"
-      ui_reviewer: "previous_step in ['developer_screenshots', 'developer_check', 'secret_scan'] and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
+      ui_reviewer: "(previous_step in ['developer_screenshots', 'developer_check'] or previous_step == 'secret_scan' and vars.after_scan == 'ui_review') and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or (steps.develop.output.files_changed or []) | ui_files(inputs.ui_folders) | length)"
     prompt: |
       {% if agent == 'ui_reviewer' %}
       {% set shots = steps.developer_screenshots.output %}
@@ -1840,12 +1843,7 @@ steps:
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
       {% if not steps.develop.output.committed %}The developer made no production change this turn (its summary above says why): review the commits already on the branch (e.g. the test writer's) against the task.{% endif %}
-      {% if steps.secret_scan.output and ((steps.secret_scan.output.ignored or []) | length or (steps.secret_scan.output.config or []) | length) %}
-      Secret scan (#49, secret-triage skill): the change makes gitleaks skip the following. Judge each one, and refuse (a blocker finding) an entry that may be a real secret or has no good reason:
-      {% for e in steps.secret_scan.output.ignored %}- `{{ e.entry }}`: {{ e.reason or 'no reason given' }}
-      {% endfor %}{% for c in steps.secret_scan.output.config %}- `{{ c }}` changed: read its diff
-      {% endfor %}{% endif %}{% if steps.secret_scan.output and steps.secret_scan.output.status == 'skipped' %}{{ steps.secret_scan.output.message }} Look for secrets in the diff yourself.
-      {% endif %}
+      {{ steps.secret_scan.output | secret_review }}
       {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
       {# #758: the Warm Up's reuse list, what the reuse pass checks the diff against #}
       {% set wreuse = (steps.warm_up.output.reuse if steps.warm_up and steps.warm_up.output else none) or [] %}
@@ -2344,10 +2342,10 @@ steps:
         set: *checks_passed
       - when: "inputs.validation == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: secret_scan
-        set: *checks_passed
+        set: { check_returns: "0", after_scan: "gate" }
       - when: "true"
         goto: secret_scan
-        set: *checks_passed
+        set: { check_returns: "0", after_scan: "review" }
 
   # #30: the rule checks cannot run here (the project's dependencies are not installed, a command is
   # missing): no developer can fix it, so it never counts as a round. The owner fixes the environment
