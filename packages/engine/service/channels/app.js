@@ -109,7 +109,7 @@ module.exports = (ctx) => [
   // the code this process started with and the code on disk now (changed: a restart is needed, #83)
   { channel: 'app:codeVersion', method: 'codeVersion', schema: { result: OBJECT }, fn: () => ctx.code.check() },
   { channel: 'settings:get', method: 'getSettings', schema: { result: OBJECT }, fn: () => workspace.readSettings(ctx.ws) },
-  // the machine profile (#367, packages/engine/domains/machine/machine-profile.js) for Settings › Execution and the Setup: the
+  // the machine profile (#367, packages/engine/domains/machine/machine-profile.js) for Settings › Execution: the
   // values in force (auto | manual | unknown), this machine's line and proposal, and the memory guard's
   // suggestion of the last 7 days (null when none). Read-only: Apply goes through settings:set.
   {

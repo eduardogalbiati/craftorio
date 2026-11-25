@@ -182,7 +182,7 @@
               <div class="s-group">
                 <div class="s-row">
                   <div class="s-label"><b>${t('settings.execution.developer')}</b><span>${t('settings.execution.developer_help')}</span></div>
-                  <label class="switch"><input type="checkbox" data-setting="developerMode" /><span></span></label>
+                  <label class="switch"><input type="checkbox" data-setting="developerMode" data-testid="settings-developer-mode" aria-label="${t('settings.execution.developer')}" /><span></span></label>
                 </div>
                 <div class="s-row">
                   <div class="s-label"><b>${t('settings.execution.open_run')}</b><span>${t('settings.execution.open_run_help')}</span></div>

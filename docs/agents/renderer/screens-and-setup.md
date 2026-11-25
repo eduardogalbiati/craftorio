@@ -8,14 +8,14 @@ The views, the first-run Setup dialog and one folder per screen (the sidebar, ad
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](../code-map.md)) says which file draws which screen.
 - **Setup** (#319, `setup.js` + `setup.css`, top-level: a dialog, not a screen): the first-run Setup,
-  registered with `registerView` for its `modals` only (no section, no menu entry) with a stepper (Agents · Try it safely · Workflows · First project).
+  registered with `registerView` for its `modals` only (no section, no menu entry) with a stepper (two steps, Agents · First project; #69: it never writes `developerMode`, the simulation is turned on in Settings › Execution › Developer mode).
   `init()` opens it when `settings.setupDone === false` (strictly: a workspace or a test double
   without the key never sees it); Settings › Agents & CLIs › Run setup again calls
   `window.Setup.open()`, but the CLIs are managed in that Settings section (#740), not here. Its pure parts (status badges, requirement badges, preselection, hidden
   workflows) are `packages/shared/setup-model.js`, shared with Node (`packages/engine/domains/workflow/workflow-requirements.js`). It sits under
   the other dialogs (z-index 9, so the Skip confirm and New project show above it) and lifts the
   terminal dock above itself while open. Check it with `npm run screenshot -- --view setup --mode
-  <agents | try-it-safely | workflows | first-project>` (`--missing-clis` for CLIs not installed).
+  <agents | first-project>` (`--missing-clis` for CLIs not installed).
 - **Settings › Agents & CLIs** (#740, `views/settings/settings-clis.js`, `data-testid="settings-clis"`):
   the CLIs' rows are the Setup's (`window.SetupRows.cliRow`: status, version, account, ▶ Install /
   ▶ Sign in), a close button (`settings-clis-close`) and no stepper. An action runs on the engine's

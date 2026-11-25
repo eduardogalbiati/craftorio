@@ -1,5 +1,5 @@
-// The first-run Setup (#319): a large modal with a stepper, Agents · Try it safely · First project
-// (#643: no Workflows step any more), and Back / Next / Skip (Enter = Next, Esc = Skip after a confirm, app.js). app.js
+// The first-run Setup (#319): a large modal with a stepper, Agents · First project (#643: no Workflows step any
+// more; #69: nor a simulation one), and Back / Next / Skip (Enter = Next, Esc = Skip after a confirm, app.js). app.js
 // opens it once per workspace (settings.setupDone === false, after the workspace dialog and under
 // the sign-in screen while it shows); Settings › Agents & CLIs › Run setup again reopens it. Finish
 // or Skip saves setupDone, so it never opens by itself again. #740: it stays first-run only; the CLIs
@@ -10,18 +10,16 @@
 //   (runSuggestedCommand, command-hint.js); a row re-checks when its terminal exits; disabled with
 //   a tooltip where no terminal can run it (canRunCommands). #740: in the browser UI the action runs on
 //   the engine's machine (SettingsClis.run, cli-setup:start) with its console under the rows.
-// - Try it safely: Show simulation mode (= settings.developerMode), on by default on a first run,
-//   and the machine profile's line (#367: runs at once and test workers sized from this machine).
 // - First project: the projects, and New project opening the onboarding wizard (#643,
 //   the action openProjectWizard of fronts/build/views/projects/project-wizard.js, no button without
 //   it; opened by itself when there is none, over the Setup, which then leaves it the focus; the
-//   list is read again when it closes). Finish saves setupDone and
-//   developerMode only, never settings.hiddenWorkflows (what a workspace hides from Start stays), then
-//   opens the Start drawer (Simulation checked when it shows, applyDeveloperMode); #846: not after an onboarding
+//   list is read again when it closes). Finish saves setupDone only, never
+//   settings.hiddenWorkflows (what a workspace hides from Start stays) nor developerMode (#69: the simulation is
+//   turned on in Settings › Execution), then opens the Start drawer; #846: not after an onboarding
 //   opened from First project that left its project's page open (its analysis may still run).
 // window.Setup = { open(step), isOpen(), skip() } (app.js, Settings, scripts/screenshot.js).
 // Registers its dialog with registerView (view-registry.js, modals only: no screen, no menu entry); uses app.js globals ($, esc,
-// state, api, errMsg, confirmDialog, showToast, openDrawer, applyDeveloperMode),
+// state, api, errMsg, confirmDialog, showToast, openDrawer),
 // start-drawer.js's loadCliStatus and command-hint.js's runSuggestedCommand / canRunCommands.
 // #329: every text comes from the catalog through t (packages/shared/i18n.js, setup.* keys); the
 // Interface language select above the stepper opens on the interface language (the saved one, else
@@ -31,7 +29,6 @@
 (function () {
   const STEPS = [
     { id: 'agents', name: () => t('setup.agents.name'), title: () => t('setup.agents.title'), lead: () => t('setup.agents.lead') },
-    { id: 'try-it-safely', name: () => t('setup.try.name'), title: () => t('setup.try.name'), lead: () => t('setup.try.lead') },
     { id: 'first-project', name: () => t('setup.project.name'), title: () => t('setup.project.title'), lead: () => t('setup.project.lead') },
   ];
   const ACTION = { install: () => t('setup.install'), signIn: () => t('setup.sign_in') };
@@ -41,8 +38,6 @@
     step: 0,
     open: false,
     tools: null,       // env:details, null while checking
-    simulation: true,  // the Try it safely switch
-    machine: null,     // settings:machineProfile (#367), its line shown in Try it safely
     onboarded: false,  // #846: First project opened the onboarding wizard
   };
   const $s = (sel) => document.querySelector(`#setup-modal ${sel}`);
@@ -181,43 +176,6 @@
     if (tab) tab.onChange = () => { renderTermTabs(); if (setup.open) checkAgents(); };
   }
 
-  // ---------- Try it safely ----------
-  function renderTry() {
-    return `
-      <p>${t('setup.try.real')}</p>
-      <p>${t('setup.try.simulation')}</p>
-      <div class="s-group">
-        <div class="s-row">
-          <div class="s-label"><b>${t('setup.try.show')}</b><span>${t('setup.try.show_help')}</span></div>
-          <label class="switch"><input type="checkbox" data-setup-sim data-testid="setup-simulation" aria-label="${t('setup.try.show')}" ${setup.simulation ? 'checked' : ''} /><span></span></label>
-        </div>
-        <div class="s-row">
-          <div class="s-label"><b>${t('setup.try.runs')}</b><span data-testid="machine-profile-line">${esc(machineText())}</span><span>${t('setup.try.runs_help')}</span></div>
-        </div>
-      </div>`;
-  }
-
-  // the machine profile (#367): the line the Try it safely step shows. #23: built in the interface's language from the
-  // numbers (the engine's `line` is English); without the machine or its proposal, the engine's line in English, else unread
-  function machineText() {
-    const m = setup.machine;
-    if (!m) return t('setup.try.reading');
-    const p = m.proposal;
-    const hw = m.machine;
-    if (!p || !hw) return window.I18n.translated('settings.machine.unread', m.line);
-    return t('setup.try.machine_line', {
-      threads: hw.threads,
-      gb: Math.round(hw.totalBytes / 1024 ** 3),
-      runs: t('settings.machine.runs_at_once', { count: p.concurrentRuns }),
-      workers: t('settings.machine.workers', { count: p.testWorkers }),
-    });
-  }
-
-  async function loadMachineProfile() {
-    try { setup.machine = await api.machineProfile(); } catch { setup.machine = { line: t('settings.machine.unread') }; }
-    if (setup.open && STEPS[setup.step].id === 'try-it-safely') render();
-  }
-
   // ---------- First project ----------
   function renderProject() {
     const projects = state.projects || [];
@@ -258,21 +216,12 @@
     });
     $s('#setup-title').textContent = step.title();
     $s('#setup-lead').textContent = step.lead();
-    $s('#setup-body').innerHTML = { agents: renderAgents, 'try-it-safely': renderTry, 'first-project': renderProject }[step.id]();
+    $s('#setup-body').innerHTML = { agents: renderAgents, 'first-project': renderProject }[step.id]();
     $s('#btn-setup-back').disabled = setup.step === 0;
     $s('#btn-setup-next').textContent = setup.step === STEPS.length - 1 ? t('setup.finish') : t('setup.next');
   }
 
-  async function saveSimulation() {
-    if (!!state.settings.developerMode === setup.simulation) return;
-    state.settings = await api.setSettings({ developerMode: setup.simulation });
-    applyDeveloperMode();
-  }
-
-  async function go(delta) {
-    try {
-      if (STEPS[setup.step].id === 'try-it-safely') await saveSimulation();
-    } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
+  function go(delta) {
     setup.step = Math.max(0, Math.min(STEPS.length - 1, setup.step + delta));
     render();
     // the wizard opened over the Setup keeps the focus, so Enter never reaches Finish under it
@@ -289,9 +238,8 @@
   // #643: settings.hiddenWorkflows is never written here, an older workspace keeps what it hides
   async function finish() {
     try {
-      state.settings = await api.setSettings({ setupDone: true, developerMode: setup.simulation });
+      state.settings = await api.setSettings({ setupDone: true });
     } catch (e) { showToast(t('setup.save_setup_failed'), errMsg(e)); return; }
-    applyDeveloperMode();
     close();
     // #846: the onboarding opened from here finished on its project's page, its analysis maybe still running
     // (the Imports tray): a Start drawer there (analyze-project, that project) would offer a second paid analysis
@@ -311,7 +259,6 @@
     setup.step = Math.max(0, STEPS.findIndex((s) => s.id === stepId));
     setup.open = true;
     setup.onboarded = false;
-    setup.simulation = state.settings.setupDone === false ? true : !!state.settings.developerMode;
     // a first run records that it is not done yet, so quitting before Finish or Skip opens it again
     // even after another setting was saved (workspace.js writeSettings leaves an unknown setupDone out)
     if (state.settings.setupDone === false) api.setSettings({ setupDone: false }).catch(() => {});
@@ -319,7 +266,6 @@
     document.getElementById('setup-modal').classList.remove('hidden');
     render();
     $s('#btn-setup-next').focus({ preventScroll: true });
-    loadMachineProfile();
     try {
       [state.workflows, state.projects] = await Promise.all([api.listWorkflows(), api.listProjects()]);
     } catch { /* the lists app.js loaded stay */ }
@@ -337,9 +283,6 @@
       if (e.target.closest('[data-setup-check]')) return checkAgents();
       if (e.target.closest('[data-setup-project]')) return newProject();
       return undefined;
-    });
-    body.addEventListener('change', (e) => {
-      if (e.target.matches('[data-setup-sim]')) setup.simulation = e.target.checked;
     });
     $s('#setup-language-box').addEventListener('change', (e) => {
       if (e.target.matches('[data-setup-language]')) saveLanguage(e.target.value);

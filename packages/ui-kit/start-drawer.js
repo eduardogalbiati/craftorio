@@ -13,6 +13,7 @@
 // An analysis workflow (ANALYSIS_WORKFLOWS, analyze-project.yaml, #378/#631) shows its model turn's
 // estimate from api.architectureEstimate (#wf-estimate) before the start; #846: its Start is refused
 // (#start-error) while the project's onboarding still runs (window.ProjectWizard.analyzing, the build front).
+// #69: #start-real-note, above Start, says a real run uses the CLI subscriptions; hidden while Simulation is checked.
 
 const LS_KEY = 'craftorio.inputs';
 const PIPE = 'pipe:';
@@ -34,6 +35,7 @@ async function openDrawer({ category = null, workflow = null, project = null, in
     (api.listPipelines ? api.listPipelines() : Promise.resolve([])).catch(() => []),
   ]);
   applyDeveloperMode();
+  renderRealNote();
   $('#start-error').textContent = '';
   renderDrawerCategories();
   // #27: with a project (given or the header's) and no workflow, the project's default before lastWorkflow
@@ -52,6 +54,14 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   $('#drawer').setAttribute('aria-hidden', 'false');
   $('#drawer-backdrop').classList.remove('hidden');
   setTimeout(() => (mainField() || $('#wf-select')).focus({ preventScroll: true }), 200);
+}
+
+// #69: a real run says it uses the CLI subscriptions before it starts, a simulated one does not
+function renderRealNote() {
+  const el = $('#start-real-note');
+  if (!el) return;
+  el.textContent = t('start_drawer.real_run_note');
+  el.classList.toggle('hidden', devMode() && !!$('#mock-toggle')?.checked);
 }
 
 // The drawer's main free-text field (usually `task`), picked by selectWorkflow()
@@ -410,6 +420,7 @@ function initStartDrawer() {
   $('#drawer-backdrop').onclick = closeDrawer;
   $('#wf-select').onchange = () => selectWorkflow($('#wf-select').value);
   $('#project-select').onchange = renderProjectInfo;
+  $('#mock-toggle').onchange = renderRealNote;
   $('#btn-drawer-new-project').onclick = () => window.Actions.call('openProjectWizard'); // #741: the wizard only
   $('#btn-start').onclick = () => startRun();
   $('#btn-start-another').onclick = () => startRun({ keepOpen: true });

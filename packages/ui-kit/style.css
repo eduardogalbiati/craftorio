@@ -378,7 +378,7 @@ label:has(> input[type=checkbox]:disabled, > input[type=radio]:disabled) { curso
 .drawer-foot { padding: 12px 18px 16px; border-top: 1px solid var(--border); }
 .drawer-foot .btn.block { margin-top: 0; }
 .drawer-foot .btn.block + .btn.block { margin-top: 8px; }
-.drawer-foot .error, .drawer-foot #start-info { margin: 0 0 8px; }
+.drawer-foot .error, .drawer-foot #start-info, .drawer-foot #start-real-note { margin: 0 0 8px; }
 #start-error:empty { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .chip { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; }

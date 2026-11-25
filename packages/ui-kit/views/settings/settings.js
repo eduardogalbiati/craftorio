@@ -165,6 +165,20 @@ async function saveFallbackSettings() {
   msg.textContent = t('settings.fallbacks.saved');
 }
 
+// The machine profile's line (#367). #23: built in the interface's language from the numbers (the engine's `line` is
+// English); without the machine or its proposal, the engine's line in English, else unread
+function machineLineText(mp) {
+  const p = mp?.proposal;
+  const hw = mp?.machine;
+  if (!p || !hw) return window.I18n.translated('settings.machine.unread', mp?.line);
+  return t('settings.machine.line', {
+    threads: hw.threads,
+    gb: Math.round(hw.totalBytes / 1024 ** 3),
+    runs: t('settings.machine.runs_at_once', { count: p.concurrentRuns }),
+    workers: t('settings.machine.workers', { count: p.testWorkers }),
+  });
+}
+
 // Settings › Execution › Concurrent runs (settings.concurrentRuns) and the machine profile (#367,
 // settings.machineProfile, packages/engine/domains/machine/machine-profile.js through settings:machineProfile): the maximum and
 // the test workers per run follow this machine in auto; a value typed here makes them manual.
@@ -182,7 +196,7 @@ async function renderConcurrency() {
   badge.dataset.state = st;
   badge.textContent = { auto: t('settings.machine.auto'), manual: t('settings.machine.manual'), unknown: t('settings.machine.unknown') }[st];
   badge.className = `badge${st === 'auto' ? ' live' : st === 'unknown' ? ' warn' : ''}`;
-  $('#set-mp-line').textContent = mp?.line || t('settings.machine.unread');
+  $('#set-mp-line').textContent = machineLineText(mp);
   $('#set-mp-hint').textContent = ` ${st === 'manual' ? t('settings.machine.manual_hint', { runs: mp.concurrentRuns, workers: t('settings.machine.workers', { count: mp.testWorkers }) })
     : st === 'unknown' ? t('settings.machine.unknown_hint') : t('settings.machine.auto_hint')}`;
   // Use these values: turns concurrent runs on with the machine's values (nothing to use when unknown)

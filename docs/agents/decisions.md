@@ -8,6 +8,13 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-25** (#69): the simulation is off by default, and the first-run Setup has two steps, Agents
+  and First project. Setup never writes `developerMode`: a fresh workspace's Product Owner and Start are
+  real, and a workspace that has developer mode on keeps it. The simulation is turned on in Settings ›
+  Execution › Developer mode; the machine's line is read there too, and Start says a real run uses the
+  CLI subscriptions. Replaces Setup's Try it safely step, which turned the simulation on (#319). Why:
+  the same app behaved differently after Next and after Skip, and a new user's first issue was only
+  previewed, never filed.
 - **2026-11-01** (#730): a project's page has the tabs Overview · City · Health · Conflict map (last).
   Health holds the git facts (free, no model) on top and the Oracle's latest report (summary, verdict
   per area, findings) below, with its report picker and a rerun with its estimate. There is no
@@ -294,7 +301,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   does not take its report as an input. Why: the questions are countable from the run folders, so
   no model is needed; the retrospective reads one run, the report aggregates a period. (#367, same
   day) A machine profile sizes the concurrent runs and the test workers per run
-  from the machine (threads, RAM), shown with its reasons in Setup and Settings › Execution and
+  from the machine (threads, RAM), shown with its reasons in Settings › Execution (no longer in Setup, #69) and
   always overridable: a manual value wins and stays when the machine changes. It never lowers a
   value the owner set by hand on its own, never stops a run and never changes the memory guard's
   limits; the memory guard's history only suggests (Apply). Why: a new user could not tell how many

@@ -1,12 +1,12 @@
 // Machine profile (#367): sizes the concurrent runs and the test workers per run from this machine,
-// shown with its reasons (Settings › Execution › Concurrent runs, the Setup) and always overridable.
+// shown with its reasons (Settings › Execution › Concurrent runs) and always overridable.
 // Pure apart from readMachine reading `os` (an os-like object can be given).
 // - readMachine(osLike) → { threads, totalBytes, freeBytes, platform }, null for a value it cannot read;
 // - machineWorkers(threads): the test workers this machine runs at once, all runs together;
 // - proposeLimits(machine) → { concurrentRuns, testWorkers } or null (machine unknown);
 // - resolveLimits(settings, machine) → { state: auto | manual | unknown, concurrentRuns, testWorkers,
 //   machine, proposal }: settings.machineProfile { mode, concurrentRuns, testWorkers }, manual always wins;
-// - machineLine(resolved): the one line Settings and the Setup show;
+// - machineLine(resolved): the one line of Settings › Execution, in English;
 // - suggestFromMemoryGuard(events, { now, concurrentRuns, timeZone }): one run fewer when the memory
 //   guard (#276) held or stopped runs on 2+ days of the last 7, with the days and runs; null otherwise.
 //   It only suggests: Settings applies it on the owner's click;
