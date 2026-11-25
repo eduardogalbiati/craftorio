@@ -109,6 +109,18 @@ for (const lang of LANGS) {
     assert.equal(said.includes(lang === 'en' ? 'Product Owner proposal…' : 'Proposta do Product Owner…'), false, said);
   });
 
+  const proposal = lang === 'en' ? 'Product Owner proposal…' : 'Proposta do Product Owner…';
+  const stages = { state: 'planned', stages: [{ id: 's1', title: 'Etapa 1', items: [{ id: 'i1', workflow: 'issue.yaml', number: 1, status: 'planned' }] }] };
+  test(`#39 ${lang}: a local roadmap with a stage keeps the Product Owner proposal box`, async () => {
+    const page = await screen('roadmap', lang, { data: localData({ roadmap: stages }) });
+    assert.equal(shownText(page, '#bl-list').includes(proposal), true);
+  });
+
+  test(`#39 ${lang}: an empty roadmap of a project with a repository keeps the Product Owner proposal box (guard)`, async () => {
+    const page = await screen('roadmap', lang, { repo: REPO });
+    assert.equal(shownText(page, '#bl-list').includes(proposal), true);
+  });
+
   test(`#39 ${lang}: New issue… on a project with no repository opens the Start drawer with no platform field`, async () => {
     const page = await screen('backlog', lang);
     page.$('#btn-bl-new-issue').click();

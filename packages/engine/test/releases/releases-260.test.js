@@ -135,6 +135,16 @@ test('shipRelease: a local-folder origin with uncommitted changes on its checked
   assert.equal(fs.readFileSync(path.join(user, 'a.txt'), 'utf8'), 'edited by the user\n');
 });
 
+test('shipRelease: a repository with no origin refuses, says it has no remote and leaves no tag (#73)', async (t) => {
+  const { shipRelease } = load();
+  const f = fixture(t);
+  git(f.repo, 'remote', 'remove', 'origin');
+  const refusal = await shipRelease({ repo: f.repo, base: 'main', tag: 'v1.2.0' }).then(() => null, (e) => e.message);
+  assert.equal(git(f.repo, 'tag', '-l'), '', 'no tag');
+  assert.match(String(refusal), /no remote/i);
+  assert.match(String(refusal), /Nothing was tagged/);
+});
+
 test('building the notes and marking the release push nothing: origin stays behind until Ship (#260)', async (t) => {
   const { releaseNotes, markReleased } = load();
   const f = fixture(t);

@@ -272,6 +272,19 @@ test('#73 an issue a person reopened stays open until a new run on it merges, wh
   assert.equal(record(closed).includes(again), true, `the record names the new run: ${record(closed)}`);
 });
 
+// (the column of an issue whose last run merged: work that landed, not a new To do one; with no remote never "not pushed")
+test('#73 with no remote, an issue reopened after its run closed it is in progress, with no record of the run that closed it', async (t) => {
+  const f = await setup(t);
+  const issue = await create(f, 'Issue one');
+  allowRealRuns(t, f.api);
+  const runId = await landed(f, { issues: refs(issue) });
+  assert.equal((await settledIssue(f, issue.title, 'closed')).state, 'closed', 'closed by its run');
+  await f.api['backlog:restore']({ projectId: f.p.id, numbers: [issue.number] });
+  const reopened = await byTitle(f, issue.title);
+  assert.deepEqual([reopened.state, reopened.column], ['open', 'in_progress']);
+  assert.equal(record(reopened).includes(runId), false, record(reopened));
+});
+
 test('#73 a remote added later: the closed local issue stays closed and is not offered for filing', async (t) => {
   const f = await setup(t);
   const issue = await create(f, 'Closed by its run');
