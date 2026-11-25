@@ -167,13 +167,15 @@ const ESTIMATE = { source: 'unknown', model: UNKNOWN, cli_version: '2.1.316', cl
 const MIXED = session('reviewer', UNKNOWN, 0.5, { cost_estimate: { source: 'tokens', model: UNKNOWN, cli_cost_usd: 0.9, unknown_cli_usd: 0.1 } });
 
 // the Run screen of a run with these sessions, the first one selected
-async function runScreen(lang, sessions, { run = {}, turnLog } = {}) {
+async function runScreen(lang, sessions, { run = {}, turnLog, prices } = {}) {
   const page = await pageIn(lang);
+  page.sandbox.__prices = prices;
   page.sandbox.__run = { id: RUN_ID, status: 'success', workflow: 'w', inputs: {}, startedAt: H.NOW - 2 * H.HOUR, finishedAt: H.NOW - H.HOUR, ...run };
   page.sandbox.__sessions = [ORCHESTRATOR, ...sessions];
   page.sandbox.__turns = turnLog || [];
   page.run(`(() => {
     const v = { ...newRunView(), run: __run, past: true, sessions: new Map(__sessions.map((s) => [s.id, { ...s, turnLog: new Map(__turns.map((x) => [x.n, x])) }])) };
+    if (__prices) state.usage = { prices: __prices };
     state.view = 'run'; state.runs.set(__run.id, v); state.runId = __run.id; state.selected = __sessions[1].id;
     renderSessions(); renderDetail();
   })()`);
@@ -213,6 +215,32 @@ test('#72 Run screen: a session with an unknown turn followed by a priced one is
   assert.match(detailCost(page), MARK);
 });
 
+// a session with nothing recorded (Codex): 1M input tokens, priced by the user's price only
+const noCost = (provider, extra = {}) => session('developer', 'gpt-x', 0, { provider, tokens: { input: 1e6, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 }, ...extra });
+async function shownCosts(s, prices) {
+  const page = await runScreen('en', [s], { prices });
+  return { card: cardCost(page, s.id), detail: detailCost(page), total: textOf(page.$('.session-card[data-id="orchestrator"] [data-testid="run-total-cost"]')).trim() };
+}
+
+test('#72 Run screen: a Codex session with no price shows no amount in its card and its detail, and the total is marked', async () => {
+  const { card, detail, total } = await shownCosts(noCost('codex'), {});
+  assert.equal(card, '—');
+  assert.equal(detail, '—');
+  assert.match(total, /^≈/);
+});
+
+test('#72 Run screen: a Codex session with the user\'s price shows the same unmarked amount in its card, its detail and the total', async () => {
+  const { card, detail, total } = await shownCosts(noCost('codex'), { 'gpt-x': { input: 2, output: 4 } });
+  assert.equal(card, '$2.0000');
+  assert.equal(detail, '$2.0000');
+  assert.equal(total, '$2.0000');
+});
+
+test('#72 Run screen: a simulated session with no cost is neither a dash nor marked', async () => {
+  const { card, detail, total } = await shownCosts(noCost('mock'), {});
+  for (const text of [card, detail, total]) assert.equal(text, '$0.0000');
+});
+
 // the child runs' costs on the Run screen: the orchestrator's card, and the strip of child run links
 const CHILDREN = (mark) => [{ run_id: 'c1', step_id: 'fan', workflow: 'w', status: 'success', cost_usd: 0.5, ...mark }];
 async function childCosts(mark) {
@@ -220,7 +248,8 @@ async function childCosts(mark) {
   const label = page.run("I18n.t('run.child_runs_cost')");
   const card = [...page.$('#sessions').querySelectorAll('.session-card[data-id="orchestrator"] .metric')].map((m) => textOf(m).trim()).find((x) => x.startsWith(label));
   page.sandbox.__parent = { childRuns: CHILDREN(mark) };
-  return { card, strip: H.visibleText(page.run('childRunsStrip(__parent)')) };
+  const strip = page.run('childRunsStrip(__parent)');
+  return { card, strip: H.visibleText(strip), tip: /data-run-link="c1" title="([^"]*)"/.exec(strip)?.[1] };
 }
 
 test('#72 Run screen: the child runs\' cost of the orchestrator\'s card is marked when a child\'s includes an unknown one, only then', async () => {
@@ -231,4 +260,11 @@ test('#72 Run screen: the child runs\' cost of the orchestrator\'s card is marke
 test('#72 Run screen: the strip of child runs gives the same marked cost as the orchestrator\'s card', async () => {
   assert.match((await childCosts({ cost_approx: true })).strip, /≈ \$0\.5000/);
   assert.doesNotMatch((await childCosts({})).strip, MARK);
+});
+
+test('#72 Run screen: a child run link\'s tooltip marks its cost when it includes an unknown one, only then', async () => {
+  assert.match((await childCosts({ cost_approx: true })).tip, /≈ \$0\.5000/);
+  const { tip } = await childCosts({});
+  assert.match(tip, /\$0\.5000/);
+  assert.doesNotMatch(tip, MARK);
 });

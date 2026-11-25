@@ -140,7 +140,7 @@ Then('the cost of the run\'s {string} session has no estimate mark', async ({ e2
 //   run-list-cost     the cost of a run's row in Workflows › Runs (with its mark)
 //   run-total-cost    also the total cost on the Run screen's orchestrator card (the list's total row has it)
 //   usage-run-cost    the cost cell of a row of Usage › Recent runs; the row: usage-run, data-run="<run id>"
-//   usage-month-cost  the month cost of a CLI's card on Usage (.usage-card[data-provider])
+//   usage-month-cost  the month cost of a CLI's card on Usage (usage-provider-card, data-provider="<CLI>")
 // A total that includes an unknown cost says so in its visible text: "at least" or "≈".
 const MARK = /≈|at least/i;
 const CENT = 0.005;
@@ -190,7 +190,7 @@ Then('the run\'s total cost in {string} is the noted one', async ({ e2e }, name)
 });
 
 // Usage's month cost of Claude Code, the provider of every direct call
-const monthCost = (page) => page.locator('.usage-card[data-provider="claude"]').filter({ visible: true }).getByTestId('usage-month-cost');
+const monthCost = (page) => page.locator('[data-testid="usage-provider-card"][data-provider="claude"]').filter({ visible: true }).getByTestId('usage-month-cost');
 
 When('I note the month cost of Claude Code in Usage', async ({ e2e }) => {
   await expect(monthCost(e2e.window)).toContainText(/\$\s*\d/, { timeout: LOAD_TIMEOUT });
