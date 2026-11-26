@@ -179,8 +179,14 @@ function layout(root) {
 // ---------------------------------------------------------------------------
 // Repository cloning
 // ---------------------------------------------------------------------------
-// https://…, ssh://…, git@host:owner/repo(.git)
-const isGitUrl = (s) => /^(https?|ssh|git):\/\/\S+$/i.test(s || '') || /^[\w.-]+@[\w.-]+:\S+$/.test(s || '');
+// #79: whether a clone can push and what to do when it can't, and isGitUrl (https://…, ssh://…, git@host:owner/repo)
+// (engine/push-access.js), re-exported here
+const {
+  checkPushAccess,
+  httpsFix,
+  isGitUrl,
+  platformOfUrl,
+} = require('../../engine/push-access');
 
 // the clone's folder name (owner-repo; #84: a local path's own name): the onboarding model's rule, shared with the wizard's step 2 (#669)
 const { repoNameFromUrl } = require('@craftorio/shared/onboarding-model');
@@ -222,9 +228,6 @@ function cloneFolder(url, reposDir) {
     } else if (!isDir(dir) || !fs.readdirSync(dir).length) return { dir, existing: false };
   }
 }
-
-// #79: whether a clone can push and what to do when it can't (engine/push-access.js), re-exported here
-const { checkPushAccess, httpsFix, platformOfUrl } = require('../../engine/push-access');
 
 // #79: the platform CLI's git protocol for a host (`gh config get git_protocol`): 'ssh' | 'https', null when
 // unknown (no CLI, it failed, a simulated run reads nothing from the machine)

@@ -51,6 +51,7 @@ const CHECKED = [
   'packages/engine/engine/project-instructions.js',
   'packages/engine/engine/project-version.js',
   'packages/engine/engine/providers.js',
+  'packages/engine/engine/push-access.js',
   'packages/engine/engine/run/accounts.js',
   'packages/engine/engine/run/checkout.js',
   'packages/engine/engine/run/costs.js',

@@ -33,6 +33,7 @@ const { foundChecks } = require('../check-tools');
 const depsCache = require('../deps-cache');
 const { scratchWorkspace } = require('../../domains/local/local-preview');
 const { render } = require('./templates');
+const { checkPushAccess, isGitUrl } = require('../push-access');
 
 // The `dependencies (<which>, <lockfile>): …` line of a deps-cache result (#198)
 function depsLine(which, r) {
@@ -107,6 +108,7 @@ const methods = {
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
     this.logRepoCommands(info.workDir);
     await this.prepareDeps('worktree', info.workDir, 'worktree ready');
+    if (!again) await methods.checkPush.call(this);
   },
 
   // #79: a Remote or Fork + PR run checks it can push its branch (workspace.js checkPushAccess, git as the agents
@@ -117,7 +119,6 @@ const methods = {
     if (!cfg || !this.worktree || this.machine.simulated || this.recovered) return;
     const { remote, fork } = worktreeTarget(cfg, this.ctx);
     if (!remote && !fork) return;
-    const { checkPushAccess, isGitUrl } = require('../../domains/workspace/workspace');
     const origin = await git(['remote', 'get-url', 'origin'], this.worktree.workDir).then((s) => String(s || '').trim(), () => '');
     if (!isGitUrl(origin)) return;
     const r = await checkPushAccess(this.worktree.workDir);

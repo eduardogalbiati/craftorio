@@ -792,6 +792,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     if (!s || !p?.folder || s.access?.push === false) return;
     if (simulation.e2eGitPush() === null && (simulation.simulationOnly() || !isGitUrl(p.repo))) return;
     change(id, { pushCheck: { status: 'checking' } });
+    /** @type {{ ok: boolean, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }} */
     const r = await Promise.resolve().then(() => pushCheck(p.folder)).catch((e) => ({ ok: false, reason: String(e?.message || e) }));
     change(id, { pushCheck: r.ok ? { status: 'ok', ok: true } : { status: 'failed', ok: false, reason: oneLine(String(r.reason || ''), 300), fix: r.fix || null, ...(r.setupGit ? { setupGit: r.setupGit } : {}) } });
   }
@@ -803,7 +804,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     if (!check || check.ok !== false) throw clientError(`The project ${projectId} can push: nothing to set up.`);
     const platform = check.setupGit ? Platforms.findPlatform(check.setupGit.platform) : null;
     const command = platform?.setupGitCommand?.();
-    if (command) {
+    if (platform && command) {
       change(projectId, { pushCheck: { ...check, status: 'fixing' } });
       const answer = await Promise.resolve().then(() => platformCli(platform.id, command.args, {})).catch((e) => ({ ok: false, out: String(e?.message || e) }));
       if (!answer?.ok) {

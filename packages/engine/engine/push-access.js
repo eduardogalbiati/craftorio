@@ -11,6 +11,9 @@
 const { execFile } = require('child_process');
 const Platforms = require('@craftorio/shared/platforms');
 
+// a remote git URL: https://…, ssh://…, git://…, git@host:owner/repo(.git); a local path is not
+const isGitUrl = (s) => /^(https?|ssh|git):\/\/\S+$/i.test(s || '') || /^[\w.-]+@[\w.-]+:\S+$/.test(s || '');
+
 // the platform of a repository URL (its host), GitHub's when the host names none
 const platformOfUrl = (url) => Platforms.platformOfRepoUrl(url) || Platforms.platformOrDefault();
 
@@ -75,6 +78,7 @@ async function checkPushAccess(dir, { run = plainGit, remote = 'origin' } = {}) 
 module.exports = {
   checkPushAccess,
   httpsFix,
+  isGitUrl,
   platformOfUrl,
   pushFix,
 };
