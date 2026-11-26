@@ -2291,11 +2291,12 @@ steps:
   - id: check_environment
     display_key: workflow_texts.feature_step_check_environment
     type: human_approval
+    # #41: the summary and message in the interface language (the notification's headline), the cause as the check gave it
     summary: |
-      The project's rule checks cannot run: {{ steps.rule_check.output.cause }}
+      {% filter translated('engine.check_environment_summary', { cause: steps.rule_check.output.cause }) %}The project's rule checks cannot run: {{ steps.rule_check.output.cause }}{% endfilter %}
     message: |
       {{ steps.rule_check.output.cause }}
-      No developer round was counted. Fix the environment, then try again: the rule checks run again.
+      {% filter translated('engine.check_environment_message') %}No developer round was counted. Fix the environment, then try again: the rule checks run again.{% endfilter %}
     environment: rule_check
     choices:
       - { id: retry, label: "Try again", label_key: engine.check_environment_retry, help: "Runs the rule checks again, once the dependencies are installed.", help_key: engine.check_environment_retry_help }

@@ -583,6 +583,7 @@
     return parts.join('');
   }
 
+  const simulatedMeta = (msg) => (msg.model === 'simulated' ? { ...msg, model: t('backlog_po.simulated') } : msg); // #41: the meta in the interface language
   function messageHtml(msg, m) {
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString(undefined, { timeZone: typeof TimeZone !== 'undefined' ? TimeZone.current() : undefined }) : '';
     // #240: another agent's request and its result, one card (agent-request.js)
@@ -598,7 +599,8 @@
     // #205: and the Cost step ("Planned for Speed · Economy")
     const once = msg.calibrationOverride || msg.costOverride;
     const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">${t('backlog_po.planned_for')} ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? t('backlog_po.this_question') : ''}</span>` : '';
-    const meta = `${t('backlog_po.product_owner')} · ${esc(time)}${msg.model ? ` · ${esc(msg.model === 'simulated' ? t('backlog_po.simulated') : msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
+    msg = simulatedMeta(msg);
+    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
       ${msg.invalid ? `<p class="small muted">${t(msg.mode === 'issue' ? 'backlog_po.the_answer_had_no_valid_draft' : 'backlog_po.the_answer_had_no_valid_proposal', { invalid: esc(msg.invalid) })}</p>` : ''}
