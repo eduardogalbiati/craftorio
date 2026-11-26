@@ -74,6 +74,7 @@ const CHECKED = [
   'packages/engine/engine/run/transitions.js',
   'packages/engine/engine/run/turns.js',
   'packages/engine/engine/secret-scan.js',
+  'packages/engine/engine/suite-counts.js',
   'packages/engine/engine/workflow.js',
   'packages/engine/service/areas/oracle.js',
   'packages/engine/service/areas/project-onboarding.js',

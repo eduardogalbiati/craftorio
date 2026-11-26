@@ -83,6 +83,7 @@ const {
   writeFileList,
 } = require('./suite-command-line');
 const { saveCoverage } = require('../domains/evidence/coverage-summary');
+const { parseCounts } = require('./suite-counts');
 const { clean, fileOf } = require('./output-lines');
 const { suiteSlotRun } = require('./suite-slot');
 const { noTests, notRunMessage, suiteWithoutCommand } = require('./suite-no-command'); // #71
@@ -118,6 +119,10 @@ const SHELL_REFUSALS = [/argument list too long/i, /command line is too long/i, 
 const exists = (dir, f) => { try { return fs.existsSync(path.join(dir, f)); } catch { return false; } };
 const someFile = (dir, re) => { try { return fs.readdirSync(dir).some((f) => re.test(f)); } catch { return false; } };
 
+// The files that make a folder a Gradle or a Python project (#82: the rule check's "Looked for" uses them too)
+const GRADLE_BUILD_FILES = ['build.gradle', 'build.gradle.kts'];
+const PYTHON_PROJECT_FILES = ['pyproject.toml', 'pytest.ini', 'setup.cfg', 'tox.ini', 'setup.py', 'requirements.txt'];
+
 // The project's whole-suite command from the files of its folder, or null.
 function detectTestCommand(dir) {
   if (!dir || !fs.existsSync(dir)) return null;
@@ -132,12 +137,12 @@ function detectTestCommand(dir) {
     if (process.platform === 'win32' && exists(dir, 'mvnw.cmd')) return 'mvnw.cmd -B test';
     return exists(dir, 'mvnw') ? './mvnw -B test' : 'mvn -B test';
   }
-  if (exists(dir, 'build.gradle') || exists(dir, 'build.gradle.kts')) {
+  if (GRADLE_BUILD_FILES.some((f) => exists(dir, f))) {
     if (process.platform === 'win32' && exists(dir, 'gradlew.bat')) return 'gradlew.bat test';
     return exists(dir, 'gradlew') ? './gradlew test' : 'gradle test';
   }
   if (someFile(dir, /\.(sln|csproj)$/i)) return 'dotnet test';
-  if (['pyproject.toml', 'pytest.ini', 'setup.cfg', 'tox.ini', 'setup.py', 'requirements.txt'].some((f) => exists(dir, f))) return 'python -m pytest';
+  if (PYTHON_PROJECT_FILES.some((f) => exists(dir, f))) return 'python -m pytest';
   return null;
 }
 
@@ -569,32 +574,6 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   return { onBase: failures.filter((f) => present.some((p) => sameFile(p, f.file)) && baseFailing.some((x) => sameTest(f, x))), info };
 }
 
-// The passed / failed counts a runner prints at the end (node:test, TAP, Jest, pytest, cargo test, dotnet
-// test, Maven Surefire, Playwright), null when none is recognized.
-function parseCounts(text) {
-  const t = clean(text);
-  const report = parseAgentReport(t);
-  if (report) return { passed: report.passed ?? 0, failed: report.failed ?? 0 };
-  const last = (re) => { const all = [...t.matchAll(re)]; return all.length ? Number(all[all.length - 1][1]) : null; };
-  const node = { passed: last(/^\s*(?:ℹ|#) pass (\d+)/gm), failed: last(/^\s*(?:ℹ|#) fail (\d+)/gm) };
-  if (node.passed != null || node.failed != null) return { passed: node.passed ?? 0, failed: node.failed ?? 0 };
-  const jest = t.match(/^Tests:\s+(.*)$/m)?.[1];
-  if (jest) return { passed: Number(jest.match(/(\d+) passed/)?.[1] || 0), failed: Number(jest.match(/(\d+) failed/)?.[1] || 0) };
-  const py = [...t.matchAll(/=+ (.*\b(?:passed|failed)\b.*) in [\d.]+s/g)].pop()?.[1];
-  if (py) return { passed: Number(py.match(/(\d+) passed/)?.[1] || 0), failed: Number(py.match(/(\d+) failed/)?.[1] || 0) };
-  // #82: the sum of every line `re` matches (groups p passed, f failed, e errors, s skipped; n run), or null
-  const total = (re) => [...t.matchAll(re)].map((m) => Object.fromEntries(Object.entries(m.groups || {}).map(([k, v]) => [k, Number(v)]))).reduce((s, g) => ({ passed: (s?.passed || 0) + (g.n != null ? g.n - g.f - g.e - g.s : g.p), failed: (s?.failed || 0) + g.f + (g.e || 0) }), /** @type {{ passed: number, failed: number } | null} */ (null));
-  // cargo test: a "test result:" line per test binary and the doc-tests; dotnet test: a line per test project;
-  // Maven Surefire: each module's total line (a class's goes on with "Time elapsed"), errors fail too
-  const summed = total(/^test result: (?:ok|FAILED)\. (?<p>\d+) passed; (?<f>\d+) failed;/gm) || total(/^\s*(?:Passed|Failed)!\s+-\s+Failed:\s+(?<f>\d+),\s+Passed:\s+(?<p>\d+),/gm)
-    || total(/^(?:\[\w+\]\s+)?Tests run: (?<n>\d+), Failures: (?<f>\d+), Errors: (?<e>\d+), Skipped: (?<s>\d+)\s*$/gm);
-  if (summed) return summed;
-  // Playwright: "  1 failed" (then the failed tests' lines), "  2 passed (15.4s)"
-  const pw = { passed: last(/^\s*(\d+) passed(?: \([^)]*\))?\s*$/gm), failed: last(/^\s*(\d+) failed\s*$/gm) };
-  if (pw.passed != null || pw.failed != null) return { passed: pw.passed ?? 0, failed: pw.failed ?? 0 };
-  return { passed: null, failed: null };
-}
-
 // `node --test …` → `node --test --experimental-test-coverage …` (#225). An npm script (`npm test`,
 // `npm run <name>`, optionally `-- <files>`; cwd: where its package.json is): its `<name>:coverage`
 // script when there is one (this project's `test:coverage`), else a script that is a plain
@@ -978,9 +957,11 @@ module.exports = {
   detectTestCommand,
   FILE_TIMEOUT_MS,
   filteredCommand,
+  GRADLE_BUILD_FILES,
   isFullSuiteCommand,
   parseCounts,
   parseFailures,
+  PYTHON_PROJECT_FILES,
   redCheck,
   runCommand,
   runFileAlone,

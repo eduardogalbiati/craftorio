@@ -128,7 +128,7 @@ async function runOnBase(check, logFile, opts) {
   let base = null;
   try { base = await opts.base?.(); } catch (e) { return { reason: `the base checkout could not be prepared: ${e.message}` }; }
   if (!base?.dir || !fs.existsSync(base.dir)) return { reason: 'the run has no base checkout' };
-  if (!foundChecks(base.dir, opts).checks.some((c) => c.command === check.command)) return { reason: 'the base does not have it' };
+  if (!foundChecks(base.dir, opts).checks.some((c) => [c.command, c.fallback?.command].includes(check.command))) return { reason: 'the base does not have it' };
   const result = await runTool(check, base.dir, logFile.replace(/\.log$/, '-base.log'), opts);
   if (result.environment || !result.ran) return { reason: 'it could not run on the base' };
   return { dir: base.dir, result };
@@ -149,6 +149,9 @@ function againstBase(failed, dir, base) {
 async function checkTool(check, dir, logFile, opts) {
   opts.onLog?.({ command: check.command, logFile });
   const result = await runTool(check, dir, logFile, opts);
+  // #82: a tool that cannot run here gives way to its fallback (rustup's clippy proxy without the component)
+  const { fallback } = check;
+  if (result.code !== 0 && fallback?.when.test(result.text)) return checkTool(fallback, dir, logFile.replace(new RegExp(`-${check.tool}\\.log$`), `-${fallback.tool}.log`), opts);
   const out = { command: check.command, why: result.why, log: logFile, code: result.code, added: [], old: 0 };
   if (result.code === 0) return out;
   if (result.environment) return { ...out, environment: result.environment, lines: findingLines(result.text) };
@@ -158,23 +161,25 @@ async function checkTool(check, dir, logFile, opts) {
 }
 
 // What the run says besides the new findings, one line each
-function notesOf(results, rewrites) {
+function notesOf(results, rewrites, lookedFor = []) {
   return [
     ...results.filter((r) => r.old).map((r) => `${r.old} finding${r.old === 1 ? '' : 's'} of \`${r.command}\` already on the base: not the change's.`),
     ...results.filter((r) => r.reason).map((r) => `\`${r.command}\` ${r.why} and could not be compared with the base (${r.reason}): reported, not blocking.`),
     ...rewrites.map((r) => `\`${r.name}\` is not run: it rewrites files (${r.why}).`),
+    // #82: the other languages of the project, with nothing to run
+    ...(lookedFor.length ? [`Also looked for: ${lookedFor.join('; ')}.`] : []),
   ];
 }
 
 // every found command in turn, up to the first that cannot run here
-async function runFound({ base, checks, rewrites }, { dir, logFile, ...opts }) {
+async function runFound({ base, checks, looked_for: lookedFor = [], rewrites }, { dir, logFile, ...opts }) {
   const t0 = Date.now();
   const results = [];
   for (const check of checks) {
     results.push(await checkTool(check, dir, logFile.replace(/(\.log)?$/, `-${check.tool}.log`), { ...opts, base }));
     if (results.at(-1).environment || opts.signal?.aborted) break;
   }
-  const notes = notesOf(results, rewrites);
+  const notes = notesOf(results, rewrites, lookedFor);
   const failed = results.filter((r) => r.added.length);
   const broken = results.find((r) => r.environment);
   const shown = broken || failed[0] || results.find((r) => r.reason) || results[0];

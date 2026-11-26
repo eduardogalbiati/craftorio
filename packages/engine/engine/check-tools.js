@@ -6,9 +6,10 @@
 // Nothing is downloaded (no npx, the offline and no-restore options of each tool) and nothing is rewritten: a
 // command that would is in `rewrites`, with why, and never runs. One rule per language, documented in
 // docs/features/developer-check.md.
-// foundChecks(dir, { env, platform }) → { checks: [{ command, env?, tool, unready? }], looked_for: [string], rewrites: [{ name, why }] }
+// foundChecks(dir, { env, platform }) → { checks: [{ command, env?, tool, unready?, fallback? }], looked_for: [string], rewrites: [{ name, why }] }
 // - tool: a short name for the log file; env: what the command's environment gets on top;
 // - unready: what the command prints when it could not run at all (not a finding of it);
+// - fallback (#82): another check, with `when`: what the command prints when the fallback runs instead;
 // - looked_for (#82): per language found with nothing to run, the checker it looked for (said when skipped).
 
 'use strict';
@@ -17,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { programOnPath } = require('./command-missing');
 const { packageScript } = require('./server-commands');
+const { GRADLE_BUILD_FILES, PYTHON_PROJECT_FILES } = require('./suite-step');
 
 const read = (dir, rel) => { try { return fs.readFileSync(path.join(dir, rel), 'utf8'); } catch { return ''; } };
 const listDir = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
@@ -98,7 +100,7 @@ function python({ dir, installed }) {
     (mypyIni || mypyConfig) && installed('mypy') && { command: `mypy --no-pretty --no-install-types --no-error-summary${target}`, tool: 'mypy' },
   ];
   // #82: a Python project (the suite's own detection) with neither says what was looked for
-  const project = firstOf(dir, ['pyproject.toml', 'pytest.ini', 'setup.cfg', 'tox.ini', 'setup.py', 'requirements.txt']);
+  const project = firstOf(dir, PYTHON_PROJECT_FILES);
   return checks.some(Boolean) || !project ? checks : [{ missing: '`ruff` or `mypy`, configured and installed (Python)' }];
 }
 
@@ -110,12 +112,16 @@ function go({ dir, installed }) {
     if (fix) return [{ rewrites: { name: 'golangci-lint run', why: `fix: true in ${config}` } }];
     return [{ command: 'golangci-lint run', env: { GOPROXY: 'off' }, tool: 'golangci-lint' }];
   }
-  // #82: the toolchain's own checker needs no configuration; a module never downloaded is not a finding
-  if (installed('go')) return [{ command: 'go vet ./...', env: { GOPROXY: 'off' }, tool: 'go-vet', unready: /GOPROXY=off|module lookup disabled|missing go\.sum entry/ }];
-  return [{ missing: config ? '`golangci-lint` or `go vet` (Go)' : '`go vet` (Go)' }];
+  // #82: the toolchain's own checker needs no configuration; a module never downloaded is not a finding.
+  // Only on a module root (the suite's own `go.mod`): at a go.work root, `go vet ./...` matches no module
+  if (installed('go') && firstOf(dir, ['go.mod'])) return [{ command: 'go vet ./...', env: { GOPROXY: 'off' }, tool: 'go-vet', unready: /GOPROXY=off|module lookup disabled|missing go\.sum entry/ }];
+  if (!installed('go')) return [{ missing: config ? '`golangci-lint` or `go vet` (Go)' : '`go vet` (Go)' }];
+  return [{ missing: '`golangci-lint`, configured and installed (Go workspace: `go vet` needs a `go.mod` at the root)' }];
 }
 
-// #82: cargo is enough: clippy when its component is installed, else the compiler's own warnings
+// #82: cargo is enough: clippy when its component is installed, else `cargo check`. Cargo's exit code decides,
+// as ESLint's does: warnings (clippy's default `warn` lints, the compiler's) exit 0 and send nothing back;
+// errors and `deny` lints do.
 function rust({ dir, installed }) {
   if (!read(dir, 'Cargo.toml')) return [];
   if (!installed('cargo')) return [{ missing: '`cargo` (Rust: `cargo clippy`, else `cargo check`)' }];
@@ -123,14 +129,16 @@ function rust({ dir, installed }) {
   const offline = firstOf(dir, ['Cargo.lock']) ? '--frozen' : '--offline';
   // dependencies never downloaded, or a Cargo.lock that would have to change
   const unready = /--offline was specified|--frozen was passed|failed to download|lock file .*needs to be updated/;
-  if (installed('cargo-clippy')) return [{ command: `cargo clippy ${offline} --message-format short`, tool: 'clippy', unready }];
-  return [{ command: `cargo check ${offline} --message-format short`, tool: 'cargo-check', unready }];
+  const check = { command: `cargo check ${offline} --message-format short`, tool: 'cargo-check', unready };
+  // rustup's `cargo-clippy` proxy is on the PATH even without the component: then `cargo check` runs instead
+  if (installed('cargo-clippy')) return [{ command: `cargo clippy ${offline} --message-format short`, tool: 'clippy', unready, fallback: { ...check, when: /is not installed for the toolchain/ } }];
+  return [check];
 }
 
 function java({ dir, installed }) {
   const pom = read(dir, 'pom.xml').replace(/<!--[\s\S]*?-->/g, '');
   // #82: Gradle's `check` runs the tests too: the suite's job, never run here
-  if (!pom) return firstOf(dir, ['build.gradle', 'build.gradle.kts']) ? [{ missing: 'a Gradle linter (`gradle check` runs the tests too: left to the suite)' }] : [];
+  if (!pom) return firstOf(dir, GRADLE_BUILD_FILES) ?[{ missing: 'a Gradle linter (`gradle check` runs the tests too: left to the suite)' }] : [];
   if (!/<artifactId>\s*maven-checkstyle-plugin\s*</.test(pom)) return [{ missing: '`maven-checkstyle-plugin` in pom.xml (Java)' }];
   if (!installed('mvn')) return [{ missing: '`mvn` (Java: Checkstyle)' }];
   // offline: a plugin that was never downloaded is not a finding

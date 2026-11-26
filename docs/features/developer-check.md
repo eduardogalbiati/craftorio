@@ -44,8 +44,8 @@ downloaded and nothing is rewritten.
 | Python | `ruff.toml`, `.ruff.toml`, `[tool.ruff]` | `ruff` on the PATH | `ruff check --no-fix` |
 | | `mypy.ini`, `.mypy.ini`, `[tool.mypy]`, `[mypy]` in `setup.cfg` | `mypy` on the PATH | `mypy` |
 | Go | `go.mod` or `go.work`, and `.golangci.*` | `golangci-lint` on the PATH | `golangci-lint run` (`GOPROXY=off`) |
-| | `go.mod` or `go.work`, no golangci-lint to run (#82) | `go` on the PATH | `go vet ./...` (`GOPROXY=off`) |
-| Rust (#82) | `Cargo.toml` | `cargo` and `cargo-clippy` on the PATH | `cargo clippy --frozen` (`--offline` without a `Cargo.lock`) |
+| | `go.mod` (a `go.work` alone matches no module), no golangci-lint to run (#82) | `go` on the PATH | `go vet ./...` (`GOPROXY=off`) |
+| Rust (#82) | `Cargo.toml` | `cargo` and `cargo-clippy` on the PATH | `cargo clippy --frozen` (`--offline` without a `Cargo.lock`); `cargo check` when rustup says the clippy component is not installed |
 | | `Cargo.toml` | `cargo` only | `cargo check --frozen` (`--offline` without a `Cargo.lock`) |
 | Java | `maven-checkstyle-plugin` in `pom.xml` | `mvn` on the PATH | `mvn -o checkstyle:check` |
 | C# | the .NET analyzers (a root `*.csproj`, `Directory.Build.props` or `.editorconfig`), with a `*.csproj` or solution in the root | `dotnet` on the PATH | `dotnet build --no-restore` |
@@ -58,8 +58,10 @@ downloaded and nothing is rewritten.
   checkout, not on the base, could not run there, no place in its output, a time limit) is said and reported
   without blocking. A `check_command` or a `check` script is not compared.
 - **Nothing to run** (#82): the step is skipped and says, per language found (the suite's: Go, Rust, Python,
-  Java, Gradle, C#), which checker it looked for (e.g. `cargo`, `go vet`). Gradle's `check` runs the tests too:
-  it is left to the suite.
+  Java, Gradle, C#), which checker it looked for (e.g. `cargo`, `go vet`). When another language's check runs,
+  the notes say it ("Also looked for: …"). Gradle's `check` runs the tests too: it is left to the suite.
+- **The exit code decides**, for every tool: cargo's warnings (clippy's default `warn` lints, the compiler's)
+  exit 0 and send nothing back, as ESLint's `warn` rules; errors and `deny` lints do.
 - **Cannot run here** (dependencies not installed, a command not found): `check_environment`, as before (#30).
 - **Before a run**: the project's settings (Projects › a project) and the Start panel show the commands. In the
   settings, **Check commands** replaces the ones found, and **Run the project's checks** turns them off
