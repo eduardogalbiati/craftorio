@@ -298,6 +298,8 @@ module.exports = {
   'onboarding:retry': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #741: the wizard's step and picks saved with the project
   'onboarding:save-wizard': { setup: onboarding, arg: ({ projectId }) => ({ projectId, step: 'repository', picks: { name: 'Contract' } }), invalid: { arg: { projectId: 'p', step: 42 } } },
+  // #79: the push warning's button: an onboarding whose clone was not refused has nothing to set up: 400
+  'onboarding:setup-git': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },
   'onboarding:start': { arg: () => ({ name: unique('Contract onboarding'), repo: UNREACHABLE_REPO }), invalid: { arg: { name: 'No repository' } } },
   'onboarding:status': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'onboarding:work-locally': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), status: 400, invalid: BAD_PROJECT },

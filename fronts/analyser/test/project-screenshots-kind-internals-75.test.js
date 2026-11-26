@@ -170,7 +170,8 @@ test('#75 projects:inputHints answers the kind of the files, whatever was picked
   fs.writeFileSync(path.join(folder, 'README.md'), '# Field Notes\n');
   const { id } = await api['projects:create']({ name: 'Notes', folder, kind: 'frontend' });
   const hints = await api['projects:inputHints'](id);
-  assert.deepEqual([hints.detectedKind, hints.runDefaults.kind], ['backend', 'frontend']);
+  // #84: a folder with only a README holds no code: its detected kind is docs, not backend
+  assert.deepEqual([hints.detectedKind, hints.runDefaults.kind], ['docs', 'frontend']);
   fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ dependencies: { react: '^19.0.0' } }));
   assert.equal((await api['projects:inputHints'](id)).detectedKind, 'frontend');
   assert.equal((await api['projects:inputHints'](null)).detectedKind, null);
