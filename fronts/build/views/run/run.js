@@ -277,7 +277,7 @@ function renderRunSummary() {
   const pills = WorkflowInputs.inputPills(wf, Object.fromEntries(all.filter(([k]) => isChoice(k))), { defaults: true });
   const inputs = all.filter(([k]) => !isChoice(k));
   // an accepted Write & Review run started from an issue: Save to issue, now or later (#103)
-  const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? (issuesOfRun(r)[0] || null) : null;
+  const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? issuesOfRun(r)[0] : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
   const html = `
     <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}${testedPillHtml(r)}</div>
