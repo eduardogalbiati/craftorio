@@ -4,7 +4,9 @@ Feature: The project wizard's step 3 and review say what really happens
   model, marked Recommended, and shows where the files live only for a model that writes files; "Analyze
   the repository" is the recommended choice (#851). While the project map still runs, the review's City
   and Findings cards both say so, the city can still be opened, and the languages have a placeholder
-  until the facts are read (#852).
+  until the facts are read (#852). A new project has no files to detect its kind from: its review asks the kind
+  (Frontend, Full-stack or Backend) with no "Detect from the files", an import keeps that option, and the kind
+  picked for a new project is the one its project page goes by (#57).
 
   # A new project has no history to analyze: nothing is skipped by the owner, so no "Skip, analyze later"
   @issue-850
@@ -69,3 +71,46 @@ Feature: The project wizard's step 3 and review say what really happens
     And the review's "Findings" card shows it is still running
     And the review's City card still offers "Open the city"
     And the review's project card shows a placeholder for the languages
+
+  # A new project has no files yet: the review's Project kind (wizard-kind-select) asks, it does not detect
+  @issue-57
+  Scenario: Creating a new project asks its kind instead of offering to detect it from the files
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    And I name the new project "kind-57"
+    And I go to the next step of the wizard
+    Then the wizard is on its "analysis" step
+    When I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    And the review's Project type offers "Frontend", "Full-stack" and "Backend (no UI)"
+    And the review's Project type does not offer "Detect from the files"
+
+  # Skipped analysis: no kind is known yet, so the import still offers to detect it from the repository's files
+  @issue-57
+  Scenario: Importing a repository keeps "Detect from the files" as its kind
+    Given the app is open
+    And a local git repository is ready to import
+    When I open the project wizard
+    And I choose to import a repository in the wizard
+    And I enter the local repository and the project name "import-57"
+    And I go to the next step of the wizard
+    And I skip the analysis for later
+    Then the wizard is on its "review" step
+    And the review's Project type has "Detect from the files" picked
+
+  # A new project with no code has no screenshots step (#75) unless the kind picked says it has an interface (#22)
+  @issue-57
+  Scenario: The kind picked for a new project is saved, and its project page goes by it
+    Given the app is open
+    When I open the project wizard
+    And I choose to create a new project in the wizard
+    And I name the new project "front-57"
+    And I go to the next step of the wizard
+    And I go to the next step of the wizard
+    Then the wizard is on its "review" step
+    When I pick "Frontend" as the review's Project type
+    And I finish the wizard
+    Then the project page of "front-57" is open
+    And the project page shows the Next steps card
+    And the Next steps card still lists the screenshots step

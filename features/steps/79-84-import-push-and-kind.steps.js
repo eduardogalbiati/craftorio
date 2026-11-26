@@ -161,3 +161,39 @@ Then("the review's Project type reads documentation or asks me to choose one", a
     return /document|docs/i.test(picked) || /not detected|choose/i.test(`${picked}\n${around}`);
   }, { message: 'the Project type reads documentation, or says it was not detected and asks to choose', timeout: LOAD_TIMEOUT }).toBe(true);
 });
+
+// ---- #57: a new project asks its kind, an import keeps "Detect from the files" ---------------------------------
+// Steps of features/850-851-852-project-wizard-step3-review.feature's @issue-57 scenarios, written before the code.
+// - data-testid="wizard-kind-select" (existing, a native <select>, aria-label "Kind of project") in the review:
+//   for a new project its options are the kinds (Frontend, Full-stack, Backend (no UI)...) with no
+//   "Detect from the files" (onboarding.kind_detect); for an import whose kind is not known yet it keeps that
+//   option, picked. The kind picked is saved on the project at Finish (the project's `kind`).
+
+const kindOptionLabels = (page) => kindSelect(page).locator('option').evaluateAll((els) => els.map((el) => (el.textContent || '').trim()));
+
+Then("the review's Project type offers {string}, {string} and {string}", async ({ e2e }, a, b, c) => {
+  const page = e2e.window;
+  await expect(kindSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const label of [a, b, c]) {
+    await expect.poll(() => kindOptionLabels(page), { message: `the Project type offers "${label}"`, timeout: LOAD_TIMEOUT }).toContain(label);
+  }
+});
+
+Then("the review's Project type does not offer {string}", async ({ e2e }, label) => {
+  const page = e2e.window;
+  await expect(kindSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await kindOptionLabels(page), `the Project type's options`).not.toContain(label);
+});
+
+Then("the review's Project type has {string} picked", async ({ e2e }, label) => {
+  const page = e2e.window;
+  await expect(kindSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => selectedKindLabel(page), { message: `the Project type has "${label}" picked`, timeout: LOAD_TIMEOUT }).toBe(label);
+});
+
+When("I pick {string} as the review's Project type", async ({ e2e }, label) => {
+  const select = kindSelect(e2e.window);
+  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await select.selectOption({ label });
+  await expect.poll(() => selectedKindLabel(e2e.window), { timeout: LOAD_TIMEOUT }).toBe(label);
+});
