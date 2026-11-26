@@ -1,3 +1,5 @@
+// Also the repositories and backlogs of features/40-repository-default-awaiting-acceptance.feature (#40) and
+// features/37-review-backlog-open-issues.feature (#37).
 // Steps of features/790-791-project-workflow-kinds.feature (#790, #791): the default workflow from the
 // project and its manifest, and the Product Owner's kinds. Reuses the wizard's steps (onboarding.steps.js),
 // the drawer's (fronts/build/features/steps/backlog.steps.js), "I open the project {string} from the
@@ -67,8 +69,8 @@ function writeBacklog(e2e, name, issues) {
   const { taskProgress } = engine('domains', 'backlog', 'backlog');
   const { backlog: dir } = openWorkspace(e2e);
   const now = new Date().toISOString();
-  const list = issues.map(({ title, labels = [] }, i) => ({
-    number: i + 1, title, state: 'open', labels: labels.map((label) => ({ name: label })), body: '', url: `${project.repo}/issues/${i + 1}`,
+  const list = issues.map(({ title, labels = [], state = 'open' }, i) => ({
+    number: i + 1, title, state, labels: labels.map((label) => ({ name: label })), body: '', url: `${project.repo}/issues/${i + 1}`,
     author: 'octocat', assignees: [], tasks: taskProgress(''), createdAt: now, updatedAt: now,
   }));
   fs.mkdirSync(dir, { recursive: true });
@@ -142,6 +144,86 @@ Given('the workspace has a project {string} whose repository declares its own wo
 
 Given('the backlog of {string} has the open bug {string} and the open issue {string}', async ({ e2e }, name, bug, title) => {
   writeBacklog(e2e, name, [{ title: bug, labels: ['bug'] }, { title }]);
+});
+
+// ---- #40: a repository's own default workflow, waiting for the owner's acceptance ------------------------
+// The repository declares, as this repository's .craftorio/project.yaml does, its own copy of a workflow by file
+// (.craftorio/workflows/<name>.yaml, a copy of the bundled feature.yaml under that name) and makes it both the
+// project's default and the Feature kind's workflow. A repository's own workflow runs only once the owner accepted
+// it for a commit (fronts/build/features/workflows-repository.feature), so until then the project's default awaits
+// acceptance and the screens fall back to the bundled Feature workflow.
+function ownDefaultManifest(own) {
+  const yaml = fs.readFileSync(path.join(root, 'workflows', 'feature.yaml'), 'utf8').replace(/^(\s*name:\s*)feature\s*$/m, `$1${own}`);
+  return {
+    '.craftorio/project.yaml': [
+      'version: 1',
+      `default: ${own}`,
+      'kinds:',
+      `  feature: { name: ${own} }`,
+      'workflows:',
+      '  - name: feature',
+      '    category: solo',
+      `  - name: ${own}`,
+      `    file: workflows/${own}.yaml`,
+      '    category: solo',
+      '',
+    ].join('\n'),
+    [`.craftorio/workflows/${own}.yaml`]: yaml,
+  };
+}
+
+Given('a local git repository whose manifest declares its own workflow {string} as its default is ready to import', async ({ e2e }, own) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const folder = path.join(e2e.scratch, 'folders', 'hero-repo');
+  writeFiles(folder, {
+    'README.md': '# hero-repo\n',
+    'package.json': JSON.stringify({ name: 'hero-repo', private: true, scripts: { test: 'node -e ""' } }, null, 2),
+    ...ownDefaultManifest(own),
+  });
+  commitAll(e2e.scratch, folder);
+  e2e.localRepo = pathToFileURL(folder).href;
+});
+
+// What a clone of that repository leaves, without the wizard: the project's record names the repository's own
+// workflow as its default, and no commit of it is accepted (no acceptedWorkflows)
+Given('the workspace has a project {string} whose repository declares its own workflow {string} as its default, not accepted yet', async ({ e2e }, name, own) => {
+  const projects = engine('domains', 'project', 'projects');
+  const dir = openWorkspace(e2e).projects;
+  const created = await projects.createProject(dir, { name, description: 'A project whose default awaits acceptance (simulated data)' });
+  const workflows = [
+    { name: 'feature', origin: 'manifest', category: 'solo' },
+    { name: own, file: `workflows/${own}.yaml`, origin: 'manifest', category: 'solo' },
+  ];
+  const project = projects.updateProject(dir, created.id, { repo: `https://github.com/example/${name}`, workflows, defaultWorkflow: own });
+  writeFiles(project.folder, ownDefaultManifest(own));
+  commitAll(e2e.scratch, project.folder);
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// The workspace's remembered last workflow (settings.lastWorkflow, as the Start panel leaves it), another project's
+// choice: the Start panel of a project must not open on it. The app reloads to read it.
+Given('the last workflow used is {string}', async ({ e2e }, name) => {
+  const workspace = engine('domains', 'workspace', 'workspace');
+  workspace.writeSettings(openWorkspace(e2e), { lastWorkflow: fileOf(name) });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+// ---- #37: the backlog an import's review reads ------------------------------------------------------------
+// A local file:// import has no platform to sync issues from, so the scenario writes the backlog a GitHub sync
+// leaves (gh issue list --state all: open and closed issues, an archived one labelled "archived") once the
+// onboarding created the project, before the review opens: the review reads that cache (api.getBacklog) and only
+// syncs when there is none. A table | title | state | labels | (state open or closed; labels comma-separated).
+Given('the backlog of {string} has the issues:', async ({ e2e }, name, table) => {
+  await expect.poll(() => engine('domains', 'project', 'projects').listProjects(openWorkspace(e2e).projects).some((p) => p.name === name),
+    { message: `the project "${name}" created by the onboarding`, timeout: LOAD_TIMEOUT }).toBe(true);
+  const issues = table.hashes().map((r) => ({
+    title: String(r.title).trim(),
+    state: String(r.state || 'open').trim().toLowerCase(),
+    labels: String(r.labels || '').split(',').map((s) => s.trim()).filter(Boolean),
+  }));
+  writeBacklog(e2e, name, issues);
 });
 
 // ---- the plan ----------------------------------------------------------------------------------------

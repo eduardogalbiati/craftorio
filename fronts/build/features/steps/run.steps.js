@@ -228,6 +228,25 @@ Then('the Start panel opens on the workflow {string}', async ({ e2e }, name) => 
   await expect(page.getByRole('combobox', { name: 'Workflow', exact: true })).toHaveValue(fileOf(name), { timeout: 30000 });
 });
 
+// #40: the Start panel's hint (NEW: data-testid="start-drawer-awaiting-acceptance") that the project's default
+// workflow awaits the owner's acceptance, holding a link (or button) to the Definitions page ("Definitions" in its name)
+const awaitingHint = (page) => page.getByTestId('start-drawer-awaiting-acceptance').filter({ visible: true });
+const definitionsLink = (page) => {
+  const hint = awaitingHint(page);
+  return hint.getByRole('link', { name: /Definitions/ }).or(hint.getByRole('button', { name: /Definitions/ })).first();
+};
+
+Then("the Start panel says the project's default workflow awaits acceptance, with a link to Definitions", async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(awaitingHint(page)).toBeVisible({ timeout: 30000 });
+  await expect(awaitingHint(page)).toContainText(/accept/i);
+  await expect(definitionsLink(page)).toBeVisible();
+});
+
+When("I follow the Start panel's link to Definitions", async ({ e2e }) => {
+  await definitionsLink(e2e.window).click();
+});
+
 // #846: the Start panel's own Start button, on the workflow and project already chosen
 When('I start the chosen workflow from the Start panel', async ({ e2e }) => {
   await e2e.window.getByTestId('start-workflow').click();

@@ -1532,6 +1532,56 @@ Then("the review's Backlog card does not say {string}", async ({ e2e }, text) =>
   await expect(card.getByText(text)).toHaveCount(0);
 });
 
+// ---- #37: the review's Backlog card counts and lists only the open, non-archived issues -----------------------------
+// In wizard-review-backlog (exists): the count ("3 open issues", onboarding.backlog_read today says "N issues read") and
+// one <li> per issue (role listitem, exists) holding its title; a closed issue or one labelled "archived" is never
+// listed nor counted; with no open issue the card ends on "No open issues." (wizard-review-backlog-activity, exists).
+Then("the review's Backlog card says {string} and lists only the issues:", async ({ e2e }, count, table) => {
+  const card = reviewBacklog(e2e.window);
+  await expect(card.getByTestId('wizard-review-backlog-activity')).toHaveAttribute('data-state', 'done', { timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText(count);
+  const titles = table.raw().map((r) => String(r[0] || '').trim()).filter(Boolean);
+  const rows = card.getByRole('listitem');
+  await expect(rows).toHaveCount(titles.length);
+  for (const title of titles) await expect(rows.filter({ hasText: title }), `the issue "${title}"`).toHaveCount(1);
+});
+
+Then("the review's Backlog card lists no issue", async ({ e2e }) => {
+  const card = reviewBacklog(e2e.window);
+  await expect(card.getByTestId('wizard-review-backlog-activity')).toHaveAttribute('data-state', 'done', { timeout: LOAD_TIMEOUT });
+  await expect(card.getByRole('listitem')).toHaveCount(0);
+  await expect(card).not.toContainText(/issues? read/i);
+});
+
+// ---- #40: the repository's own default workflow waits for the owner's acceptance ------------------------------------
+// What the screens expose (NEW, to be added by #40):
+// - data-testid="wizard-default-awaiting-acceptance": on step 3 (analysis) and on step 4 (review), the notice that the
+//   project's default workflow (named in it) must be reviewed and accepted before it runs, with a link or button
+//   "Review and accept" (pt-BR "Revisar e aceitar") to the Definitions page;
+// - data-testid="next-step-accept-workflows": the project page's Next steps entry "Accept the repository's workflows"
+//   (pt-BR "Aceitar os workflows do repositório"), shown until the repository's workflows are accepted.
+const defaultAwaiting = (page) => wizard(page).getByTestId('wizard-default-awaiting-acceptance').filter({ visible: true });
+
+Then("the wizard says the default workflow {string} must be reviewed and accepted before it runs, offering {string}", async ({ e2e }, name, label) => {
+  const notice = defaultAwaiting(e2e.window);
+  await expect(notice).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(notice).toContainText(name);
+  await expect(notice).toContainText(/accept/i);
+  const action = notice.getByRole('link', { name: label, exact: true }).or(notice.getByRole('button', { name: label, exact: true }));
+  await expect(action.first()).toBeVisible();
+});
+
+Then("the Next steps card asks to accept the repository's workflows", async ({ e2e }) => {
+  const entry = nextSteps(e2e.window).getByTestId('next-step-accept-workflows');
+  await expect(entry).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(entry).toContainText("Accept the repository's workflows");
+});
+
+Then("the Next steps card no longer asks to accept the repository's workflows", async ({ e2e }) => {
+  await expect(projectPage(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(nextSteps(e2e.window).getByTestId('next-step-accept-workflows')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+});
+
 // ---- #844: what the wizard reads from a repository with no tests and tagged milestones ------------------------------
 // The ways of working profile (wizard-profile) of a repository with no test command and no test file says so ("No
 // tests found") or leaves the tests open, never "Unit tests"; the release row's selector (wizard-workflow

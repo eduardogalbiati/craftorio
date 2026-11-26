@@ -72,6 +72,21 @@ Then("the Assign dialog's workflow description does not say {string}", async ({ 
   await expect(desc).not.toContainText(words, { ignoreCase: true });
 });
 
+// #40: a workflow waiting for the owner's acceptance is marked in the Assign dialog (NEW: an element
+// data-testid="assign-workflow-awaiting-acceptance" naming the workflow and saying it awaits acceptance, on its
+// option of the "Workflow" select or next to it) and is never the one the dialog opens on
+Then('the Assign dialog marks the workflow {string} as awaiting acceptance', async ({ e2e }, name) => {
+  const marker = assignDialog(e2e.window).getByTestId('assign-workflow-awaiting-acceptance').filter({ hasText: name }).first();
+  await expect(marker).toBeAttached({ timeout: LOAD_TIMEOUT });
+  await expect(marker).toContainText(/accept/i);
+});
+
+Then('the Assign dialog does not have the workflow {string} chosen', async ({ e2e }, name) => {
+  const select = assignDialog(e2e.window).getByRole('combobox', { name: 'Workflow', exact: true });
+  await expect(select).toHaveValue(/\S/, { timeout: LOAD_TIMEOUT });
+  await expect(select).not.toHaveValue(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
 // ---- the new last stage ----------------------------------------------------------------------------
 
 Then('stage {int} is the last stage of the roadmap, with one item holding {string} and {string}', async ({ e2e }, n, a, b) => {
