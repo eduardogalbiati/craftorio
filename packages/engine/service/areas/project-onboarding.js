@@ -60,6 +60,7 @@ const {
   checkPushAccess,
   execGit,
   isGitUrl,
+  isSshUrl,
   pushableUrl,
   sameRepo,
 } = require('../../domains/workspace/workspace');
@@ -295,10 +296,10 @@ const forkNameOf = (platform, repo) => (platform.subgroups ? Platforms.parseRepo
 
 // #738: the fork's remote URL in the original's protocol: an SSH original (git@host:… or ssh://) gets
 // git@host:<fork path>.git, so an owner who signs in by SSH key keeps pushing; else <fork url>.git, cloned the
-// way that can push (#79, workspace.js pushableUrl: SSH when the platform CLI's protocol is ssh)
+// way that can push (#79, workspace.js pushableUrl: SSH when the platform CLI's protocol is ssh; isSshUrl, the
+// push check's rule)
 async function forkRemoteOf(forkUrl, repo) {
-  const ssh = /^(ssh:\/\/|[\w.-]+@[\w.-]+:)/i.test(String(repo ?? '').trim());
-  const parts = ssh && Platforms.parseRepoUrl(forkUrl);
+  const parts = isSshUrl(repo) && Platforms.parseRepoUrl(forkUrl);
   return parts ? `git@${parts.host}:${parts.path}.git` : (await pushableUrl(`${forkUrl}.git`)).url;
 }
 

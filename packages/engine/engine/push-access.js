@@ -2,9 +2,10 @@
 // #79: whether a clone can push, as the runs' agents push (git without the app's credential helper, no terminal
 // prompt): `checkPushAccess(dir, { run, remote })` runs `git push --dry-run` with the caller's git runner and,
 // when git refuses, names the fix (`pushFix`: git's HTTPS credentials and the platform CLI's setup-git, the SSH
-// key, else the account's rights). `NO_HTTPS_CREDENTIALS` (git's messages without credentials) is shared with
-// workspace.js explainGitError; `httpsFix(platform, host)` / `repoPlatformOrDefault(url)` with the clone URL's
-// choice (domains/workspace/workspace.js pushableUrl); `safeUrl(url)` drops a user:token@ before a URL is logged.
+// key, else the account's rights); its `reason` is git's useful line (`gitSaidLine`). `NO_HTTPS_CREDENTIALS` (git's
+// messages without credentials) is shared with workspace.js explainGitError; `httpsFix(platform, host)` with the
+// clone URL's choice (domains/workspace/workspace.js pushableUrl); `isSshUrl(url)` with the fork's remote
+// (project-onboarding.js forkRemoteOf); `safeUrl(url)` drops a user:token@ before a URL is logged.
 // `isGitUrl` is the onboarding model's rule (packages/shared/onboarding-model.js). Used by the import
 // (service/areas/project-onboarding.js) and a Remote / Fork + PR run's start (engine/run/checkout.js checkPush).
 
@@ -21,6 +22,13 @@ const NOTHING_TO_PUSH = /src refspec \S+ does not match any/i;
 
 // an SSH remote (ssh://… or git@host:path)
 const isSshUrl = (url) => /^(ssh:\/\/|[\w.-]+@[\w.-]+:)/i.test(String(url || '').trim());
+
+// git's useful line of an error (fatal:, ERROR:, denied), not its last one ("and the repository exists.") nor the
+// app's own explanation before it (workspace.js explainGitError); its first line when none matches
+function gitSaidLine(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.find((l) => /fatal:|error:|denied/i.test(l)) || lines[0] || '';
+}
 
 // a URL (or a line of text holding URLs) without their user:password@ (a token embedded in an HTTPS remote), for the logs
 const safeUrl = (text) => String(text || '').replace(/\b([a-z][\w+.-]*:\/\/)[^@/\s]+@/gi, '$1');
@@ -63,7 +71,8 @@ function pushFix(reason, origin) {
 /**
  * Whether the clone in `dir` can push: `git push --dry-run <remote>` to a branch name nobody uses, with `run`, a
  * git runner without the app's credential helper (as the runs' agents push: worktree.js git, workspace.js execGit
- * with auth: false). A repository without a commit has nothing to push: ok (unchecked). Never rejects.
+ * with auth: false). A repository without a commit has nothing to push: ok (unchecked). Never rejects. `reason`:
+ * git's useful line (gitSaidLine); the fix is read from its whole message.
  * @param {string} dir
  * @param {{ run: (args: string[], cwd: string) => Promise<any>, remote?: string }} options
  * @returns {Promise<{ ok: boolean, unchecked?: true, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }>}
@@ -76,16 +85,17 @@ async function checkPushAccess(dir, { run, remote = 'origin' }) {
   } catch (e) {
     const reason = String(e?.message || e).trim();
     if (NOTHING_TO_PUSH.test(reason)) return { ok: true, unchecked: true };
-    return { ok: false, reason, ...pushFix(reason, origin) };
+    return { ok: false, reason: gitSaidLine(reason), ...pushFix(reason, origin) };
   }
 }
 
 module.exports = {
   checkPushAccess,
+  gitSaidLine,
   httpsFix,
   isGitUrl,
+  isSshUrl,
   NO_HTTPS_CREDENTIALS,
   pushFix,
-  repoPlatformOrDefault,
   safeUrl,
 };

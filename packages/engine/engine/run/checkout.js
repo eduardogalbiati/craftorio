@@ -131,10 +131,8 @@ const methods = {
       this.emitEvent('log', { level: 'info', message: `push check: ${r.unchecked ? 'nothing to push yet (no commit), not checked for' : 'the run can push to'} ${where}` });
       return;
     }
-    // git's useful line (fatal:, ERROR:, denied), not its last one ("and the repository exists.")
-    const lines = String(r.reason || '').split('\n').map((l) => l.trim()).filter(Boolean);
-    const said = lines.find((l) => /fatal:|error:|denied/i.test(l)) || lines[0] || '';
-    throw new Error(`The run cannot push its branch to ${where}: ${r.fix || ''} (git said: ${safeUrl(said)})`);
+    // r.reason: git's useful line (push-access.js gitSaidLine)
+    throw new Error(`The run cannot push its branch to ${where}: ${r.fix || ''} (git said: ${safeUrl(r.reason)})`);
   },
 
   // #472 (SEC-7): one `log` event, before the install and the first step, naming the commands the

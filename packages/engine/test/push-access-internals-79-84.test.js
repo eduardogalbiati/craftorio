@@ -18,6 +18,21 @@ const refusing = (origin, message) => async (args) => {
   throw new Error(message);
 };
 
+test('checkPushAccess: the reason is git\'s own line, not the app\'s explanation before it; the fix still sees the whole message', async () => {
+  const explained = 'git push failed: no access to the repository. For private GitHub repositories, authenticate the GitHub CLI (gh auth login); on other hosts use SSH or configure a credential helper.\nfatal: could not read Username for \'https://github.com\': terminal prompts disabled';
+  const r = await checkPushAccess('/x', { run: refusing('https://github.com/o/r.git', explained) });
+  assert.equal(r.reason, 'fatal: could not read Username for \'https://github.com\': terminal prompts disabled');
+  assert.match(String(r.fix), /gh auth setup-git/);
+});
+
+test('isSshUrl: one rule for the fork\'s remote and the push fix', () => {
+  const { isSshUrl } = require('../engine/push-access');
+  assert.equal(isSshUrl('git@github.com:o/r.git'), true);
+  assert.equal(isSshUrl('ssh://git@gitlab.com/o/r.git'), true);
+  assert.equal(isSshUrl('https://github.com/o/r.git'), false);
+  assert.equal(isSshUrl(undefined), false);
+});
+
 test('checkPushAccess: a repository without a commit has nothing to push: ok, unchecked', async () => {
   const r = await checkPushAccess('/x', { run: refusing('https://github.com/o/r.git', 'git push failed: error: src refspec HEAD does not match any') });
   assert.deepEqual(r, { ok: true, unchecked: true });

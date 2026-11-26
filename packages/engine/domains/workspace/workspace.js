@@ -180,11 +180,12 @@ function layout(root) {
 // Repository cloning
 // ---------------------------------------------------------------------------
 // #79: whether a clone can push and what to do when it can't, git's messages without HTTPS credentials, and
-// isGitUrl (https://…, ssh://…, git@host:owner/repo) (engine/push-access.js), re-exported here
+// isGitUrl (https://…, ssh://…, git@host:owner/repo) and isSshUrl (engine/push-access.js), re-exported here
 const {
   checkPushAccess,
   httpsFix,
   isGitUrl,
+  isSshUrl,
   NO_HTTPS_CREDENTIALS,
 } = require('../../engine/push-access');
 
@@ -334,6 +335,7 @@ module.exports = {
   fileStore,
   gitAuthArgs,
   isGitUrl,
+  isSshUrl,
   layout,
   LEGACY_DEFAULT_NAME,
   legacyDefaultWorkspace,
