@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/ui-kit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "The UI kit every composition starts from: the app shell, the run kernel and the controls of the renderer, plus the shell's screens (Home, Settings); plain scripts a page loads, no bundler.",
   "license": "MIT",

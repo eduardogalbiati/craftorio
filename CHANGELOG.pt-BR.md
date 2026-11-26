@@ -6,6 +6,35 @@ source: CHANGELOG.md (English)
 
 Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos seus documentos do SDLC; `#123` leva à issue.
 
+## [1.0.1] - 2026-11-26
+
+> Correções do primeiro uso real da 1.0.0: importar e começar um projeto, a primeira run, o pt-BR e runs que paravam onde nada estava errado.
+
+### Adicionado
+- As runs procuram segredos nos próprios commits (gitleaks) antes da revisão; um achado volta para o desenvolvedor (#49).
+- A checagem de regras acha o linter e o type checker do próprio projeto, também em fix e refactor (#50), e cobre Rust com cargo clippy (#82).
+- A primeira tela de um projeto novo ganha capturas e a revisão visual (#57).
+- Importar um projeto diz quanto as análises custam antes de rodar (#74), e uma run de custo desconhecido diz isso (#72).
+
+### Mudado
+- **A verificação da base vem desligada**: quem quiser liga em Configurações › Execução (#85).
+- O Night watch tenta de novo um item que falhou e só pula um item com Pular ligado (#87).
+- Um projeto sem test runner é avisado no começo, em vez de parar em test_failed (#81).
+- O build só bloqueia por vulnerabilidade que a mudança traz; a que já estava na base é relatada, nunca corrigida de carona, e uma correção nunca sobe versão major.
+- No projeto do usuário, o revisor de UI segue as convenções do próprio projeto, nunca as regras da casa deste app.
+- O app tem um logotipo novo.
+- **Aceite de novo os workflows do repositório**: os workflows hero mudaram.
+
+### Corrigido
+- Um repositório importado consegue fazer push: o clone usa um protocolo que funciona (#79); importar por caminho local mantém o nome do repositório, e repositório só de documentação não vira Backend (#84).
+- As pastas de tela vêm dos arquivos do projeto: nenhuma run herda o `src/renderer/` deste app (#80).
+- A verificação da base não registra mais testes cancelados ou que estouraram o tempo como vermelhos na base (#78).
+- Um projeto Node com `node_modules/` no .gitignore não para mais no gate do passo de testes a cada rodada.
+- Um script de teste que compila antes (`tsc && node --test dist`) roda a suíte inteira, nunca os fontes TypeScript sozinhos.
+- A rodada test:affected da suíte guarda o relatório de cada workspace (#91).
+- O onboarding, o workflow refactor, a run esperando na barra lateral e a primeira run aparecem em pt-BR (#37, #40, #41, #70, #83).
+- O logotipo e a captura do Findings funcionam numa aba do navegador no servidor do engine.
+
 ## [1.0.0] - 2026-11-25
 
 > A primeira release com o nome Craftorio. As versões recomeçam; as releases abaixo são do Multiagent Orchestrator, o mesmo app.

@@ -6,6 +6,35 @@ translation: CHANGELOG.pt-BR.md
 
 Every release of the app, newest first. Items link to their SDLC documents; `#123` links to the issue.
 
+## [1.0.1] - 2026-11-26
+
+> Fixes from the first real use of 1.0.0: importing and starting a project, the first run, pt-BR, and runs that stopped where nothing was wrong.
+
+### Added
+- Runs scan their own commits for secrets (gitleaks) before the review; a finding goes back to the developer (#49).
+- The rule check finds the project's own linter and type checker, in fix and refactor too (#50), and covers Rust with cargo clippy (#82).
+- A new project's first screen gets screenshots and the visual review (#57).
+- Importing a project says what its analyses cost before they run (#74), and a run whose cost is unknown says so (#72).
+
+### Changed
+- **The base check is off by default**: whoever wants it turns it on in Settings › Execution (#85).
+- The Night watch retries a failed item by default and skips one only when Skip is on (#87).
+- A project with no test runner is told so up front, instead of stopping at test_failed (#81).
+- The build blocks only on vulnerabilities the change brings; one already on the base is reported, never fixed on the side, and a fix never upgrades a major version.
+- In a user's project the UI reviewer follows the project's own conventions, never this app's house rules.
+- The app has a new logo.
+- **Accept your repository workflows again**: the hero workflows changed.
+
+### Fixed
+- An imported repository can push: its clone uses a protocol that works (#79); a local-path import keeps the repository's name, and a docs-only repository is not detected as Backend (#84).
+- A project's UI folders come from its files: no run gets this app's `src/renderer/` default (#80).
+- The base check no longer files cancelled or timed-out tests as red on the base (#78).
+- A Node project whose .gitignore has `node_modules/` no longer stops at the test step's gate on every round.
+- A test script that compiles first (`tsc && node --test dist`) runs the whole suite, never the TypeScript sources alone.
+- The suite's test:affected round keeps every workspace's report (#91).
+- The onboarding, the refactor workflow, the sidebar's waiting run and the first run read in pt-BR (#37, #40, #41, #70, #83).
+- The logo and the Findings capture work in a browser tab on the engine server.
+
 ## [1.0.0] - 2026-11-25
 
 > The first release under the name Craftorio. Versions start again; the releases below are of the Multiagent Orchestrator, the same app.
