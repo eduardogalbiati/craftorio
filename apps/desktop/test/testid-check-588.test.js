@@ -173,13 +173,15 @@ test('#588 run: the workflow\'s testid_check reads the step and UI folders the r
   assert.deepEqual(ids(output.missing), [{ id: 'really-absent', files: ['fronts/build/features/steps/run.steps.js'] }], 'kit-header, run-card and shell-root are defined; only really-absent is missing');
 });
 
-test('#588 run: with no input set, the workflow\'s testid_check keeps features/steps and src/renderer', { timeout: 60000 }, async (t) => {
+test('#588 #80 run: with no input set, the workflow\'s testid_check reads features/steps and the whole repository, named as such', { timeout: 60000 }, async (t) => {
   const repo = commitRepo(t, (dir) => {
     write(dir, 'features/steps/board.steps.js', "page.getByTestId('present-id'); page.getByTestId('absent-id');\n");
-    write(dir, 'src/renderer/index.html', '<main data-testid="present-id"></main>\n');
+    write(dir, 'web/index.html', '<main data-testid="present-id"></main>\n');
   });
   const { finished, output } = await runHeroCheck(t, repo, {});
   assert.equal(finished.status, 'success', finished.error);
   assert.equal(output.status, 'missing');
   assert.deepEqual(ids(output.missing), [{ id: 'absent-id', files: ['features/steps/board.steps.js'] }]);
+  assert.match(output.message, /are not in the repository:/, 'the root folder reads as "the repository"');
+  assert.doesNotMatch(output.message, /src\/renderer/);
 });

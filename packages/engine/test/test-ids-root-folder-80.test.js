@@ -45,6 +45,17 @@ test('#80 the root renderer skips specs, builds and tests: an id they cite is no
   assert.deepEqual(missingTestIds(root, { steps: ['features/steps'], renderer: ['dist'] }).map((m) => m.id), ['order']);
 });
 
+// review 2: only the root's own build / test / docs folders are skipped; a nested folder with one of
+// those names (a feature-sliced app's src/features/) is UI code and defines its ids
+test('#80 the root renderer reads a nested folder named like a skipped one (src/features/)', (t) => {
+  const root = site(t);
+  fs.mkdirSync(path.join(root, 'src/features/cart'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src/features/cart/cart.tsx'), '<div data-testid="cart"></div>');
+  for (const renderer of [[], ['./']]) {
+    assert.deepEqual(missingTestIds(root, { steps: ['features/steps'], renderer }).map((m) => m.id), []);
+  }
+});
+
 test('#80 the missing_test_ids filter with no UI folders looks in the whole repository', (t) => {
   const root = site(t);
   const out = render('{{ dir | missing_test_ids(steps, ui) }}', { dir: root, steps: ['features/steps'], ui: [] });

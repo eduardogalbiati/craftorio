@@ -173,6 +173,23 @@ test('#80 result.md of a run without UI folders says the screenshots and the UI 
   assert.match(line, /skipped/i);
 });
 
+test('#80 result.md of a run without UI folders that took screenshots (its first pages) does not say they were skipped', (t) => {
+  const out = renderResultSummary(project(t), {
+    workflow: 'feature', status: 'success', run_id: 'r-80b',
+    inputs: { ...RUN, ui_folders: [], steps_folders: [] },
+    steps: {
+      develop: { output: { committed: true, files_changed: ['index.html'], issues: [] } },
+      developer_screenshots: { output: { kind: 'screenshots', taken: 1, message: 'Took 1 screenshot.' } },
+    },
+  });
+  assert.equal(/no UI folders?/i.test(out), false);
+});
+
+test('#80 result.md of a run whose workflow has no UI folder input says nothing about them', (t) => {
+  const out = renderResultSummary(project(t), { workflow: 'fix', status: 'success', run_id: 'r-80c', inputs: { task: 'x' }, steps: {} });
+  assert.equal(/no UI folders?/i.test(out), false);
+});
+
 test('#80 result.md of a run with UI folders does not say they are missing', (t) => {
   assert.doesNotMatch(resultOf(t, ['web/']), /no UI folders?/i);
 });
