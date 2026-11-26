@@ -83,10 +83,12 @@ test('ai-development-local-hero (#304): the suite step runs with scope affected,
   assert.equal(suite.type, 'suite');
   // #396 added the owner's policy (a red only outside the change goes on) before the fix rounds
   // #71 added the project with no tests (not_run): it goes on, or to the gate with no_tests: ask
-  assert.deepEqual(suite.transitions.map((tr) => tr.goto), ['e2e', 'build', 'build', 'test_failed', 'test_failed', 'e2e', 'build', 'test', 'suite']);
+  // #81 added test files with no test command (not_run + no_command): always on to the build
+  assert.deepEqual(suite.transitions.map((tr) => tr.goto), ['e2e', 'build', 'build', 'build', 'test_failed', 'test_failed', 'e2e', 'build', 'test', 'suite']);
   assert.deepEqual(suite.transitions.map((tr) => tr.when), [
     "output.status == 'pass' and inputs.e2e_tests == 'write_and_run' and steps.acceptance_tests.output.e2e_scope == 'scenarios'",
     "output.status == 'pass'",
+    "output.status == 'not_run' and output.no_command",
     "output.status == 'not_run' and inputs.no_tests != 'ask'",
     "output.status == 'not_run'",
     "output.status == 'blocked'",
