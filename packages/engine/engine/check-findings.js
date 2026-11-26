@@ -34,9 +34,10 @@ function relativeFile(file, roots) {
   return path.posix.normalize(rel);
 }
 
-// the text without the checkout's folder nor the lines it names (they move)
+// the text without the checkout's folder nor the lines it names (they move); a tool on Windows may join
+// the folder with either separator (`C:\...\checkout/a.py`)
 function textKey(text, roots) {
-  const local = roots.reduce((t, root) => t.split(root + path.sep).join(''), text);
+  const local = roots.reduce((t, root) => ['/', '\\'].reduce((u, sep) => u.split(root + sep).join(''), t), text);
   return oneSpace(local).replace(/\bline \d+/g, 'line N');
 }
 

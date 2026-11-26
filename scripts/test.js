@@ -82,7 +82,8 @@ process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 const root = path.join(__dirname, '..');
 // --workspace <dir>: one workspace's test/ folder (its `npm test`); else the root test/ and every workspace's
 const workspaceAt = process.argv.indexOf('--workspace');
-const workspaceDir = workspaceAt >= 0 ? path.relative(root, path.resolve(process.argv[workspaceAt + 1] || '.')) : null;
+// repository-relative with forward slashes on every platform (the shared log's header: `== apps/web ==`)
+const workspaceDir = workspaceAt >= 0 ? path.relative(root, path.resolve(process.argv[workspaceAt + 1] || '.')).split(path.sep).join('/') : null;
 // #91: the workspaces of `npm run test:affected` run at the same time (Turborepo) and share one
 // CRAFTORIO_TEST_HUMAN_LOG. A workspace never empties that shared log nor writes its reports there:
 // it writes its own log and reports (<log>-<workspace>.log, …-<workspace>[-N].report.json) and, when
