@@ -97,7 +97,12 @@ const visible = (locator) => locator.filter({ visible: true });
 // Architecture tab. The modal comes last in the document, so it wins when both are shown.
 // #730: the Architecture tab is split into the City tab (#project-panel-city) and the Health tab
 // (#project-panel-health, the facts); the one shown is the one these steps read.
-const tab = (page) => visible(page.locator('[data-testid="city-modal"], [data-testid="project-page"] :is(#project-panel-architecture, #project-panel-city, #project-panel-health)')).last();
+// #381: the city expanded over the whole window is position: fixed, so the City tab around it has no
+// box of its own and Playwright counts it as hidden: the tab that holds an expanded city is the shown one too.
+const tab = (page) => {
+  const panels = page.locator('[data-testid="city-modal"], [data-testid="project-page"] :is(#project-panel-architecture, #project-panel-city, #project-panel-health)');
+  return visible(panels).or(panels.filter({ has: page.locator('[data-testid="project-city"].expanded') })).last();
+};
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
 // #730: the City's action is the city's own button, or the tab's when the city did not load
 const analyzeButton = (page) => visible(tab(page).locator('[data-testid="architecture-analyze"], [data-testid="project-city-analyze"]')).first();
