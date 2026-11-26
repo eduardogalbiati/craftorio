@@ -37,15 +37,19 @@ Feature: The screens of the first issue read in Portuguese
       | now               |
       | idea              |
 
-  # #28: the Backlog's platform select offers Bitbucket as coming soon; the Product Owner's "Registrar uma
-  # issue" suggestion switches its drawer to registering an issue, whose empty state, footer (a simulated
+  # #28: the Backlog's platform select offers Bitbucket as coming soon; the select shows only for a
+  # repository on a host the app cannot tell (#745: GitHub and GitLab get a badge, a local project
+  # nothing, #39), so the scenario picks such a project. The Product Owner's "Registrar uma issue"
+  # suggestion switches its drawer to registering an issue, whose empty state, footer (a simulated
   # workspace) and text box (with the shared paste hint) were in English.
   @issue-28
   Scenario: In Português (Brasil), the Backlog and the Product Owner's drawer for registering an issue show no English
     Given the app is open
+    And the workspace has a project "intranet-app" whose repository is on a host the app cannot tell
     When I open "Settings" in the sidebar
     And I open the "General" settings tab
     And I choose "Português (Brasil)" as the "Interface" language
+    And I choose the project "intranet-app" in the header
     And I open "Backlog" in the sidebar
     Then the Backlog screen is shown
     And the open screen offers the option "Bitbucket (em breve)"
