@@ -56,7 +56,8 @@ Then('the permission {string} is not ticked', async ({ e2e }, name) => {
 // #87: what a permission does, the line under its name in the checklist. New test ids: data-testid="nw-perm"
 // on each permission's row (its <label>) and data-testid="nw-perm-help" on its "what it does" line
 Then('the help of the permission {string} mentions {string}', async ({ e2e }, name, text) => {
-  const row = permissions(e2e.window).getByTestId('nw-perm').filter({ has: permission(e2e.window, name) });
+  // `has` is matched inside each row: it must be relative to the row, not rooted at the card
+  const row = permissions(e2e.window).getByTestId('nw-perm').filter({ has: e2e.window.getByRole('checkbox', { name: new RegExp(`^\\s*${escapeRe(name)}`) }) });
   await expect(row.getByTestId('nw-perm-help')).toContainText(new RegExp(escapeRe(text), 'i'));
 });
 
