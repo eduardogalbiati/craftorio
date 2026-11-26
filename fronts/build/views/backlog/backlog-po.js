@@ -534,7 +534,7 @@
     const list = planWorkflows();
     const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
     return `<select class="po-wf" data-po-wf aria-label="${t('backlog_po.workflow_of_the_filed_issue')}" title="${t('backlog_po.the_workflow_create_roadmap_plans_it')}"${busy}>${options.map((w) =>
-      `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === def ? ' (default)' : ''}</option>`).join('')}</select>`;
+      `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === def ? ` ${t('backlog_po.wf_default')}` : ''}</option>`).join('')}</select>`;
   }
 
   function draftActions(x, m) {
@@ -598,7 +598,7 @@
     // #205: and the Cost step ("Planned for Speed · Economy")
     const once = msg.calibrationOverride || msg.costOverride;
     const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">${t('backlog_po.planned_for')} ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? t('backlog_po.this_question') : ''}</span>` : '';
-    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
+    const meta = `${t('backlog_po.product_owner')} · ${esc(time)}${msg.model ? ` · ${esc(msg.model === 'simulated' ? t('backlog_po.simulated') : msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ` <span class="badge warn" title="${t('backlog_po.you_stopped_this_turn_the_answer')}">${t('backlog_po.stopped')}</span>` : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
       ${msg.invalid ? `<p class="small muted">${t(msg.mode === 'issue' ? 'backlog_po.the_answer_had_no_valid_draft' : 'backlog_po.the_answer_had_no_valid_proposal', { invalid: esc(msg.invalid) })}</p>` : ''}

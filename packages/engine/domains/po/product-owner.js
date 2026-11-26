@@ -267,7 +267,8 @@ const SELECTION_RULES = [
   'Leave the attached issues that are closed out of every group.',
 ].join('\n');
 
-const clip =(s, n) => { s = String(s ?? '').trim(); return s.length > n ? `${s.slice(0, n)}… (${s.length - n} more characters)` : s; };
+// `more`: the cut's note; a prompt keeps the English, a text the owner reads passes the interface language's (#41)
+const clip = (s, n, more = (count) => `… (${count} more characters)`) => { s = String(s ?? '').trim(); return s.length > n ? `${s.slice(0, n)}${more(s.length - n)}` : s; };
 const minutes = (ms) => Math.round((ms || 0) / 60e3);
 
 /** The complexity of an issue from its `complexity:n` label (null when it has none). */
@@ -1077,8 +1078,8 @@ function mockIssueAnswer({ data, question = '', previous = [], headings: h = Lan
   const empty = { title: '', body: '', labels: [], related: [] };
   if (said.length === 1 && question.split(/\s+/).filter(Boolean).length < 8 && !target) {
     return {
-      reply: '**Simulated answer** (no model was called). One question before I draft it:',
-      questions: ['Where does it happen (which screen or command), and what should happen instead?'],
+      reply: I18n.t('po.simulated_answer'),
+      questions: [I18n.t('po.simulated_question')],
       draft: empty, duplicates: [], existing_issue: 0, addition: '', assumptions: [],
     };
   }
@@ -1086,12 +1087,12 @@ function mockIssueAnswer({ data, question = '', previous = [], headings: h = Lan
   const asked = words(said.join(' '));
   const close = issues.filter((i) => i.state === 'open' && [...words(i.title)].filter((w) => asked.has(w)).length >= 2);
   const first = said[0].split(/(?<=[.!?])\s/)[0];
-  const title = clip(first.charAt(0).toUpperCase() + first.slice(1), 80).replace(/[.!?]$/, '');
+  const title = clip(first.charAt(0).toUpperCase() + first.slice(1), 80, (count) => I18n.t('po.more_characters', { count })).replace(/[.!?]$/, '');
   const known = target && issues.some((i) => i.number === target) ? target : 0;
   // the epic most of the overlapping issues belong to (#138)
   const epic = close.map((i) => i.epic).find(Boolean) || '';
   return {
-    reply: `**Simulated draft** (no model was called, no code was read). ${known ? `I would add this to #${known}: review the addition below.` : 'Review it below, or tell me what to change.'}`,
+    reply: known ? I18n.t('po.simulated_draft_known', { number: known }) : I18n.t('po.simulated_draft'),
     questions: [],
     draft: {
       title,
@@ -1279,7 +1280,7 @@ function discardDraft(backlogDir, projectId, at, runsDir) {
   const messages = readConversation(backlogDir, projectId);
   const open = currentDraft(messages);
   if (!open || open.message.ts !== at) throw new Error('This draft was filed, discarded or revised since.');
-  recordIssueMessage({ backlogDir, projectId, runsDir }, { role: 'po', mode: 'issue', thread: threadOf(messages, projectId), text: 'Draft discarded: nothing was filed.', discarded: at });
+  recordIssueMessage({ backlogDir, projectId, runsDir }, { role: 'po', mode: 'issue', thread: threadOf(messages, projectId), text: I18n.t('po.draft_discarded'), discarded: at });
   return readConversation(backlogDir, projectId);
 }
 

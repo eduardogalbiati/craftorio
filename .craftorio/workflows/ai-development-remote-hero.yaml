@@ -168,16 +168,22 @@ inputs:
   # #36: label_key / help_key / options_key (<prefix>_<value>): the catalog keys the screens show these texts with in
   # the interface language (packages/ui-kit/workflow-inputs.js localized); the file's text is the English
   task:
+    label_key: workflow_texts.feature_task_label
+    help_key: workflow_texts.feature_task_desc
     label: "Task"
     type: string
     required: true
     description: Feature or bug to implement.
   issue:
+    label_key: workflow_texts.feature_issue_label
+    help_key: workflow_texts.ai_development_hero_remote_issue_desc
     label: "Issue"
     type: string
     default: ""
     description: "URL of the issue this run implements (set by the Backlog screen). Nothing is closed on GitHub/GitLab until the pull request merges."
   issues:
+    label_key: workflow_texts.feature_issues_label
+    help_key: workflow_texts.feature_issues_desc
     label: "Issues"
     type: array
     default: []
@@ -209,6 +215,8 @@ inputs:
     description: The branch the work starts from and the pull request targets.
   # validated: the run stops at developer_check after the developer.
   git_platform:
+    label_key: workflow_texts.feature_git_platform_label
+    help_key: workflow_texts.feature_git_platform_desc
     label: "Git platform"
     group: How it runs
     type: string
@@ -245,6 +253,9 @@ inputs:
   # #286: the developer's reasoning effort per run; `default` passes no --effort (the CLI's own
   # default for the model, the behaviour before #286); xhigh doubles the turn timeout
   developer_effort:
+    label_key: workflow_texts.feature_developer_effort_label
+    help_key: workflow_texts.feature_developer_effort_desc
+    options_key: workflow_texts.feature_developer_effort_opt
     label: "Developer effort"
     group: Developer
     type: string
@@ -254,6 +265,8 @@ inputs:
     description: "How hard the developer thinks on each turn: a higher effort trades time and cost for depth (Extra high also doubles the turn timeout). Default: the CLI's own effort for the model."
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
+    label_key: workflow_texts.feature_validate_every_round_label
+    help_key: workflow_texts.feature_validate_every_round_desc
     label: "Validate every round"
     group: How it runs
     type: boolean
@@ -291,6 +304,8 @@ inputs:
     description: "Write: the test writer writes the issue's end-to-end scenarios first, with the acceptance tests, and checks that they parse; the E2E release workflow runs them. Write and run: the orchestrator also runs them here, with the @smoke journeys, after the suite (no agent while they pass; starts the app). Off: none."
   # #223: the e2e step adds `--grep "@issue-<n>|@smoke"` (Playwright) to it
   e2e_command:
+    label_key: workflow_texts.feature_e2e_command_label
+    help_key: workflow_texts.ai_development_hero_e2e_command_desc
     type: string
     default: "npm run test:e2e"
     label: E2E command
@@ -322,6 +337,8 @@ inputs:
     default: [packages/ui-kit/, fronts/, apps/desktop/renderer/, apps/web/renderer/]
     description: "The project's UI folders, repository-relative (one per line). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there."
   steps_folders:
+    label_key: workflow_texts.feature_steps_folders_label
+    help_key: workflow_texts.feature_steps_folders_desc
     label: "Step definition folders"
     group: Tests
     type: array
@@ -337,6 +354,8 @@ inputs:
     description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
   # T6: the command of the suite step's whole round (once per run, after the affected test files pass)
   whole_test_command:
+    label_key: workflow_texts.feature_whole_test_command_label
+    help_key: workflow_texts.feature_whole_test_command_desc
     type: string
     default: "npm run test:affected"
     label: Whole-round test command
@@ -344,6 +363,8 @@ inputs:
     description: "What the suite step runs for its whole round, once per run after the affected test files pass (e.g. npm run test:affected in a Turborepo monorepo: every test of the workspaces the change reaches, from the cache where nothing changed). Empty: the test command runs whole."
   # #404: the project's fast rule checks, run after each develop commit (rule_check)
   check_command:
+    label_key: workflow_texts.feature_check_command_label
+    help_key: workflow_texts.feature_check_command_desc
     type: string
     default: ""
     label: Check command
@@ -364,6 +385,9 @@ inputs:
   # #396 (owner 2026-10-15): set before the run, never changed by an agent while it runs. With
   # continue, a suite red only outside the change goes on to the build without the test_failed gate.
   suite_red_outside_change:
+    label_key: workflow_texts.feature_suite_red_outside_change_label
+    help_key: workflow_texts.feature_suite_red_outside_change_desc
+    options_key: workflow_texts.feature_suite_red_outside_change_opt
     type: string
     enum: [ask, continue]
     default: ask
@@ -1462,6 +1486,7 @@ steps:
   # one goes back to the developer with the file and the update command, at most twice in the run;
   # then the run goes on and the E2E step generates it (new_baselines) for the UI review, never the healer.
   - id: baseline_check
+    display_key: workflow_texts.ai_development_hero_step_baseline_check
     display: Baseline check (scenarios)
     type: visual_baselines
     issues: "{% for n in inputs | issue_numbers %}{{ n }}{{ ',' if not loop.last }}{% endfor %}"
@@ -1530,6 +1555,7 @@ steps:
   # back here; no automatic limit, the owner decides when to stop. A human gate: no timeout, and
   # neither the supervisor nor a retry ever answers it.
   - id: developer_check
+    display_key: workflow_texts.feature_step_developer_check
     type: human_approval
     local_preview: true
     diff_base: "{{ inputs.base_branch }}"
@@ -1581,6 +1607,7 @@ steps:
   # Requirements of the task the developer still leaves out after being sent back once to finish
   # them (#98): never dropped silently. A human gate: neither the supervisor nor a retry answers it.
   - id: requirements_left_out
+    display_key: workflow_texts.feature_step_requirements_left_out
     type: human_approval
     summary: |
       {% set gaps = steps.develop.output.left_out | developer_gaps %}The developer left {{ gaps | length }} requirement{{ '' if gaps | length == 1 else 's' }} of the task out, even after being sent back once to finish them.
@@ -1622,6 +1649,7 @@ steps:
 
   # A run for several issues where the developer could not do one of them: never dropped silently.
   - id: issue_not_done
+    display_key: workflow_texts.feature_step_issue_not_done
     type: human_approval
     summary: |
       The developer could not do every issue of this run; the others are done on branch `{{ steps.develop.output.branch }}`.
@@ -1663,6 +1691,7 @@ steps:
   # otherwise the reviewer runs alone. min_success 1 + required_agents: a failed UI Reviewer never
   # blocks the run, a failed reviewer fails the step as before. output.results.<agent> holds each answer.
   - id: code_review
+    display_key: workflow_texts.feature_step_code_review
     agents: [reviewer, ui_reviewer]
     min_success: 1
     required_agents: [reviewer]
@@ -1881,6 +1910,7 @@ steps:
         goto: build
 
   - id: human_review
+    display_key: workflow_texts.feature_step_human_review
     type: human_approval
     local_preview: true
     summary: |
@@ -2227,6 +2257,7 @@ steps:
   # gate (a decision: neither the supervisor nor a retry answers it). Continue takes rule_check's
   # routes after a pass; the suite's rule tests still report what is left.
   - id: check_failed
+    display_key: workflow_texts.feature_step_check_failed
     type: human_approval
     summary: |
       The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s) (`{{ steps.rule_check.output.command }}`).
@@ -2258,6 +2289,7 @@ steps:
   # (npm ci in the folder the cause names) and tries again, which reruns rule_check. A decision, like
   # check_failed: neither the supervisor nor a retry answers it.
   - id: check_environment
+    display_key: workflow_texts.feature_step_check_environment
     type: human_approval
     summary: |
       The project's rule checks cannot run: {{ steps.rule_check.output.cause }}
@@ -2281,6 +2313,7 @@ steps:
         status: failed
 
   - id: test_failed
+    display_key: workflow_texts.feature_step_test_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     # the run's failures, the pre-existing ones as a count (#211)
@@ -2387,6 +2420,7 @@ steps:
 
   # Reached by an infra failure (at once) or a build still blocked after 3 fix rounds.
   - id: build_failed
+    display_key: workflow_texts.feature_step_build_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     # from the build's failure_class: infra (the environment) or still blocked after the fix rounds
@@ -2415,6 +2449,7 @@ steps:
   # Evidence: shows the change working (UI screenshots, HTTP request/response, CLI output, log
   # lines), after the tests passed and the build succeeded. It never blocks: the verifier uses it.
   - id: evidence
+    display_key: workflow_texts.feature_step_evidence
     agent: evidence
     prompt: |
       Task: {{ inputs.task }}
@@ -2572,6 +2607,7 @@ steps:
         on_exhausted: verify_failed
 
   - id: verify_failed
+    display_key: workflow_texts.feature_step_verify_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     # the verifier's verdict per issue (verify_change.output.issues), else its claim and evidence
@@ -2692,6 +2728,7 @@ steps:
 
   # Only when the automation can't go on: the developer is blocked, or 3 resolution rounds ran out.
   - id: merge_blocked
+    display_key: workflow_texts.feature_step_merge_blocked
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     summary: |
@@ -2717,13 +2754,16 @@ steps:
   # ============================ PULL REQUEST =================================
   # the pull request and the maintainer's merge (fragments/pr-pipeline.yaml); no CI to wait for
   - id: pr_open
+    display_key: workflow_texts.mockups_export_step_pr_open
     fragment: pr-pipeline
     agent: ci_pusher
   # #807 a stacked run follows its parent pull request here until it merges
   - id: stack_follow
+    display_key: workflow_texts.mockups_export_step_stack_follow
     fragment: pr-pipeline
     agent: ci_pusher
   - id: pr_monitor
+    display_key: workflow_texts.mockups_export_step_pr_monitor
     fragment: pr-pipeline
 
 # -----------------------------------------------------------------------------

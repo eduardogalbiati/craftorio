@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../backlog/backlog');
+const I18n = require('@craftorio/shared/i18n'); // #41: a preview reads in the interface language
 
 /** #150: the issue a hot spot of an answer's `decongest` becomes: { title, body }. */
 function decongestIssue(d) {
@@ -43,7 +44,7 @@ async function fileDecongest(conv, { backlogDir, projectId, runsDir, at, index, 
   const cmd = backlog.issueCreateCommand({ platform, repo, title: issue.title, labels: [], file, text: issue.body });
   const url = preview ? null : String(await exec(cmd.cli, cmd.args) || '').trim();
   const text = preview
-    ? `**Preview** (simulated): nothing was filed. The app would run:\n- \`${cmd.display}\``
+    ? `${I18n.t('po.filed_preview_list')}\n- \`${cmd.display}\``
     : `Filed ${url ? `[${issue.title}](${url})` : issue.title}.`;
   const message = conv.appendMessage(backlogDir, projectId, {
     role: 'po', text, decongestFiled: { at, index: Number(index), title: issue.title, ...(url ? { url } : {}), ...(preview ? { preview: true } : {}) },
@@ -77,7 +78,7 @@ async function fileSpec(conv, { backlogDir, projectId, runsDir, at, preview, pla
     filed.push({ title: issue.title, ...(number ? { number } : {}), ...(url ? { url } : {}) });
   }
   const text = preview
-    ? `**Preview** (simulated): nothing was filed. The app would run:\n${commands.map((c) => `- \`${c}\``).join('\n')}`
+    ? `${I18n.t('po.filed_preview_list')}\n${commands.map((c) => `- \`${c}\``).join('\n')}`
     : `Filed ${filed.map((i) => (i.url ? `[${i.title}](${i.url})` : i.title)).join(', ')}.`;
   const message = conv.appendMessage(backlogDir, projectId, {
     role: 'po', text, specFiled: { at, item: spec.item, issues: filed, ...(preview ? { preview: true } : {}) },

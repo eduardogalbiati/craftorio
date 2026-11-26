@@ -100,7 +100,7 @@ inputs:
     type: string
     required: false
     default: ""
-    description: Optional related issues, e.g. "#41, #79". The analyzer reads them first.
+    description: 'Optional related issues, e.g. "#41, #79". The analyzer reads them first.'
   attachments:
     label: "Attachments"
     type: array
