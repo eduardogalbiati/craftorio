@@ -240,7 +240,8 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false, prOpen = false } = {
   // one far over (red)
   // #71: the first one's project had no tests (its card says so)
   const better = merged(now - 300 * min, 0.6, `${stamp(300)}-190000-run00009`, { tested: 'no tests', tested_failures: [] });
-  const worse = merged(now - 420 * min, 1.8, `${stamp(420)}-170000-run00012`);
+  // #81: the second one's project had test files but no test runner (its card says "Not tested: no test command")
+  const worse = merged(now - 420 * min, 1.8, `${stamp(420)}-170000-run00012`, { tested: 'no test command', tested_failures: [] });
   const running = `${stamp(52)}-230500-run00016`;
   const waiting = `${stamp(95)}-221500-run00015`;
   const failed = `${stamp(190)}-204000-run00013`;
