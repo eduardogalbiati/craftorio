@@ -1729,6 +1729,11 @@ steps:
       failed capture, or no screen listed), review the diff of the styles and markup instead:
       `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- {{ (inputs.ui_folders or ['src/renderer/']) | join(' ') }}`.
       Judge only what the change touched, never the rest of the app, and never the code's logic.
+      Judge the project by its own conventions: its docs, its design system and its existing screens.
+      The skills' rules written for this orchestrator (Undo in a toast, its badge set, its tokens) bind
+      a project only when its own docs or screens follow them: elsewhere a missing one is never blocking
+      and never asks for a behaviour the task did not ask for (an Undo, a toast, a confirmation, a new
+      component); report it at most as a non-blocking suggestion.
       For each screenshot (or each changed screen, without screenshots), go through the fixed
       checklist of ui-conventions and mark each item pass or fail with one line of evidence:
       the 5-second test (the one message the screen gives and what leads; none, or buried, is
