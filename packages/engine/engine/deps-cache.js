@@ -514,13 +514,6 @@ async function moveIntoCache(nm, entry, key, workDir, d) {
  *   status: none (no lockfile) · not_cached · linked (already) · hit · miss (installed now) ·
  *   local (installed in the worktree, could not go to the cache) · failed (the install failed)
  */
-async function ensureDeps(opts) {
-  const r = await linkDeps(opts);
-  // a link (or a workspaces folder of links) the cache made: the worktree's git never sees it
-  if (['hit', 'miss', 'linked'].includes(r.status)) excludeDepsLink(opts.workDir, opts.log);
-  return r;
-}
-
 // The project's .gitignore usually has `node_modules/`, which matches a folder but not the link the
 // cache puts there: git then reported `?? node_modules`, the test writer's leftover check stopped at its
 // gate on every round (`commitLeftoverTests`) and an agent's `git add -A` would commit the link.
@@ -545,7 +538,7 @@ function excludeDepsLink(workDir, log = () => {}) {
   }
 }
 
-async function linkDeps({ workDir, cacheDir, project, env, signal, previous = null, log = () => {}, run = runCommand, waitMs = LOCK_WAIT_MS, ignoreScripts = false }) {
+async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = null, log = () => {}, run = runCommand, waitMs = LOCK_WAIT_MS, ignoreScripts = false }) {
   const t0 = Date.now();
   const d = workDir && fs.existsSync(workDir) ? detect(workDir) : null;
   if (!d) return { status: 'none' };
@@ -566,6 +559,7 @@ async function linkDeps({ workDir, cacheDir, project, env, signal, previous = nu
   const usable = () => keyEntries(projectDir, key).find(entryUsable);
 
   const link = async (entry, status, extra = {}) => {
+    excludeDepsLink(workDir, log); // the link the cache makes: the worktree's git never sees it
     if (linksEntry(nm, entry)) {
       touch(entry, nm);
       return {
@@ -595,6 +589,7 @@ async function linkDeps({ workDir, cacheDir, project, env, signal, previous = nu
   const changedElsewhere = own?.unusable && own.changed_by && !samePath(own.changed_by, workDir);
   if (own && own.unusable !== EMPTIED && !changedElsewhere && linksEntry(nm, previous.entry)) {
     touch(previous.entry, nm);
+    excludeDepsLink(workDir, log);
     return { ...previous, status: 'linked', seconds: (Date.now() - t0) / 1000 };
   }
   const relinked = changedElsewhere && linksEntry(nm, previous.entry)
@@ -648,6 +643,7 @@ async function linkDeps({ workDir, cacheDir, project, env, signal, previous = nu
       bytes: dirBytes(path.join(entry, 'node_modules')), install_seconds: seconds, created_at: now, last_used: now,
     });
     touch(entry, nm);
+    excludeDepsLink(workDir, log);
     return { status: 'miss', ...base, key, entry, seconds, waited, ...relinked, ...(links != null ? { workspace_links: links } : {}) };
   } finally {
     release();
