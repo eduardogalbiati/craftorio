@@ -88,18 +88,56 @@ npm install
 ## 4. The workspace
 
 The workspace is a folder of its own, outside the app and the code, where the app keeps projects, runs and settings.
-Look for one that exists, in this order, and keep the first you find:
+Look for one that exists. The app opens the first of these whose folder is there:
 
 1. The registered one. Windows: `reg query HKCU\Software\Craftorio /v WorkspacePath`, then the same with
    `HKCU\Software\MultiagentOrchestrator`. macOS and Linux: `~/.craftorio.json`, then `~/.multiagent-orchestrator.json`.
 2. `craftorio-workspace` in the user's home folder.
 3. `multiagent-workspace` in the user's home folder (an install from before the name Craftorio).
 
-If none exists, **ask** to create `craftorio-workspace` in the home folder. Create only that empty folder: the
-app adopts it without a question. If one of the others exists, do not create it, or the app would open the new
-one instead. For another place, create nothing: the app asks at its first start, and the user chooses.
+**None exists**: **ask** to create `craftorio-workspace` in the home folder. Create only that empty folder: the app
+adopts it without a question. For another place, create nothing: the app asks at its first start, and the user
+chooses.
+
+**One exists**: **ask**, always, even one of an app by another name. Once opened, the app shows all it holds (projects,
+runs, a paused roadmap) and updates its workflows, skills and seeds. Say its path, what points to it and the names in
+its `projects` folder, and offer both:
+
+| | Start clean | Keep it |
+|---|---|---|
+| The app opens | empty, at the Setup | with that workspace's projects, runs and settings |
+| That workspace | stays as it is: the app does not open it | the app changes it: offer a copy of the folder first |
+
+Recommend starting clean, unless the user is updating a Craftorio they use. To start clean, with the app closed:
+
+1. Create an empty folder: `craftorio-workspace` in the home folder or, if that one exists, another the user names.
+2. Register its full path: the registered one comes before every other. macOS and Linux: write
+   `{ "workspace": "<workspace>" }` to `~/.craftorio.json`. Windows (`/f` only answers reg's question about replacing
+   the value): `reg add HKCU\Software\Craftorio /v WorkspacePath /t REG_SZ /d "<workspace>" /f`.
+
+Never delete, move or empty the old workspace, and leave `HKCU\Software\MultiagentOrchestrator` and
+`~/.multiagent-orchestrator.json` as they are: the older app may still use them. If the app is already open in the wrong
+one, the user changes it in Settings › General › Workspace folder › **Change…**, to an empty folder.
 
 ## 5. Open the app
+
+**First, the engine: this computer, unless the user says otherwise.** The app keeps where its engine runs outside the
+workspace, in `engine-connection.json` of its data folder, `craftorio`, in `%APPDATA%` (Windows),
+`~/Library/Application Support` (macOS) or `~/.config` (Linux). On the first start it copies there the folder of an
+install from before the name Craftorio, `multiagent-orchestrator`, next to it: the sign-in and the engine included. An
+old install that used a remote engine makes the new app its client, which opens no workspace here, so step 6 gets no
+answer. Look before the start, at `mode` and `address` only (never show the `token`):
+
+- **`craftorio` has the file**: `local` is right. With `remote`, **ask**: this computer (recommended) or that engine.
+  For this computer do not edit the file: the user picks **Use this computer** on the page the app opens with, or
+  Settings › Execution › Engine › **Change…**.
+- **Only `multiagent-orchestrator` is there**: if the user starts clean (step 4), or if its `mode` is `remote` and the
+  user, whom you **ask**, wants this computer (recommended), create the folder `craftorio` with only that file,
+  `{ "mode": "local", "address": "" }`. The app then copies nothing and the user signs in again. If not, create nothing.
+- **Neither**: the engine is this computer. Create nothing.
+
+Never change or delete `multiagent-orchestrator`. If the user keeps a remote engine, this computer has no workspace of
+its own: say that steps 6 to 8 do not apply here, and stop after opening the app.
 
 Start it **detached from this session**, or it closes when the session ends:
 
@@ -134,9 +172,9 @@ permitted" is its sandbox, not the app: ask the user to allow it. Make one read 
 ```
 
 An answer, even an empty list, means it works. Without one, say which of these it is and stop: the app did not open
-(show its output), the window is waiting for the user, or Settings › Execution › "Allow outside sessions to control
-this app" is off. If there is no `client`, the app is older than this guide. Never show the token of
-`endpoint.json`.
+(show its output), the window is waiting for the user, the app is a client of a remote engine (step 5; its output says
+`Engine: remote`), or Settings › Execution › "Allow outside sessions to control this app" is off. If there is no
+`client`, the app is older than this guide. Never show the token of `endpoint.json`.
 
 ## 7. Hand over: a session needs the workspace folder
 
