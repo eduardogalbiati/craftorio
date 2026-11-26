@@ -54,7 +54,8 @@ test('#81 internals: a step that adds a test runner flips no_test_command back, 
 
 test('#81 internals: the recheck after a step never decides in a mock run', (t) => {
   const dir = tmpDir(t);
-  const run = fakeRun(dir, { mock: true, ctx: { inputs: {} } });
+  // a mock run gets the simulated machine (workflow.js runMachine): that is what the check reads (#353)
+  const run = fakeRun(dir, { mock: true, machine: { simulated: true }, ctx: { inputs: {} } });
   run.decideTestCommand(dir, undefined, 'develop');
   assert.equal(run.ctx.no_test_command, undefined);
 });
@@ -77,7 +78,7 @@ test('#81 internals: logRepoCommands leaves no_test_command false when a command
 
 test('#81 internals: a mock or simulated run never decides no_test_command', (t) => {
   const dir = tmpDir(t);
-  const mock = fakeRun(dir, { mock: true });
+  const mock = fakeRun(dir, { mock: true, machine: { simulated: true } });
   methods.logRepoCommands.call(mock, dir);
   assert.equal(mock.ctx.no_test_command, false);
   const simulated = fakeRun(dir, { machine: { simulated: true } });

@@ -171,7 +171,7 @@ const methods = {
   // adds a test runner (a package.json with a test script) gets its tests run, as before. Logged when
   // it is decided and each time it changes.
   decideTestCommand(dir, given, stepId = null) {
-    if (!this.ctx || this.mock || this.machine?.simulated || !dir || !fs.existsSync(dir)) return;
+    if (!this.ctx || this.machine?.simulated || !dir || !fs.existsSync(dir)) return;
     const tests = given === undefined ? this.suiteCommand() : given;
     const none = !tests;
     const before = this.ctx.no_test_command;
