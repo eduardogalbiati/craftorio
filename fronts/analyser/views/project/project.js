@@ -126,7 +126,8 @@ function loadNextStepKind(pv) {
 // not readable: offered, as before)
 function hasInterface(pv) {
   const kind = pv.project?.kind || pv.nextStepKind;
-  return kind !== undefined && kind !== 'backend';
+  // #84: a docs project (no code) has no interface either
+  return kind !== undefined && kind !== 'backend' && kind !== 'docs';
 }
 
 // #30: npm ci in the clone (the service honours the project's "ignore install scripts"), then the entry again

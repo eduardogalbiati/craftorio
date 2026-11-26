@@ -6403,6 +6403,7 @@
   "ways_of_working.f_ui_folders": "Pastas de UI (separadas por vírgula)",
   "ways_of_working.intro": "Um agente lê o repositório (commits, merges, tags, CI, scripts) só para leitura e propõe como trabalhar nele. Você responde só o que ele não conseguiu decidir.",
   "ways_of_working.kind_backend": "Backend (sem UI)",
+  "ways_of_working.kind_docs": "Documentação (sem código)",
   "ways_of_working.kind_frontend": "Frontend",
   "ways_of_working.kind_full_stack": "Full-stack",
   "ways_of_working.merge_fork": "pull requests do seu fork",

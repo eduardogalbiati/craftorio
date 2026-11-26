@@ -11,7 +11,7 @@
 //   test_command, check_command, check_commands (#50: no workflow input, what the check runs without a
 //   check_command: the `check` script, else the linter and type checker found in the folder) and
 //   check_rewrites (those it does not run because they rewrite files: { name, why }), e2e_tests, e2e_command, ui_folders, screenshots, steps_folders and
-//   the project's kind (backend / frontend / full-stack). No Node assumption: an `npm …` command only
+//   the project's kind (backend / frontend / full-stack; #84: docs, no code). No Node assumption: an `npm …` command only
 //   when the project's package.json has that script; no E2E unless an E2E suite was found (and the
 //   profile does not say unit tests only). A backend project gets no UI default: ui_folders [],
 //   screenshots off, e2e_tests off, steps_folders []. #80: pages at the root give the UI folder './'
@@ -96,9 +96,28 @@ function uiFolders(folder) {
   return [...found].sort();
 }
 
+// #84: a document, not code: text and markup documents, images, and the extensionless files a repository keeps
+// next to them (LICENSE, README, NOTICE…); dotfiles (.gitignore, .editorconfig) are neither
+const DOC_FILE = /\.(md|markdown|mdx|txt|rst|adoc|asciidoc|org|pdf|png|jpe?g|gif|svg|webp|ico)$|^[A-Z][A-Z0-9_-]*$/i;
+
+// #84: whether the folder holds a file other than documents (DOC_FILE) or dotfiles, up to MAX_DEPTH (the
+// dependencies and dot folders aside)
+function hasCode(folder) {
+  const walk = (rel, depth) => {
+    let entries;
+    try { entries = fs.readdirSync(path.join(folder, rel), { withFileTypes: true }); } catch { return false; }
+    return entries.some((e) => {
+      if (e.name.startsWith('.')) return false;
+      if (e.isDirectory()) return e.name !== 'node_modules' && depth < MAX_DEPTH && walk(rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      return !DOC_FILE.test(e.name);
+    });
+  };
+  return walk('', 0);
+}
+
 /**
  * What the project's files tell for its runs: { node, webFramework, server, uiFolders, e2eCommand,
- * e2eSuite, stepsFolders, kind }.
+ * e2eSuite, stepsFolders, kind }. #84: kind docs when it holds no code (documents only).
  */
 function projectFacts(folder) {
   if (!folder || !isDir(folder)) return { node: false, webFramework: false, server: false, uiFolders: [], e2eCommand: null, e2eSuite: false, stepsFolders: [], kind: 'backend' };
@@ -112,7 +131,7 @@ function projectFacts(folder) {
   const e2eCommand = detectE2eCommand(folder);
   const e2eSuite = !!e2eCommand || E2E_CONFIGS.some((f) => exists(folder, f));
   const hasUi = webFramework || ui.length > 0;
-  const kind = hasUi ? (server ? 'full-stack' : 'frontend') : 'backend';
+  const kind = hasUi ? (server ? 'full-stack' : 'frontend') : !pkg && !server && !hasCode(folder) ? 'docs' : 'backend';
   return { node: !!pkg, webFramework, server, uiFolders: ui, e2eCommand, e2eSuite, stepsFolders: STEPS_FOLDERS.filter((f) => isDir(path.join(folder, f))), kind };
 }
 
@@ -143,7 +162,8 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
   const kind = [project?.kind, p.kind].find((k) => KINDS.includes(k)) || facts.kind;
   const mode = wizardMode(project) || (MODES.includes(p.mode) ? p.mode : null);
   const suite = str(p.e2eCommand) || facts.e2eCommand;
-  const noUi = kind === 'backend';
+  // #84: a docs project has no UI either
+  const noUi = kind === 'backend' || kind === 'docs';
   const e2eOff = noUi || !suite || p.tests === 'unit';
   const variant = wizardVariant(project);
   const defaults = {

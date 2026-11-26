@@ -22,7 +22,10 @@ const os = require('os');
 const crypto = require('crypto');
 const path = require('path');
 const readline = require('readline');
-const { refuseReal } = require('./simulation');
+const {
+  e2eCiNoPr,
+  refuseReal,
+} = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
 const { childEnv } = require('./child-env');
 const { runShim } = require('../domains/machine/shell');
@@ -690,6 +693,9 @@ const MOCK_CITY_PLAN = {
 // A schema's mock answer; its `city_plan` (#372) is mockSequences.city_plan[visit - 1] (the last
 // one repeats), else MOCK_CITY_PLAN
 function mockAnswer(h) {
+  // #79: the E2E hook of a CI step that opened no pull request (simulation.e2eCiNoPr)
+  const noPr = String(h.stepId ?? '').split(':')[0] === 'ci' && h.schema?.properties?.pr_url ? e2eCiNoPr() : null;
+  if (noPr) return noPr;
   const out = mockValue(h.schema, '', h);
   if (!out || typeof out !== 'object' || !('city_plan' in out)) return out;
   const plans = Array.isArray(h.sequences?.city_plan) && h.sequences.city_plan.length ? h.sequences.city_plan : [MOCK_CITY_PLAN];

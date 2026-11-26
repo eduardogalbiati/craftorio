@@ -45,7 +45,25 @@ function e2eOnboardingCosts(env = process.env) {
   } catch { return null; }
 }
 
+// #79: the E2E hook of a simulated run (features/steps/79-84-import-push-and-kind.steps.js):
+// CRAFTORIO_E2E_CI_NO_PR=<reason> makes the CI step (fragments/pr-pipeline.yaml `ci`) answer that it opened no
+// pull request, failed for an infra reason with <reason> as its log (providers.js mockAnswer); null otherwise
+function e2eCiNoPr(env = process.env) {
+  const reason = String(env.CRAFTORIO_E2E_CI_NO_PR || '').trim();
+  if (!reason || !simulationOnly(env)) return null;
+  return { pr_url: '', pr_number: 0, ci_status: 'failed', failure_class: 'infra', failure_log: reason };
+}
+
+// #79: the E2E hook of a simulated import: CRAFTORIO_E2E_GIT_PUSH=0 makes the clone's push check fail as git does
+// without credentials, until the simulated `gh auth setup-git` (areas/project-onboarding.js); null otherwise
+function e2eGitPush(env = process.env) {
+  const hook = env.CRAFTORIO_E2E_GIT_PUSH;
+  return simulationOnly(env) && (hook === '0' || hook === '1') ? hook === '1' : null;
+}
+
 module.exports = {
+  e2eCiNoPr,
+  e2eGitPush,
   e2eOnboardingCosts,
   e2eSuiteDelay,
   ENV,

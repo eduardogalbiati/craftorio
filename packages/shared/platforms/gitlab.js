@@ -213,6 +213,11 @@
     forkCommand: (name) => cmd(['repo', 'fork', name, '--clone=false']),
     parseForkUrl: () => null,
 
+    // ---- git's push access (#79, workspace.js pushableUrl / checkPushAccess): the CLI's git protocol for a host;
+    // glab has no command that sets git's credential helper (null: the fix says to configure one or use SSH)
+    protocolCommand: (host) => cmd(['config', 'get', 'git_protocol', '--host', host]),
+    setupGitCommand: () => null,
+
     // ---- URLs
     // https://host/group/sub/project/-/issues/7 → { host, repo, number }, or null
     parseIssueUrl(url) {

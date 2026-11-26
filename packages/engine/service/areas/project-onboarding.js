@@ -297,12 +297,14 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  * acquireSlot's); emit(event, state); #632: remote(provider, { name, folder }) → { ok, url?, error? } creates
  * a new project's private repository (default: gh / glab, machineRemote); #30: install(cmd, args, { cwd }) →
  * { code, output } runs the dependency install (default: deps-cache.js runCommand); #74: savedMap(project) →
- * { costUsd } | null, the project map an earlier process saved (default: none).
+ * { costUsd } | null, the project map an earlier process saved (default: none); #79: pushCheck(folder) → { ok, reason?,
+ * fix?, setupGit? }, whether the clone can push (default: machinePushCheck).
  * @param {{ projectsDir: string, reposDir: string, git?: typeof execGit, cli?: typeof machineCli, jobs: any, slotsDir?: string,
  *   emit?: (event: string, state: any) => void, pollMs?: number, remote?: (provider: string, spec: { name: string, folder: string }) => Promise<RemoteAnswer>,
- *   platformCli?: typeof machinePlatformCli, install?: typeof depsCache.runCommand, savedMap?: (project: any) => any }} options
+ *   platformCli?: typeof machinePlatformCli, install?: typeof depsCache.runCommand, savedMap?: (project: any) => any,
+ *   pushCheck?: typeof machinePushCheck }} options
  */
-function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts), savedMap = () => null }) {
+function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts), savedMap = () => null, pushCheck = machinePushCheck }) {
   const states = new Map();
   // per project: { wanted (analyze was asked during the clone), asked (the paid part was started), facts (the
   // facts job's promise), free, paid (the running parts), cli }
@@ -446,6 +448,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
         return;
       }
       change(id, { status: 'ready', code: undefined, reason: undefined, deps: depsOf(p) }, { clone: { status: 'done' } });
+      checkPush(id).catch(() => {});
       startFree(id);
       if (workOf(id).wanted) startPaid(id);
     } catch (e) {
@@ -763,7 +766,40 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(p.id);
   }
 
-  return { analyze, create, finish, fork, installDeps, retry, saveWizard, start, status, workLocally };
+  // #79: whether the clone can push (workspace.js checkPushAccess), once it is ready: pushCheck: { status: checking |
+  // ok | failed | fixing, ok?, reason?, fix?, setupGit? }. Not checked without push permission (the fork notice
+  // says it) nor for a local path; a simulated run checks only under its E2E hook (CRAFTORIO_E2E_GIT_PUSH).
+  // Never fails the import.
+  async function checkPush(id) {
+    const s = states.get(id);
+    const p = projectOf(id);
+    if (!s || !p?.folder || s.access?.push === false) return;
+    if (simulation.e2eGitPush() === null && (simulation.simulationOnly() || !isGitUrl(p.repo))) return;
+    change(id, { pushCheck: { status: 'checking' } });
+    const r = await Promise.resolve().then(() => pushCheck(p.folder)).catch((e) => ({ ok: false, reason: String(e?.message || e) }));
+    change(id, { pushCheck: r.ok ? { status: 'ok', ok: true } : { status: 'failed', ok: false, reason: oneLine(String(r.reason || ''), 300), fix: r.fix || null, ...(r.setupGit ? { setupGit: r.setupGit } : {}) } });
+  }
+
+  /** #79: the push warning's button: runs the platform CLI's setup-git (when the check named it), then checks again. */
+  async function setupGit(projectId) {
+    status(projectId);
+    const check = states.get(projectId)?.pushCheck;
+    if (!check || check.ok !== false) throw clientError(`The project ${projectId} can push: nothing to set up.`);
+    const platform = check.setupGit ? Platforms.findPlatform(check.setupGit.platform) : null;
+    const command = platform?.setupGitCommand?.();
+    if (command) {
+      change(projectId, { pushCheck: { ...check, status: 'fixing' } });
+      const answer = await Promise.resolve().then(() => platformCli(platform.id, command.args, {})).catch((e) => ({ ok: false, out: String(e?.message || e) }));
+      if (!answer?.ok) {
+        change(projectId, { pushCheck: { ...check, status: 'failed', reason: oneLine(`${check.setupGit.command} failed: ${String(answer?.out || 'no reason was given.')}`, 300) } });
+        return status(projectId);
+      }
+    }
+    await checkPush(projectId);
+    return status(projectId);
+  }
+
+  return { analyze, create, finish, fork, installDeps, retry, saveWizard, setupGit, start, status, workLocally };
 }
 
 module.exports = (ctx) => {

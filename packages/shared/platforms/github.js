@@ -232,6 +232,11 @@
     forkCommand: (name) => cmd(['repo', 'fork', name, '--clone=false']),
     parseForkUrl: (out) => (String(out || '').match(/https:\/\/\S+/g) || []).slice(-1)[0] || null,
 
+    // ---- git's push access (#79, workspace.js pushableUrl / checkPushAccess): the CLI's git protocol for a
+    // host (ssh | https), and the command that makes git push over HTTPS with the CLI's login
+    protocolCommand: (host) => cmd(['config', 'get', 'git_protocol', '-h', host]),
+    setupGitCommand: () => cmd(['auth', 'setup-git']),
+
     // ---- URLs
     // https://host/owner/repo/issues/12 → { host, repo, number }, or null
     parseIssueUrl(url) {
