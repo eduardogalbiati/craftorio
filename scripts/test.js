@@ -80,7 +80,16 @@ const agent = isAgentMode(process.env, { isTTY: !!process.stdout.isTTY });
 process.env.CRAFTORIO_SIMULATION_ONLY = '1';
 
 const root = path.join(__dirname, '..');
-const humanLog = agent ? path.resolve(root, process.env.CRAFTORIO_TEST_HUMAN_LOG || path.join('.test-output', 'human.log')) : null;
+// --workspace <dir>: one workspace's test/ folder (its `npm test`); else the root test/ and every workspace's
+const workspaceAt = process.argv.indexOf('--workspace');
+const workspaceDir = workspaceAt >= 0 ? path.relative(root, path.resolve(process.argv[workspaceAt + 1] || '.')) : null;
+// #91: the workspaces of `npm run test:affected` run at the same time (Turborepo) and share one
+// CRAFTORIO_TEST_HUMAN_LOG. A workspace never empties that shared log nor writes its reports there:
+// it writes its own log and reports (<log>-<workspace>.log, …-<workspace>[-N].report.json) and, when
+// it ends, appends a copy of its log to the shared one (finish), so the suite step still reads one log.
+const sharedLog = agent ? path.resolve(root, process.env.CRAFTORIO_TEST_HUMAN_LOG || path.join('.test-output', 'human.log')) : null;
+const ownLog = workspaceDir === null ? '' : `-${workspaceDir.split(/[\\/]+/).filter(Boolean).join('-') || 'root'}`;
+const humanLog = agent ? sharedLog.replace(/(\.log)?$/, `${ownLog}.log`) : null;
 const reportFile = agent ? humanLog.replace(/(\.log)?$/, '.report.json') : null;
 if (agent) {
   fs.mkdirSync(path.dirname(humanLog), { recursive: true });
@@ -103,9 +112,6 @@ const testFiles = (dir) => (fs.existsSync(path.resolve(root, dir)) ? fs.readdirS
   if (e.isDirectory()) return e.name === 'fixtures' ? [] : testFiles(path.join(dir, e.name));
   return e.name.endsWith('.test.js') ? [path.join(dir, e.name)] : [];
 }).sort();
-// --workspace <dir>: one workspace's test/ folder (its `npm test`); else the root test/ and every workspace's
-const workspaceAt = process.argv.indexOf('--workspace');
-const workspaceDir = workspaceAt >= 0 ? path.relative(root, path.resolve(process.argv[workspaceAt + 1] || '.')) : null;
 const allTestFiles = () => (workspaceDir !== null
   ? testFiles(path.join(workspaceDir, 'test'))
   : [...testFiles('test'), ...workspaces(root).flatMap((w) => testFiles(path.join(w.dir, 'test')))]);
@@ -204,7 +210,9 @@ const runGroup = async (g) => {
 
 // a file as the report shows it: relative to the root, forward slashes
 const shown = (file) => {
-  const rel = path.relative(root, file);
+  // #91: resolved from the root, not the current folder (a workspace's under Turborepo), so a
+  // repository-relative path is not prefixed with the workspace's folder a second time
+  const rel = path.relative(root, path.resolve(root, file));
   return (rel.startsWith('..') || path.isAbsolute(rel) ? file : rel).split(path.sep).join('/');
 };
 
@@ -280,6 +288,10 @@ function finish(flow) {
     }
   }
   report.human_log = path.relative(root, humanLog).split(path.sep).join('/');
+  // #91: a workspace's log joins the shared one in one append, whole, when it ends
+  if (humanLog !== sharedLog) {
+    try { fs.appendFileSync(sharedLog, `\n== ${workspaceDir || '(root)'} ==\n${fs.readFileSync(humanLog, 'utf8')}`); } catch { /* the shared log is a copy: the workspace's own stays */ }
+  }
   process.stdout.write(`${JSON.stringify(report)}\n`);
   process.exit(unitStatus === 0 && (!flow || flow.status === 0) ? 0 : 1);
 }
