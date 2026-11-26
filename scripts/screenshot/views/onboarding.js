@@ -16,6 +16,8 @@
 //                 the suggestions from the answers, no row left waiting without its reason)
 // --review manual (with --mode review, #20): Define manually then Continue, no Analyze click: the city starts
 // on Continue, the review shows it running, without the "skipped" banner
+// --review awaiting (with --mode analysis or review, #40): the repository's own default workflow
+// (.multiagent/workflows/team-feature.yaml) is not accepted: step 3 and the review show wizard-default-awaiting-acceptance
 // --review issues-off (with --mode review, #845): a repository with Issues turned off, its Backlog card says so,
 // no Retry (the simulation-only hook CRAFTORIO_E2E_ISSUES_FAIL answers the issue read as gh does)
 // --review running (with --mode review, #852): the project map still running, City and Findings with the same
@@ -53,8 +55,13 @@ workflows:
     category: release
 `;
 
+// #40 (--review awaiting): the repository ships its own workflow (a copy of the bundled feature.yaml) and
+// declares it its default: not accepted at HEAD, so the wizard says it awaits acceptance
+const AWAITING_MANIFEST = SAMPLE_MANIFEST.replace('default: feature', 'default: team-feature')
+  .replace('workflows:\n', 'workflows:\n  - name: team-feature\n    category: solo\n');
+
 // a git repository with a few source files and some history on one of them (the analyses score it)
-function sampleRepository(folder) {
+function sampleRepository(folder, { awaiting = false } = {}) {
   fs.mkdirSync(path.join(folder, 'src'), { recursive: true });
   const config = path.join(path.dirname(folder), 'empty.gitconfig');
   fs.writeFileSync(config, '');
@@ -66,7 +73,11 @@ function sampleRepository(folder) {
   fs.writeFileSync(path.join(folder, 'src', 'router.js'), router(0));
   fs.writeFileSync(path.join(folder, 'src', 'util.js'), 'const add = (a, b) => a + b;\nmodule.exports = { add };\n');
   fs.mkdirSync(path.join(folder, '.multiagent'), { recursive: true });
-  fs.writeFileSync(path.join(folder, '.multiagent', 'project.yaml'), SAMPLE_MANIFEST);
+  fs.writeFileSync(path.join(folder, '.multiagent', 'project.yaml'), awaiting ? AWAITING_MANIFEST : SAMPLE_MANIFEST);
+  if (awaiting) {
+    fs.mkdirSync(path.join(folder, '.multiagent', 'workflows'), { recursive: true });
+    fs.copyFileSync(path.join(__dirname, '..', '..', '..', 'workflows', 'feature.yaml'), path.join(folder, '.multiagent', 'workflows', 'team-feature.yaml'));
+  }
   git(['init', '-q', '-b', 'main']);
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'First commit']);
@@ -89,7 +100,7 @@ function seed({ args, ws, project, projects, workspace }) {
   if (['analysis', 'review'].includes(args.mode)) {
     const folder = path.join(ws.root, 'onboarding-demo', 'billing-api');
     fs.rmSync(folder, { recursive: true, force: true });
-    reachableRepo = sampleRepository(folder);
+    reachableRepo = sampleRepository(folder, { awaiting: args.review === 'awaiting' });
     process.env.CRAFTORIO_E2E_ONBOARDING_COSTS = JSON.stringify({ profile: 0.42, projectMap: 0.74 }); // #74
   }
 }
@@ -203,7 +214,8 @@ module.exports = {
   open,
   // #845: the review of a repository with Issues turned off; #852: the review with the project map still running;
   // #79: the review of a clone that cannot push (its push notice and setup-git button)
-  options: { review: ['issues-off', 'manual', 'no-push', 'running'] },
+  // #40: a repository whose own default workflow awaits acceptance (with --mode analysis or review)
+  options: { review: ['awaiting', 'issues-off', 'manual', 'no-push', 'running'] },
   sampleRepository,
   seed,
   typeIn,
