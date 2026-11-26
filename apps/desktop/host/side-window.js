@@ -39,9 +39,18 @@ function onScreenBounds(state, min, screen) {
   return b;
 }
 
+// The window icon (apps/desktop/assets): Windows takes the .ico and Linux the .png, also when the app runs from the
+// source code, where Electron's own icon showed otherwise; macOS uses the bundle's icon (and app.dock from source).
+const WINDOW_ICON = { win32: 'icon.ico', linux: 'icon.png' };
+function windowIcon(platform = process.platform) {
+  return WINDOW_ICON[platform] ? path.join(__dirname, '..', 'assets', WINDOW_ICON[platform]) : null;
+}
+
 function sideWindowOptions({ dirname, devTools = false, min, defaults, bounds = null, title }) {
+  const icon = windowIcon();
   return {
     ...defaults,
+    ...(icon ? { icon } : {}),
     ...(bounds || {}),
     minWidth: min.width,
     minHeight: min.height,
@@ -60,5 +69,6 @@ function sideWindowOptions({ dirname, devTools = false, min, defaults, bounds = 
 module.exports = {
   onScreenBounds,
   sideWindowOptions,
+  windowIcon,
   windowState,
 };

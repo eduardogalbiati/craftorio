@@ -30,6 +30,7 @@ const {
   systemPreferences,
 } = require('electron');
 const { createAgentsWindow } = require('./agents-window');
+const { windowIcon } = require('./side-window');
 const {
   createMockupsWindow,
   serveMockup,
@@ -382,8 +383,8 @@ const WINDOW = {
   minHeight: 700,
   backgroundColor: '#0e1014',
   title: 'Craftorio',
-  // Linux takes the window icon from here (Windows and macOS from the packaged executable)
-  ...(process.platform === 'linux' && { icon: path.join(__dirname, '..', 'assets', 'icon.png') }),
+  // the app's icon on Windows and Linux, from the source code too (side-window.js windowIcon)
+  ...(windowIcon() && { icon: windowIcon() }),
   autoHideMenuBar: true,
 };
 
@@ -585,6 +586,8 @@ if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'Crafto
 protocol?.registerSchemesAsPrivileged?.([{ scheme: 'mockup', privileges: { standard: true, secure: true } }]);
 
 app.whenReady().then(async () => {
+  // macOS from the source code: the Dock shows Electron's icon unless told (a packaged app has its bundle's)
+  if (process.platform === 'darwin' && !app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, '..', 'assets', 'icon.png'));
   restrictPermissions(session.defaultSession);
   const engine = engineConnection.decideMode({ connection: connectionStore.read(), env: process.env });
   remoteMode = engine.mode === 'remote';
