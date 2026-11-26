@@ -360,6 +360,8 @@ async function shownLabel(page, english, { prefix = false } = {}) {
 
 When('I open the Assign dialog for the backlog issue {string}', async ({ e2e }, title) => {
   const page = e2e.window;
+  // the Board tab belongs to the Backlog screen: go there first (a scenario may start from the Roadmap)
+  await page.getByRole('navigation').getByRole('button', { name: /^Backlog(\s+\d+)?$/ }).click();
   await page.getByRole('tab', { name: await shownLabel(page, 'Board') }).filter({ visible: true }).first().click();
   await page.getByRole('group', { name: await shownLabel(page, 'Board view') }).filter({ visible: true }).first()
     .getByRole('button', { name: await shownLabel(page, 'List') }).click();
