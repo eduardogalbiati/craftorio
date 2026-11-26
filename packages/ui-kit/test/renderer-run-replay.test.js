@@ -30,6 +30,7 @@ const PATTERNS = {
   runLabel: /const runLabel = \(r\) => \{[\s\S]*?\n\};/,
   statusLabel: /const statusLabel = [^\n]+;/,
   agentLabel: /const agentLabel = [^\n]+;/, // readable step names in gate toasts (#245)
+  runStepNames: /function runStepNames\(run\) \{[^\n]+\}/, // #41: the toasts' step names in the interface language
   newRunView: /const newRunView = \(\) => \(\{[\s\S]*?\n\}\);/,
   getTurn: /function getTurn\(sess, n\) \{[\s\S]*?\n\}/,
   viewOf: /function viewOf\(ev\) \{[\s\S]*?\n\}/,
