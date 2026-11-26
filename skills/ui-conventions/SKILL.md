@@ -18,12 +18,8 @@ screen; they are skipped for changes without UI. You run unattended: record a de
 ## Conventions (the developer builds with them, the reviewer checks against them)
 
 **Whose conventions.** A project's own docs, design system and existing screens come first. The
-rules below are this orchestrator's (its renderer, its toasts and badges); in another project they
-are guidance: the developer builds what the task asks, and the reviewer never blocks on a missing
-house rule or asks for a behaviour the task did not ask for (an Undo, a toast, a confirmation, a new
-component). A gap is at most a non-blocking suggestion, unless the project's own docs or screens
-already follow that rule. (A to-do app got an unrequested Undo toast and an extra develop round,
-exploratory run 20261126-092137-d3e664e6.)
+rules below are this orchestrator's: elsewhere the reviewer never blocks on a missing house rule nor
+asks for a behaviour the task did not ask for (a suggestion at most).
 
 - **Reuse the shared components** before writing new ones: the project's docs name them (this
   orchestrator: `docs/agents/renderer/ui-conventions.md`; elsewhere the design system, the
