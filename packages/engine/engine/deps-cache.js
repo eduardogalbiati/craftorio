@@ -514,7 +514,38 @@ async function moveIntoCache(nm, entry, key, workDir, d) {
  *   status: none (no lockfile) · not_cached · linked (already) · hit · miss (installed now) ·
  *   local (installed in the worktree, could not go to the cache) · failed (the install failed)
  */
-async function ensureDeps({ workDir, cacheDir, project, env, signal, previous = null, log = () => {}, run = runCommand, waitMs = LOCK_WAIT_MS, ignoreScripts = false }) {
+async function ensureDeps(opts) {
+  const r = await linkDeps(opts);
+  // a link (or a workspaces folder of links) the cache made: the worktree's git never sees it
+  if (['hit', 'miss', 'linked'].includes(r.status)) excludeDepsLink(opts.workDir, opts.log);
+  return r;
+}
+
+// The project's .gitignore usually has `node_modules/`, which matches a folder but not the link the
+// cache puts there: git then reported `?? node_modules`, the test writer's leftover check stopped at its
+// gate on every round (`commitLeftoverTests`) and an agent's `git add -A` would commit the link.
+// `node_modules` (no slash) goes into the repository's own exclude file (`git rev-parse --git-path
+// info/exclude`: the app's clone, shared by its worktrees; never the project's tracked files), once.
+const DEPS_EXCLUDE = 'node_modules';
+function excludeDepsLink(workDir, log = () => {}) {
+  try {
+    const { execFileSync } = require('child_process');
+    const rel = execFileSync('git', ['rev-parse', '--git-path', 'info/exclude'], { cwd: workDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }).trim();
+    if (!rel) return false;
+    const file = path.resolve(workDir, rel);
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    if (text.split(/\r?\n/).some((l) => l.trim() === DEPS_EXCLUDE || l.trim() === '/' + DEPS_EXCLUDE)) return false;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, (text && !text.endsWith('\n') ? '\n' : '') + '# Craftorio: the dependency cache links node_modules into each worktree (a link: "node_modules/" does not match it)\n' + DEPS_EXCLUDE + '\n');
+    return true;
+  } catch (e) {
+    if (e && e.status !== undefined) return false; // not a git repository
+    log('warn', 'dependency cache: could not add node_modules to the repository\'s exclude file (' + (e && e.message) + '); git may list the link as untracked');
+    return false;
+  }
+}
+
+async function linkDeps({ workDir, cacheDir, project, env, signal, previous = null, log = () => {}, run = runCommand, waitMs = LOCK_WAIT_MS, ignoreScripts = false }) {
   const t0 = Date.now();
   const d = workDir && fs.existsSync(workDir) ? detect(workDir) : null;
   if (!d) return { status: 'none' };
@@ -716,6 +747,7 @@ module.exports = {
   detect,
   ensureDeps,
   entryUsable,
+  excludeDepsLink,
   installArgs,
   keyEntries,
   linkedBy,

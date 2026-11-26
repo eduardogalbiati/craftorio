@@ -83,7 +83,7 @@ const COMPLEXITY_EXCEPTIONS = {
   'packages/engine/domains/workflow/workflow-builder.js:patchWorkflow': 41,
   'packages/engine/domains/workflow/workflow-builder.js:readAgent': 27,
   'packages/engine/domains/workspace/mobile-gates.js:handle': 38,
-  'packages/engine/engine/deps-cache.js:ensureDeps': 40,
+  'packages/engine/engine/deps-cache.js:linkDeps': 39,
   'packages/engine/engine/providers.js:mockValue': 44,
   'packages/engine/engine/providers.js:runMock': 40,
   'packages/engine/engine/run/gates.js:requestApproval': 34,
