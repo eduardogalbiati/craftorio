@@ -75,7 +75,8 @@ async function runWithScenarios(t, { repoOptions, mockSequences = {}, onTurn } =
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({
     file: WORKFLOW,
-    inputs: { task: 'Split a card on the board', issue: ISSUE, repo_path: repo, e2e_tests: 'write_and_run', unit_tests: 'run_existing' },
+    // #80: the workflow has no folder defaults any more; the project's run defaults name its own
+    inputs: { task: 'Split a card on the board', issue: ISSUE, repo_path: repo, e2e_tests: 'write_and_run', unit_tests: 'run_existing', ui_folders: ['src/renderer/'], steps_folders: ['features/steps'] },
     mock: true,
     runsDir,
     mockSequences: { verdict: ['approved'], e2e_scope: ['scenarios'], suite: { red_check: ['fail'], suite: ['pass'], e2e: ['pass'] }, ...mockSequences },

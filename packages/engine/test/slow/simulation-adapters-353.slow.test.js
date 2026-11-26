@@ -24,6 +24,9 @@
 // #49: the secret scan (off in this run, engine-helpers.js) is a step before code_review, visited
 // twice (5 events for 1 each time), and code-review pulls secret-triage through `uses` (one log in
 // code_review; the developer loads it only on a turn a finding sends back): 458.
+// #80: feature.yaml's ui_folders default is empty (no src/renderer/): the test-id check reads this
+// whole checkout ('.'), finds every id and passes on its first visit, so the two returns to develop
+// are gone: re-recorded, two runs gave 397 events.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');

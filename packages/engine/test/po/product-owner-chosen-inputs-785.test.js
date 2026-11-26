@@ -85,10 +85,11 @@ test('#785 an option the owner changed is the only key of the group\'s inputs', 
   assert.deepEqual({ ...normalized(group(), { workflow: 'feature.yaml', inputs: { e2e_tests: 'off' } }).inputs }, { e2e_tests: 'off' });
 });
 
+// #80: the UI and step definition folders default to empty lists (no src/renderer/ nor features/steps)
 test('#785 a group that repeats the workflow\'s defaults keeps none of them (the full set of the owner\'s report)', () => {
   const inputs = {
     mode: 'local', test_order: 'e2e_first', e2e_tests: 'write_and_run', screenshots: 'changed', validate_every_round: false,
-    ui_folders: 'src/renderer/', steps_folders: ['features/steps'], developer_effort: 'default',
+    ui_folders: [], steps_folders: [], developer_effort: 'default',
   };
   assert.deepEqual({ ...normalized(group({ inputs })).inputs }, {});
 });
