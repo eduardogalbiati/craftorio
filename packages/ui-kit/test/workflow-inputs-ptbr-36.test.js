@@ -96,6 +96,61 @@ test('#36 English unchanged: the hero workflow\'s form keeps "Base branch", "Uni
   assert.equal(fieldTexts(html, 'unit_tests').options.write_and_run, 'Write and run');
 });
 
+// ---- #41: every input of every bundled workflow (and the repository's hero workflows) ------------------------------
+// Each input a form draws (Start leaves the path/dir inputs to the project picker) shows its label, its help and each
+// option in Portuguese: differing from the file's English, or the same word on purpose, which its own pt-BR key in
+// pt-BR.json says (the key the UI reads: the input's label_key / help_key / options_key, else a bundled copy's
+// workflow_texts.<workflow>_<input>_label|_desc|_opt_<value>). Proper names stay as they are (languages, platforms,
+// providers and models). Includes Mockup, Test order (E2E first / Code first), Review (Single reviewer / Multi-model),
+// Retrospective after, Parent branch, E2E command, Check command, the effort levels and Git platform.
+const PT = JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n', 'pt-BR.json'), 'utf8'));
+const snake = (s) => String(s ?? '').replace(/\.ya?ml$/, '').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+const PROPER = /^(JavaScript|TypeScript|Python|Go|Java|C#|Rust|GitHub|GitLab|Claude|Codex|Grok|(Opus|Sonnet|Haiku|Fable|GPT)\b.*)$/;
+const EVERY = [
+  ...fs.readdirSync(path.join(ROOT, 'workflows')).filter((f) => /\.ya?ml$/.test(f)).sort().map((f) => ['workflows', f, 'default']),
+  FILES[2], FILES[3],
+];
+function untranslatedInputs(dir, file, origin) {
+  const en = englishOf(dir, file);
+  const bundled = origin === 'default';
+  const name = snake(file);
+  const keyed = (own, suffix) => { const key = own || (bundled ? `workflow_texts.${name}_${snake(suffix)}` : null); return !!key && key in PT; };
+  I18n.setLanguage('pt-BR');
+  const html = formOf(load(dir, file, origin));
+  const out = [];
+  for (const [k, d] of Object.entries(en.inputs || {})) {
+    if (/path|dir/i.test(k)) continue;
+    const f = fieldTexts(html, k);
+    if (!f) { out.push(`${k}: not drawn`); continue; }
+    if (f.label === esc(WorkflowInputs.label(k, d)) && !keyed(d.label_key, `${k}_label`)) out.push(`${k} label "${f.label}"`);
+    if (d.description && f.help === esc(d.description) && !keyed(d.help_key, `${k}_desc`)) out.push(`${k} help`);
+    if (!Array.isArray(d.enum) || WorkflowInputs.isBoolean(d)) continue;
+    for (const v of d.enum.map(String)) {
+      const english = WorkflowInputs.optionLabel(d, v);
+      if (PROPER.test(english)) continue;
+      if (f.options[v] === esc(english) && !keyed(d.options_key && `${d.options_key}_${snake(v)}`, `${k}_opt_${v}`)) out.push(`${k}=${v} "${english}"`);
+    }
+  }
+  I18n.setLanguage('en');
+  return out;
+}
+
+for (const [dir, file, origin] of EVERY) {
+  test(`#41 pt-BR ${file}: every input label, help and option a form shows is in Portuguese`, () => {
+    assert.deepEqual(untranslatedInputs(dir, file, origin), []);
+  });
+}
+
+test('#41 English unchanged: feature\'s form keeps "Test order" (E2E first / Code first), "Review" (Single reviewer / Multi-model), "Developer effort" (Extra high) and "Git platform"', () => {
+  const html = formOf(load('workflows', 'feature.yaml', 'default'));
+  assert.equal(fieldTexts(html, 'test_order').label, 'Test order');
+  assert.deepEqual([fieldTexts(html, 'test_order').options.e2e_first, fieldTexts(html, 'test_order').options.code_first], ['E2E first', 'Code first']);
+  assert.equal(fieldTexts(html, 'review').label, 'Review');
+  assert.deepEqual([fieldTexts(html, 'review').options.single, fieldTexts(html, 'review').options.multi_model], ['Single reviewer', 'Multi-model']);
+  assert.equal(fieldTexts(html, 'developer_effort').options.xhigh, 'Extra high');
+  assert.equal(fieldTexts(html, 'git_platform').label, 'Git platform');
+});
+
 // ---- 6. the check_environment gate's choice help ------------------------------------------------------
 
 const { methods: gates } = require('@craftorio/engine/engine/run/gates');
@@ -136,6 +191,24 @@ for (const [dir, file, origin] of [FILES[0], FILES[2], FILES[3]]) {
     assert.deepEqual(GATE_HELP.filter((h) => html.includes(esc(h))), []);
   });
 }
+
+// #41: the gate's notification reads its brief (gate-summary.js gateBrief, stored on the approval record): the headline
+// "The project's rule checks cannot run: <cause>" comes in the gate's pt-BR text, the cause as the check gave it
+for (const [dir, file, origin] of [FILES[0], FILES[1], FILES[2], FILES[3]]) {
+  test(`#41 pt-BR ${file}: the check_environment notification does not read "The project's rule checks cannot run"`, () => {
+    I18n.setLanguage('pt-BR');
+    const record = gateRecord(load(dir, file, origin), 'check_environment');
+    const headline = String(record.brief?.headline || '');
+    assert.match(headline, /npm ci was not run/, 'the cause is kept');
+    assert.doesNotMatch(headline, /The project's rule checks cannot run/);
+    assert.doesNotMatch(String(record.message || ''), /No developer round was counted|Fix the environment, then try again/);
+  });
+}
+
+test('#41 English unchanged: the check_environment notification reads "The project\'s rule checks cannot run: <cause>"', () => {
+  const record = gateRecord(load('workflows', 'feature.yaml', 'default'), 'check_environment');
+  assert.equal(record.brief.headline, 'The project\'s rule checks cannot run: npm ci was not run');
+});
 
 test('#36 English unchanged: the check_environment gate\'s choice help reads as the file says', () => {
   const html = gateHelpText('en', gateRecord(load('workflows', 'feature.yaml', 'default'), 'check_environment'));

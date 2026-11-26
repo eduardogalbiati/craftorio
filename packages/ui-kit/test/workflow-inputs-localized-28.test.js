@@ -14,7 +14,13 @@ const I18n = require('@craftorio/shared/i18n');
 const WorkflowInputs = require('../workflow-inputs');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const OFFERED = ['issue', 'feature', 'fix', 'analyze-project', 'release'];
+// #83 (c): every bundled workflow Start offers (Start lists every workflows/*.yaml the Setup did not hide), read from
+// the folder so the next workflow cannot ship untranslated (refactor did: pt-BR had 10 of its texts)
+const OFFERED = fs.readdirSync(path.join(ROOT, 'workflows')).filter((f) => /\.ya?ml$/.test(f)).map((f) => f.replace(/\.ya?ml$/, '')).sort();
+const PT = JSON.parse(fs.readFileSync(path.join(ROOT, 'packages', 'shared', 'i18n', 'pt-BR.json'), 'utf8'));
+const snake = (s) => String(s ?? '').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+// a station whose pt-BR text is deliberately the English word: its own key in pt-BR.json says so
+const stationKeyed = (name, s) => (s.display_key || `workflow_texts.${snake(name)}_step_${snake(s.id)}`) in PT;
 const load = (name, origin = 'bundled') => {
   const doc = yaml.load(fs.readFileSync(path.join(ROOT, 'workflows', `${name}.yaml`), 'utf8'));
   return { ...doc, name: doc.metadata.name, description: doc.metadata.description, file: `${name}.yaml`, origin };
@@ -52,7 +58,7 @@ for (const name of OFFERED) {
     for (const [i, s] of (wf.steps || []).entries()) {
       const display = shown.steps[i].display;
       assert.ok(display, `station ${s.id} has a label`);
-      if (!SAME_WORD.has(`${name}:${s.id}`)) assert.notEqual(display, english.steps[i].display || s.id, `station ${s.id} translated`);
+      if (!SAME_WORD.has(`${name}:${s.id}`) && !(display === (english.steps[i].display || s.id) && stationKeyed(name, s))) assert.notEqual(display, english.steps[i].display || s.id, `station ${s.id} translated`);
     }
   });
 
@@ -69,6 +75,23 @@ for (const name of OFFERED) {
     }
   });
 }
+
+// #83 (a): the refactor workflow as Start lists it (the engine's loader: its fragments' stations included, e.g.
+// rule_check, check_environment): its description and every station read in Portuguese
+test('#83 pt-BR: refactor\'s description and every station Start shows (fragments included) are in Portuguese', () => {
+  const { loadWorkflow } = require('@craftorio/engine/engine/workflow');
+  const doc = loadWorkflow(path.join(ROOT, 'workflows', 'refactor.yaml'));
+  const wf = { ...doc, name: doc.metadata.name, description: doc.metadata.description, file: 'refactor.yaml', origin: 'default' };
+  const english = WorkflowInputs.localized(wf);
+  I18n.setLanguage('pt-BR');
+  const shown = WorkflowInputs.localized(wf);
+  assert.notEqual(shown.description, wf.description, 'the description');
+  const untranslated = wf.steps.filter((s, i) => {
+    const en = english.steps[i].display || s.id;
+    return !shown.steps[i].display || (shown.steps[i].display === en && !stationKeyed('refactor', s));
+  }).map((s) => s.id);
+  assert.deepEqual(untranslated, []);
+});
 
 test('#28 English: the issue workflow keeps its file\'s description and its stations read Analyze › Write › Review › File', () => {
   const wf = load('issue');

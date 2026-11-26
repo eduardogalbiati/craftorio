@@ -279,3 +279,16 @@ test('issueProject: a link repository that matches no project falls through to t
   const projects = [{ id: 'a', name: 'Alpha' }, { id: 'b', repo: 'https://github.com/o/b' }];
   assert.equal(M.issueProject({ repo: 'o/other' }, { projects, runProject: 'Alpha', currentId: 'b' }), 'a');
 });
+
+// ---- #41: the action card's status in the interface language ------------------------------------
+
+test('#41 actionView: an action waiting for the owner reads "Waiting for you" in English, not in pt-BR', () => {
+  const I18n = require('@craftorio/shared/i18n');
+  try {
+    assert.equal(M.actionView({ status: 'proposed' }).label, 'Waiting for you');
+    I18n.setLanguage('pt-BR');
+    assert.notEqual(M.actionView({ status: 'proposed' }).label, 'Waiting for you');
+  } finally {
+    I18n.setLanguage('en');
+  }
+});

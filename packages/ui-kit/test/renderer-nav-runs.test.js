@@ -217,6 +217,27 @@ test('renderNavRuns: a run waiting at a gate shows "Waiting for you · <step>", 
   assert.equal(elements.gates.textContent, '1');
 });
 
+// #83 (b): the gate line goes through t(): pt-BR reads "Aguardando você · <step>", English stays "Waiting for you · <step>"
+for (const [lang, want] of [['en', /nav-run-at">Waiting for you · review</], ['pt-BR', /nav-run-at">(Aguardando você|Esperando por você) · review</i]]) {
+  test(`#83 renderNavRuns ${lang}: a run waiting at a gate reads ${lang === 'en' ? '"Waiting for you · review"' : '"Aguardando você · review"'}`, () => {
+    const I18n = require('@craftorio/shared/i18n');
+    I18n.setLanguage(lang);
+    try {
+      const { renderNavRuns, state, elements } = load();
+      state.runs.set('r1', runView(
+        makeRun({ id: 'r1', status: 'running' }),
+        { approvals: new Map([['a1', { run_id: 'r1', approval_id: 'a1', step_id: 'review' }]]) },
+      ));
+      renderNavRuns();
+      const at = (/nav-run-at">[^<]*</.exec(elements.box.innerHTML) || [''])[0];
+      assert.match(at, want);
+      if (lang !== 'en') assert.doesNotMatch(at, /Waiting for you/);
+    } finally {
+      I18n.setLanguage('en');
+    }
+  });
+}
+
 test('renderNavRuns: several listed runs show a count badge, and the selected run is highlighted', () => {
   const { renderNavRuns, state, elements } = load();
   state.runs.set('r1', runView(makeRun({ id: 'r1', status: 'running' })));

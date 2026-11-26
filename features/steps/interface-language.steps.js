@@ -425,3 +425,51 @@ Then('the confirm dialog offers {string} and {string}', async ({ e2e }, yes, no)
   const dialog = confirmDialogPart(e2e.window);
   for (const name of [yes, no]) await expect(dialog.getByRole('button', { name, exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
+
+// ---- #83: the refactor workflow and the sidebar's waiting run in the interface language ---------------
+// Steps of features/83-ptbr-refactor-workflow-and-sidebar-gate.feature. The Start panel's part and its
+// "shows none of these English texts:" are #28's above. The sidebar's runs in progress are
+// data-testid="sidebar-footer" (exists), one button per run, data-gate="1" when it waits at a gate
+// (exists); the row's visible line reads "<Waiting for you> · <step>" in the interface language (the
+// title attribute counts too, with the same rule).
+
+const waitingRunRow = (page) => {
+  const footer = page.getByTestId('sidebar-footer');
+  return footer.getByRole('button').and(footer.locator('[data-gate="1"]')).first();
+};
+
+Then('the run waiting at a gate in the sidebar reads {string} and the step it waits at', async ({ e2e }, words) => {
+  const row = waitingRunRow(e2e.window);
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(row).toContainText(new RegExp(`${escapeRe(words)}\\s*·\\s*\\S`), { timeout: LOAD_TIMEOUT });
+});
+
+Then('the run waiting at a gate in the sidebar shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(waitingRunRow(e2e.window), table, 'the sidebar\'s run waiting at a gate');
+});
+
+// ---- #41: a new user's path in the interface language ----------------------------------------------
+// Steps of features/41-ptbr-new-user-path.feature, with the same "shows none of these English texts:"
+// rule as #28 above. The Product Owner's simulated draft (an issue request of eight words or more) shows
+// the select of the filed issue's workflow (aria-label backlog_po.workflow_of_the_filed_issue, read from
+// the shown language's catalog); its options name the project's default workflow without the English
+// " (default)" mark. Reuses fronts/build/features/steps/backlog.steps.js ("I open the Product Owner",
+// "I click the suggested question {string}", "I ask the Product Owner {string}"),
+// backlog-po-recommendations.steps.js ("I close the Product Owner"), fronts/plan's discovery.steps.js
+// (the cards, the interview), roadmap.steps.js ("I press {string} in the confirm dialog"),
+// roadmap-stack-on-waiting-stage.steps.js (the waiting stage) and run.steps.js / run-environment.steps.js
+// (the simulated run up to its gate, back to it from the sidebar).
+
+Then('the Product Owner\'s drawer shows a draft of the issue, in the interface language', async ({ e2e }) => {
+  const page = e2e.window;
+  const select = poDrawerPart(page).getByRole('combobox', { name: await shownLabel(page, 'Workflow of the filed issue') }).filter({ visible: true }).last();
+  await expect(select, 'the simulated draft\'s workflow select').toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+Then('no workflow in the Product Owner\'s drawer is marked {string}', async ({ e2e }, mark) => {
+  const drawer = poDrawerPart(e2e.window);
+  await expect(drawer).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(() => drawer.evaluate((root, text) => [...root.querySelectorAll('select option')]
+    .map((o) => (o.textContent || '').trim()).filter((s) => s.includes(text)), mark),
+  { message: `workflow options marked "${mark}" in the Product Owner's drawer`, timeout: LOAD_TIMEOUT }).toEqual([]);
+});

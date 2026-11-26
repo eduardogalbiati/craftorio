@@ -273,3 +273,23 @@ test('#36 English unchanged: the Live roadmap switched off says "Off. Turning it
   const { R } = await ready('en');
   assert.equal(draw(R, one(card(), { live: false })).includes('Off. Turning it on starts the roadmap first.'), true);
 });
+
+// ---- #41: a release block waiting at its Ship gate (backlog-roadmap.js RELEASE_BLOCK) ---------------------------
+
+// the release block of 1.1.0, waiting at its Ship gate: its visible text and accessible name
+async function waitingRelease(lang) {
+  const { R } = await ready(lang);
+  const d = one(card({ status: 'done', runId: 'r1', runs: ['r1'] }), { state: 'done' });
+  d.releases = { releases: [{ version: '1.1.0', status: 'waiting', runId: 'rel-110', runs: ['r1'] }] };
+  const block = H.findAll(draw(R, d), (e) => e.attrs['data-testid'] === 'roadmap-release-block').find((e) => H.visibleText(e.inner).includes('1.1.0'));
+  assert.ok(block, 'the roadmap shows the 1.1.0 release block');
+  return `${H.visibleText(block.inner)} ${block.attrs['aria-label'] || ''}`;
+}
+
+test('#41 English unchanged: a release block waiting at its Ship gate says "Waiting for you"', async () => {
+  assert.match(await waitingRelease('en'), /Waiting for you/);
+});
+
+test('#41 pt-BR: a release block waiting at its Ship gate does not say "Waiting for you"', async () => {
+  assert.doesNotMatch(await waitingRelease('pt-BR'), /Waiting for you/);
+});

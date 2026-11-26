@@ -437,3 +437,45 @@ test('workflowCard (#286): each load warning is a "Warning: ..." line (data-test
   assert.doesNotMatch(helpers.workflowCard({ ...base, warnings: [] }), /workflow-warning/);
   assert.doesNotMatch(helpers.workflowCard(base), /workflow-warning/);
 });
+
+// ---------------------------------------------------------------------------
+// #41: Definições in pt-BR: a bundled workflow's card shows its description, its modes (Automatic / Validated) and its
+// stations in Portuguese. The workflows are the real files as api.listWorkflows lists a bundled copy (origin default).
+// ---------------------------------------------------------------------------
+
+function listed(file) {
+  const { loadWorkflow } = require('@craftorio/engine/engine/workflow');
+  const wf = loadWorkflow(path.join(__dirname, '..', '..', '..', 'workflows', file));
+  return { ...wf, file, origin: 'default', name: wf.metadata.name, description: wf.metadata.description, steps: wf.steps.map((s) => ({ ...s, next: [] })) };
+}
+// the card's description, mode pills and step chips (visible texts)
+function cardTexts(lang, file) {
+  const I18n = require('@craftorio/shared/i18n');
+  const { sandbox, helpers } = loadDefs();
+  sandbox.displayName = require('@craftorio/shared/display-name').displayName; // loaded before the page's scripts
+  I18n.setLanguage(lang);
+  try {
+    const html = helpers.workflowCard(listed(file));
+    const all = (re) => [...html.matchAll(re)].map((m) => m[1]);
+    return { desc: all(/class="muted small wf-desc"[^>]*>([^<]*)</g)[0] || '', modes: all(/class="pill pill-idle"[^>]*>([^<]*)</g), steps: all(/class="step-chip[^"]*"[^>]*>([^<]*)</g) };
+  } finally {
+    I18n.setLanguage('en');
+  }
+}
+
+test('#41 Definições English unchanged: issue\'s card shows its file\'s description, Automatic / Validated and Analyze › Write › Review › File', () => {
+  const en = cardTexts('en', 'issue.yaml');
+  assert.ok(en.desc.length > 0);
+  assert.deepEqual(en.modes, ['Automatic', 'Validated']);
+  assert.deepEqual(en.steps, ['Analyze', 'Write', 'Review', 'File']);
+});
+
+for (const file of ['issue.yaml', 'feature.yaml', 'refactor.yaml']) {
+  test(`#41 Definições pt-BR: ${file}'s card shows its description, modes and stations in Portuguese`, () => {
+    const en = cardTexts('en', file);
+    const pt = cardTexts('pt-BR', file);
+    assert.notEqual(pt.desc, en.desc, 'the description');
+    assert.deepEqual(pt.modes.filter((m) => ['Automatic', 'Validated'].includes(m)), [], 'the modes');
+    assert.deepEqual(pt.steps.filter((s, i) => s === en.steps[i] && s !== 'CI'), [], 'the stations');
+  });
+}
