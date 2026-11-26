@@ -63,9 +63,9 @@
   // #245: a step by its readable name, its id in the tooltip
   // (a run recorded without them: its workflow's own `display` names, as the Run screen's progress)
   // #41: with WorkflowInputs (the app), the Run screen's names: recorded and the workflow's (a repository one too)
-  // in the interface language (runStepNames)
+  // in the interface language (runStepNames), from the shell's run (it has the projectId), else the chat model's
   const workflowStepNames = () => {
-    if (typeof WorkflowInputs === 'object') return WorkflowInputs.runStepNames(chat.model.run, state.workflows);
+    if (typeof WorkflowInputs === 'object') return WorkflowInputs.runStepNames(state.runs?.get?.(chat.runId)?.run ?? chat.model.run, state.workflows);
     const wf = (state.workflows || []).find((w) => w && (w.file === chat.model.run?.workflow || w.name === chat.model.run?.workflow));
     return wf ? Object.fromEntries((wf.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) : null;
   };

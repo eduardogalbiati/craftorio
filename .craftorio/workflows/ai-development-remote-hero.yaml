@@ -1396,6 +1396,7 @@ steps:
   # secret_found; not installed or turned off: skipped, said as "secrets not scanned", never as passed.
   - id: secret_scan
     fragment: secret-scan-pipeline
+    display_key: workflow_texts.feature_step_secret_scan
     transitions:
       # gitleaks failed, or its range could not be read: you, never a pass nor the developer's round
       - when: "output.status == 'error'"
@@ -1419,6 +1420,7 @@ steps:
   # #49: a finding that stays. Every way on goes through the scan again
   - id: secret_found
     fragment: secret-scan-pipeline
+    display_key: workflow_texts.feature_step_secret_found
     transitions:
       - when: "choice == 'stop'"
         goto: end
@@ -1435,6 +1437,7 @@ steps:
 
   - id: secret_scan_error
     fragment: secret-scan-pipeline
+    display_key: workflow_texts.feature_step_secret_scan_error
 
   # #246: the test ids of the E2E scenarios written first, checked by the orchestrator right after
   # develop commits (no agent, no model call, milliseconds): every static getByTestId('…') of the
