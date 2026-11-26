@@ -607,6 +607,13 @@ function mockScenarios(h, statuses = []) {
 // asks for one, the ui_reviewer's dismissed deterministic findings (#387) always
 const EMPTY_UNLESS_ASKED = ['preexisting_failures', 'ui_findings'];
 const mockEmptyList = (key, h) => key === 'dismissed' || (EMPTY_UNLESS_ASKED.includes(key) && !h.sequences?.[key]);
+// The developer's screens to capture (#144): one valid entry of the screenshot command; #57:
+// sequences.screenshots: [[...screens of visit 1], ...] (the last repeating, [] no screen listed)
+function mockScreens(h) {
+  const seq = h.sequences?.screenshots;
+  if (Array.isArray(seq) && seq.length) return structuredClone(seq[Math.min(h.visit - 1, seq.length - 1)]);
+  return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
+}
 
 // The simulated agent's question (#567, sequences.needs_human)
 const MOCK_QUESTION = {
@@ -658,11 +665,7 @@ function mockValue(s, key, h) {
       // sequences.files_changed: [[...files of visit 1], ...] (#340: the languages a run changed)
       const files = key === 'files_changed' && h.sequences?.files_changed;
       if (Array.isArray(files) && files.length) return [...files[Math.min(h.visit - 1, files.length - 1)]];
-      // the developer's screens to capture (#144): one valid entry of the screenshot command; #57:
-      // sequences.screenshots: [[...screens of visit 1], ...] (the last repeating, [] no screen listed)
-      const screens = key === 'screenshots' && s.items?.properties?.args && h.sequences?.screenshots;
-      if (Array.isArray(screens) && screens.length) return structuredClone(screens[Math.min(h.visit - 1, screens.length - 1)]);
-      if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
+      if (key === 'screenshots' && s.items?.properties?.args) return mockScreens(h);
       if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h, s.items.properties.status.enum || []);
       if (key === 'left_out') {
         const seq = h.sequences?.left_out;

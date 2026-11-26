@@ -87,6 +87,7 @@ const CHECKED = [
   'packages/shared/platforms/gitlab.js',
   'packages/shared/roadmap-model.js',
   'packages/shared/types.js',
+  'packages/shared/ui-files.js',
 ];
 
 // files the owner wants checked next (sorted, one per line); a file leaves this list when it opts in

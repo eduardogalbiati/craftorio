@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readEvidence } = require('./evidence');
-const { screenNotReviewed } = require('../../engine/test-ids');
+const { screenNotReviewed } = require('@craftorio/shared/ui-files');
 
 const MAX_FINDINGS = 10;
 const posix = (p) => String(p).split(path.sep).join('/');

@@ -12,6 +12,14 @@
 
 const fs = require('fs');
 const path = require('path');
+// #80, #57: what a UI file is (the `ui_files` filter, the project's UI folders, the result summary)
+const {
+  normFolder,
+  screenNotReviewed,
+  STYLE_FILE,
+  UI_FILE,
+  uiFiles,
+} = require('@craftorio/shared/ui-files');
 
 const DEFAULT_STEPS = 'features/steps';
 const DEFAULT_RENDERER = 'src/renderer';
@@ -21,40 +29,6 @@ const SKIPPED_DIRS = new Set(['.git', 'node_modules']);
 // #80: the folders that hold no UI of a project (builds, tests, docs, tooling): skipped when its UI
 // folders are looked for (domains/project/project-run-defaults.js) and when the renderer is the root
 const NON_UI_DIRS = new Set(['.craftorio', '.git', '.github', '.multiagent', 'build', 'coverage', 'dist', 'docs', 'e2e', 'features', 'node_modules', 'out', 'target', 'test', 'tests', 'vendor']);
-// #80: a UI file (a page or a component), what finds a project's UI folders (domains/project/
-// project-run-defaults.js) and what the `ui_files` filter matches in a run without UI folders
-const UI_FILE = /\.(html|jsx|tsx|vue|svelte)$/i;
-// #80: a stylesheet, a UI file too under the root UI folder ('./': a site's pages and its css/)
-const STYLE_FILE = /\.(css|less|sass|scss)$/i;
-
-// #80: a repository-relative folder or file with forward slashes, without a leading './' nor a
-// trailing '/'; the root ('./', '.') is ''. Shared with the `ui_files` filter, so both read a
-// project's UI folders alike.
-function normFolder(p) {
-  const f = String(p ?? '').replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
-  return f === '.' ? '' : f;
-}
-
-// The files of a list (a step's files_changed) under the project's UI folders (#588), compared with
-// forward slashes; folders: one or a list, repository-relative. #80: the root folder ('./') holds the
-// pages and stylesheets anywhere (UI_FILE, STYLE_FILE), never a README or a package.json; without folders
-// (none given, or an empty list: an empty project) a UI file is a page or a component by its extension.
-// The `ui_files` template filter (engine/run/templates.js) and the result summary (#57) use it.
-function uiFiles(files, folders) {
-  const dirs = [].concat(folders ?? []).filter((d) => String(d ?? '').trim()).map(normFolder);
-  const under = (f, d) => (d === '' ? UI_FILE.test(f) || STYLE_FILE.test(f) : f === d || f.startsWith(`${d}/`));
-  return [].concat(files ?? []).filter((f) => (dirs.length ? dirs.some((d) => under(normFolder(f), d)) : UI_FILE.test(normFolder(f))));
-}
-
-// #57: why a change with UI files (uiFiles of develop's files_changed) gets no visual review, '' when it has
-// no UI file or its screens are reviewed: screenshots off (a backend or docs project, or the run's own pick),
-// or (reviewed === false, the run ended without screenshots) none taken. The gates' and result.md's
-// "Screen not reviewed: <reason>".
-function screenNotReviewed(develop, inputs, reviewed = true) {
-  if (!uiFiles(develop?.files_changed, inputs?.ui_folders).length) return '';
-  if (inputs?.screenshots === 'off') return 'screenshots are off in this run (the project\'s kind is backend or docs, or the run turned them off); change the project\'s kind or the run\'s screenshots input to review it';
-  return reviewed ? '' : 'no screenshots were taken in this run';
-}
 
 // The unique static ids of `getByTestId(...)` in a source text, in order of first use.
 function testIdsUsed(source) {

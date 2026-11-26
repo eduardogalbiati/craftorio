@@ -139,7 +139,7 @@ async function prepareFolder(folder, { repo, cloned, fresh, git }) {
  * Creates a project. If `repo` is given and the folder is not a git repository, it returns at once
  * with status 'cloning' and clones the repository into it in the background (the folder must be
  * empty or not exist; #639); otherwise the project is 'ready' at once.
- * @param {{ name: string, folder?: string, repo?: string, description?: string }} data
+ * @param {{ name: string, folder?: string, repo?: string, description?: string, kind?: string | null }} data
  * @param {{ git?: Function, reposDir?: string, cloneError?: string }} opts reposDir: <workspace>/repos;
  *   cloneError (#640, the access check refused the repository): the project is saved 'failed' with
  *   that reason and nothing is cloned (retryClone clones it); fresh (#632, a new project): its folder must be

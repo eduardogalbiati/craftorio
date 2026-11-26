@@ -114,8 +114,10 @@ the left, the step's action on the right.
    Empty, `git init` only), the private remote's checkbox (`wizard-new-remote`, unchecked, disabled without a
    signed-in gh / glab) with its platform (`wizard-new-remote-provider`) and hint (`wizard-new-remote-hint`),
    and the folder `<workspace>/projects/<slug>` (`wizard-new-folder`, `slugify` of the onboarding model).
-   On the right the three questions (`wizard-question` `data-question="mode | ci | release"`, one
-   `wizard-chip` per answer, `CREATE_ANSWERS` / `CREATE_DEFAULTS` of the model). Next calls
+   On the right the four questions (`wizard-question` `data-question="mode | ci | release | kind"`, one
+   `wizard-chip` per answer, `CREATE_ANSWERS` / `CREATE_DEFAULTS` of the model). #57: `kind` (frontend,
+   full-stack or backend; default frontend, labels from `KIND_LABELS`) is saved on the project, so the
+   review's Project kind opens on it, never on "Detect from the files". Next calls
    `onboarding:create` (the engine's `create` in `project-onboarding.js`: the local repository, then the
    remote only when asked and signed in; a failed remote leaves `remote.status = 'failed'` and the local
    project). The project is ready at once, the stepper's third pill reads "Workflows" and step 3 follows.
@@ -169,7 +171,7 @@ the left, the step's action on the right.
 The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to file and add, the first
 idea, the refactor cadence ("Turn on" only opens the Health tab, #730: there the findings become issues), and release CI and
 screenshots, shown disabled (later phases). #75: no screenshots entry without a user interface: the picked kind decides, else what
-the files say now (`projects:inputHints`' `detectedKind`: `backend` with no code, never saved as the picked kind). The heading adds
+the files say now (`projects:inputHints`' `detectedKind`: `backend` with no code, none for an empty project (#57: a README at most), never saved as the picked kind). The heading adds
 "· city and refactor backlog done" once the proposals are there, and the workflow count for a project's own set (an import has none).
 
 The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`; its code is

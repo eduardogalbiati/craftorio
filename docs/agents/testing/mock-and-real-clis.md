@@ -13,6 +13,9 @@ creates a commit needs its own `-c user.name/email`.
 - Picks the first enum value unless `MOCK_SEQUENCES` has a fitting sequence (or the run's
   `mockSequences` option overrides it). The default sequence fails the preview once with
   `failure_class: code` and recovers. Numbers and booleans take sequences too (`score`, `ready`).
+- `mockSequences.screenshots: [[visit1], [visit2]]` (#57) sets the develop answer's `screenshots`
+  list per visit, like `files_changed` (the last one repeats; `[]` lists no screen). Without it
+  the developer lists one simulated screen.
 - `mockSequences.invalid_answers: { step: n }` makes the first n answers of a step miss its schema
   (exercises the retries and the supervisor); `permission_denials: { step: n }` refuses every tool
   call; `no_handoff: { step: n }` leaves out the handoff note (exercises the follow-up request);

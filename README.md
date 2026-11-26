@@ -1458,6 +1458,16 @@ dim them: an empty `ui_folders` alone (an empty project) dims nothing, and a cha
 component (by its extension) still counts as a UI change. A run without UI folders says in its
 result that the screenshots and the UI review were skipped for that reason.
 
+**A new project's kind** (#57): "Create new project" asks it (frontend, full-stack or backend, no UI;
+frontend by default) instead of "Detect from the files", since a new folder has nothing to detect;
+the pick is saved on the project and can be changed later in Ways of working. Importing a repository
+keeps the detection. A project whose folder holds only a README and dotfiles has no kind yet
+(undecided): its screenshots stay on with no UI folder, so the first change with pages or components
+gets the developer's screenshots and the UI Reviewer, and a developer that lists no screen for it is
+sent back once. A page at the root counts too: a project that is only `index.html` is a frontend. A
+kind you chose as backend and a run's own `screenshots: off` are always respected; the run then
+says "Screen not reviewed: <reason>" in its result and at its gates when the change has UI files.
+
 Where each input of feature, fix and release gets its project value:
 
 | Input | Project value |
@@ -1474,7 +1484,7 @@ Where each input of feature, fix and release gets its project value:
 | `e2e_tests` (release: `e2e_suite`) | `off` for a backend, a unit-only profile or no E2E suite found |
 | `e2e_command` | the profile's E2E command or the suite found (Playwright / Cypress config); empty otherwise |
 | `ui_folders` | the UI folders found (folders with pages or components; `./` for pages at the root, which covers the pages and stylesheets anywhere); empty for a backend or an empty project, never this app's `src/renderer/` |
-| `screenshots` | `off` for a backend, else the workflow's default |
+| `screenshots` | `off` for a backend or documentation, else the workflow's default (an empty, undecided project keeps them on, #57) |
 | `steps_folders` | the step folders found; empty for a backend or when the project has none |
 | CI wait, budgets, review rigour, validation | none: the workflow's defaults |
 
