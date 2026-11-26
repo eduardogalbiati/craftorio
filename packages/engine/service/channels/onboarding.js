@@ -39,6 +39,8 @@ module.exports = (ctx) => [
   // the original; Fork + PR) or "Work locally" (the Local way of working, no pull request)
   { channel: 'onboarding:fork', method: 'forkOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingFork(opts) },
   { channel: 'onboarding:work-locally', method: 'workLocallyOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingWorkLocally(opts) },
+  // #79: the clone cannot push: runs the platform CLI's setup-git (`gh auth setup-git`), then checks the push again
+  { channel: 'onboarding:setup-git', method: 'setupGitOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingSetupGit(opts) },
   // #30: the clone's dependencies (state.deps missing): runs npm ci there, --ignore-scripts under the project's setting
   { channel: 'onboarding:install-deps', method: 'installOnboardingDeps', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingInstallDeps(opts) },
   // #741: the wizard's step and the owner's picks, saved with the project on every change (an onboarding left

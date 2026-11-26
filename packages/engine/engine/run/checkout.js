@@ -1,6 +1,7 @@
 // @ts-check
 // The run's checkout (#250, from packages/engine/engine/workflow.js): the per-run git worktree and its branch
-// (`setupWorktree` / `finishWorktree`: removed or retired, the worktree summary, HEAD and branch),
+// (`setupWorktree` / `finishWorktree`: removed or retired, the worktree summary, HEAD and branch;
+// #79 `checkPush`: a Remote / Fork + PR run's push access, before its first turn),
 // its dependencies from the shared cache (`prepareDeps`, `depsGuide`), the base worktree a suite
 // compares against (`setupBaseWorktree`, `suiteBase`, `baseRefs`; #736 `suiteLastGreenBase`, the
 // base's last green commit), the base brought into the branch
@@ -106,6 +107,25 @@ const methods = {
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
     this.logRepoCommands(info.workDir);
     await this.prepareDeps('worktree', info.workDir, 'worktree ready');
+  },
+
+  // #79: a Remote or Fork + PR run checks it can push its branch (workspace.js checkPushAccess, git as the agents
+  // run it) before its first turn, and fails at once with the fix instead of at its `ci` step. Not for a simulated
+  // run, a recovered one, a run without a worktree or an origin that is no remote URL (a local path).
+  async checkPush() {
+    const cfg = this.wf.orchestrator?.worktree;
+    if (!cfg || !this.worktree || this.machine.simulated || this.recovered) return;
+    const { remote, fork } = worktreeTarget(cfg, this.ctx);
+    if (!remote && !fork) return;
+    const { checkPushAccess, isGitUrl } = require('../../domains/workspace/workspace');
+    const origin = await git(['remote', 'get-url', 'origin'], this.worktree.workDir).then((s) => String(s || '').trim(), () => '');
+    if (!isGitUrl(origin)) return;
+    const r = await checkPushAccess(this.worktree.workDir);
+    if (r.ok) {
+      this.emitEvent('log', { level: 'info', message: `push check: the run can push to ${origin}` });
+      return;
+    }
+    throw new Error(`The run cannot push its branch to ${origin}: ${r.fix || ''} (git said: ${String(r.reason || '').split('\n').pop()})`);
   },
 
   // #472 (SEC-7): one `log` event, before the install and the first step, naming the commands the

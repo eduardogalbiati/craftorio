@@ -23,7 +23,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execGit, repoNameFromUrl } = require('../workspace/workspace');
+const {
+  cloneFolder,
+  execGit,
+  pushableUrl,
+} = require('../workspace/workspace');
 const { insideFolder } = require('../machine/platform-paths');
 const { childEnv, PLATFORM_CLIS } = require('../../engine/child-env');
 const { cleanConfig } = require('../local/local-preview');
@@ -76,7 +80,9 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
   const job = (async () => {
     try {
       const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
-      await git(['clone', p.repo, p.folder], path.dirname(p.folder));
+      // #79: cloned with the URL runs can push with (SSH when the platform CLI's protocol is ssh)
+      const { url } = await pushableUrl(p.repo);
+      await git(['clone', url, p.folder], path.dirname(p.folder));
       const patch = { status: 'ready', cloneError: null };
       if (!cleanWorkflows(p.workflows).length) {
         const manifest = await projectManifest({ folder: p.folder });
@@ -148,7 +154,8 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
   for (let i = 2; fs.existsSync(metaFile(dir, id)); i++) id = `${slugify(name)}-${i}`;
 
   let repo = data.repo?.trim() || null;
-  const defaultFolder = repo && reposDir ? path.join(reposDir, repoNameFromUrl(repo)) : path.join(dir, id);
+  // #84: the clone's own name, or its free sibling (name-2…) when that folder holds something else
+  const defaultFolder = repo && reposDir ? cloneFolder(repo, reposDir).dir : path.join(dir, id);
   const folder = path.resolve(data.folder?.trim() || defaultFolder);
 
   const cloned = !!repo && !isDir(path.join(folder, '.git'));

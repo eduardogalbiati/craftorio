@@ -1,5 +1,5 @@
 {
- "hash": "bdc4bd7a2020",
+ "hash": "2eb75bcbc298",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -9370,6 +9370,34 @@
      "required": [
       "projectId",
       "step"
+     ]
+    },
+    "result": {
+     "type": "object"
+    }
+   }
+  },
+  {
+   "channel": "onboarding:setup-git",
+   "method": "setupGitOnboarding",
+   "params": [
+    "projectId"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      }
+     },
+     "required": [
+      "projectId"
      ]
     },
     "result": {

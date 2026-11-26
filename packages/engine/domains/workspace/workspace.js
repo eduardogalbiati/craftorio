@@ -223,22 +223,8 @@ function cloneFolder(url, reposDir) {
   }
 }
 
-// #79: the platform of a repository URL (its host), GitHub's when the host names none
-const platformOfUrl = (url) => Platforms.platformOfRepoUrl(url) || Platforms.platformOrDefault();
-
-// #79: the platform CLI's command that makes git use its login over HTTPS (`gh auth setup-git`), '' when it has none
-function setupGitText(platform) {
-  const c = platform.setupGitCommand?.();
-  return c ? `${c.cli} ${c.args.join(' ')}` : '';
-}
-
-// #79: what to do when git has no credentials for an HTTPS remote
-function httpsFix(platform) {
-  const command = setupGitText(platform);
-  return command
-    ? `Run \`${command}\` so git pushes with the ${platform.cli} login, or set the remote to its SSH URL.`
-    : `Configure a git credential helper for ${platform.host}, or set the remote to its SSH URL.`;
-}
+// #79: whether a clone can push and what to do when it can't (engine/push-access.js), re-exported here
+const { checkPushAccess, httpsFix, platformOfUrl } = require('../../engine/push-access');
 
 // #79: the platform CLI's git protocol for a host (`gh config get git_protocol`): 'ssh' | 'https', null when
 // unknown (no CLI, it failed, a simulated run reads nothing from the machine)
@@ -297,37 +283,6 @@ async function cloneRepo(url, reposDir, { run = execGit, ghProtocol, credentialH
   const { url: cloneUrl, ...access } = await pushableUrl(url, { ghProtocol, credentialHelper });
   await run(['clone', cloneUrl, dir], reposDir);
   return { dir, cloned: true, ...access };
-}
-
-// #79: what to do about a refused push → { fix, setupGit? }: git's credentials over HTTPS (setupGit: the platform
-// CLI's command that sets them, when it has one), the SSH key, else the account's rights
-function pushFix(reason, origin) {
-  const platform = platformOfUrl(origin);
-  const command = setupGitText(platform);
-  if (/could not read Username|terminal prompts disabled|Authentication failed|could not read Password/i.test(reason)) {
-    return { fix: httpsFix(platform), ...(command ? { setupGit: { platform: platform.id, command } } : {}) };
-  }
-  if (/Permission denied \(publickey|Host key verification failed|no such identity/i.test(reason)) {
-    const host = Platforms.parseRepoUrl(origin)?.host || platform.host;
-    return { fix: `git's SSH key is not accepted by ${host}: add your SSH key to your account (test it with \`ssh -T git@${host}\`), or set the remote to its HTTPS URL${command ? ` and run \`${command}\`` : ''}.` };
-  }
-  return { fix: 'Check that your account may push to this repository (or fork it) and that the remote is reachable.' };
-}
-
-/**
- * #79: whether the clone in `dir` can push: `git push --dry-run <remote>` to a branch name nobody uses, without the
- * app's credential helper (gitAuthArgs), as the runs' agents push. Never rejects.
- * @returns {Promise<{ ok: boolean, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }>}
- */
-async function checkPushAccess(dir, { run = (args, cwd) => execGit(args, cwd, { auth: false, timeout: 60000 }), remote = 'origin' } = {}) {
-  const origin = await Promise.resolve().then(() => run(['remote', 'get-url', remote], dir)).then((s) => String(s || '').trim(), () => '');
-  try {
-    await run(['push', '--dry-run', '--no-verify', remote, 'HEAD:refs/heads/craftorio-push-check'], dir);
-    return { ok: true };
-  } catch (e) {
-    const reason = String(e?.message || e).trim();
-    return { ok: false, reason, ...pushFix(reason, origin) };
-  }
 }
 
 // The app runs without a terminal: git cannot prompt for username/password (it would fail with

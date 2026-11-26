@@ -56,7 +56,12 @@ const projects = require('../../domains/project/projects');
 const seedRuns = require('../seed-runs');
 const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
-const { execGit } = require('../../domains/workspace/workspace');
+const {
+  checkPushAccess,
+  execGit,
+  isGitUrl,
+  sameRepo,
+} = require('../../domains/workspace/workspace');
 const { resolveCommandAsync } = require('../../engine/providers');
 const {
   clientError,
@@ -67,15 +72,6 @@ const { toolSignIn } = require('./settings');
 const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const PAID = ['projectMap'];
-
-// #741: two URLs of the same repository (https or ssh, case, a trailing slash or .git aside), with the
-// registry's one normalization (Platforms.parseRepoUrl); a string it can't parse is compared cleaned
-const repoKey = (url) => {
-  const parsed = Platforms.parseRepoUrl(url);
-  if (parsed) return `${parsed.host}/${parsed.path.toLowerCase()}`;
-  return String(url || '').trim().toLowerCase().replace(/\/+$/, '').replace(/\.git$/, '');
-};
-const sameRepo = (a, b) => !!repoKey(a) && repoKey(a) === repoKey(b);
 
 // a readable reason for an access check that did not reach the repository
 function accessReason(access) {
@@ -252,10 +248,30 @@ function e2ePlatformCli(args) {
   return null;
 }
 
+// #79: the simulated git credentials of an E2E run (simulation.e2eGitPush, CRAFTORIO_E2E_GIT_PUSH=0): the push
+// check fails as git does without credentials until the simulated setup-git (e2eSetupGit) sets them up
+let e2eGitSetUp = false;
+function e2eSetupGit(provider, args) {
+  const command = Platforms.findPlatform(provider)?.setupGitCommand?.();
+  if (simulation.e2eGitPush() === null || !command || args.map(String).join(' ') !== command.args.join(' ')) return null;
+  e2eGitSetUp = true;
+  return { ok: true, out: '' };
+}
+
+/** #79: whether the clone in `folder` can push (workspace.js checkPushAccess); simulated under CRAFTORIO_E2E_GIT_PUSH. */
+function machinePushCheck(folder) {
+  const hook = simulation.e2eGitPush();
+  if (hook === null) return checkPushAccess(folder);
+  const refused = 'fatal: could not read Username for \'https://github.com\': terminal prompts disabled';
+  return checkPushAccess(folder, {
+    run: (args) => (args[0] === 'push' && !hook && !e2eGitSetUp ? Promise.reject(new Error(refused)) : Promise.resolve('https://github.com/e2e-owner/repo.git')),
+  });
+}
+
 // #738: gh / glab for a provider, args as given (the system boundary the tests replace) → { ok, out }; a
 // simulated run never calls them (e2ePlatformCli's answers, else { ok: false })
 async function machinePlatformCli(provider, args, /** @type {{ cwd?: string }} */ { cwd } = {}) {
-  if (simulation.simulationOnly()) return e2ePlatformCli(args) || { ok: false, out: 'Simulation only: gh / glab are not called.' };
+  if (simulation.simulationOnly()) return e2eSetupGit(provider, args) || e2ePlatformCli(args) || { ok: false, out: 'Simulation only: gh / glab are not called.' };
   const id = issues.PLATFORMS[provider]?.cli;
   const r = id ? await resolveCommandAsync(id) : null;
   if (!r) return { ok: false, out: `${id || provider} is not installed.` };
@@ -854,6 +870,7 @@ module.exports = (ctx) => {
     onboardingRepos: (/** @type {{ provider?: string }} */ { provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
     onboardingSaveWizard: (/** @type {{ projectId?: string, step?: string, picks?: any }} */ { projectId, step, picks } = {}) => onboarding().saveWizard(projectId, { step, picks }),
+    onboardingSetupGit: ({ projectId }) => onboarding().setupGit(projectId),
     onboardingStart: (data) => onboarding().start(data),
     onboardingStatus: ({ projectId }) => onboarding().status(projectId),
     onboardingWorkLocally: ({ projectId }) => onboarding().workLocally(projectId),

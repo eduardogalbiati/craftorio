@@ -473,6 +473,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     let error = null;
     try {
       await this.setupWorktree();
+      await this.checkPush();
       await this.startResumed();
       while (current !== 'end') {
         if (current === 'fail') throw new Error('Workflow routed to "fail" (retry limit reached).');

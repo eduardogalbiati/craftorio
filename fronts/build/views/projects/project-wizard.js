@@ -97,7 +97,8 @@
   const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model)
     : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
-  const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'work-locally': 'workLocallyOnboarding' };
+  // #79: push-fix, the push notice's setup-git button
+  const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'push-fix': 'setupGitOnboarding', 'work-locally': 'workLocallyOnboarding' };
   const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), costHint: () => costs.estimateText(), phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur, recommended: column.recommended }); // #633: step 3's work model section
@@ -113,6 +114,7 @@
   const cliWarning = (cli) => column.cliWarning(cli);
   const forkNotice = (o) => column.forkNotice(o);
   const forkPending = (o) => column.forkPending(o);
+  const pushNotice = (o) => column.pushNotice(o);
   const failedPaid = (s) => PAID.find((id) => s?.jobs?.[id]?.status === 'failed') || null;
   // #724: the progress tray, hidden while the wizard is open (project-wizard-tray.js)
   const tray = window.ProjectWizardTray({
@@ -386,6 +388,7 @@
           ${o.status === 'failed' ? errorBlock(o) : ''}
           ${cliWarning(o.cli)}
           ${remoteWarning(o.remote)}
+          ${pushNotice(o)}
         </div>
         ${workflowsColumn()}
       </div>${workModel.section()}`;
@@ -502,7 +505,7 @@
     const r = cur.review;
     const later = sectionState('projectMap', true) === 'later' && cur.model.source !== 'new' ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
     const openCity = `<button type="button" class="btn sm" data-act="open-city" data-testid="wizard-open-city">${esc(t('onboarding.open_city'))}</button>`;
-    return `<div class="wizard-review" data-testid="wizard-review">${later}
+    return `<div class="wizard-review" data-testid="wizard-review">${later}${pushNotice(cur.onboarding)}
         <div class="wizard-review-grid">
           ${projectCard()}
           ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city', openCity)}

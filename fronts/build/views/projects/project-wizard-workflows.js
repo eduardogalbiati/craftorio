@@ -17,6 +17,7 @@
 //   fork choice of a repository the owner can't push to, else the profile's mode.
 // - cliWarning(cli), forkNotice(onboarding), forkPending(onboarding): the repository step's notices (the
 //   CLI missing or signed out; #738 no push access: Create a fork / Work locally).
+// - #79 pushNotice(onboarding): the clone can't push (git's credentials), with the setup-git button.
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
 // - profileOf(), workflowChoices(), pickedWorkflows() (#729: Finish saves them as the project's workflows).
@@ -89,6 +90,24 @@
           ${failed}
           <div class="wizard-actions"><button type="button" class="btn primary" data-act="fork-create" data-testid="wizard-create-fork"${off}>${esc(t('onboarding.fork_create'))}</button>
             <button type="button" class="btn" data-act="work-locally" data-testid="wizard-work-locally"${off}>${esc(t('onboarding.fork_work_locally'))}</button></div>
+        </div>`;
+    }
+
+    // #79: the clone can't push (the engine's pushCheck failed): wizard-push-notice says why and what to run, with
+    // wizard-push-fix running the platform CLI's setup-git when the check named one; shown before Finish
+    function pushNotice(o) {
+      const check = o?.pushCheck;
+      if (!check || check.ok !== false) return '';
+      const command = check.setupGit?.command || '';
+      const off = cur().busy || check.status === 'fixing' ? ' disabled' : '';
+      const fix = command
+        ? `<div class="wizard-actions"><button type="button" class="btn primary" data-act="push-fix" data-testid="wizard-push-fix"${off}>${esc(t('onboarding.push_fix', { command }))}</button></div>`
+        : '';
+      return `<div class="wizard-alert warn" data-testid="wizard-push-notice" role="alert">
+          <strong>${esc(t('onboarding.push_notice'))}</strong>
+          <p class="small">${esc(check.fix || '')}</p>
+          ${check.reason ? `<p class="mono muted small text-cut" title="${esc(check.reason)}">${esc(check.reason)}</p>` : ''}
+          ${fix}
         </div>`;
     }
 
@@ -265,6 +284,7 @@
       pickedWorkflows,
       profileOf,
       profileSourceKey,
+      pushNotice,
       recommended,
       sourceKey,
       textOf,

@@ -3777,6 +3777,8 @@
   "onboarding.project_exists": "A project already imports this repository and its onboarding is finished: open it instead of importing it again.",
   "onboarding.project_exists_title": "This project already exists",
   "onboarding.provider_label": "Provider",
+  "onboarding.push_fix": "Run {command}",
+  "onboarding.push_notice": "Runs can't push to this clone yet: their pull requests would fail at the last step.",
   "onboarding.read_only": "Read-only. Nothing is written to the repository.",
   "onboarding.read_only_new": "Chosen from your answers.",
   "onboarding.recommended": "Recommended",

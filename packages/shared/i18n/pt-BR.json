@@ -3777,6 +3777,8 @@
   "onboarding.project_exists": "Um projeto já importa este repositório e o onboarding dele terminou: abra-o em vez de importar de novo.",
   "onboarding.project_exists_title": "Este projeto já existe",
   "onboarding.provider_label": "Provedor",
+  "onboarding.push_fix": "Executar {command}",
+  "onboarding.push_notice": "As execuções ainda não conseguem enviar push deste clone: os pull requests falhariam no último passo.",
   "onboarding.read_only": "Somente leitura. Nada é escrito no repositório.",
   "onboarding.read_only_new": "Escolhidos pelas suas respostas.",
   "onboarding.recommended": "Recomendado",
