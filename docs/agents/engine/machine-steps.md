@@ -103,9 +103,12 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
   project has no step definitions. The same rule backs the `missing_test_ids` filter
   (`{{ worktree_dir | missing_test_ids(steps, renderer) }}`, one line per id) and test/e2e-playwright.test.js.
-  ai-development-local-hero passes its `steps_folders` / `ui_folders` inputs (#588; defaults
-  `features/steps`, `src/renderer/`); the `ui_files(folders)` filter keeps the files of a list under
-  the UI folders, so a change there routes to `developer_screenshots` and the UI reviewer.
+  feature and fix pass their `steps_folders` / `ui_folders` inputs (#588; #80: no default, the
+  project's run defaults read them from its files, empty when it has none); the `ui_files(folders)`
+  filter keeps the files of a list under the UI folders, so a change there routes to
+  `developer_screenshots` and the UI reviewer. #80: `./` is the root (the pages and stylesheets
+  anywhere count); with no folders a page or component counts by its extension; a `renderer` that
+  renders empty is the whole repository (step files aside), never `src/renderer`.
   ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
   were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
   (`vars.testid_returns`), then develop's own routes follow.

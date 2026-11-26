@@ -575,11 +575,13 @@ const methods = {
     const dir = this.ctx.worktree_dir;
     // #588: each field renders to one folder or several, one per line or comma-separated (the hero
     // workflow joins its `steps_folders` / `ui_folders` inputs)
-    const folder = (key, def) => {
+    // #80: a `renderer` field that renders empty (a project without UI folders) is the whole repository ('.'),
+    // never src/renderer
+    const folder = (key, def, empty = def) => {
       const list = (step[key] ? render(String(step[key]), this.ctx) : '').split(/[\n,]/).map((f) => f.trim()).filter(Boolean);
-      return list.length ? list : [def];
+      return list.length ? list : [step[key] ? empty : def];
     };
-    const folders = { steps: folder('steps', testIds.DEFAULT_STEPS), renderer: folder('renderer', testIds.DEFAULT_RENDERER) };
+    const folders = { steps: folder('steps', testIds.DEFAULT_STEPS), renderer: folder('renderer', testIds.DEFAULT_RENDERER, '.') };
     const base = { kind: 'test_ids', round: st.visits, steps: folders.steps, renderer: folders.renderer, missing: [] };
     let output;
     if (!dir || !fs.existsSync(dir)) {

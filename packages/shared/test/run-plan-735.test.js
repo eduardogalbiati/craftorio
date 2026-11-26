@@ -28,8 +28,13 @@ test('#735 agentsOf of a step without agents is empty', () => {
 
 test('#735 on the describe() shape a backend run dims the UI reviewer with the no-UI reason', () => {
   const described = { inputs: INPUTS, steps: [{ id: 'develop' }, { id: 'code_review', agents: ['reviewer', 'ui_reviewer'] }] };
-  const out = stepsThatDontApply(described, { ui_folders: [] });
+  const out = stepsThatDontApply(described, { ui_folders: [], screenshots: 'off' });
   assert.deepEqual(out.map((s) => `${s.id}:${s.reason}`), ['ui_reviewer:run.doesnt_apply_no_ui']);
+});
+
+test('#80 no UI folders alone dims no UI step: an empty project\'s first run may add pages', () => {
+  const wf = { inputs: INPUTS, steps: [{ id: 'developer_screenshots' }, { id: 'testid_check' }, { id: 'code_review', agents: ['reviewer', 'ui_reviewer'] }] };
+  assert.deepEqual(stepsThatDontApply(wf, { ui_folders: [] }), []);
 });
 
 test('#735 with UI folders the UI reviewer applies', () => {

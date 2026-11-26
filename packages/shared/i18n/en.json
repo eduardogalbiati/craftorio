@@ -6565,7 +6565,7 @@
   "workflow_texts.feature_task_label": "Task",
   "workflow_texts.feature_test_command_desc": "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml).",
   "workflow_texts.feature_test_command_label": "Test command",
-  "workflow_texts.feature_ui_folders_desc": "The project's UI folders, repository-relative (one per line). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there.",
+  "workflow_texts.feature_ui_folders_desc": "The project's UI folders, repository-relative (one per line; ./ for pages at the root). A change under one of them takes its screenshots and the UI review; the test id check looks for the ids there. Empty: a changed page or component (.html, .jsx, .tsx, .vue, .svelte) counts as a UI change.",
   "workflow_texts.feature_ui_folders_label": "UI folders",
   "workflow_texts.feature_unit_tests_desc": "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-backfill workflow).",
   "workflow_texts.feature_unit_tests_label": "Unit tests",

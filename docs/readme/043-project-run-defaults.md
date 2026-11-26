@@ -26,7 +26,10 @@ frameworks, UI folders, a server, an E2E suite) and confirmed on the wizard's re
 working. A backend project has no UI defaults: `ui_folders` empty, `screenshots: off`,
 `e2e_tests: off`, no `steps_folders`; the existing conditions then skip the developer's
 screenshots, the test id check and the UI Reviewer, and the run screen shows those steps dimmed
-with "Doesn't apply: no UI in this project".
+with "Doesn't apply: no UI in this project". It is `screenshots: off` and `e2e_tests: off` that
+dim them: an empty `ui_folders` alone (an empty project) dims nothing, and a changed page or
+component (by its extension) still counts as a UI change. A run without UI folders says in its
+result that the screenshots and the UI review were skipped for that reason.
 
 Where each input of feature, fix and release gets its project value:
 
@@ -43,9 +46,9 @@ Where each input of feature, fix and release gets its project value:
 | `check_commands` | no workflow input: what the rule check runs without a `check_command` (#50), the `check` script or the linter and type checker found; shown in Project settings and Start |
 | `e2e_tests` (release: `e2e_suite`) | `off` for a backend, a unit-only profile or no E2E suite found |
 | `e2e_command` | the profile's E2E command or the suite found (Playwright / Cypress config); empty otherwise |
-| `ui_folders` | the UI folders found; empty for a backend |
+| `ui_folders` | the UI folders found (folders with pages or components; `./` for pages at the root, which covers the pages and stylesheets anywhere); empty for a backend or an empty project, never this app's `src/renderer/` |
 | `screenshots` | `off` for a backend, else the workflow's default |
-| `steps_folders` | the step folders found; empty for a backend |
+| `steps_folders` | the step folders found; empty for a backend or when the project has none |
 | CI wait, budgets, review rigour, validation | none: the workflow's defaults |
 
 Platform (#745): the Backlog, Roadmap and Epics use the project's platform (github.com → GitHub,

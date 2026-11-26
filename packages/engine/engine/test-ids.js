@@ -8,6 +8,7 @@
 // Folders are repository-relative, one folder or a list (#579, #588: this app's step definitions and
 // UI are spread over its root and its fronts): steps default to features/steps, the renderer to
 // src/renderer (the old layout; the bundled workflow passes its `steps_folders` / `ui_folders` inputs).
+// #80: './' is the root; an empty renderer list (no UI folders) is the whole repository, step files aside.
 
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +21,16 @@ const SKIPPED_DIRS = new Set(['.git', 'node_modules']);
 // #80: a UI file (a page or a component), what finds a project's UI folders (domains/project/
 // project-run-defaults.js) and what the `ui_files` filter matches in a run without UI folders
 const UI_FILE = /\.(html|jsx|tsx|vue|svelte)$/i;
+// #80: a stylesheet, a UI file too under the root UI folder ('./': a site's pages and its css/)
+const STYLE_FILE = /\.(css|less|sass|scss)$/i;
+
+// #80: a repository-relative folder or file with forward slashes, without a leading './' nor a
+// trailing '/'; the root ('./', '.') is ''. Shared with the `ui_files` filter, so both read a
+// project's UI folders alike.
+function normFolder(p) {
+  const f = String(p ?? '').replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
+  return f === '.' ? '' : f;
+}
 
 // The unique static ids of `getByTestId(...)` in a source text, in order of first use.
 function testIdsUsed(source) {
@@ -39,7 +50,7 @@ function listFiles(root, dir, exts) {
       if (e.isDirectory()) { if (!SKIPPED_DIRS.has(e.name)) visit(child); } else if (exts.includes(path.extname(e.name))) out.push(child);
     }
   };
-  visit(String(dir || '').replace(/\\/g, '/').replace(/\/+$/, ''));
+  visit(normFolder(dir));
   return out.sort();
 }
 
@@ -64,7 +75,9 @@ function missingTestIds(root, { steps = DEFAULT_STEPS, renderer = DEFAULT_RENDER
   // `renderer`: one folder, or a list of folders (this app's page is spread over its UI kit and its fronts);
   // the step definitions inside a UI folder (fronts/<id>/features/steps, #588) never define an id
   const stepSet = new Set(files);
-  const source = [...new Set([].concat(renderer).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  // #80: an empty list (a project without UI folders) is the whole repository, never src/renderer
+  const given = [].concat(renderer ?? []).filter((d) => String(d ?? '').trim());
+  const source = [...new Set((given.length ? given : ['']).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   return [...used].filter(([id]) => !source.includes(id)).map(([id, files]) => ({ id, files }));
 }
 
@@ -79,7 +92,9 @@ module.exports = {
   listFiles,
   missingTestIdLines,
   missingTestIds,
+  normFolder,
   stepFiles,
+  STYLE_FILE,
   testIdsUsed,
   UI_FILE,
 };

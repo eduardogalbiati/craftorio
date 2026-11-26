@@ -1,13 +1,13 @@
 // #735: which steps and agents of a workflow can't run with a run's inputs, so the run screen and its
 // plan show them dimmed ("Doesn't apply: no UI in this project") instead of reading as frontend work
 // on a backend project. A rule per UI step, on the inputs the workflow's own conditions read:
-// - no UI folders (`ui_folders` empty): developer_screenshots, testid_check and the code review's
-//   ui_reviewer never start (their `when` / `agent_when` look for a change under them);
-// - `screenshots: off`: developer_screenshots; `e2e_tests: off` (or not write_and_run): e2e;
-//   `e2e_tests: off`: testid_check.
+// - `screenshots: off`: developer_screenshots and the code review's ui_reviewer;
+// - `e2e_tests: off` (or not write_and_run): e2e; `e2e_tests: off`: testid_check.
+// #80: no UI folders (`ui_folders` empty) alone dims nothing: an empty project's first run that adds
+// pages is a UI change (the `ui_files` filter matches UI files by their extension then).
 // `stepsThatDontApply(workflow, inputs)` → [{ id, reason }], `reason` an i18n key:
-// run.doesnt_apply_no_ui when the project has no UI folders, run.doesnt_apply_off when an input
-// turned the step off. Only ids the workflow has (steps, or agents of a step: its agent_when or the
+// run.doesnt_apply_no_ui when an input turned the step off on a project without UI folders,
+// run.doesnt_apply_off otherwise. Only ids the workflow has (steps, or agents of a step: its agent_when or the
 // `agents` list the app's workflow description gives, `agentsOf`).
 // Browser: window.RunPlan; Node: module.exports.
 (function (root) {
@@ -38,10 +38,10 @@
     const screenshotsOff = has(declared, 'screenshots') && value('screenshots') === 'off';
     const e2e = has(declared, 'e2e_tests') ? value('e2e_tests') : null;
     const rules = [
-      ['developer_screenshots', noUi || screenshotsOff],
-      ['testid_check', noUi || e2e === 'off'],
+      ['developer_screenshots', screenshotsOff],
+      ['testid_check', e2e === 'off'],
       ['e2e', e2e != null && e2e !== 'write_and_run'],
-      ['ui_reviewer', noUi],
+      ['ui_reviewer', screenshotsOff],
     ];
     return rules
       .filter(([id, off]) => off && ids.has(id))

@@ -88,7 +88,7 @@ test('#588 ui_files: the changed files under the UI folders, one folder or a lis
   assert.equal(under(['src/renderer/views/a.js'], null), 0, 'no folders: no src/renderer default (#80)');
   assert.equal(under(['fronts/build/views/run.js'], null), 0);
   assert.equal(under(['index.html', 'web/App.tsx', 'lib/a.js'], []), 2, 'no folders: a page or a component by its extension (#80)');
-  assert.equal(under(['index.html', 'web/index.html'], ['./']), 1, 'the root folder: the root-level files (#80)');
+  assert.equal(under(['index.html', 'css/style.css', 'README.md', 'package.json'], ['./']), 2, 'the root folder: the pages and stylesheets, not any file (#80)');
   assert.equal(under(null, ['fronts']), 0, 'no files changed');
   assert.equal(under([], []), 0);
 });

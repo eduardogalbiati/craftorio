@@ -6565,7 +6565,7 @@
   "workflow_texts.feature_task_label": "Tarefa",
   "workflow_texts.feature_test_command_desc": "O comando da suíte inteira do projeto, que o orquestrador roda uma vez por rodada de testes (ex.: npm test). Vazio: descoberto pelos arquivos do projeto (package.json, go.mod, Cargo.toml, pom.xml, build.gradle, *.csproj, pyproject.toml).",
   "workflow_texts.feature_test_command_label": "Comando de testes",
-  "workflow_texts.feature_ui_folders_desc": "As pastas de UI do projeto, relativas ao repositório (uma por linha). Uma mudança em uma delas ganha capturas de tela e a revisão de UI; a verificação de test ids procura os ids nelas.",
+  "workflow_texts.feature_ui_folders_desc": "As pastas de UI do projeto, relativas ao repositório (uma por linha; ./ para páginas na raiz). Uma mudança em uma delas ganha capturas de tela e a revisão de UI; a verificação de test ids procura os ids nelas. Vazio: uma página ou um componente alterado (.html, .jsx, .tsx, .vue, .svelte) conta como mudança de UI.",
   "workflow_texts.feature_ui_folders_label": "Pastas de UI",
   "workflow_texts.feature_unit_tests_desc": "Escrever e rodar: o autor de testes escreve os testes da mudança, depois o orquestrador roda a suíte inteira (cerca de metade do custo de uma execução). Rodar os existentes: nenhum teste novo, a suíte roda uma vez sem agente e as falhas vão para o desenvolvedor (barato, a mudança fica sem teste). Desligado: nenhuma suíte (o mais barato; teste depois com o workflow test-backfill).",
   "workflow_texts.feature_unit_tests_label": "Testes unitários",
