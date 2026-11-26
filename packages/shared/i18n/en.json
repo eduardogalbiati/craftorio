@@ -3783,7 +3783,7 @@
   "onboarding.next": "Next",
   "onboarding.next_clone": "Next: clone and continue",
   "onboarding.next_steps_accept_workflows": "Accept the repository's workflows",
-  "onboarding.next_steps_accept_workflows_text": "The project's default comes from the repository and does not run until you accept it in Definitions.",
+  "onboarding.next_steps_accept_workflows_text": "Workflows of the repository await your acceptance: a run of them is refused until you accept each one in Definitions.",
   "onboarding.next_steps_add_failed": "The refactors could not be added to the roadmap",
   "onboarding.next_steps_cadence": "Keep refactoring",
   "onboarding.next_steps_cadence_text": "Add a refactor to the roadmap every 10 runs.",

@@ -18,7 +18,7 @@
 // (the default's rule, shared with packages/engine/domains/project/projects.js) and OnboardingModel's
 // variant labels (packages/shared/onboarding-model.js). #22: a Feature / Fix card whose variant ends in -code or
 // -e2e describes that test order (projects.workflows_desc_*), not the workflow file's generic description.
-// #40: a default that is a repository workflow awaiting acceptance (awaitsAcceptance over `all`) says so under the head
+// #40: a default that is a repository workflow refused until accepted (defaultAwaitingAcceptance over `all`) says so under the head
 // (project-default-awaiting-acceptance), with a link to Workflows › Definitions (Actions showWorkflowDefinition).
 
 window.ProjectWorkflows = (() => {
@@ -155,7 +155,7 @@ window.ProjectWorkflows = (() => {
   // #40: the default is a repository workflow awaiting the owner's acceptance: it can't run until accepted on
   // Workflows › Definitions (project-default-review-accept leads there)
   function awaitingHtml(def) {
-    const entry = (page.all || []).find((w) => nameOf(w) === def && window.awaitsAcceptance?.(w));
+    const entry = window.defaultAwaitingAcceptance?.(def, page.all);
     if (!entry) return '';
     return `<p class="warn-text small" data-testid="project-default-awaiting-acceptance">${esc(t('projects.workflows_default_awaiting', { name: def }))}
       <button type="button" class="link-btn small" data-testid="project-default-review-accept" data-file="${esc(entry.file)}">${esc(t('projects.workflows_default_review_accept'))}</button></p>`;

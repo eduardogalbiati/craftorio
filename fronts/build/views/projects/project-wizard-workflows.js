@@ -26,7 +26,7 @@
 // - #851 recommended(): the wizard-recommended label, on Analyze the repository here and on Light (work model).
 // - #790 loadManifest(): reads cur.manifest for the Default row; pickedDefault(workflows): Finish's default.
 // - #40 awaitingNotice(): wizard-default-awaiting-acceptance (step 3 and the review) while the project's default is a
-//   repository workflow awaiting acceptance (cur.awaiting, read by loadManifest), with Review and accept (data-act="review-accept").
+//   repository workflow refused until accepted (cur.repoWorkflows, read by loadManifest), with Review and accept (data-act="review-accept").
 // - #726 textOf(x): the model's i18n keys (a key, { key, params }, an array) in the interface's language: the
 //   reasons (after the highlighted wizard-workflow-why "Why:" label), the selects' options, the profile line.
 // Uses app.js globals (esc, t), window.OnboardingModel and window.Select.
@@ -229,21 +229,23 @@
     }
 
     // #40: the project's default (the Default row's pick, the manifest's, the record's) when it is one of the
-    // repository's workflows awaiting the owner's acceptance (cur.awaiting, read by loadManifest), else null
+    // repository's entries whose run is refused until accepted (cur.repoWorkflows, read by loadManifest;
+    // defaultAwaitingAcceptance, workflows-acceptance.js) → { name, entry }, else null
     function awaitingDefault() {
       const bare = (s) => String(s || '').replace(/\.ya?ml$/i, '');
       const name = bare(cur().workflows?.default) || bare(cur().manifest?.default) || bare(recordOf(cur().projectId)?.defaultWorkflow);
-      return name && (cur().awaiting || []).includes(name) ? name : null;
+      const entry = name ? window.defaultAwaitingAcceptance?.(name, cur().repoWorkflows) : null;
+      return entry ? { name, entry } : null;
     }
 
     // #40: step 3 and the review say that default must be reviewed and accepted before it runs (Workflows ›
-    // Definitions, data-act="review-accept"); acceptance stays the owner's click there
+    // Definitions at its file, data-act="review-accept"); acceptance stays the owner's click there
     function awaitingNotice() {
-      const name = awaitingDefault();
-      if (!name) return '';
+      const found = awaitingDefault();
+      if (!found) return '';
       return `<div class="wizard-alert warn" data-testid="wizard-default-awaiting-acceptance">
-          <span>${esc(t('onboarding.default_awaiting_acceptance', { name }))}</span>
-          <div class="wizard-actions"><button type="button" class="btn sm" data-act="review-accept" data-workflow="${esc(name)}" data-testid="wizard-default-review-accept">${esc(t('onboarding.review_and_accept'))}</button></div>
+          <span>${esc(t('onboarding.default_awaiting_acceptance', { name: found.name }))}</span>
+          <div class="wizard-actions"><button type="button" class="btn sm" data-act="review-accept" data-file="${esc(found.entry.file)}" data-testid="wizard-default-review-accept">${esc(t('onboarding.review_and_accept'))}</button></div>
         </div>`;
     }
 
@@ -284,12 +286,12 @@
         cur().manifest = m && typeof m === 'object' ? m : null;
         renderSoon();
       }).catch(() => { if (current()) cur().manifest = null; });
-      // #40: which of the repository's workflows await acceptance (awaitsAcceptance, workflows-acceptance.js)
+      // #40: the repository's own workflow entries (awaitingDefault finds the default's among them)
       Promise.resolve().then(() => api.listWorkflows({ projectId: pid, repositoryOnly: true })).then((list) => {
         if (!current()) return;
-        cur().awaiting = (list || []).filter((w) => window.awaitsAcceptance?.(w)).map((w) => String(w.name || '').replace(/\.ya?ml$/i, ''));
+        cur().repoWorkflows = Array.isArray(list) ? list : [];
         renderSoon();
-      }).catch(() => { if (current()) cur().awaiting = []; });
+      }).catch(() => { if (current()) cur().repoWorkflows = []; });
     }
 
     // #790: the default Finish saves: the owner's pick in the Default row, else the repository manifest's

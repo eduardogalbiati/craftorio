@@ -28,8 +28,8 @@
 // clone has a lockfile and no node_modules (api.onboardingStatus's deps), names the command and runs it
 // (api.installOnboardingDeps: npm ci, --ignore-scripts per the project's setting);
 // #35: a project with no repository (created without a remote) has a local backlog, so its first entry is the PO's too;
-// #40: next-step-accept-workflows, shown while some repository workflows await acceptance (api.listWorkflows repositoryOnly,
-// awaitsAcceptance), leads to Workflows › Definitions (Actions showWorkflowDefinition);
+// #40: next-step-accept-workflows, shown while some repository workflows are refused until accepted (api.listWorkflows
+// repositoryOnly, refusedUntilAccepted), leads to Workflows › Definitions at the default when it is one of them;
 // next-steps-dismiss), remembered per project in localStorage craftorio.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -119,7 +119,7 @@ function loadNextStepAwaiting(pv) {
   if (nextSteps()[pv.id] !== 'open' || pv.nextStepAwaiting !== undefined) return;
   pv.nextStepAwaiting = null;
   new Promise((resolve) => resolve(api.listWorkflows?.({ projectId: pv.id, repositoryOnly: true }))).then((list) => list, () => []).then((list) => {
-    pv.nextStepAwaiting = (Array.isArray(list) ? list : []).filter((w) => window.awaitsAcceptance?.(w));
+    pv.nextStepAwaiting = (Array.isArray(list) ? list : []).filter((w) => window.refusedUntilAccepted?.(w));
     if (state.pv === pv && state.view === 'project') renderProjectView();
   });
 }
@@ -240,8 +240,13 @@ function onNextStepClick(step) {
   // #744: the Product Owner's chat in issue mode on this project (the Build front's backlog-po.js)
   else if (step === 'po-issue' && state.pv) window.Actions?.call('openPoIssue', state.pv.id);
   else if (step === 'install-deps') installNextStepDeps(state.pv);
-  // #40: Workflows › Definitions at the first workflow awaiting acceptance (the owner accepts it there)
-  else if (step === 'accept-workflows' && state.pv?.nextStepAwaiting?.length) window.Actions?.call('showWorkflowDefinition', state.pv.nextStepAwaiting[0].file);
+  // #40: Workflows › Definitions at the project's default when it awaits acceptance, else the first one awaiting
+  // (the owner accepts it there)
+  else if (step === 'accept-workflows' && state.pv?.nextStepAwaiting?.length) {
+    const pending = state.pv.nextStepAwaiting;
+    const entry = window.defaultAwaitingAcceptance?.(state.pv.project?.defaultWorkflow, pending) || pending[0];
+    window.Actions?.call('showWorkflowDefinition', entry.file);
+  }
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {
     state.pv.tab = 'health';

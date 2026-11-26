@@ -810,7 +810,7 @@
   function onLeaveClick(act, e) {
     if (act === 'finish') finish();
     else if (act === 'open-city') finish({ city: true });
-    else if (act === 'review-accept') { const file = `${e.target.closest('[data-act]').dataset.workflow}.yaml`; close(); window.Actions?.call('showWorkflowDefinition', file); }
+    else if (act === 'review-accept') { const file = e.target.closest('[data-act]').dataset.file; close(); window.Actions?.call('showWorkflowDefinition', file); }
     else return false;
     return true;
   }
@@ -838,7 +838,7 @@
     else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, awaiting: undefined, ...freshReview() };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, repoWorkflows: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }

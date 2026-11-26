@@ -567,8 +567,9 @@
     const issues = shownSelected().map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     $b('#assign-issues').innerHTML = issues.map((i) => `<li title="${esc(`#${i.number} ${i.title}`)}"><span class="num">#${i.number}</span><span class="title">${esc(i.title)}</span></li>`).join('');
     const sel = $b('#assign-workflow');
-    // #40: a repository workflow awaiting the owner's acceptance is marked (its run is refused until accepted)
-    const awaiting = (w) => !!window.awaitsAcceptance?.(w);
+    // #40: a repository workflow whose run is refused until the owner accepts it is marked (an edited workspace
+    // copy of it runs as it is: not marked)
+    const awaiting = (w) => !!window.refusedUntilAccepted?.(w);
     const options = DefaultWorkflow.projectFirst(bl.workflows).map((w) => (awaiting(w)
       ? `<option value="${esc(w.file)}" data-testid="assign-workflow-awaiting-acceptance">${esc(w.name)}${esc(t('backlog.workflow_awaiting_acceptance'))}</option>`
       : `<option value="${esc(w.file)}">${esc(w.name)}</option>`)).join('');

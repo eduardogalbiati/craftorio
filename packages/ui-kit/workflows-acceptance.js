@@ -8,8 +8,12 @@
 // the current one's count. Nothing here accepts anything.
 // awaitsAcceptance is the one rule for "waits for acceptance": the count and the screen's block,
 // highlight and reason line (views/workflows/workflows.js) share it.
-// Uses app.js globals at call time ($, api, t).
-// Browser: window.awaitsAcceptance, window.refreshWorkflowsAcceptance, window.refreshWorkflowsAcceptanceOnFocus.
+// #40: refusedUntilAccepted narrows it to "a run of it is refused" (an owner's workspace copy runs without the
+// acceptance) and defaultAwaitingAcceptance resolves a project's default to that entry: the wizard, the project page
+// (Workflows block, Next steps), the Start drawer and the Assign dialog share them; Definitions keeps awaitsAcceptance.
+// Uses app.js globals at call time ($, api, t, DefaultWorkflow).
+// Browser: window.awaitsAcceptance, window.defaultAwaitingAcceptance, window.refreshWorkflowsAcceptance,
+// window.refreshWorkflowsAcceptanceOnFocus, window.refusedUntilAccepted.
 (function (root) {
   let seq = 0;
   let lastFocusRead = 0;
@@ -20,6 +24,18 @@
 
   /** A repository workflow entry not accepted at HEAD (an unreadable one too: its run is refused until accepted); a manifest error entry has no `accepted` and never waits. */
   const awaitsAcceptance = (w) => w.origin === 'repository' && w.accepted === false;
+  /** #40: an entry awaiting acceptance whose run is refused: the owner's edited workspace copy of that file (runsCopy 'workspace') runs without it (runs.js runWorkflowFile). */
+  const refusedUntilAccepted = (w) => awaitsAcceptance(w) && w.runsCopy !== 'workspace';
+  /** #40: the repository entry a project's default name means among `entries` (DefaultWorkflow.installedFile over their files), when its run is refused until accepted; else null. */
+  function defaultAwaitingAcceptance(name, entries) {
+    const list = (entries || []).filter((w) => w && w.origin === 'repository');
+    const bare = String(name || '').replace(/^.*[\\/]/, '').replace(/\.ya?ml$/i, '');
+    if (!bare) return null;
+    const files = list.map((w) => w.file);
+    const file = root.DefaultWorkflow?.installedFile ? root.DefaultWorkflow.installedFile(bare, files) : files.find((f) => f === `${bare}.yaml`);
+    const entry = file ? list.find((w) => w.file === file) : null;
+    return entry && refusedUntilAccepted(entry) ? entry : null;
+  }
 
   async function refreshWorkflowsAcceptance() {
     const projectId = root.CurrentProject?.get();
@@ -46,6 +62,8 @@
   }
 
   root.awaitsAcceptance = awaitsAcceptance;
+  root.defaultAwaitingAcceptance = defaultAwaitingAcceptance;
   root.refreshWorkflowsAcceptance = refreshWorkflowsAcceptance;
   root.refreshWorkflowsAcceptanceOnFocus = refreshWorkflowsAcceptanceOnFocus;
+  root.refusedUntilAccepted = refusedUntilAccepted;
 })(typeof window !== 'undefined' ? window : globalThis);

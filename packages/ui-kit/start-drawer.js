@@ -50,8 +50,8 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   const defaultFile = projectDefault && `${projectDefault}.yaml`;
   const offered = state.workflows.some((w) => w.file === defaultFile && !hiddenFromStart(w));
   // #40: a repository default awaiting the owner's acceptance falls back to the bundled Feature, never lastWorkflow
-  const awaiting = !offered && rec && projectDefault ? await defaultAwaitsAcceptance(rec.id, projectDefault) : false;
-  renderAwaitingNote(awaiting ? projectDefault : null);
+  const awaiting = !offered && rec && projectDefault ? await defaultAwaitingEntry(rec.id, projectDefault) : null;
+  renderAwaitingNote(awaiting && { name: projectDefault, file: awaiting.file, project: rec.id });
   const fallback = awaiting ? window.DefaultWorkflow?.LOCAL : state.settings.lastWorkflow;
   renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || (offered ? defaultFile : fallback));
   if (inputs && (!workflow || state.wf?.file === workflow)) {
@@ -73,25 +73,27 @@ function renderRealNote() {
   el.classList.toggle('hidden', devMode() && !!$('#mock-toggle')?.checked);
 }
 
-// #40: whether the project's default is one of its repository workflows still awaiting acceptance
-// (api.listWorkflows() without a project does not list them)
-async function defaultAwaitsAcceptance(projectId, name) {
+// #40: the project's repository entry its default means, when a run of it is refused until accepted
+// (defaultAwaitingAcceptance, workflows-acceptance.js; api.listWorkflows() without a project does not list them), else null
+async function defaultAwaitingEntry(projectId, name) {
   const repo = await Promise.resolve().then(() => api.listWorkflows({ projectId, repositoryOnly: true })).catch(() => []);
-  return (repo || []).some((w) => (w.name === name || w.file === `${name}.yaml`) && window.awaitsAcceptance?.(w));
+  return window.defaultAwaitingAcceptance?.(name, repo) || null;
 }
 
-// #40: the hint naming the default that awaits acceptance, with a way to Workflows › Definitions
-function renderAwaitingNote(name) {
+// #40: the hint naming the default that awaits acceptance ({ name, file, project } or null), with a way to
+// Workflows › Definitions at its file
+function renderAwaitingNote(found) {
   const el = $('#start-awaiting-note');
   if (!el) return;
-  el.classList.toggle('hidden', !name);
-  el.innerHTML = name
-    ? `${esc(t('start_drawer.default_awaiting_acceptance', { name }))} <button type="button" class="link-btn" data-testid="start-drawer-open-definitions">${esc(t('start_drawer.open_definitions'))}</button>`
+  el.classList.toggle('hidden', !found);
+  el.dataset.project = found?.project || '';
+  el.innerHTML = found
+    ? `${esc(t('start_drawer.default_awaiting_acceptance', { name: found.name }))} <button type="button" class="link-btn" data-testid="start-drawer-open-definitions">${esc(t('start_drawer.open_definitions'))}</button>`
     : '';
   el.onclick = (e) => {
-    if (!name || !e.target?.closest?.('button')) return;
+    if (!found || !e.target?.closest?.('button')) return;
     closeDrawer();
-    window.Actions?.call('showWorkflowDefinition', `${name}.yaml`);
+    window.Actions?.call('showWorkflowDefinition', found.file);
   };
 }
 
@@ -178,6 +180,9 @@ function renderProjectOptions(preferred) {
 function renderProjectInfo() {
   const p = state.projects.find((x) => x.id === $('#project-select').value);
   $('#project-info').textContent = p ? `${p.folder}${p.repo ? `\n${p.repo}` : ''}` : '';
+  // #40: the awaiting-acceptance hint belongs to the project the drawer opened on
+  const note = $('#start-awaiting-note');
+  if (note && note.dataset.project && note.dataset.project !== (p?.id || '')) renderAwaitingNote(null);
   applyProjectHints();
   window.renderAnalysisEstimate?.();
 }
