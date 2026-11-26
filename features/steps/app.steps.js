@@ -48,6 +48,27 @@ When('I reload the app', async ({ e2e }) => {
   await e2e.window.waitForLoadState('domcontentloaded');
 });
 
+// #85, #87: a workspace that never saved a setting. The demo seed writes settings.json with every
+// default merged in (packages/engine/domains/workspace/settings.js writeSettings), so the key is taken
+// out of the file; the Night watch permissions are their own file (oracle/night-permissions.json, not
+// written by the demo seed). Then the page reloads so the renderer reads the workspace again.
+const NEVER_SAVED = {
+  'base check setting': (ws) => {
+    const file = path.join(ws, 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    delete settings.baseCheck;
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+  },
+  'Night watch permissions': (ws) => fs.rmSync(path.join(ws, 'oracle', 'night-permissions.json'), { force: true }),
+};
+Given('the workspace never saved its {string}', async ({ e2e }, what) => {
+  const forget = NEVER_SAVED[what];
+  if (!forget) throw new Error(`no "never saved" seeding for "${what}" (known: ${Object.keys(NEVER_SAVED).join(', ')})`);
+  forget(path.join(e2e.scratch, 'workspace'));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
 Then('the sidebar offers {string}', async ({ e2e }, name) => {
   await expect(navItem(e2e.window, name)).toBeVisible();
 });

@@ -36,6 +36,8 @@ test.afterEach(() => {
 
 async function setup(t) {
   const { service, api } = makeService(t);
+  // #85: the base check is off by default; this test needs it on
+  api['settings:set']({ baseCheck: { onRed: 'fix' } });
   const ws = service.workspace();
   const repo = gitRepo(t);
   const project = await api['projects:create']({ name: 'bh465', folder: repo.dir });

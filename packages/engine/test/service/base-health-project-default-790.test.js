@@ -54,7 +54,8 @@ async function setup(t, { manifest = null, extra = {} } = {}) {
   }
   const project = await api['projects:create']({ name: 'bh790', folder: repo.dir, ...extra });
   // what an older settings.json holds: nothing but the migration may read it
-  fs.writeFileSync(ws.settings, JSON.stringify({ defaultWorkflow: 'fixture-setting.yaml' }));
+  // #85: the base check is off by default; this test needs it on
+  fs.writeFileSync(ws.settings, JSON.stringify({ defaultWorkflow: 'fixture-setting.yaml', baseCheck: { onRed: 'fix' } }));
   const ctx = { ws, active: new Map(), isReleaseRun: (r) => !!r.release, notify: () => {}, listWorkflows: () => api['workflows:list']() };
   const health = loadHealth();
   const exec = fakeExec();

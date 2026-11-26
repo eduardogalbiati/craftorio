@@ -74,6 +74,8 @@ function nodeProject(t) {
 
 test('#613 the service re-runs only the failed files in one command: red twice is recorded, red then green is a flaky sighting', async (t) => {
   const { service, api } = makeService(t);
+  // #85: the base check is off by default; this test needs it on
+  api['settings:set']({ baseCheck: { onRed: 'fix' } });
   process.env.CRAFTORIO_LOCKS_DIR = tmp(t, 'bh613s-locks-');
   const repo = nodeProject(t);
   const project = await api['projects:create']({ name: 'bh613', folder: repo });

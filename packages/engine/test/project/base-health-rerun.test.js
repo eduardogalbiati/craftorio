@@ -214,15 +214,15 @@ for (const [name, rerunFiles] of [
   ['times out', async ({ files }) => ({ failures: [], log: 'killed', error: `the re-run of ${files.length} file(s) timed out` })],
   ['does not start (no test command)', async () => ({ failures: [], log: '', error: 'no test command' })],
 ]) {
-  test(`#613 a second round that ${name} counts as red for its tests: filed as before`, async (t) => {
+  // #78: a second round that gave no result confirms nothing: neither red nor flaky, nothing filed.
+  test(`#613 #78 a second round that ${name} confirms nothing: the check is error, nothing filed`, async (t) => {
     const { ws, locks } = tmpWs(t);
     const f = fixture(t, 'canonical');
     const fx = fakeExec();
     const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([FLAKY]).runSuite, rerunFiles, exec: fx.exec });
-    assert.equal(r.status, 'red');
-    assert.equal(fx.creates.length, 1);
-    assert.ok(fx.creates[0].includes(FLAKY.test), fx.creates[0]);
-    assert.deepEqual(load().knownFailures(ws, PROJECT).map((x) => x.test), [FLAKY.test]);
+    assert.equal(r.status, 'error');
+    assert.equal(fx.creates.length, 0, 'no issue filed');
+    assert.equal(r.fixItem ? 'fix item' : 'none', 'none');
     assert.deepEqual(flakyOf(ws), [], 'no flaky sighting');
   });
 }

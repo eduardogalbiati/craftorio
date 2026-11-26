@@ -9,6 +9,7 @@ Feature: Main stays green: the base check
   @issue-527
   Scenario: The Roadmap shows the base check waiting for the suite slot while another run holds it
     Given the app is open while another run holds the machine's suite slot
+    And the base check is set to "Issue + fix item"
     And the demo project is a git repository on the base "main"
     When a merge into the base "main" starts the base check
     And I open "Backlog" in the sidebar

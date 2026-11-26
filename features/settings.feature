@@ -265,12 +265,27 @@ Feature: Settings
     And the "AI agents" language is "Same as the interface (English)"
 
   # #405: Settings › Execution's red-base choice (data-testid="base-check-on-red"), setting baseCheck.onRed
+  # #85 changed the default from "Issue + fix item" to "Off"
   @issue-405
-  Scenario: Settings › Execution offers what happens when the base goes red, issue + fix item by default
+  Scenario: Settings › Execution offers what happens when the base goes red, off by default
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
-    Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Issue + fix item" selected
+    Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Off" selected
+
+  # #85: the base check is off until the owner turns it on. The demo seed writes every default into
+  # settings.json, so the scenario takes baseCheck out first. The help (data-testid="base-check-help")
+  # says it is off by default and what turning it on does.
+  @issue-85
+  Scenario: A workspace that never saved the base check shows it Off, and the help says what turning it on does
+    Given the app is open
+    And the workspace never saved its "base check setting"
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the red-base choice offers "Off", "Issue only" and "Issue + fix item", with "Off" selected
+    And the base check help mentions "off by default"
+    And the base check help mentions "issue"
+    And the base check help mentions "Fix the base"
 
   # #476 (SEC-11): the Linux AppImage's launcher starts the app without Chromium's sandbox when the
   # system forbids it, and then sets CRAFTORIO_NO_SANDBOX=1 (the scenario sets it as the launcher

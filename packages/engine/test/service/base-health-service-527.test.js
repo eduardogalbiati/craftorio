@@ -66,6 +66,8 @@ const waitingPush = (p) => p?.status === 'waiting' || Object.values(p || {}).som
 
 test('#527 the service\'s base check waits while a run holds the suite slot and tells the Roadmap so', async (t) => {
   const { service, api } = makeService(t);
+  // #85: the base check is off by default; this test needs it on
+  api['settings:set']({ baseCheck: { onRed: 'fix' } });
   const locks = tmpLocks(t);
   const repo = gitRepo(t);
   const project = await api['projects:create']({ name: 'bh527', folder: repo.dir });

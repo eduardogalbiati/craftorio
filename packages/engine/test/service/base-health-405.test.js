@@ -6,7 +6,7 @@
 //   after recordPreexisting wrote into the service's workspace root (service.workspace().root).
 //
 // Assumptions:
-// - The key is `baseCheck: { onRed: 'fix' }` ('off' | 'issue' | 'fix'); settings:set validates nothing.
+// - The key is `baseCheck: { onRed: 'off' }` ('off' | 'issue' | 'fix'; 'off' by default since #85); settings:set validates nothing.
 // - A project is registered with the shared roadmapProject helper (projects:create + a backlog file).
 // Modules are required inside each test, so this file loads before the code exists.
 const test = require('node:test');
@@ -15,9 +15,10 @@ const { makeService, roadmapProject } = require('./helpers');
 
 const load = () => require('../../domains/project/base-health');
 
-test('#405 settings: baseCheck.onRed defaults to \'fix\' and settings:set { onRed: \'issue\' } reads back', (t) => {
+// #85: the base check is off by default (was 'fix')
+test('#405 #85 settings: baseCheck.onRed defaults to \'off\' and settings:set { onRed: \'issue\' } reads back', (t) => {
   const { api } = makeService(t);
-  assert.equal(api['settings:get']().baseCheck?.onRed, 'fix');
+  assert.equal(api['settings:get']().baseCheck?.onRed, 'off');
   const saved = api['settings:set']({ baseCheck: { onRed: 'issue' } });
   assert.equal(saved.baseCheck?.onRed, 'issue');
   assert.equal(api['settings:get']().baseCheck?.onRed, 'issue');

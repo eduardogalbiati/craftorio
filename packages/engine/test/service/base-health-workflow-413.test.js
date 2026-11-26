@@ -58,6 +58,8 @@ function fakeExec() {
 
 async function setup(t) {
   const { service, api } = makeService(t);
+  // #85: the base check is off by default; this test needs it on
+  api['settings:set']({ baseCheck: { onRed: 'fix' } });
   const ws = service.workspace();
   for (const f of [AI_DEV, LOCAL]) assert.ok(fs.existsSync(path.join(ws.workflows, f)), `the workspace has ${f}`);
   const repo = gitRepo(t);
@@ -129,6 +131,8 @@ test('#413 through the service\'s own wiring, a run\'s pre-existing failure gets
   t.after(() => { require.cache[areaFile].exports = factory; });
   const { service, api } = makeService(t);
   require.cache[areaFile].exports = factory;
+  // #85: the base check is off by default; this test needs it on
+  api['settings:set']({ baseCheck: { onRed: 'fix' } });
   assert.ok(shared && typeof shared.afterStepFinished === 'function', 'the service built the area');
   const ws = service.workspace();
   const repo = gitRepo(t);

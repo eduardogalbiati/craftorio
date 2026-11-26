@@ -30,6 +30,8 @@ test.afterEach(() => {
 
 test('#71 base check: a project with no test command and no test file ends no_tests, with no failure notice', async (t) => {
   const { service, api } = makeService(t);
+  // #85: the base check is off by default; this test needs it on
+  api['settings:set']({ baseCheck: { onRed: 'fix' } });
   const ws = service.workspace();
   const project = await api['projects:create']({ name: 'bh71', folder: gitRepo(t).dir });
   const notices = [];

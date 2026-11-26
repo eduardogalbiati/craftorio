@@ -905,6 +905,7 @@ Feature: Roadmap statuses, done items, filters and run timers
   @issue-750
   Scenario: While the base check runs, the activity band names it with its start and commit, and "View terminal" opens its log
     Given the app is open with the machine's suite slot free
+    And the base check is set to "Issue + fix item"
     And the demo project is a git repository on the base "main" whose suite runs for a while
     When a merge into the base "main" starts the base check
     And I open "Backlog" in the sidebar

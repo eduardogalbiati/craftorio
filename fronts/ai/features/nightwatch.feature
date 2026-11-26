@@ -19,6 +19,19 @@ Feature: Night watch
     And the permission "Regroup or reorder planned items" is ticked
     And the permission "Retry a failed roadmap item" is ticked
 
+  # #87: never saved, the checklist shows the defaults: Retry on, Skip off. Skip's help (data-testid
+  # "nw-perm-help" in the row "nw-perm") says turning it on lets the night move on past a failed item,
+  # and past a gate once the wait is over. The demo seed writes no night-permissions.json.
+  @issue-87
+  Scenario: A workspace that never saved its permissions has Skip an item off and Retry on, and Skip says what it lets the night do
+    Given the app is open
+    And the workspace never saved its "Night watch permissions"
+    When I open "Night watch" in the sidebar
+    Then the permission "Retry a failed roadmap item" is ticked
+    And the permission "Skip an item" is not ticked
+    And the help of the permission "Skip an item" mentions "past a failed item"
+    And the help of the permission "Skip an item" mentions "past a gate"
+
   @issue-239
   Scenario: Unticking every permission on purpose and saving keeps them all unticked
     Given the app is open

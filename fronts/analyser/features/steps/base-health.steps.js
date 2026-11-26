@@ -83,6 +83,25 @@ Then('the red-base choice offers {string}, {string} and {string}, with {string} 
   await expect.poll(() => select.evaluate((el) => el.selectedOptions[0]?.textContent.trim())).toBe(selected);
 });
 
+// #85: the help under "When the base goes red" (data-testid="base-check-help", new): says the check is
+// off by default and what turning it on does (files issues; with a fix item, a Fix-the-base stage)
+Then('the base check help mentions {string}', async ({ e2e }, text) => {
+  const help = e2e.window.getByTestId('base-check-help');
+  await expect(help).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(help).toContainText(new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+});
+
+// #85: the base check is off by default; a scenario that needs it on saves the choice the owner would
+// make in Settings › Execution (settings.json baseCheck.onRed, read by the service on every check)
+const ON_RED = { Off: 'off', 'Issue only': 'issue', 'Issue + fix item': 'fix' };
+Given('the base check is set to {string}', async ({ e2e }, label) => {
+  const onRed = ON_RED[label];
+  if (!onRed) throw new Error(`the red-base choice reads ${Object.keys(ON_RED).join(', ')}, not "${label}"`);
+  const file = path.join(wsRoot(e2e), 'settings.json');
+  const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  fs.writeFileSync(file, JSON.stringify({ ...settings, baseCheck: { ...(settings.baseCheck || {}), onRed } }, null, 2));
+});
+
 // ---- a red base check puts a fix item at the front of the roadmap -------------------------------------
 
 // A base check of the demo project after a merge, on a scratch repository's main, its suite red on one
