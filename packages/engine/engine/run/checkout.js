@@ -7,6 +7,9 @@
 // base's last green commit), the base brought into the branch
 // before a suite round (`bringBaseIn`, #403), the scratch workspace (#120)
 // and the processes agents leave running in it (`stopWorktreeProcesses`).
+// #81: `logRepoCommands` also sets `no_test_command` in the templates' context once the checkout is known
+// (no test command given or found, before the first turn): feature.yaml / fix.yaml tell the test writer
+// and the developer, and skip the test steps (the change reported as not tested: no test command).
 // The git operations themselves are packages/engine/engine/worktree.js.
 
 'use strict';
@@ -151,6 +154,8 @@ const methods = {
     // #50: said here too, for a workflow whose route skips a check step with nothing to run
     const rewrites = checksOff(given) || checkStep.checkCommand(dir, given) ? [] : foundChecks(dir).rewrites;
     const tests = this.suiteCommand();
+    // #81: decided before the first turn, in the run's real checkout (never a mock run: it never detects one)
+    if (this.ctx && !this.mock && !this.machine?.simulated && fs.existsSync(dir)) this.ctx.no_test_command = !tests;
     const parts = [
       install && `dependency install ${install}`,
       checks.length && `check ${checks.map((c) => `\`${c}\``).join(', ')}`,

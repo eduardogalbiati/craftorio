@@ -35,6 +35,10 @@ nothing to run. The suite ends **not run: the project has no tests** and the run
 Run screen, its chat, the roadmap item, the pull request's text and the base check say **Not tested:
 the project has no tests**, never Not tested green. The input **A project with no tests**
 (`no_tests`) set to *Ask* keeps the gate: its recommendation tells the supervisor on call that only
-you answer it, and in Fix your Approve goes on to the verification, never straight to the merge. A project that has test files and no known command always
-asks: set `test_command`. When the supervisor on call answers a gate itself, the Run screen and the
+you answer it, and in Fix your Approve goes on to the verification, never straight to the merge. A project with no test runner (no `test_command` given and
+none found: a plain HTML site, a Markdown-only repository) is decided when the run starts: the test
+writer writes no test file, the test steps are skipped, and the build and the verification still run,
+reported as **Not tested: no test command** (`tested: "no test command"`); test files found with no
+known command go on the same way. If the project does have a runner Craftorio does not know, set
+`test_command`. When the supervisor on call answers a gate itself, the Run screen and the
 chat say so, with the answer; it is told the gate's own recommendation and says why when it differs.

@@ -304,6 +304,11 @@ steps:
     fragment: dev-pipeline
     agent: reviewer
     transitions:
+      # #81: decided when the run started (no test command given or found: `no_test_command`), so the
+      # suite step is skipped and the verification runs; no_tests: ask still goes through the suite
+      - when: "output.approved and no_test_command and inputs.no_tests != 'ask'"
+        goto: verify_change
+        set: { tested: "no test command" }
       - when: "output.approved"
         goto: suite
       - when: "true"
@@ -367,7 +372,7 @@ steps:
     transitions:
       # #71: no_tests: ask and an Approve right after the suite: on to the verification, as Continue does
       # (verify_change and code_review open this gate after their own rounds: their Approve lands the change)
-      - when: "approved and steps.suite.output and steps.suite.output.status == 'not_run' and previous_step not in ['code_review', 'verify_change']"
+      - when: "approved and steps.suite.output and steps.suite.output.status == 'not_run' and not steps.suite.output.no_command and previous_step not in ['code_review', 'verify_change']"
         goto: verify_change
         set: { tested: "no tests" }
       - when: "approved and inputs.mode != 'local'"

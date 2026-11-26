@@ -84,11 +84,12 @@ In the other workflows the rule stays: the developer never writes tests (only th
 
 A project with no test command (a plain HTML site, a Markdown-only repository: no package.json,
 go.mod, pom.xml, build.gradle, *.csproj or pyproject.toml, and the workflow's `test_command` empty)
-has no test runner: nothing can run a test file there. Never invent one (no package.json, no
-framework, no runner script added just to run your tests): the suite step does not run, the run goes
-on to the build and the verification, reported as "Not tested: no test command" (#81). Say so in your
-answer: each criterion is then not testable automatically, with how to check it by hand (open the
-page, follow the link). Only when the task asks for a runner is adding one part of the change.
+has no test runner: nothing can run a test file there. The run decides it before your first turn and
+your prompt says so (#81): write no test file and never invent a runner (no package.json, no
+framework, no runner script added just to run your tests). The test steps are skipped, the run goes
+on to the build and the verification, reported as "Not tested: no test command". In your answer, each
+criterion is then not testable automatically, with how to check it by hand (open the page, follow the
+link). Only when the task itself adds a runner is writing tests (and the runner) part of the change.
 
 ## Anti-patterns (reject them in your own tests)
 

@@ -24,6 +24,9 @@ steps:
       a new minimal failing test, or a direct call) and run it. Change no production code yet.
       Commit a new failing regression test when you wrote one. Answer with the command, what it
       showed and whether the bug reproduced.
+      {% if no_test_command %}This project has no test runner (#81: no test command was given or found when the run
+      started): write no test file and add no runner; reproduce with a direct check (open the page, read the file).
+      {% endif %}
     output_schema:
       type: object
       required: [reproduced, command, observed]
@@ -51,9 +54,13 @@ steps:
       {% endif %}{% if steps.e2e.output and steps.e2e.output.status != 'pass' %}The E2E suite failed: {{ steps.e2e.output.message }}
       {% endif %}{% if steps.verify_change.output and steps.verify_change.output.verdict == 'not_verified' %}The verifier could not confirm the fix: {{ steps.verify_change.output.evidence }}
       {% endif %}Fix it.{% endif %}
-      Fix the root cause, keep a regression test that failed before the fix and passes after it, run
+      {% if no_test_command %}Fix the root cause. This project has no test runner (#81: no test command), so write no
+      test file and add no runner: nothing can run a test, so the change is reported as not tested.
+      Commit on the branch and answer with the branch, a short summary and the files you changed. Never push.
+      {% else %}Fix the root cause, keep a regression test that failed before the fix and passes after it, run
       the focused tests (not the whole suite: the run's suite step runs it), commit on the branch and
       answer with the branch, a short summary and the files you changed. Never push.
+      {% endif %}
     output_schema:
       type: object
       required: [branch, summary, files_changed]

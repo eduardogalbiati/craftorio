@@ -36,7 +36,10 @@ async function suiteWithoutCommand(cwd, patterns) {
 // the round's output as the step's transitions can route it
 function routedStatus(output, step) {
   if (output.status !== 'not_run' || (step.transitions || []).some((t) => /\bnot_run\b/.test(String(t.when || '')))) return output;
-  const reason = I18n.t('engine.suite_no_command_reason', { reason: output.reason });
+  // #81: a no_command round keeps its own short reason, not the not_run sentence inside the wrapper
+  const reason = output.no_command
+    ? I18n.t('engine.suite_no_command_tests', { files: LOOKED_IN })
+    : I18n.t('engine.suite_no_command_reason', { reason: output.reason });
   return { ...output, status: 'blocked', reason, message: notRunMessage({ status: 'blocked', reason }) };
 }
 

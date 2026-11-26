@@ -93,7 +93,12 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   `summary.json` then has `tested` and `tested_failures`. #71 (`suite-no-command.js`): with no command
   and no test file (`tests_paths`) the status is `not_run`, routed on by feature and fix with
   `set: { tested: "no tests" }` unless `no_tests: ask`; a step whose transitions do not name `not_run`
-  gets it as `blocked`. Filter `suite_failures`
+  gets it as `blocked`. #81: test files with no command found end `not_run` with `no_command: true`,
+  routed on by feature and fix with `set: { tested: "no test command" }` whatever `no_tests` says.
+  Before that, at the run's start, `checkout.js logRepoCommands` sets `no_test_command` in the
+  templates' context (no command given or found; never in a mock run): the test writer writes no test
+  file, and code_review (feature, fix) skips the test steps straight to the build / verification with
+  the same `tested` (unless `no_tests: ask` or test files were written anyway). Filter `suite_failures`
   (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test (with
   its class), for a prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
   (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
