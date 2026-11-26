@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../engine/workflow');
 const { runUntilStall } = require('./helpers/run-watch');
+const { simInputs } = require('./helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..');
 // #648: writer-reviewer.yaml and ai-arena.yaml left workflows/ (aliases of write-doc); their own tests read these copies
@@ -38,7 +39,7 @@ async function runConditionalAction(t, cleanup) {
 // software-development.yaml; the caller's inputs win). Gates get `answers[step]` (default: approve /
 // first choice), like --auto-approve. `answers[step]` (and `feedback[step]`) may be a list, one
 // per visit to that gate (shifted as it is visited again; the last one repeats past the end).
-// The rule check runs a trivial command: the repository's own `npm run check` would take most of
+// The rule check runs a trivial command (helpers/sim-inputs.js, for every workflow): the repository's own `npm run check` would take most of
 // the test's time on every visit of rule_check (#705). The secret scan is off (#49): gitleaks, where it is
 // installed, would read this checkout's own commits and a finding there would change the route.
 // #737: the runs of a test process share the mock's code → tests map of the repository (seconds of
@@ -50,7 +51,7 @@ async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = 
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', file),
-    inputs: { task: 'Engine test', repo_path: root, ...(file === 'feature.yaml' ? { mode: 'remote', check_command: 'node --version', secret_scan: 'off' } : {}), ...inputs },
+    inputs: simInputs({ task: 'Engine test', repo_path: root, ...(file === 'feature.yaml' ? { mode: 'remote' } : {}), ...inputs }),
     mock: true,
     runsDir,
     mockSequences,

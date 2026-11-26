@@ -60,7 +60,10 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
     a plain `node --test …` runs inlined with the flag; any other command runs without coverage. Whenever the output (or the #219
     human log) has node's coverage table, `coverage/coverage-summary.md` (totals and the changed
     files' coverage, `packages/engine/domains/evidence/coverage-summary.js`) is saved as a Tests artifact and the output gets
-    `coverage { lines, branches, functions, files, path }`. No model call.
+    `coverage { lines, branches, functions, files, path }`. No model call. Only an execution of the
+    whole suite measures it: a round of selected files (`scope: affected`, the focused run of
+    `scope: failed`, a step's `files:`) runs bare, so the report is the last whole run's (on this
+    repository coverage made the suite about a quarter slower: 270 s bare, 341 s with it, 2026-11-25).
   - **`result.md`** (#225): `finish` writes the run's result summary (`packages/engine/domains/evidence/result-summary.js`: status,
     issues, commits, suite results, coverage, screenshots, key artifacts) before `workflow.finished`;
     it is the run's first artifact (category `result`, `packages/engine/domains/evidence/artifact-categories.js`).

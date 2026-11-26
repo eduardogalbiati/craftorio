@@ -31,6 +31,12 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   docs PRs that run no test, so a test copies it into its `test/fixtures/` and reads the copy.
   `npm run check`'s `test-fixtures` rule (`scripts/test-fixture-rule.js`) names each test file and
   line that reads a path under `docs/work/`.
+- Generated files fail before the suite, not in it: `npm run check`'s `generated` rule
+  (`scripts/generated-files.js`, run by a run's rule_check after every developer commit) says when
+  `packages/contract/contract.json` or the contract hash pinned in
+  `packages/engine/test/service/one-front-composition-590.test.js` is behind the engine (`npm run
+  contract` rewrites both; add a changeset for `@craftorio/contract`), and when a `docs/agents/` file
+  grows over 200 lines (split it into `docs/agents/<topic>/`, then `npm run docs`).
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +
@@ -71,10 +77,11 @@ What `npm test` runs, CI, and the folder and file a new test belongs in.
   file, port or the clipboard) gets `@serial` with the reason in a comment; `CRAFTORIO_E2E_WORKERS=1`
   is the old serial suite. One lane only: `npm run test:e2e -- --project behaviour`.
   Workers (#366): unset or `auto` sizes the behaviour lane from the machine,
-  `clamp(1, 4, min(floor(threads / 8), floor((freeGB - 4) / 1.5)))` (20 threads and 11 GB free give 2,
-  a 4-vCPU runner 1; constants and measurements in `scripts/e2e-workers.js`); a number forces it, an
+  `clamp(1, 4, min(floor(threads / 4), floor((freeGB - 4) / 1.5)))` (16 threads and 13 GB free give 4,
+  a 4-vCPU runner 1; constants and measurements in `scripts/e2e-workers.js`: the analyser front took
+  249 s with 2 workers, 150 s with 4 and 128 s with 6 in WSL on 16 threads, 2026-11-25); a number forces it, an
   invalid value falls back to auto with a warning. The suite's first line says the choice
-  ("E2E: 2 workers (auto: 20 threads, 11.2 GB free)"). On a slow machine, or when scenarios time out
+  ("E2E: 4 workers (auto: 16 threads, 13.2 GB free)"). On a slow machine, or when scenarios time out
   while other work runs, set `CRAFTORIO_E2E_WORKERS=1`; on a big idle one, a number above auto.
   The app is dark-only today: the light and dark baselines guard `prefers-color-scheme` both ways.
   E2E visual scenarios render at a fixed clock, never the real one (#362): `the app is open in the

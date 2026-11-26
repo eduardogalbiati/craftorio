@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
+const { simInputs } = require('../helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..', '..');
 const wfFile = (name) => path.join(root, 'workflows', `${name}.yaml`);
@@ -18,7 +19,7 @@ function tmpDir(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
-const newRun = (t, name, inputs, opts = {}) => new WorkflowRun({ file: wfFile(name), inputs: { task: 'Add the feature', repo_path: root, ...inputs }, mock: true, runsDir: tmpDir(t), ...opts });
+const newRun = (t, name, inputs, opts = {}) => new WorkflowRun({ file: wfFile(name), inputs: simInputs({ task: 'Add the feature', repo_path: root, ...inputs }), mock: true, runsDir: tmpDir(t), ...opts });
 const plainThen = (then) => JSON.parse(JSON.stringify(then ?? null));
 
 test('#702 a feature run whose task names docs/work/<item>/plan.md starts with a then to sdlc-record for that item', (t) => {

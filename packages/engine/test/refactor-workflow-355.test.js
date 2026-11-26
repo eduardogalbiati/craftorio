@@ -11,6 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun, loadWorkflow, evalExpr } = require('../engine/workflow');
+const { simInputs } = require('./helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..');
 const WORKFLOW = path.join(root, 'workflows', 'refactor.yaml');
@@ -24,7 +25,7 @@ const stepOf = (wf, id) => {
 function newRun(t, inputs) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-355-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
-  return new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Split the handler', repo_path: root, ...inputs }, mock: true, runsDir });
+  return new WorkflowRun({ file: WORKFLOW, inputs: simInputs({ task: 'Split the handler', repo_path: root, ...inputs }), mock: true, runsDir });
 }
 
 test('refactor workflow: the bundled workflow loads, is named refactor, and starts by pinning the behaviour', () => {

@@ -11,6 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun, loadWorkflow, evalExpr } = require('../../engine/workflow');
+const { simInputs } = require('../helpers/sim-inputs');
 
 const root = path.join(__dirname, '..', '..', '..', '..');
 const FEATURE = path.join(root, 'workflows', 'feature.yaml');
@@ -22,7 +23,7 @@ function tmpDir(t, prefix) {
   return dir;
 }
 
-const featureRun = (t, inputs, opts = {}) => new WorkflowRun({ file: FEATURE, inputs: { task: 'Add the feature', repo_path: root, ...inputs }, mock: true, runsDir: tmpDir(t, 'runs-631-'), ...opts });
+const featureRun = (t, inputs, opts = {}) => new WorkflowRun({ file: FEATURE, inputs: simInputs({ task: 'Add the feature', repo_path: root, ...inputs }), mock: true, runsDir: tmpDir(t, 'runs-631-'), ...opts });
 const plainThen = (then) => JSON.parse(JSON.stringify(then ?? null));
 
 // ---- Retrospective after --------------------------------------------------------------------------

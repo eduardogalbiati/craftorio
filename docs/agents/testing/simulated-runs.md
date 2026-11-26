@@ -35,6 +35,15 @@ the default mock answers, `CRAFTORIO_MOCK_DELAY_SCALE=0.05`, alone on the machin
 - **Fail fast (#737)**: `packages/engine/test/helpers/run-watch.js` `runUntilStall(run, { stallMs })`
   replaces `await run.start()`: a run with no event for `stallMs` (default 5 s) is stopped and the
   test fails at once, naming the step it stopped at, instead of reaching the test's timeout.
+- **A trivial rule check, no secret scan**: a run on this repository (`repo_path: root`) takes its
+  inputs from `simInputs({ ... })` (`packages/engine/test/helpers/sim-inputs.js`: `check_command:
+  'node --version'`, `secret_scan: 'off'`, the caller's inputs winning). Without it, rule_check runs
+  the repository's real `npm run check` (about 9 s) after every simulated developer commit, and the
+  secret scan reads this checkout's own commits (#49). Measured 2026-11-25 (WSL, alone):
+  `run-state-from-events-dev-606.slow` 53 s → 15 s; it took 207 s under coverage in the whole suite.
+  A test about the check or the scan names its own `check_command` / `secret_scan`;
+  `test/simulation-trivial-checks.test.js` (a guard of `test/guards.json`) fails on an inputs object
+  naming `repo_path: root` that does neither.
 - **Timings kept over time (#737)**: `CRAFTORIO_TEST_TIMINGS_FILE=<file> npm test` appends one JSON
   line per run (`at`, `wall_ms`, `files: [{ file, tier, ms }]`): the baseline a later run compares with.
 - **Where whole runs live**: `packages/engine/test/slow/`, one workflow and theme per file, each under about 30 s

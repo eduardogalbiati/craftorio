@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { WorkflowRun } = require('../../engine/workflow');
 const { runUntilStall } = require('../helpers/run-watch');
+const { simInputs } = require('../helpers/sim-inputs');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = process.env.CRAFTORIO_MOCK_DELAY_SCALE || '0.05';
 const root = path.join(__dirname, '..', '..', '..', '..');
@@ -33,7 +34,7 @@ const sharedTestMaps = new Map();
 async function runLocalHero(t, { mockSequences, answers = {}, patchAgent } = {}) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
-  const run = new WorkflowRun({ file: LOCAL_HERO, inputs: { task: 'Engine test', repo_path: root, check_command: CHECK_COMMAND }, mock: true, runsDir, mockSequences });
+  const run = new WorkflowRun({ file: LOCAL_HERO, inputs: simInputs({ task: 'Engine test', repo_path: root, check_command: CHECK_COMMAND }), mock: true, runsDir, mockSequences });
   run.mockTestMaps = sharedTestMaps;
   // #380: the mock fills every optional string, so its resolve_merge answer always carries a
   // test_conflict (handed to the test writer); these scenarios are conflicts in code, not in tests

@@ -17,6 +17,7 @@ const {
   storeAttachments,
 } = require('../engine/providers');
 const { WorkflowRun, render } = require('../engine/workflow');
+const { simInputs } = require('./helpers/sim-inputs');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..', '..', '..');
@@ -310,7 +311,7 @@ test('resolveApproval: a failed copy or an invalid image leaves the gate open to
 
   const run = new WorkflowRun({
     file: path.join(root, 'packages', 'engine', 'test', 'fixtures', 'loop-goal.yaml'),
-    inputs: { repo_path: root },
+    inputs: simInputs({ repo_path: root }),
     mock: true,
     runsDir: path.join(dir, 'runs'),
   });

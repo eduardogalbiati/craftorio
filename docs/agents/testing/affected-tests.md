@@ -17,8 +17,14 @@ The affected tests, the slow suite and who runs what (#212); reading a session s
   (`const read = (rel) => fs.readFileSync(path.join(ROOT, rel))`) reads what each call passes. A read path
   reaches the file at it and every file under it (a listed folder); a non-literal argument before a
   literal stands for any folders (`path.join(ROOT, dir, 'views')` → `**/views`, so a screen folder
-  added under `fronts/plan/views/` selects `apps/desktop/test/view-folders.test.js`); a read that
-  cannot be resolved (a temp folder, an environment variable) adds nothing. A test that reads a
+  added under `fronts/plan/views/` selects `apps/desktop/test/view-folders.test.js`). A name the code
+  cannot know is a glob: a template with an unknown part names the files it may be
+  (`path.join(ROOT, 'workflows', `${name}.yaml`)` → `workflows/*.yaml`, so a changed workflow selects
+  `packages/ui-kit/test/workflow-inputs-localized-28.test.js`; `i18n/${lang}.json` → the catalogs'
+  readers), and an unknown last argument after a literal folder names that folder's files
+  (`path.join(ROOT, 'docs', 'agents', f)` → `docs/agents/*`, not its subfolders; a spread, everything
+  under it). A read keeps a literal segment: `path.join(ROOT, f)` or a temp folder, an environment
+  variable adds nothing. A test that reads a
   folder through a helper makes the read visible in its own code. A test file the change deleted
   is never selected (the runner would fail on the missing file). A shared root
   (`package.json`, a lockfile, `scripts/test.js`) or a project without a JS/TS graph selects the

@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun, attemptSummary } = require('../engine/workflow');
+const { simInputs } = require('./helpers/sim-inputs');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..', '..', '..');
@@ -21,7 +22,7 @@ function resolvedAgent(run, agentName) {
 function makeGroupedRun(issues, runsDir, file = 'feature.yaml') {
   return new WorkflowRun({
     file: path.join(root, 'workflows', file),
-    inputs: { task: 'Fix things', repo_path: root, issues },
+    inputs: simInputs({ task: 'Fix things', repo_path: root, issues }),
     mock: true,
     runsDir,
   });
