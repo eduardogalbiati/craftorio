@@ -1,13 +1,15 @@
 // @ts-check
 // The project's own linter and type checker (#50), for the check step (check-step.js) of a project with no
 // `check` script and no check_command. Found, never guessed: a tool counts only when the project's files
-// configure it AND it is installed (the project's node_modules/.bin, or the PATH the command runs with).
+// configure it AND it is installed (the project's node_modules/.bin, or the PATH the command runs with); the
+// toolchain's own checkers need no configuration (#82: cargo clippy, else cargo check; go vet).
 // Nothing is downloaded (no npx, the offline and no-restore options of each tool) and nothing is rewritten: a
 // command that would is in `rewrites`, with why, and never runs. One rule per language, documented in
 // docs/features/developer-check.md.
-// foundChecks(dir, { env, platform }) → { checks: [{ command, env?, tool, unready? }], rewrites: [{ name, why }] }
+// foundChecks(dir, { env, platform }) → { checks: [{ command, env?, tool, unready? }], looked_for: [string], rewrites: [{ name, why }] }
 // - tool: a short name for the log file; env: what the command's environment gets on top;
-// - unready: what the command prints when it could not run at all (not a finding of it).
+// - unready: what the command prints when it could not run at all (not a finding of it);
+// - looked_for (#82): per language found with nothing to run, the checker it looked for (said when skipped).
 
 'use strict';
 
@@ -91,32 +93,46 @@ function python({ dir, installed }) {
   const mypyConfig = mypyIni ? sectionOf(mypyIni, 'mypy') : sectionOf(pyproject, 'tool.mypy') || sectionOf(read(dir, 'setup.cfg'), 'mypy');
   // mypy checks the files its own section names (never another tool's `packages`), else the whole folder
   const target = /^\s*(?:files|modules|packages)\s*=/m.test(mypyConfig) ? '' : ' .';
-  return [
+  const checks = [
     ruff && installed('ruff') && { command: 'ruff check --no-fix --output-format concise .', tool: 'ruff' },
     (mypyIni || mypyConfig) && installed('mypy') && { command: `mypy --no-pretty --no-install-types --no-error-summary${target}`, tool: 'mypy' },
   ];
+  // #82: a Python project (the suite's own detection) with neither says what was looked for
+  const project = firstOf(dir, ['pyproject.toml', 'pytest.ini', 'setup.cfg', 'tox.ini', 'setup.py', 'requirements.txt']);
+  return checks.some(Boolean) || !project ? checks : [{ missing: '`ruff` or `mypy`, configured and installed (Python)' }];
 }
 
 function go({ dir, installed }) {
+  if (!firstOf(dir, ['go.mod', 'go.work'])) return [];
   const config = firstOf(dir, ['.golangci.yml', '.golangci.yaml', '.golangci.toml', '.golangci.json']);
-  if (!config || !firstOf(dir, ['go.mod', 'go.work']) || !installed('golangci-lint')) return [];
-  const fix = /^\s*"?fix"?\s*[:=]\s*true\b/m.exec(read(dir, config));
-  if (fix) return [{ rewrites: { name: 'golangci-lint run', why: `fix: true in ${config}` } }];
-  return [{ command: 'golangci-lint run', env: { GOPROXY: 'off' }, tool: 'golangci-lint' }];
+  if (config && installed('golangci-lint')) {
+    const fix = /^\s*"?fix"?\s*[:=]\s*true\b/m.exec(read(dir, config));
+    if (fix) return [{ rewrites: { name: 'golangci-lint run', why: `fix: true in ${config}` } }];
+    return [{ command: 'golangci-lint run', env: { GOPROXY: 'off' }, tool: 'golangci-lint' }];
+  }
+  // #82: the toolchain's own checker needs no configuration; a module never downloaded is not a finding
+  if (installed('go')) return [{ command: 'go vet ./...', env: { GOPROXY: 'off' }, tool: 'go-vet', unready: /GOPROXY=off|module lookup disabled|missing go\.sum entry/ }];
+  return [{ missing: config ? '`golangci-lint` or `go vet` (Go)' : '`go vet` (Go)' }];
 }
 
+// #82: cargo is enough: clippy when its component is installed, else the compiler's own warnings
 function rust({ dir, installed }) {
-  const cargo = read(dir, 'Cargo.toml');
-  if (!cargo || !(firstOf(dir, ['clippy.toml', '.clippy.toml']) || /^\s*\[(?:workspace\.)?lints\.clippy\]/m.test(cargo))) return [];
-  if (!installed('cargo') || !installed('cargo-clippy')) return [];
+  if (!read(dir, 'Cargo.toml')) return [];
+  if (!installed('cargo')) return [{ missing: '`cargo` (Rust: `cargo clippy`, else `cargo check`)' }];
   // --frozen: offline, and Cargo.lock stays as it is
   const offline = firstOf(dir, ['Cargo.lock']) ? '--frozen' : '--offline';
-  return [{ command: `cargo clippy ${offline} --message-format short`, tool: 'clippy' }];
+  // dependencies never downloaded, or a Cargo.lock that would have to change
+  const unready = /--offline was specified|--frozen was passed|failed to download|lock file .*needs to be updated/;
+  if (installed('cargo-clippy')) return [{ command: `cargo clippy ${offline} --message-format short`, tool: 'clippy', unready }];
+  return [{ command: `cargo check ${offline} --message-format short`, tool: 'cargo-check', unready }];
 }
 
 function java({ dir, installed }) {
   const pom = read(dir, 'pom.xml').replace(/<!--[\s\S]*?-->/g, '');
-  if (!/<artifactId>\s*maven-checkstyle-plugin\s*</.test(pom) || !installed('mvn')) return [];
+  // #82: Gradle's `check` runs the tests too: the suite's job, never run here
+  if (!pom) return firstOf(dir, ['build.gradle', 'build.gradle.kts']) ? [{ missing: 'a Gradle linter (`gradle check` runs the tests too: left to the suite)' }] : [];
+  if (!/<artifactId>\s*maven-checkstyle-plugin\s*</.test(pom)) return [{ missing: '`maven-checkstyle-plugin` in pom.xml (Java)' }];
+  if (!installed('mvn')) return [{ missing: '`mvn` (Java: Checkstyle)' }];
   // offline: a plugin that was never downloaded is not a finding
   return [{ command: 'mvn -o -B checkstyle:check', tool: 'checkstyle', unready: /in offline mode|PluginResolutionException|NoPluginFoundForPrefix/ }];
 }
@@ -124,20 +140,26 @@ function java({ dir, installed }) {
 const DOTNET_ANALYZERS = /<(?:AnalysisLevel|AnalysisMode|EnableNETAnalyzers|EnforceCodeStyleInBuild|TreatWarningsAsErrors)\b|<PackageReference[^>]*Analyzers"/;
 function csharp({ dir, installed }) {
   const files = listDir(dir);
-  if (!files.some((f) => /\.(?:csproj|slnx?)$/i.test(f)) || !installed('dotnet')) return [];
+  if (!files.some((f) => /\.(?:csproj|slnx?)$/i.test(f))) return [];
+  if (!installed('dotnet')) return [{ missing: '`dotnet` (C#: `dotnet build` with the .NET analyzers)' }];
   const projects = files.filter((f) => /\.csproj$/i.test(f) || f === 'Directory.Build.props');
   const configured = projects.some((f) => DOTNET_ANALYZERS.test(read(dir, f))) || /^\s*(?:csharp_style|dotnet_diagnostic|dotnet_style)/m.test(read(dir, '.editorconfig'));
+  if (!configured) return [{ missing: 'the .NET analyzers configured in a `*.csproj`, `Directory.Build.props` or `.editorconfig` (C#)' }];
   // a checkout nobody restored, or several solutions in one folder
-  return configured ? [{ command: 'dotnet build --no-restore --no-incremental -nologo', tool: 'dotnet', unready: /\b(?:MSB1011|NETSDK1004)\b/ }] : [];
+  return [{ command: 'dotnet build --no-restore --no-incremental -nologo', tool: 'dotnet', unready: /\b(?:MSB1011|NETSDK1004)\b/ }];
 }
 
 const LANGUAGES = [javascript, python, go, rust, java, csharp];
 
 function foundChecks(dir, { env = process.env, platform = process.platform } = {}) {
-  if (!dir) return { checks: [], rewrites: [] };
+  if (!dir) return { checks: [], rewrites: [], looked_for: [] };
   const installed = (name) => programOnPath(name, { env, platform });
   const found = LANGUAGES.flatMap((rule) => rule({ dir, installed, platform })).filter(Boolean);
-  return { checks: found.filter((f) => f.command), rewrites: found.filter((f) => f.rewrites).map((f) => f.rewrites) };
+  return {
+    checks: found.filter((f) => f.command),
+    looked_for: found.filter((f) => f.missing).map((f) => f.missing),
+    rewrites: found.filter((f) => f.rewrites).map((f) => f.rewrites),
+  };
 }
 
 module.exports = {

@@ -31,7 +31,7 @@ for (const [what, s, why] of [
 ]) {
   test(`#50 a lint script rewrites files through ${what}`, (t) => {
     const found = foundChecks(tmp(t, scripts(s)), { env: NO_PATH });
-    assert.deepEqual(found, { checks: [], rewrites: [{ name: 'npm run lint', why }] });
+    assert.deepEqual(found, { checks: [], looked_for: [], rewrites: [{ name: 'npm run lint', why }] });
   });
 }
 
@@ -45,7 +45,7 @@ test('#50 golangci-lint with fix: true in its configuration is said, not run', (
   const bin = tmp(t, { 'golangci-lint': '#!/bin/sh\n', 'golangci-lint.cmd': '' });
   const dir = tmp(t, { 'go.mod': 'module a\n', '.golangci.yml': 'issues:\n  fix: true\n' });
   const env = { PATH: bin, PATHEXT: '.CMD' };
-  assert.deepEqual(foundChecks(dir, { env }), { checks: [], rewrites: [{ name: 'golangci-lint run', why: 'fix: true in .golangci.yml' }] });
+  assert.deepEqual(foundChecks(dir, { env }), { checks: [], looked_for: [], rewrites: [{ name: 'golangci-lint run', why: 'fix: true in .golangci.yml' }] });
 });
 
 test('#50 programOnPath on Windows takes PATHEXT; the current folder does not count', (t) => {

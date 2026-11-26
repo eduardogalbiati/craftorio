@@ -49,7 +49,7 @@ for (const [what, s, why] of [
 ]) {
   test(`#50 a lint script that rewrites files is said, not run: ${what}`, (t) => {
     const found = foundChecks(tmp(t, scripts(s)), { env: NO_PATH });
-    assert.deepEqual(found, { checks: [], rewrites: [{ name: 'npm run lint', why }] });
+    assert.deepEqual(found, { checks: [], looked_for: [], rewrites: [{ name: 'npm run lint', why }] });
   });
 }
 
@@ -61,7 +61,7 @@ for (const [what, s] of [
   ['prettier --check', { lint: 'prettier --check .' }],
 ]) {
   test(`#50 a lint script that only reads runs: ${what}`, (t) => {
-    assert.deepEqual(foundChecks(tmp(t, scripts(s)), { env: NO_PATH }), { checks: [{ command: 'npm run lint', tool: 'lint' }], rewrites: [] });
+    assert.deepEqual(foundChecks(tmp(t, scripts(s)), { env: NO_PATH }), { checks: [{ command: 'npm run lint', tool: 'lint' }], looked_for: [], rewrites: [] });
   });
 }
 
@@ -69,7 +69,7 @@ for (const [what, s] of [
 
 test('#50 no folder, an empty one or a broken package.json finds nothing', (t) => {
   for (const dir of [null, '', tmp(t), tmp(t, { 'package.json': '{ "scripts": ' })]) {
-    assert.deepEqual(foundChecks(dir, { env: NO_PATH }), { checks: [], rewrites: [] });
+    assert.deepEqual(foundChecks(dir, { env: NO_PATH }), { checks: [], looked_for: [], rewrites: [] });
   }
 });
 
@@ -98,13 +98,13 @@ test('#50 go: a linter configuration outside a module finds nothing; in one it d
   assert.deepEqual([check.command, check.env], ['golangci-lint run', { GOPROXY: 'off' }]);
 });
 
-test('#50 rust: needs clippy installed beside cargo, keeps a Cargo.lock as it is and stays offline', (t) => {
+test('#50 rust: clippy when installed beside cargo (#82: else cargo check), keeps a Cargo.lock as it is and stays offline', (t) => {
   const files = { 'Cargo.toml': '[workspace.lints.clippy]\nall = "warn"\n' };
   const env = withTools(t, 'cargo', 'cargo-clippy');
-  assert.deepEqual(commandsOf(tmp(t, files), withTools(t, 'cargo')), []);
+  assert.deepEqual(commandsOf(tmp(t, files), withTools(t, 'cargo')), ['cargo check --offline --message-format short']);
   assert.match(commandsOf(tmp(t, files), env)[0], /^cargo clippy --offline /);
   assert.match(commandsOf(tmp(t, { ...files, 'Cargo.lock': '' }), env)[0], /^cargo clippy --frozen /);
-  assert.deepEqual(commandsOf(tmp(t, { 'Cargo.toml': '[package]\nname = "a"\n' }), env), [], 'clippy is not configured');
+  assert.match(commandsOf(tmp(t, { 'Cargo.toml': '[package]\nname = "a"\n' }), env)[0], /^cargo clippy /, '#82: no clippy configuration needed');
 });
 
 test('#50 java: a Checkstyle plugin commented out of the pom finds nothing', (t) => {

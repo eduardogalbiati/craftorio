@@ -569,8 +569,8 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   return { onBase: failures.filter((f) => present.some((p) => sameFile(p, f.file)) && baseFailing.some((x) => sameTest(f, x))), info };
 }
 
-// The passed / failed counts a runner prints at the end (node:test, TAP, Jest, pytest), null when
-// none is recognized.
+// The passed / failed counts a runner prints at the end (node:test, TAP, Jest, pytest, cargo test, dotnet
+// test, Maven Surefire, Playwright), null when none is recognized.
 function parseCounts(text) {
   const t = clean(text);
   const report = parseAgentReport(t);
@@ -582,6 +582,13 @@ function parseCounts(text) {
   if (jest) return { passed: Number(jest.match(/(\d+) passed/)?.[1] || 0), failed: Number(jest.match(/(\d+) failed/)?.[1] || 0) };
   const py = [...t.matchAll(/=+ (.*\b(?:passed|failed)\b.*) in [\d.]+s/g)].pop()?.[1];
   if (py) return { passed: Number(py.match(/(\d+) passed/)?.[1] || 0), failed: Number(py.match(/(\d+) failed/)?.[1] || 0) };
+  // #82: the sum of every line `re` matches (groups p passed, f failed, e errors, s skipped; n run), or null
+  const total = (re) => [...t.matchAll(re)].map((m) => Object.fromEntries(Object.entries(m.groups || {}).map(([k, v]) => [k, Number(v)]))).reduce((s, g) => ({ passed: (s?.passed || 0) + (g.n != null ? g.n - g.f - g.e - g.s : g.p), failed: (s?.failed || 0) + g.f + (g.e || 0) }), /** @type {{ passed: number, failed: number } | null} */ (null));
+  // cargo test: a "test result:" line per test binary and the doc-tests; dotnet test: a line per test project;
+  // Maven Surefire: each module's total line (a class's goes on with "Time elapsed"), errors fail too
+  const summed = total(/^test result: (?:ok|FAILED)\. (?<p>\d+) passed; (?<f>\d+) failed;/gm) || total(/^\s*(?:Passed|Failed)!\s+-\s+Failed:\s+(?<f>\d+),\s+Passed:\s+(?<p>\d+),/gm)
+    || total(/^(?:\[\w+\]\s+)?Tests run: (?<n>\d+), Failures: (?<f>\d+), Errors: (?<e>\d+), Skipped: (?<s>\d+)\s*$/gm);
+  if (summed) return summed;
   // Playwright: "  1 failed" (then the failed tests' lines), "  2 passed (15.4s)"
   const pw = { passed: last(/^\s*(\d+) passed(?: \([^)]*\))?\s*$/gm), failed: last(/^\s*(\d+) failed\s*$/gm) };
   if (pw.passed != null || pw.failed != null) return { passed: pw.passed ?? 0, failed: pw.failed ?? 0 };

@@ -215,7 +215,9 @@ async function runCheck({ baseCheckout = /** @type {(() => Promise<{ dir: string
     if (found.checks.length) return runFound({ ...found, base: baseCheckout }, { dir, env, logFile, onLog, platform, run, signal, sweep, timeoutMs });
     const notes = notesOf([], found.rewrites);
     const none = 'no check_command input, no `check` script in the project\'s package.json and no linter or type checker to run.';
-    return { ...base, notes, status: 'skipped', message: `Rule checks skipped: ${notes.length ? notes.join(' ') : none}` };
+    // #82: which checker each language found was looked for
+    const looked = found.looked_for.length ? ` Looked for: ${found.looked_for.join('; ')}.` : '';
+    return { ...base, notes, status: 'skipped', message: `Rule checks skipped: ${notes.length ? notes.join(' ') : none}${looked}` };
   }
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   onLog?.({ command: cmd, logFile });
