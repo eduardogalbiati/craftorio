@@ -127,3 +127,42 @@ test('#78 gh issue create answers an error but the issue exists: the check looks
   await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([BROKEN]), rerunFiles, exec });
   assert.equal(loadStore().readStore(ws, PROJECT).failures[0]?.issue?.number ?? null, 901);
 });
+
+test('#78 glab issue create answers an error but the issue exists: the lookup reads GitLab\'s iid and web_url', async (t) => {
+  const { ws, locks } = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  const listed = [
+    { iid: 41, title: 'Red on the base: test/other.test.js (another test)', web_url: 'https://gitlab.com/o/r/-/issues/41', state: 'opened' },
+    { iid: 42, title: 'Red on the base: test/cart.test.js (cart totals include tax)', web_url: 'https://gitlab.com/o/r/-/issues/42', state: 'opened' },
+  ];
+  const lists = [];
+  const exec = async (cli, args) => {
+    const list = argsOf(args);
+    if (isCreate(list)) throw new Error('glab: 502 Bad Gateway');
+    if (isList(list)) { lists.push(list.join(' ')); return JSON.stringify(listed); }
+    return '';
+  };
+  const rerunFiles = async () => ({ failures: [{ ...BROKEN, error: 'still red' }], log: 'ℹ fail 1\n' });
+  await load().runBaseCheck(ws, { ...checkArgs(f, locks, { platform: 'gitlab' }), runSuite: suiteOf([BROKEN]), rerunFiles, exec });
+  const issue = loadStore().readStore(ws, PROJECT).failures[0]?.issue ?? null;
+  assert.deepEqual(issue && { number: issue.number, url: issue.url }, { number: 42, url: 'https://gitlab.com/o/r/-/issues/42' });
+  assert.equal(lists.length >= 1, true, 'the issue list was read');
+});
+
+test('#78 the create fails and the lookup finds no issue of that title: no issue is recorded, the check stays red', async (t) => {
+  const { ws, locks } = tmpWs(t);
+  const f = fixture(t, 'canonical');
+  // an issue whose title only contains the searched one is not the same issue
+  const listed = [{ number: 950, title: 'Red on the base: test/cart.test.js (cart totals include tax) — old', url: 'https://github.com/o/r/issues/950', state: 'CLOSED', labels: [], updatedAt: '2026-11-20T06:00:00Z' }];
+  const exec = async (cli, args) => {
+    const list = argsOf(args);
+    if (isCreate(list)) throw new Error('HTTP 502: Bad Gateway (https://api.github.com/graphql)');
+    if (isList(list)) return JSON.stringify(listed);
+    return list.includes('label') ? '[{"name":"bug"}]' : '';
+  };
+  const rerunFiles = async () => ({ failures: [{ ...BROKEN, error: 'still red' }], log: 'ℹ fail 1\n' });
+  const r = await load().runBaseCheck(ws, { ...checkArgs(f, locks), runSuite: suiteOf([BROKEN]), rerunFiles, exec });
+  assert.equal(r.status, 'red');
+  assert.equal(loadStore().readStore(ws, PROJECT).failures[0]?.issue?.number ?? null, null);
+  assert.equal((r.issues || []).length, 0, 'no issue reported as filed');
+});

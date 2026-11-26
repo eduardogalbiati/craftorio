@@ -62,8 +62,9 @@ function tmp(t, prefix) {
   return dir;
 }
 
-// a git repository on main whose `npm test` prints `log` and exits 1 (whatever files it is given)
-function printingProject(t, log) {
+// a git repository on main whose `npm test` prints `log` and exits 1; given files (the #613 second
+// round), it prints `rerunLog` instead when there is one
+function printingProject(t, log, rerunLog = null) {
   const dir = tmp(t, 'bh78s-repo-');
   const cfg = path.join(tmp(t, 'bh78s-gitcfg-'), 'config');
   fs.writeFileSync(cfg, '');
@@ -71,19 +72,21 @@ function printingProject(t, log) {
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
   fs.mkdirSync(path.join(dir, 'test'));
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'bh78', private: true, scripts: { test: 'node report.js' } }, null, 2));
-  fs.writeFileSync(path.join(dir, 'report.js'), `process.stdout.write(${JSON.stringify(`${log}\n`)});\nprocess.exitCode = 1;\n`);
-  for (const f of ['hang-a', 'hang-b', 'cart', 'ok']) fs.writeFileSync(path.join(dir, 'test', `${f}.test.js`), '// printed by report.js\n');
+  const first = JSON.stringify(`${log}\n`);
+  const second = JSON.stringify(`${rerunLog ?? log}\n`);
+  fs.writeFileSync(path.join(dir, 'report.js'), `process.stdout.write(process.argv.length > 2 ? ${second} : ${first});\nprocess.exitCode = 1;\n`);
+  for (const f of ['hang-a', 'hang-b', 'cart', 'tax', 'ok']) fs.writeFileSync(path.join(dir, 'test', `${f}.test.js`), '// printed by report.js\n');
   git('init', '-q');
   git('add', '.');
   git('commit', '-q', '-m', 'base');
   return dir;
 }
 
-async function check(t, log) {
+async function check(t, log, rerunLog = null) {
   const { service, api } = makeService(t);
   process.env.CRAFTORIO_LOCKS_DIR = tmp(t, 'bh78s-locks-');
   api['settings:set']({ baseCheck: { onRed: 'fix' } });
-  const project = await api['projects:create']({ name: 'bh78', folder: printingProject(t, log) });
+  const project = await api['projects:create']({ name: 'bh78', folder: printingProject(t, log, rerunLog) });
   const area = loadArea()({ ws: service.workspace(), active: new Map(), isReleaseRun: () => false, notify: () => {}, events: { emit: () => {} } });
   const started = area.afterBaseMerge({ projectId: project.id, runId: 'run-78', mock: false }, { base: 'main', tested: 'merge' });
   assert.ok(started && typeof started.then === 'function', 'a check started (fixture check)');
@@ -93,6 +96,7 @@ async function check(t, log) {
     r,
     known: loadHealth().knownFailures(ws.root, project.id).map((x) => x.test),
     lastCheck: loadStore().readStore(ws.root, project.id).lastCheck?.status ?? null,
+    flaky: (loadStore().readStore(ws.root, project.id).flaky || []).map((x) => x.test),
     fixStages: loadRoadmap().readRoadmap(ws.backlog, project.id).stages.filter((s) => s.name === 'Fix the base').length,
   };
 }
@@ -116,4 +120,20 @@ test('#78 a suite with fail 1 and 2 cancelled files is still red, and only the f
   assert.equal(r.status, 'red', `the check: ${JSON.stringify({ status: r.status, error: r.error })}`);
   assert.deepEqual(known, ['cart totals include tax']);
   assert.equal(lastCheck, 'red');
+});
+
+// the whole suite: two real failures (cart, tax); the second round: cart red again, tax's file cancelled
+const failure = (file, name, error) => [`test at ${file}:3:1`, `✖ ${name} (1.1ms)`, `  ${error}`, ''];
+const twoFailed = ['ℹ tests 10', 'ℹ pass 8', 'ℹ fail 2', 'ℹ cancelled 0', '', '✖ failing tests:', '',
+  ...failure('test/cart.test.js', 'cart totals include tax', 'AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:'),
+  ...failure('test/tax.test.js', 'tax rounds half up', 'AssertionError [ERR_ASSERTION]: 0.5 !== 1')].join('\n');
+const mixedRerun = ['ℹ tests 2', 'ℹ pass 0', 'ℹ fail 1', 'ℹ cancelled 1', '', '✖ failing tests:', '',
+  ...failure('test/cart.test.js', 'cart totals include tax', 'AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:'),
+  ...cancelledFile('test/tax.test.js')].join('\n');
+
+test('#78 a second round with one test red again and the other one\'s file cancelled: the first is red, the second is not flaky', async (t) => {
+  const { r, known, flaky } = await check(t, twoFailed, mixedRerun);
+  assert.equal(r.status, 'red', `the check: ${JSON.stringify({ status: r.status, error: r.error })}`);
+  assert.equal(known.includes('cart totals include tax'), true, 'cart, red twice, is red on the base');
+  assert.deepEqual(flaky, [], 'tax was cancelled in the second round, not seen green: no flaky sighting');
 });
