@@ -71,6 +71,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { classifyFailures, IN_CHANGE, OUTSIDE_CHANGE } = require('./affected-tests');
+const { compilesFirst, packageScript } = require('./package-script');
 const { parseAgentReport } = require('./agent-test-report');
 const { childEnv: allowlistedEnv } = require('./child-env');
 const { isMissingCode, programMissing } = require('./command-missing'); // #67
@@ -448,10 +449,15 @@ function recordDuration(history, ms) {
 // The suite's command restricted to `files`, or null when it cannot be: npm/pnpm/yarn test (the
 // files after `--`, the project's runner gets them), a package script without arguments of its own
 // (#324: `npm run test:e2e -- <feature files>` reaches `playwright test` after `bddgen`; pnpm and
-// yarn pass them on without `--`), pytest, node --test without files of its own.
-function filteredCommand(command, files) {
+// yarn pass them on without `--`), pytest, node --test without files of its own. `cwd` (the checkout):
+// a package script that compiles first (`tsc -p . && node --test dist/test`) cannot take them, node
+// ran the .ts source itself (ERR_MODULE_NOT_FOUND, exploratory run 20261126-093311-93fd1414): the
+// whole suite runs instead.
+function filteredCommand(command, files, cwd = null) {
   const c = String(command || '').trim();
   if (!c || !files.length) return null;
+  const script = packageScript(c, cwd);
+  if (script && compilesFirst(script)) return null;
   const list = files.map((f) => (/[\s"&|<>^()]/.test(f) ? `"${f}"` : f)).join(' ');
   if (/^(npm|pnpm|yarn)( run)? (test|t)$/.test(c)) return `${c} -- ${list}`;
   if (/^npm run(-script)? [\w:.-]+$/.test(c)) return `${c} -- ${list}`;
@@ -463,8 +469,8 @@ function filteredCommand(command, files) {
 
 // Why the base check cannot run `files` on its own command line, or null: the command cannot take
 // single files, or (#400) too many of them for the platform's command line.
-function baseFilesSkip(command, files, platform) {
-  const filtered = filteredCommand(command, files);
+function baseFilesSkip(command, files, platform, cwd = null) {
+  const filtered = filteredCommand(command, files, cwd);
   if (!filtered) return `\`${command}\` cannot run single test files`;
   return fitsCommandLine(filtered, platform) ? null : `${overCommandLine(files.length, platform)}: not checked on the base`;
 }
@@ -477,7 +483,7 @@ function baseFilesSkip(command, files, platform) {
 // duration, why its files did not fit (null when they did or went through the list), and whether
 // they go through the list.
 function narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }) {
-  const filtered = filteredCommand(out.command, files);
+  const filtered = filteredCommand(out.command, files, cwd);
   if (!filtered) {
     if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
     return { measure: true, tooLong: null, list: false };
@@ -520,7 +526,7 @@ const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || 
 // per commit + file). → { onBase: [failure], info: { status: done | skipped, commit, files, cached,
 // ran, log, reason } }; never throws. Too many files for the platform's command line (#400): skipped,
 // like a command that cannot run single files.
-async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform, onLog }) {
+async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform, onLog, cwd = null }) {
   const info = { status: 'skipped', commit: null, files: [], cached: [], ran: [], log: null, reason: null };
   const files = [...new Set(failures.map((f) => f.file).filter(Boolean))].sort();
   info.files = files;
@@ -530,7 +536,7 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
     return { onBase: failures.filter((f) => f.file === MOCK_BASE_FILE), info };
   }
   if (typeof base !== 'function') { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
-  info.reason = baseFilesSkip(command, files, platform);
+  info.reason = baseFilesSkip(command, files, platform, cwd);
   if (info.reason) return { onBase: [], info };
   let b = null;
   try { b = await base(); } catch (e) { info.reason = `the base checkout could not be prepared: ${e.message}`; return { onBase: [], info }; }
@@ -544,7 +550,7 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   const baseFailing = info.cached.flatMap((f) => cache[f].failing.map((test) => ({ test, file: f })));
   const toRun = present.filter((f) => !info.cached.includes(f));
   if (toRun.length) {
-    const cmd = filteredCommand(command, toRun);
+    const cmd = filteredCommand(command, toRun, b.dir);
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     fs.writeFileSync(logFile, `$ ${cmd}\n# in the base checkout ${b.dir}${info.commit ? ` (${String(info.commit).slice(0, 8)})` : ''}: are these failures already there?\n`);
     if (runDir) {
@@ -598,7 +604,7 @@ const optionalRunArgs = ({ onSpawn, sweep }) => ({ ...(onSpawn ? { onSpawn } : {
 // One test file run alone (#396), its log written whole → { status: pass | fail | hang, ms, timeout_ms,
 // failures, log }; never throws. why: the log header's reason (#527: the base check's re-run of a timeout).
 async function runFileAlone({ command, file, cwd, where, env, timeoutMs, signal, run, logFile, runDir, cmdArgs = {}, why = 'it was still running when the round timed out' }) {
-  const cmd = filteredCommand(command, [file]);
+  const cmd = filteredCommand(command, [file], cwd);
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   fs.writeFileSync(logFile, `$ ${cmd}\n# ${file} alone ${where} (${cwd}), timeout ${Math.round(timeoutMs / 60e3)} min: ${why}\n`);
   const t0 = Date.now();
@@ -691,7 +697,7 @@ function classifyOutput(out, { mock, cwd, changedFiles }) {
 // base); `out.alone` lists them and their failures join out.failures (out.preexisting when the run
 // knows them) → rerunAlone's result, or null when there is nothing to rerun.
 async function rerunTimedOut(out, { preexisting, signal, logName, round, ...args }) {
-  if (!out.timed_out || !out.running.length || !filteredCommand(out.command, out.running) || signal?.aborted) return null;
+  if (!out.timed_out || !out.running.length || !filteredCommand(out.command, out.running, args.cwd) || signal?.aborted) return null;
   const alone = await rerunAlone({ ...args, files: out.running, command: out.command, signal, stem: logName || `suite-${round}` });
   out.alone = alone.files.map((r) => ({ file: r.file, branch: r.branch.status, base: r.base?.status || null, timeout_ms: r.branch.timeout_ms, log: r.branch.log, base_log: r.base?.log || null }));
   const known = alone.failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
@@ -848,7 +854,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   });
   // the failures the run does not know yet: do they fail on the base too? (#211)
   if (out.failures.length && (base || mock) && !signal?.aborted) {
-    const where = (name) => ({ command: out.command, mock, signal, run, timeoutMs: out.timeout_ms, runDir, cacheDir: baseCacheDir, log, platform, onLog, logFile: logFile ? path.join(runDir, 'logs', `${name}.log`) : null,
+    const where = (name) => ({ command: out.command, cwd, mock, signal, run, timeoutMs: out.timeout_ms, runDir, cacheDir: baseCacheDir, log, platform, onLog, logFile: logFile ? path.join(runDir, 'logs', `${name}.log`) : null,
       env: childEnv ? { ...childEnv.env, CRAFTORIO_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `${name}.log`)) } : undefined });
     const { onBase: redOnBase, info } = await checkOnBase({ ...where(`suite-${round}-base`), failures: out.failures, base });
     out.base_check = info;

@@ -48,6 +48,7 @@ const CHECKED = [
   'packages/engine/engine/check-tools.js',
   'packages/engine/engine/expected-files.js',
   'packages/engine/engine/output-lines.js',
+  'packages/engine/engine/package-script.js',
   'packages/engine/engine/project-instructions.js',
   'packages/engine/engine/project-version.js',
   'packages/engine/engine/providers.js',
