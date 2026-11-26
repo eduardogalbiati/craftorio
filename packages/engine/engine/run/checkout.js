@@ -7,8 +7,9 @@
 // base's last green commit), the base brought into the branch
 // before a suite round (`bringBaseIn`, #403), the scratch workspace (#120)
 // and the processes agents leave running in it (`stopWorktreeProcesses`).
-// #81: `logRepoCommands` also sets `no_test_command` in the templates' context once the checkout is known
-// (no test command given or found, before the first turn): feature.yaml / fix.yaml tell the test writer
+// #81: `decideTestCommand` sets `no_test_command` in the templates' context once the checkout is known
+// (no test command given or found, before the first turn; checked again after each agent step, so a
+// change that adds a test runner gets its tests run): feature.yaml / fix.yaml tell the test writer
 // and the developer, and skip the test steps (the change reported as not tested: no test command).
 // The git operations themselves are packages/engine/engine/worktree.js.
 
@@ -154,8 +155,7 @@ const methods = {
     // #50: said here too, for a workflow whose route skips a check step with nothing to run
     const rewrites = checksOff(given) || checkStep.checkCommand(dir, given) ? [] : foundChecks(dir).rewrites;
     const tests = this.suiteCommand();
-    // #81: decided before the first turn, in the run's real checkout (never a mock run: it never detects one)
-    if (this.ctx && !this.mock && !this.machine?.simulated && fs.existsSync(dir)) this.ctx.no_test_command = !tests;
+    methods.decideTestCommand.call(this, dir, tests);
     const parts = [
       install && `dependency install ${install}`,
       checks.length && `check ${checks.map((c) => `\`${c}\``).join(', ')}`,
@@ -164,6 +164,23 @@ const methods = {
     for (const r of rewrites) this.emitEvent('log', { level: 'info', message: `rule checks: \`${r.name}\` is not run: it rewrites files (${r.why})` });
     if (!parts.length) return;
     this.emitEvent('log', { level: 'info', message: `repository commands: this run executes the repository's own scripts: ${parts.join('; ')}` });
+  },
+
+  // #81: `no_test_command`, decided before the first turn in the run's real checkout (never a mock or
+  // simulated run: they never detect one), then again after each agent step (`stepId`): a change that
+  // adds a test runner (a package.json with a test script) gets its tests run, as before. Logged when
+  // it is decided and each time it changes.
+  decideTestCommand(dir, given, stepId = null) {
+    if (!this.ctx || this.mock || this.machine?.simulated || !dir || !fs.existsSync(dir)) return;
+    const tests = given === undefined ? this.suiteCommand() : given;
+    const none = !tests;
+    const before = this.ctx.no_test_command;
+    this.ctx.no_test_command = none;
+    if (stepId ? before === undefined || before === none : !none) return;
+    const message = none
+      ? `no test command: none was given (the test_command input) nor found in the project${stepId ? ` after step ${stepId}` : ''}: the test steps are skipped and the run reports "not tested: no test command"`
+      : `test command found after step ${stepId}: \`${tests}\`: the test steps run`;
+    this.emitEvent('log', { level: 'info', message });
   },
 
   // ---- dependencies from the shared cache (#198, packages/engine/engine/deps-cache.js) ---------------------

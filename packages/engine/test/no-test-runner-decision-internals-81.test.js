@@ -23,11 +23,41 @@ function fakeRun(dir, extra = {}) {
     mock: false,
     machine: null,
     ignoreInstallScripts: false,
-    emitEvent() {},
+    logs: [],
+    emitEvent(type, data) { if (type === 'log') this.logs.push(data.message); },
     suiteCommand() { return fs.existsSync(path.join(dir, 'go.mod')) ? 'go test ./...' : null; },
+    decideTestCommand: methods.decideTestCommand,
     ...extra,
   };
 }
+
+test('#81 internals: the decision is logged when the run starts with no test command', (t) => {
+  const dir = tmpDir(t);
+  const run = fakeRun(dir);
+  methods.logRepoCommands.call(run, dir);
+  assert.ok(run.logs.some((m) => /no test command: .*test steps are skipped/.test(m)), run.logs.join('\n'));
+});
+
+test('#81 internals: a step that adds a test runner flips no_test_command back, and says so', (t) => {
+  const dir = tmpDir(t);
+  const run = fakeRun(dir);
+  methods.logRepoCommands.call(run, dir);
+  assert.equal(run.ctx.no_test_command, true);
+  run.decideTestCommand(dir, undefined, 'develop');
+  assert.equal(run.ctx.no_test_command, true);
+  assert.equal(run.logs.length, 1, 'no new log while nothing changed');
+  fs.writeFileSync(path.join(dir, 'go.mod'), 'module example.com/p\n');
+  run.decideTestCommand(dir, undefined, 'develop');
+  assert.equal(run.ctx.no_test_command, false);
+  assert.ok(run.logs.some((m) => /test command found after step develop: `go test/.test(m)), run.logs.join('\n'));
+});
+
+test('#81 internals: the recheck after a step never decides in a mock run', (t) => {
+  const dir = tmpDir(t);
+  const run = fakeRun(dir, { mock: true, ctx: { inputs: {} } });
+  run.decideTestCommand(dir, undefined, 'develop');
+  assert.equal(run.ctx.no_test_command, undefined);
+});
 
 test('#81 internals: logRepoCommands sets no_test_command in a checkout with no test command', (t) => {
   const dir = tmpDir(t);

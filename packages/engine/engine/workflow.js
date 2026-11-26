@@ -694,9 +694,9 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
       } finally {
         slow?.stop();
         await this.stopWorktreeProcesses(`step ${step.id}`);
-        // a lockfile the step changed (a package added): its key is installed once and linked; an
-        // entry the agent changed or emptied through the link is no longer given to new worktrees
+        // a lockfile the step changed: installed once and linked (an entry the agent changed is not reused); a test runner it added: #81
         if (this.worktree && !this.abort.signal.aborted) await this.prepareDeps('worktree', this.ctx.worktree_dir, `step ${step.id}`).catch(() => {});
+        this.decideTestCommand(this.ctx.worktree_dir, undefined, step.id);
       }
       if (output === undefined) {
         const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
