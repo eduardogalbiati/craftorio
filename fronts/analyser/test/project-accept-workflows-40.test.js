@@ -16,7 +16,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
 const { loadApp } = require('@craftorio/ui-kit/test/renderer-app-harness');
-const { pageMarkup } = require('./project-page-helpers');
+const { pageMarkup, clickRendered } = require('./project-page-helpers');
 
 const PID = 'p1';
 const REPO_WF = 'ai-development-remote-hero';
@@ -32,8 +32,12 @@ const repoEntry = (accepted) => ({
   trusted: accepted, steps: [], inputs: task, category: 'build',
 });
 const clone = (x) => JSON.parse(JSON.stringify(x));
+// another repository workflow of the same manifest (not the default)
+const LOCAL_WF = 'ai-development-local-hero';
+const otherEntry = (accepted, extra = {}) => ({ ...repoEntry(accepted), file: `${LOCAL_WF}.yaml`, name: LOCAL_WF, ...extra });
 
-async function projectPage({ accepted = false, lang = 'en' } = {}) {
+async function projectPage({ accepted = false, lang = 'en', repo = null } = {}) {
+  const repoList = () => repo || [repoEntry(accepted)];
   const app = loadApp({
     storage: { 'craftorio.currentProject': PID, 'craftorio.nextSteps': JSON.stringify({ [PID]: 'open' }) },
     api: {
@@ -41,7 +45,7 @@ async function projectPage({ accepted = false, lang = 'en' } = {}) {
       listProjects: async () => [clone(PROJECT)],
       listWorkflows: async (opts = {}) => {
         if (opts?.projectId !== PID) return clone(WORKSPACE);
-        return clone(opts.repositoryOnly ? [repoEntry(accepted)] : [...WORKSPACE, repoEntry(accepted)]);
+        return clone(opts.repositoryOnly ? repoList() : [...WORKSPACE, ...repoList()]);
       },
       projectManifest: async () => ({ manifest: { default: REPO_WF, workflows: [{ name: REPO_WF, file: `workflows/${REPO_WF}.yaml` }] }, errors: [] }),
       onboardingStatus: async () => null,
@@ -102,4 +106,32 @@ test('#40 project page: the awaiting-acceptance notice leads to Workflows › De
 test('#40 project page: an accepted default shows no awaiting-acceptance notice', { timeout: 30000 }, async () => {
   const app = await projectPage({ accepted: true });
   assert.equal(notice(app), null);
+});
+
+// The entry's button (data-next-step="accept-workflows"), clicked: the files Definitions was asked to open
+async function clickAccept(app) {
+  const calls = [];
+  app.sandbox.Actions.register('showWorkflowDefinition', (...args) => { calls.push(args.map(String)); });
+  const button = H.findEl(entry(app)?.outer || '', (e) => e.name === 'button' && e.attrs['data-next-step'] === 'accept-workflows');
+  assert.equal(button === null, false, 'the entry has its data-next-step="accept-workflows" button');
+  await clickRendered(app, button);
+  await app.settle(10);
+  return calls;
+}
+
+test('#40 Next steps: the default accepted but another repository workflow pending still offers the entry, and opens that one', { timeout: 30000 }, async () => {
+  const app = await projectPage({ repo: [repoEntry(true), otherEntry(false)] });
+  assert.equal(entry(app) === null, false, 'next-step-accept-workflows is shown');
+  assert.deepEqual(await clickAccept(app), [[`${LOCAL_WF}.yaml`]]);
+});
+
+test('#40 Next steps: with two repository workflows pending, the entry opens the project\'s default in Definitions', { timeout: 30000 }, async () => {
+  const app = await projectPage({ repo: [otherEntry(false), repoEntry(false)] });
+  assert.deepEqual(await clickAccept(app), [[`${REPO_WF}.yaml`]]);
+});
+
+test('#40 Next steps: a pending repository workflow whose edited workspace copy runs (runsCopy workspace) offers no entry', { timeout: 30000 }, async () => {
+  const app = await projectPage({ repo: [repoEntry(true), otherEntry(false, { runsCopy: 'workspace' })] });
+  assert.equal(card(app) === null, false, 'the Next steps card is shown');
+  assert.equal(entry(app), null);
 });

@@ -126,6 +126,28 @@ test('#40 the awaiting-acceptance hint points to Workflows › Definitions', asy
   assert.match(around, /definitions/i, `the hint links or names Definitions: ${JSON.stringify(around.slice(0, 400))}`);
 });
 
+test('#40 choosing another project in the drawer hides the hint of the project it opened on', async () => {
+  const app = await page();
+  await open(app, { project: 'p5' });
+  assert.equal(hintText(app).includes(REPO_WF), true, 'the hint is shown for the imported project first');
+  app.el('#project-select').value = 'p1';
+  await app.run("$('#project-select').onchange()");
+  await app.settle(10);
+  assert.equal(hintText(app), '');
+});
+
+test('#40 the hint\'s Definitions button closes the drawer and opens the awaiting workflow in Definitions', async () => {
+  const app = await page();
+  await open(app, { project: 'p5' });
+  const calls = [];
+  app.sandbox.Actions.register('showWorkflowDefinition', (...args) => { calls.push(args.map(String)); });
+  // a click on the hint's button (the fake DOM does not parse the hint's markup into elements)
+  await app.run("$('#start-awaiting-note').onclick({ target: { closest: (s) => (s === 'button' ? {} : null) } })");
+  await app.settle(10);
+  assert.deepEqual(calls, [[`${REPO_WF}.yaml`]]);
+  assert.equal(app.el('#drawer').classList.contains('open'), false);
+});
+
 test('#40 unchanged: a default the Setup hid from Start still opens on settings.lastWorkflow, with no acceptance hint', async () => {
   const app = await page({ hiddenWorkflows: ['feature'] });
   assert.equal(await open(app, { project: 'p1' }), 'issue.yaml');
