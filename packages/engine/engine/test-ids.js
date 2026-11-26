@@ -42,18 +42,21 @@ function testIdsUsed(source) {
 }
 
 // Every file under a repository-relative folder with one of the extensions, repository-relative
-// with forward slashes, sorted; [] when the folder does not exist. `skip`: the folder names not visited.
-function listFiles(root, dir, exts, skip = SKIPPED_DIRS) {
+// with forward slashes, sorted; [] when the folder does not exist. `skip`: the folder names not visited;
+// `topSkip`: the ones not visited right under `dir` only (#80: the root's dist/, not src/features/).
+function listFiles(root, dir, exts, skip = SKIPPED_DIRS, topSkip = skip) {
   const out = [];
+  const start = normFolder(dir);
   const visit = (rel) => {
     let entries;
     try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); } catch { return; }
+    const skipped = rel === start ? topSkip : skip;
     for (const e of entries) {
       const child = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) { if (!skip.has(e.name)) visit(child); } else if (exts.includes(path.extname(e.name))) out.push(child);
+      if (e.isDirectory()) { if (!skipped.has(e.name)) visit(child); } else if (exts.includes(path.extname(e.name))) out.push(child);
     }
   };
-  visit(normFolder(dir));
+  visit(start);
   return out.sort();
 }
 
@@ -79,9 +82,9 @@ function missingTestIds(root, { steps = DEFAULT_STEPS, renderer = DEFAULT_RENDER
   // the step definitions inside a UI folder (fronts/<id>/features/steps, #588) never define an id
   const stepSet = new Set(files);
   // #80: an empty list (a project without UI folders) is the whole repository, never src/renderer; the
-  // root skips its builds, tests and docs (a spec or a bundle citing an id never defines it)
+  // root skips its top-level builds, tests and docs (a spec or a bundle citing an id never defines it)
   const given = [].concat(renderer ?? []).filter((d) => String(d ?? '').trim());
-  const source = [...new Set((given.length ? given : ['']).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS, normFolder(dir) ? SKIPPED_DIRS : NON_UI_DIRS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  const source = [...new Set((given.length ? given : ['']).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS, SKIPPED_DIRS, normFolder(dir) ? SKIPPED_DIRS : NON_UI_DIRS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   return [...used].filter(([id]) => !source.includes(id)).map(([id, files]) => ({ id, files }));
 }
 
