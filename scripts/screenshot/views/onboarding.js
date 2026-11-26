@@ -58,7 +58,7 @@ workflows:
 // #40 (--review awaiting): the repository ships its own workflow (a copy of the bundled feature.yaml) and
 // declares it its default: not accepted at HEAD, so the wizard says it awaits acceptance
 const AWAITING_MANIFEST = SAMPLE_MANIFEST.replace('default: feature', 'default: team-feature')
-  .replace('workflows:\n', 'workflows:\n  - name: team-feature\n    category: solo\n');
+  .replace('workflows:\n', 'workflows:\n  - name: team-feature\n    file: workflows/team-feature.yaml\n    category: solo\n');
 
 // a git repository with a few source files and some history on one of them (the analyses score it)
 function sampleRepository(folder, { awaiting = false } = {}) {
