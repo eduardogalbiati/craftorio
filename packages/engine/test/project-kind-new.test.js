@@ -146,6 +146,61 @@ for (const [name, files, changed] of [
   });
 }
 
+// ---- said: "Screen not reviewed: <reason>" in result.md and at the gates --------------------------------
+
+const { renderResultSummary } = require('../domains/evidence/result-summary');
+const { render } = require('../engine/run/templates');
+
+function resultMd(t, inputs, filesChanged, screenshotsTaken = false) {
+  const steps = { develop: { output: { committed: true, files_changed: filesChanged, issues: [] } } };
+  if (screenshotsTaken) steps.developer_screenshots = { output: { kind: 'screenshots', taken: 1, message: 'Took 1 screenshot.' } };
+  return renderResultSummary(folderWith(t, {}), { workflow: 'feature', status: 'success', run_id: 'r-57', duration_ms: 1000, inputs, steps });
+}
+const notReviewedLines = (text) => String(text).split('\n').filter((l) => /screen not reviewed/i.test(l));
+const ON = { task: 'Change it', screenshots: 'changed', ui_folders: [], steps_folders: [], e2e_tests: 'off', issues: [] };
+
+test('#57 result.md of an owner\'s backend whose change has UI files says the screen was not reviewed: screenshots are off', (t) => {
+  const inputs = runInputs(folderWith(t, NEW_PROJECT), { kind: 'backend' });
+  const lines = notReviewedLines(resultMd(t, inputs, ['src/App.jsx']));
+  assert.equal(lines.length, 1, lines.join(' | '));
+  assert.match(lines[0], /Screen not reviewed: screenshots are off/);
+});
+
+test('#57 result.md of a run whose change has UI files and took no screenshots says none were taken', (t) => {
+  const lines = notReviewedLines(resultMd(t, ON, ['src/App.jsx']));
+  assert.equal(lines.length, 1, lines.join(' | '));
+  assert.match(lines[0], /Screen not reviewed: no screenshots were taken/);
+});
+
+test('#57 result.md says nothing about an unreviewed screen when the screenshots were taken', (t) => {
+  assert.deepEqual(notReviewedLines(resultMd(t, ON, ['src/App.jsx'], true)), []);
+});
+
+test('#57 result.md of a service whose change has no UI files says nothing about an unreviewed screen', (t) => {
+  assert.deepEqual(notReviewedLines(resultMd(t, { ...ON, screenshots: 'off' }, ['cmd/server/main.go'])), []);
+});
+
+// the gates' texts, rendered from feature.yaml with the run's scope right after develop
+const gateTexts = (scope) => ({
+  developer_check: [stepOf('developer_check').summary, stepOf('developer_check').message].map((s) => render(String(s || ''), scope)).join('\n'),
+  human_review: [stepOf('human_review').summary, stepOf('human_review').message].map((s) => render(String(s || ''), scope)).join('\n'),
+});
+
+test('#57 the developer_check and human_review gates of an owner\'s backend with a UI change say the screen was not reviewed', (t) => {
+  const inputs = runInputs(folderWith(t, NEW_PROJECT), { kind: 'backend' });
+  const texts = gateTexts(developScope(inputs, ['src/App.jsx']));
+  assert.deepEqual({
+    developer_check: /Screen not reviewed: screenshots are off/.test(texts.developer_check),
+    human_review: /Screen not reviewed: screenshots are off/.test(texts.human_review),
+  }, { developer_check: true, human_review: true });
+});
+
+test('#57 the gates of a service whose change has no UI files say nothing about an unreviewed screen', (t) => {
+  const inputs = runInputs(folderWith(t, GO_SERVICE));
+  const texts = gateTexts(developScope(inputs, ['cmd/server/main.go']));
+  assert.deepEqual({ developer_check: notReviewedLines(texts.developer_check), human_review: notReviewedLines(texts.human_review) }, { developer_check: [], human_review: [] });
+});
+
 // ---- docs ------------------------------------------------------------------------------------------------
 
 test('#57 docs/readme/043-project-run-defaults.md says what kind a new project has', () => {

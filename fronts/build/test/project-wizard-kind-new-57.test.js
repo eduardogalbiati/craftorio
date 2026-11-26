@@ -121,4 +121,42 @@ test('#57 the new project\'s review opens on the kind answered, with no "Detect 
   assert.equal(W.currentStep(app), 'review');
   const options = kindOptions(app).map(textOf);
   assert.deepEqual({ picked: pickedKind(app), detect: options.includes('Detect from the files') }, { picked: 'full-stack', detect: false }, options.join(' | '));
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-kind-detected') === null, true, 'answered, not "Detected"');
+});
+
+// a new project's wizard resumed later: the onboarding state has no profile any more, the kind answered is read
+// from the project's record (listProjects), and it is not presented as detected
+function resumedPage(kind) {
+  const record = { id: W.PID, name: NAME, repo: '', folder: 'C:/ws/repos/field-notes', exists: true, kind, onboarding: { finished: false, step: 'analysis' } };
+  const status = { ...W.clone(W.READY), projectId: W.PID, wizard: { step: 'analysis', picks: { source: 'new', name: NAME, workflowsMode: 'manual' }, finished: false } };
+  return loadApp({
+    api: {
+      getSettings: async () => ({ setupDone: true }),
+      listProjects: async () => [W.clone(record)],
+      listProjectRuns: async () => ({ runs: [], project: W.clone(record), local: null }),
+      onboardingAccounts: async () => [],
+      onboardingRepos: async () => [],
+      architectureEstimate: async () => null,
+      onboardingStatus: async () => W.clone(status),
+      saveOnboardingWizard: async (data) => ({ ...W.clone(status), wizard: { step: data?.step, picks: W.clone(data?.picks), finished: false } }),
+      getBacklog: async () => ({ issues: [] }),
+    },
+  });
+}
+
+test('#57 a resumed new project\'s review opens on the kind saved on the project, not as "Detected"', { timeout: 30000 }, async () => {
+  const app = resumedPage('backend');
+  await app.boot();
+  W.wizard(app).open({ projectId: W.PID });
+  await app.settle(20);
+  assert.equal(W.currentStep(app), 'analysis', 'resumed on step 3');
+  await W.press(app, 'wizard-next');
+  await app.settle(20);
+  assert.equal(W.currentStep(app), 'review');
+  const options = kindOptions(app).map(textOf);
+  assert.deepEqual({
+    picked: pickedKind(app),
+    detect: options.includes('Detect from the files'),
+    detectedMark: W.byTestId(W.wizardMarkup(app), 'wizard-kind-detected') !== null,
+  }, { picked: 'backend', detect: false, detectedMark: false }, options.join(' | '));
 });

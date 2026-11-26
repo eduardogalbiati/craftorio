@@ -90,6 +90,23 @@ test('#75 the picked kind decides over the one read', { timeout: 30000 }, async 
   assert.equal(offered(app), true, 'picked frontend');
 });
 
+// #57: an empty project (README at most) is undecided: projects:inputHints gives detectedKind null
+test('#57 an empty project with no kind picked leaves the entry out', { timeout: 30000 }, async () => {
+  const app = await projectPage(async () => ({ detectedKind: null }));
+  assert.equal(offered(app), false);
+});
+
+test('#57 an empty project whose owner picks frontend offers the entry', { timeout: 30000 }, async () => {
+  const app = await projectPage(async () => ({ detectedKind: null }));
+  app.run('state.pv.project = { ...state.pv.project, kind: "frontend" }; renderProjectView()');
+  assert.equal(offered(app), true);
+});
+
+test('#57 a detected kind that comes back empty (not null) still offers the entry', { timeout: 30000 }, async () => {
+  const app = await projectPage(async () => ({ detectedKind: '' }));
+  assert.equal(offered(app), true);
+});
+
 // ---- several reads in flight ------------------------------------------------------------------------------
 
 async function leaveAndReturn(app) {
