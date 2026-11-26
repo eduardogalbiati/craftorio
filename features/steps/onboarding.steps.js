@@ -90,6 +90,13 @@ Given('a local git repository is ready to import', async ({ e2e }) => {
   e2e.localRepo = makeRepository(e2e.scratch, 'sample-repo');
 });
 
+// #75: a web front end (react in its dependencies): its kind is frontend, so the Next steps card keeps the
+// screenshots step (left out for a backend, docs or empty project)
+Given('a local git repository of a web front end is ready to import', async ({ e2e }) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  e2e.localRepo = makeRepository(e2e.scratch, 'sample-repo', { pkg: { dependencies: { react: '^18.0.0' } } });
+});
+
 Given('a local git repository with some code is ready to import', async ({ e2e }) => {
   if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
   e2e.localRepo = makeRepository(e2e.scratch, 'sample-repo', { withCode: true });
@@ -466,7 +473,19 @@ Then('the Next steps card offers {string}, {string} and {string}', async ({ e2e 
   }
 });
 
+Then('the Next steps card offers {string} and {string}', async ({ e2e }, a, b) => {
+  for (const words of [a, b]) {
+    await expect(nextStepsEntry(e2e.window, words), `the Next steps entry "${words}"`).toBeVisible();
+    await expect(nextStepsAction(e2e.window, words), `the button of the Next steps entry "${words}"`).toBeEnabled();
+  }
+});
+
 // mock-7: what phase 1 does not do yet (release CI, screenshots) stays visible, its button disabled
+Then('the Next steps card shows {string} as coming later', async ({ e2e }, words) => {
+  await expect(nextStepsEntry(e2e.window, words), `the Next steps entry "${words}"`).toBeVisible();
+  await expect(nextStepsAction(e2e.window, words), `the button of the Next steps entry "${words}"`).toBeDisabled();
+});
+
 Then('the Next steps card shows {string} and {string} as coming later', async ({ e2e }, a, b) => {
   for (const words of [a, b]) {
     await expect(nextStepsEntry(e2e.window, words), `the Next steps entry "${words}"`).toBeVisible();
