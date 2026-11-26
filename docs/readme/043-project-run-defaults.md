@@ -21,9 +21,10 @@ project's kind) and the facts read from the files; a value saved on the project
 (`project.runDefaults`) wins over a derived one. No Node toolchain is assumed: a Rust project gets
 `cargo test`, and no `npm …` command is offered without a `package.json`.
 
-**The project's kind** (backend / frontend / full-stack) is detected from the files (web
-frameworks, UI folders, a server, an E2E suite) and confirmed on the wizard's review or in Ways of
-working. A backend project has no UI defaults: `ui_folders` empty, `screenshots: off`,
+**The project's kind** (backend / frontend / full-stack / documentation) is detected from the files
+(web frameworks, UI folders, a server, an E2E suite; #84: a repository with only documents, images,
+upper-case files such as LICENSE and dotfiles is documentation, with the backend's defaults) and
+confirmed on the wizard's review or in Ways of working. A backend project has no UI defaults: `ui_folders` empty, `screenshots: off`,
 `e2e_tests: off`, no `steps_folders`; the existing conditions then skip the developer's
 screenshots, the test id check and the UI Reviewer, and the run screen shows those steps dimmed
 with "Doesn't apply: no UI in this project". It is `screenshots: off` and `e2e_tests: off` that

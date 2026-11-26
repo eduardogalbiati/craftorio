@@ -60,6 +60,7 @@ const {
   checkPushAccess,
   execGit,
   isGitUrl,
+  pushableUrl,
   sameRepo,
 } = require('../../domains/workspace/workspace');
 const { resolveCommandAsync } = require('../../engine/providers');
@@ -258,10 +259,11 @@ function e2eSetupGit(provider, args) {
   return { ok: true, out: '' };
 }
 
-/** #79: whether the clone in `folder` can push (workspace.js checkPushAccess); simulated under CRAFTORIO_E2E_GIT_PUSH. */
+/** #79: whether the clone in `folder` can push (workspace.js checkPushAccess, git without the app's credential
+ * helper, as the runs' agents push); simulated under CRAFTORIO_E2E_GIT_PUSH. */
 function machinePushCheck(folder) {
   const hook = simulation.e2eGitPush();
-  if (hook === null) return checkPushAccess(folder);
+  if (hook === null) return checkPushAccess(folder, { run: (args, cwd) => execGit(args, cwd, { auth: false, timeout: 60000 }) });
   const refused = 'fatal: could not read Username for \'https://github.com\': terminal prompts disabled';
   return checkPushAccess(folder, {
     run: (args) => (args[0] === 'push' && !hook && !e2eGitSetUp ? Promise.reject(new Error(refused)) : Promise.resolve('https://github.com/e2e-owner/repo.git')),
@@ -292,11 +294,12 @@ const ownerRepoOf = (repo) => /** @type {{ repo: string }} */ (OnboardingModel.f
 const forkNameOf = (platform, repo) => (platform.subgroups ? Platforms.parseRepoUrl(repo)?.path || '' : ownerRepoOf(repo));
 
 // #738: the fork's remote URL in the original's protocol: an SSH original (git@host:… or ssh://) gets
-// git@host:<fork path>.git, so an owner who signs in by SSH key keeps pushing; else <fork url>.git
-function forkRemoteOf(forkUrl, repo) {
+// git@host:<fork path>.git, so an owner who signs in by SSH key keeps pushing; else <fork url>.git, cloned the
+// way that can push (#79, workspace.js pushableUrl: SSH when the platform CLI's protocol is ssh)
+async function forkRemoteOf(forkUrl, repo) {
   const ssh = /^(ssh:\/\/|[\w.-]+@[\w.-]+:)/i.test(String(repo ?? '').trim());
   const parts = ssh && Platforms.parseRepoUrl(forkUrl);
-  return parts ? `git@${parts.host}:${parts.path}.git` : `${forkUrl}.git`;
+  return parts ? `git@${parts.host}:${parts.path}.git` : (await pushableUrl(`${forkUrl}.git`)).url;
 }
 
 const README = (name) => `# ${name}\n`;
@@ -604,13 +607,16 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       name = name || ownerRepoOf(p.repo);
       const made = await makeFork(name, p.repo);
       const remotes = String(await git(['remote'], p.folder)).split(/\s+/).filter(Boolean);
-      await git(['remote', 'set-url', 'origin', forkRemoteOf(made.url, p.repo)], p.folder);
+      await git(['remote', 'set-url', 'origin', await forkRemoteOf(made.url, p.repo)], p.folder);
       await git(['remote', remotes.includes('upstream') ? 'set-url' : 'add', 'upstream', p.repo], p.folder);
       projects.updateProject(projectsDir, projectId, { fork: { url: made.url, upstream: p.repo } });
       forkChange(projectId, made);
     } catch (e) {
       forkChange(projectId, { status: 'failed', repo: name, reason: String(e?.message || e) });
+      return status(projectId);
     }
+    // #79: the fork is the new origin: checked like an import (never a silent clone that cannot push)
+    await checkPush(projectId).catch(() => {});
     return status(projectId);
   }
 
@@ -783,13 +789,13 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   }
 
   // #79: whether the clone can push (workspace.js checkPushAccess), once it is ready: pushCheck: { status: checking |
-  // ok | failed | fixing, ok?, reason?, fix?, setupGit? }. Not checked without push permission (the fork notice
-  // says it) nor for a local path; a simulated run checks only under its E2E hook (CRAFTORIO_E2E_GIT_PUSH).
-  // Never fails the import.
+  // ok | failed | fixing, ok?, reason?, fix?, setupGit? }. Not checked without push permission until a fork is
+  // made (the fork notice says it) nor for a local path; a simulated run checks only under its E2E hook
+  // (CRAFTORIO_E2E_GIT_PUSH). Never fails the import.
   async function checkPush(id) {
     const s = states.get(id);
     const p = projectOf(id);
-    if (!s || !p?.folder || s.access?.push === false) return;
+    if (!s || !p?.folder || (s.access?.push === false && !p.fork)) return;
     if (simulation.e2eGitPush() === null && (simulation.simulationOnly() || !isGitUrl(p.repo))) return;
     change(id, { pushCheck: { status: 'checking' } });
     /** @type {{ ok: boolean, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }} */

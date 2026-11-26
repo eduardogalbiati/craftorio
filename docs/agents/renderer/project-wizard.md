@@ -96,7 +96,11 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    a pick fills the full https URL; a typed `owner/repo` becomes the toggle's provider's https URL before
    `onboarding:start`, since the engine does not take the short form), and the line "Will be cloned into
    <workspace>/repos/<owner-repo>" (`wizard-clone-into`, the engine's own rule `repoNameFromUrl` of
-   `packages/shared/onboarding-model.js`). #739: the name (`wizard-name`) follows the URL, typed, pasted or
+   `packages/shared/onboarding-model.js`; #84: a local path gives `repos/<name>`, the engine adds a suffix
+   when that folder holds another repository). #79: once the clone is ready the engine checks it can push
+   (state `pushCheck`, also after **Create a fork**); a refusal shows the push notice with git's fix and,
+   when the platform CLI has one, a button running its setup-git (`onboarding:setup-git`); it never fails
+   the import. #739: the name (`wizard-name`) follows the URL, typed, pasted or
    picked from the list, with one rule (`displayNameFromUrl` of the model: `acme/ai-memory` → "Ai Memory")
    until the owner types a name; clearing it makes it follow again. "Next: clone and continue"
    calls `onboarding:start`. #743: the access check and the clone read as one wait in place: `wizard-next`

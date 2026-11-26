@@ -33,7 +33,11 @@ const { foundChecks } = require('../check-tools');
 const depsCache = require('../deps-cache');
 const { scratchWorkspace } = require('../../domains/local/local-preview');
 const { render } = require('./templates');
-const { checkPushAccess, isGitUrl } = require('../push-access');
+const {
+  checkPushAccess,
+  isGitUrl,
+  safeUrl,
+} = require('../push-access');
 
 // The `dependencies (<which>, <lockfile>): …` line of a deps-cache result (#198)
 function depsLine(which, r) {
@@ -121,12 +125,16 @@ const methods = {
     if (!remote && !fork) return;
     const origin = await git(['remote', 'get-url', 'origin'], this.worktree.workDir).then((s) => String(s || '').trim(), () => '');
     if (!isGitUrl(origin)) return;
-    const r = await checkPushAccess(this.worktree.workDir);
+    const r = await checkPushAccess(this.worktree.workDir, { run: git });
+    const where = safeUrl(origin);
     if (r.ok) {
-      this.emitEvent('log', { level: 'info', message: `push check: the run can push to ${origin}` });
+      this.emitEvent('log', { level: 'info', message: `push check: ${r.unchecked ? 'nothing to push yet (no commit), not checked for' : 'the run can push to'} ${where}` });
       return;
     }
-    throw new Error(`The run cannot push its branch to ${origin}: ${r.fix || ''} (git said: ${String(r.reason || '').split('\n').pop()})`);
+    // git's useful line (fatal:, ERROR:, denied), not its last one ("and the repository exists.")
+    const lines = String(r.reason || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const said = lines.find((l) => /fatal:|error:|denied/i.test(l)) || lines[0] || '';
+    throw new Error(`The run cannot push its branch to ${where}: ${r.fix || ''} (git said: ${safeUrl(said)})`);
   },
 
   // #472 (SEC-7): one `log` event, before the install and the first step, naming the commands the

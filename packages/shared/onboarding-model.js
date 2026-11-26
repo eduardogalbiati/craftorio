@@ -26,6 +26,8 @@
 // - repoNameFromUrl(url): the clone's folder name under <workspace>/repos, owner-repo (the engine's
 //   cloneRepo and createProject, the wizard's "Will be cloned into" line, #669); #84: a local path or
 //   file:// URL gives its folder's own name;
+// - #79 #84 isGitUrl(s): a remote git URL (https://, ssh://, git://, git@host:path, no space), else a local path;
+//   the one rule of repoNameFromUrl and the engine's (engine/push-access.js, domains/workspace/workspace.js);
 // - #632 "Create new project" (source 'new'): its repository step needs only the name; CREATE_ANSWERS
 //   (mode / ci / release, each field's values) and CREATE_DEFAULTS are its three questions, slugify(name)
 //   the new project's id and folder name (<workspace>/projects/<slug>).
@@ -238,12 +240,15 @@
     return clean.split(/[/:]/).filter(Boolean);
   }
 
-  // a remote URL (https, ssh, git:// or the scp form git@host:path), the engine's isGitUrl rule; else a local path
-  const REMOTE_URL = /^(https?|ssh|git):\/\/|^[\w.-]+@[\w.-]+:/i;
+  // a remote git URL (https, ssh, git:// or the scp form git@host:path, no space); else a local path
+  function isGitUrl(s) {
+    const text = String(s ?? '');
+    return /^(https?|ssh|git):\/\/\S+$/i.test(text) || /^[\w.-]+@[\w.-]+:\S+$/.test(text);
+  }
 
   function repoNameFromUrl(url) {
     // owner-repo avoids collisions between forks; #84: a local path (POSIX, C:\…, file://) is its folder's own name
-    const parts = REMOTE_URL.test(String(url ?? '').trim()) ? repoUrlParts(url).slice(-2) : repoUrlParts(url).join('/').split('\\').join('/').split('/').filter(Boolean).slice(-1);
+    const parts = isGitUrl(String(url ?? '').trim()) ? repoUrlParts(url).slice(-2) : repoUrlParts(url).join('/').split('\\').join('/').split('/').filter(Boolean).slice(-1);
     return (parts.join('-') || 'repo').replace(/[^\w.-]/g, '_');
   }
 
@@ -302,6 +307,7 @@
     displayNameFromUrl,
     forkSuggestion,
     initialState,
+    isGitUrl,
     next,
     profileLine,
     repoNameFromUrl,

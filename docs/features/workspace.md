@@ -58,5 +58,12 @@ order: 100
 - Settings shows the current workspace, with **Open** and **Change…**.
 - The `repo_path` input accepts a git URL (`https://…` or `git@…`): the app clones it into
   `repos/<owner>-<repo>` (or runs `git fetch` if already cloned) and runs the workflow on that copy.
+  #84: a local path (or `file://`) is cloned into `repos/<name>`, its folder's own name; a folder taken by
+  another repository gets a suffix (`<name>-2`).
+- #79: a GitHub or GitLab HTTPS URL is cloned over SSH when the platform CLI's protocol is ssh
+  (`gh config get git_protocol`); over HTTPS without a git credential helper the wizard warns before it
+  ends that runs cannot push, with the fix (`gh auth setup-git`) and a button that runs it. A Remote or
+  Fork + PR run checks its push access (`git push --dry-run`) before its first agent turn and fails at
+  once with the fix instead of at its `ci` step.
 - `CRAFTORIO_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.

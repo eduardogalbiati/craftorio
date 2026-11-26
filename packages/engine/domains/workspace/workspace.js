@@ -179,13 +179,13 @@ function layout(root) {
 // ---------------------------------------------------------------------------
 // Repository cloning
 // ---------------------------------------------------------------------------
-// #79: whether a clone can push and what to do when it can't, and isGitUrl (https://…, ssh://…, git@host:owner/repo)
-// (engine/push-access.js), re-exported here
+// #79: whether a clone can push and what to do when it can't, git's messages without HTTPS credentials, and
+// isGitUrl (https://…, ssh://…, git@host:owner/repo) (engine/push-access.js), re-exported here
 const {
   checkPushAccess,
   httpsFix,
   isGitUrl,
-  platformOfUrl,
+  NO_HTTPS_CREDENTIALS,
 } = require('../../engine/push-access');
 
 // the clone's folder name (owner-repo; #84: a local path's own name): the onboarding model's rule, shared with the wizard's step 2 (#669)
@@ -270,7 +270,7 @@ async function pushableUrl(url, { ghProtocol, credentialHelper } = {}) {
   if (protocol === 'ssh') return { url: `git@${parsed.host}:${parsed.path}.git` };
   if (protocol !== 'https') return { url };
   const helper = credentialHelper === undefined ? await readCredentialHelper(url) : credentialHelper;
-  return helper ? { url } : { url, push: false, fix: httpsFix(platformOfUrl(url)) };
+  return helper ? { url } : { url, push: false, fix: httpsFix(Platforms.platformOfRepoUrl(url), parsed.host) };
 }
 
 /**
@@ -299,7 +299,7 @@ function gitAuthArgs() {
 
 function explainGitError(args, stderr) {
   const msg = stderr.trim();
-  if (/could not read Username|Authentication failed|terminal prompts disabled|Repository not found/i.test(msg)) {
+  if (NO_HTTPS_CREDENTIALS.test(msg)) {
     return `git ${args[0]} failed: no access to the repository. For private GitHub repositories, authenticate the GitHub CLI (gh auth login); on other hosts use SSH or configure a credential helper.\n${msg}`;
   }
   return `git ${args[0]} failed: ${msg}`;

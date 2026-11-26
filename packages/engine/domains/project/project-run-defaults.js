@@ -97,10 +97,13 @@ function uiFolders(folder) {
 }
 
 // #84: a document, not code: text and markup documents, images, and the extensionless files a repository keeps
-// next to them (LICENSE, README, NOTICE…); dotfiles (.gitignore, .editorconfig) are neither
-const DOC_FILE = /\.(md|markdown|mdx|txt|rst|adoc|asciidoc|org|pdf|png|jpe?g|gif|svg|webp|ico)$|^[A-Z][A-Z0-9_-]*$/i;
+// next to them, upper-case only (LICENSE, README, NOTICE…: Makefile, Dockerfile and scripts are code); dotfiles
+// (.gitignore, .editorconfig) are neither
+const DOC_EXTENSION = /\.(md|markdown|mdx|txt|rst|adoc|asciidoc|org|pdf|png|jpe?g|gif|svg|webp|ico)$/i;
+const DOC_NAME = /^[A-Z][A-Z0-9_-]*$/;
+const isDocFile = (/** @type {string} */ name) => DOC_EXTENSION.test(name) || DOC_NAME.test(name);
 
-// #84: whether the folder holds a file other than documents (DOC_FILE) or dotfiles, up to MAX_DEPTH (the
+// #84: whether the folder holds a file other than documents (isDocFile) or dotfiles, up to MAX_DEPTH (the
 // dependencies and dot folders aside)
 function hasCode(folder) {
   const walk = (rel, depth) => {
@@ -109,7 +112,7 @@ function hasCode(folder) {
     return entries.some((e) => {
       if (e.name.startsWith('.')) return false;
       if (e.isDirectory()) return e.name !== 'node_modules' && depth < MAX_DEPTH && walk(rel ? `${rel}/${e.name}` : e.name, depth + 1);
-      return !DOC_FILE.test(e.name);
+      return !isDocFile(e.name);
     });
   };
   return walk('', 0);
