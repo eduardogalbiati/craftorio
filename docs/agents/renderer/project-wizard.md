@@ -71,18 +71,17 @@ release CI entry of a project with a `release` workflow says `onboarding.next_st
 
 ## The review's loading state (#852)
 
-A card whose analysis runs shows `wizard-review-running` (spinner + "running") in its header beside its
-action; the project card shows `wizard-review-languages-loading` (skeleton bar, `languagesBlock()` of
-`project-wizard-activity.js`) until the facts arrive, then the bar, or `wizard-review-languages-failed`.
-Under `prefers-reduced-motion: reduce` nothing animates.
+A card whose analysis runs shows `wizard-review-running` (spinner + "running") in its header beside its action; the project
+card shows `wizard-review-languages-loading` (skeleton bar, `languagesBlock()` of `project-wizard-activity.js`) until the facts
+arrive, then the bar, or `wizard-review-languages-failed`. Under `prefers-reduced-motion: reduce` nothing animates.
 
 ## The steps
 
-The screens follow the spec's mockups (#669, `docs/work/first-project-onboarding/images/mock-1, 2, 4, 6,
-7.jpg`): what phase 1 does not do yet stays visible and disabled. The panel has the numbered step pills
-(`wizard-steps`, one `wizard-step-pill` each, the current one `aria-current="step"`) over a divider, the
-step's body (its title is `#project-wizard-title`) and the footer (`wizard-footer`) over a divider: Cancel
-(`wizard-cancel`, step 1) or Back on the left, the step's action on the right.
+The screens follow the spec's mockups (#669, `docs/work/first-project-onboarding/images/mock-1, 2, 4, 6, 7.jpg`): what
+phase 1 does not do yet stays visible and disabled. The panel has the numbered step pills (`wizard-steps`, one
+`wizard-step-pill` each, the current one `aria-current="step"`) over a divider, the step's body (its title is
+`#project-wizard-title`) and the footer (`wizard-footer`) over a divider: Cancel (`wizard-cancel`, step 1) or Back on
+the left, the step's action on the right.
 
 1. **start** (mock-1): "Add a project", two cards with an icon (`wizard-card-icon`) and three points:
    import a repository (`wizard-source-import`, picked when the wizard opens); create new
@@ -96,22 +95,20 @@ step's body (its title is `#project-wizard-title`) and the footer (`wizard-foote
    a pick fills the full https URL; a typed `owner/repo` becomes the toggle's provider's https URL before
    `onboarding:start`, since the engine does not take the short form), and the line "Will be cloned into
    <workspace>/repos/<owner-repo>" (`wizard-clone-into`, the engine's own rule `repoNameFromUrl` of
-   `packages/shared/onboarding-model.js`; #84: a local path gives `repos/<name>`, the engine adds a suffix
-   when that folder holds another repository). #79: once the clone is ready the engine checks it can push
-   (state `pushCheck`, also after **Create a fork**); a refusal shows the push notice with git's fix and,
-   when the platform CLI has one, a button running its setup-git (`onboarding:setup-git`); it never fails
-   the import. #739: the name (`wizard-name`) follows the URL, typed, pasted or
-   picked from the list, with one rule (`displayNameFromUrl` of the model: `acme/ai-memory` → "Ai Memory")
-   until the owner types a name; clearing it makes it follow again. "Next: clone and continue"
-   calls `onboarding:start`. #743: the access check and the clone read as one wait in place: `wizard-next`
-   shows a spinner (`wizard-spinner`) and "Cloning <name>…" (`aria-busy`), the fields read-only, no status
-   card; the button is disabled only while `onboarding:start` is in flight, then a click goes on to the
-   analysis step without waiting (#641: the clone keeps running); the clone done goes straight to the
-   analysis step. The panel (`wizard-panel`) has one fixed size
-   on every step and state: its body scrolls. A refused access shows `wizard-error`
-   `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
-   the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A
-   missing or signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
+   `packages/shared/onboarding-model.js`; #84: a local path gives `repos/<name>`, the engine adds a suffix when that
+   folder holds another repository). #79: once the clone is ready the engine checks it can push (state `pushCheck`,
+   also after **Create a fork**); a refusal shows the push notice with git's fix and, when the platform CLI has one,
+   a button running its setup-git (`onboarding:setup-git`); it never fails the import. #739: the name (`wizard-name`)
+   follows the URL, typed, pasted or picked from the list, with one rule (`displayNameFromUrl` of the model:
+   `acme/ai-memory` → "Ai Memory") until the owner types a name; clearing it makes it follow again. "Next: clone and
+   continue" calls `onboarding:start`. #743: the access check and the clone read as one wait in place: `wizard-next`
+   shows a spinner (`wizard-spinner`) and "Cloning <name>…" (`aria-busy`), the fields read-only, no status card; the
+   button is disabled only while `onboarding:start` is in flight, then a click goes on to the analysis step without
+   waiting (#641: the clone keeps running); the clone done goes straight to the analysis step. The panel
+   (`wizard-panel`) has one fixed size on every step and state: its body scrolls. A refused access shows
+   `wizard-error` `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
+   the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A missing or
+   signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
    **Create new** (#632, mock-3, step 2 with the Create card): on the left the name (`wizard-new-name`),
    what it starts with (`wizard-new-starts` radios: README and .gitignore with a first commit on `main`, or
    Empty, `git init` only), the private remote's checkbox (`wizard-new-remote`, unchecked, disabled without a
@@ -175,19 +172,17 @@ screenshots, shown disabled (later phases). #75: no screenshots entry without a 
 the files say now (`projects:inputHints`' `detectedKind`: `backend` with no code, never saved as the picked kind). The heading adds
 "· city and refactor backlog done" once the proposals are there, and the workflow count for a project's own set (an import has none).
 
-The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`;
-its code is `fronts/build/views/projects/project-wizard-tray.js` (`window.ProjectWizardTray`, over the
-wizard's maps of states and names). #724: it is hidden while the wizard is open (the wizard shows the import's progress itself, nothing
-covers its footer); with the wizard closed it lists only what needs attention: an import running (with
-`tray-spinner`) or failed (its reason and Retry). A finished import (ready or analyzed, no paid job
-failed) leaves it about 5 s later with the toast "<name> imported" and Open the project (no toast when
-the wizard showed it, nor when Finish's own toast says the analysis ended). No item left: hidden.
+The tray (`onboarding-tray`, one `tray-item` per import with `data-status`) follows `onboarding:changed`; its code is
+`fronts/build/views/projects/project-wizard-tray.js` (`window.ProjectWizardTray`, over the wizard's maps of states and names).
+#724: it is hidden while the wizard is open (the wizard shows the import's progress itself, nothing covers its footer); with
+the wizard closed it lists only what needs attention: an import running (with `tray-spinner`) or failed (its reason and
+Retry). A finished import (ready or analyzed, no paid job failed) leaves it about 5 s later with the toast "<name> imported"
+and Open the project (no toast when the wizard showed it, nor when Finish's own toast says the analysis ended). Empty: hidden.
 
 ## Texts
 
-Every text of the wizard, the tray, the review and the Next steps card is an `onboarding.*` key of
-`packages/shared/i18n/en.json` and `pt-BR.json` (the same set in both); `apps/desktop/test/i18n-every-screen-330.test.js`
-fails a literal visible text.
+Every text of the wizard, the tray, the review and the Next steps card is an `onboarding.*` key of `packages/shared/i18n/en.json`
+and `pt-BR.json` (the same set in both); `apps/desktop/test/i18n-every-screen-330.test.js` fails a literal visible text.
 
 ## Checking it
 
