@@ -65,6 +65,8 @@ async function setup(t, { manifest = null, extra = {} } = {}) {
   t.mock.method(health, 'runBaseCheck', (root, opts) => realCheck(root, {
     ...opts, platform: 'github', ghRepo: 'o/r', exec, releaseHoldsBase: () => false,
     runSuite: async () => ({ failures: [{ test: FAILURE.test, file: FAILURE.file, error: 'expected 110, got 100' }], log: 'red' }),
+    // #78: a re-run that does not start confirms nothing; the second round is red too here
+    rerunFiles: async () => ({ failures: [{ test: FAILURE.test, file: FAILURE.file, error: 'expected 110, got 100' }], log: 'red' }),
   }));
   return { ws, project, area: loadArea()(ctx) };
 }

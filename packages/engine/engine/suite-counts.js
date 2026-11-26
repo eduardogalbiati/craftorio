@@ -73,7 +73,7 @@ function splitCancelled(text, failures) {
   const last = (re) => { const all = [...t.matchAll(re)]; return all.length ? Number(all[all.length - 1][1]) : null; };
   const nodeFail = last(/^\s*(?:ℹ|#) fail (\d+)/gm);
   const nodeCancelled = last(/^\s*(?:ℹ|#) cancelled (\d+)/gm);
-  const allCancelled = nodeFail === 0 && nodeCancelled > 0;
+  const allCancelled = nodeFail === 0 && (nodeCancelled ?? 0) > 0;
   const failed = [];
   const cancelled = [];
   for (const f of failures || []) (allCancelled || isCancelled(f) ? cancelled : failed).push(f);

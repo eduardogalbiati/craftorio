@@ -8,17 +8,15 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
-- **2026-11-25** (#85): the base check after a roadmap merge is off by default
-  (`DEFAULT_SETTINGS.baseCheck.onRed: 'off'`): no check, no base worktree, no issue and no "Fix the
-  base" stage until the owner turns it on in Settings › Execution › Base check. A workspace that saved
-  `issue` or `fix` keeps it; nothing is migrated. Why: new users got issues filed on their project and
-  a paid fix run proposed without having chosen it, and false reds reached them (#78).
-- **2026-11-25** (#87): the Night watch retries a failed item by default and never skips one: `skip`
-  is off in the default permissions (`retry` and `refresh` stay on). Without Skip, a run waiting at a
-  human gate is never moved past, whatever `settings.oracle.parkAfterMinutes` says: the gate waits for
-  the owner and the morning summary lists it. A saved permission list is kept. Why: a fix the owner
-  planned could drop out of a release without anyone choosing it.
-- **2026-11-25** (#69): the simulation is off by default, and the first-run Setup has two steps, Agents
+- **2026-11-25** (#69, #85, #87): what a new user did not choose stays off. #85: the base check after
+  a roadmap merge is off by default (`DEFAULT_SETTINGS.baseCheck.onRed: 'off'`): no check, no base
+  worktree, no issue and no "Fix the base" stage until the owner turns it on in Settings › Execution ›
+  Base check. Why: issues were filed and a paid fix run proposed without being chosen, and false reds
+  reached them (#78). #87: the Night watch retries a failed item by default and never skips one
+  (`skip` off in the default permissions, `retry` and `refresh` on); without Skip a run waiting at a
+  human gate is never moved past, whatever `settings.oracle.parkAfterMinutes` says, and the morning
+  summary lists it. Why: a planned fix could drop out of a release unchosen. Saved choices (a
+  `baseCheck`, a permission list) are kept; nothing is migrated. #69: the simulation is off by default, and the first-run Setup has two steps, Agents
   and First project. Setup never writes `developerMode`: a fresh workspace's Product Owner and Start are
   real, and a workspace that has developer mode on keeps it. The simulation is turned on in Settings ›
   Execution › Developer mode; the machine's line is read there too, and Start says a real run uses the
