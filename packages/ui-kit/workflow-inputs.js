@@ -354,11 +354,14 @@
   }
 
   /** #41: a run's step id → name (`stepNames`, recorded in English) with its workflow's localized names winning
-   * where the run recorded no name or the workflow's current English one (a past version's name stays, #245). */
+   * where the run recorded no name or the workflow's current English one, its `display` or the name derived from
+   * its id (the engine records both, setup.js); a past version's name stays (#245). */
+  const displayNameOf = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/display-name').displayName : root.displayName);
   function stepNamesOf(stepNames, wf) {
     const shown = localized(wf)?.steps || [];
+    const english = (s) => s.display || displayNameOf()?.(s.id, null, 'en');
     const own = Object.fromEntries((wf?.steps || []).map((s, i) => [s, shown[i]?.display])
-      .filter(([s, name]) => s?.id && name && (!stepNames?.[s.id] || stepNames[s.id] === s.display)).map(([s, name]) => [s.id, name]));
+      .filter(([s, name]) => s?.id && name && (!stepNames?.[s.id] || stepNames[s.id] === english(s))).map(([s, name]) => [s.id, name]));
     return Object.keys(own).length ? { ...stepNames, ...own } : stepNames || null;
   }
 
@@ -374,7 +377,7 @@
       if (!repoWorkflows.has(run.projectId)) {
         repoWorkflows.set(run.projectId, []);
         root.api.listWorkflows({ projectId: run.projectId, repositoryOnly: true })
-          .then((list) => { repoWorkflows.set(run.projectId, Array.isArray(list) ? list : []); root.scheduleRender?.(); }, () => {});
+          .then((list) => { repoWorkflows.set(run.projectId, Array.isArray(list) ? list : []); root.scheduleRender?.(); }, () => repoWorkflows.delete(run.projectId)); // a failure: asked again next time
       }
       wf = repoWorkflows.get(run.projectId).find(same);
     }

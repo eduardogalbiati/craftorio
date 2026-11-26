@@ -59,6 +59,26 @@ test('#41 runStepNames: a repository workflow is read once for its project, then
   assert.equal(calls, 1);
 });
 
+test('#41 stepNamesOf (iteration 3): a step without `display` recorded under its derived name reads in pt-BR', () => {
+  I18n.setLanguage('pt-BR');
+  const issue = load('workflows', 'issue.yaml', 'default');
+  const names = WorkflowInputs.stepNamesOf({ analyze: 'Analyze', write: 'Write' }, issue);
+  assert.equal(names.analyze, I18n.t('workflow_texts.issue_step_analyze'));
+  assert.equal(names.write, I18n.t('workflow_texts.issue_step_write'));
+  const feature = load('workflows', 'feature.yaml', 'default');
+  assert.equal(WorkflowInputs.stepNamesOf({ code_review: 'Code review' }, feature).code_review, I18n.t('workflow_texts.feature_step_code_review'));
+});
+
+test('#41 runStepNames (iteration 3): a failed read of the repository workflows is asked again', async () => {
+  let calls = 0;
+  globalThis.api = { listWorkflows: async () => { calls += 1; throw new Error('offline'); } };
+  const run = { workflow: 'x.yaml', projectId: 'p-41-retry', stepNames: { a: 'A' } };
+  WorkflowInputs.runStepNames(run, []);
+  await new Promise((r) => setImmediate(r));
+  WorkflowInputs.runStepNames(run, []);
+  assert.equal(calls, 2);
+});
+
 test('#41 runStepNames: no run gives null; a run without a project keeps its recorded names', () => {
   assert.equal(WorkflowInputs.runStepNames(null, []), null);
   assert.deepEqual(WorkflowInputs.runStepNames({ workflow: 'gone.yaml', stepNames: { a: 'A' } }, []), { a: 'A' });

@@ -2,7 +2,8 @@
 // owner next to `.craftorio/local-preview.yaml` (packages/engine/domains/local/local-preview.js). It lists the workflows the
 // project is worked on with: `{ name }` for a bundled or workspace workflow, `{ name, file:
 // workflows/<x>.yaml }` for the repository's own copy under `.craftorio/workflows/`, each with an
-// optional `category` (intake, solo, team, release, or a bundled one) and `description`; `version`
+// optional `category` (intake, solo, team, release, or a bundled one), `description` and its catalog key
+// `description_key` (#41); `version`
 // and `requires` (the app versions it needs, e.g. `>=1.2`). Pure: parsing and checks only. What the
 // repository's files may do (accepted per commit, capped) is packages/engine/engine/run/load.js's
 // loadRepositoryWorkflow; the listing and the acceptance are packages/engine/service/areas/workflows.js's.
@@ -90,7 +91,9 @@ function parseEntry(entry, i) {
   if (category && !CATEGORIES.includes(category) && !BUNDLED_CATEGORIES.includes(category)) {
     errors.push(`${at}: unknown category "${category}" (one of ${[...CATEGORIES, ...BUNDLED_CATEGORIES].join(', ')}).`);
   }
-  return { errors, workflow: { name, file, category, description: str(entry.description) } };
+  // #41: `description_key`, the description's catalog key (the screens show it in the interface language)
+  const descriptionKey = str(entry.description_key);
+  return { errors, workflow: { name, file, category, description: str(entry.description), ...(descriptionKey ? { description_key: descriptionKey } : {}) } };
 }
 
 /**

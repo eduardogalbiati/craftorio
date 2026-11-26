@@ -676,7 +676,7 @@ function renderSteps() {
   const shown = v.allSteps ? all : all.filter((s) => s.visits > 0);
   const groupOf = new Map(v.groups.flatMap((g) => g.steps.map((id) => [id, g.name])));
   const current = v.trail?.steps.at(-1)?.step || all.find((s) => s.status === 'running' || s.status === 'waiting')?.id;
-  const logs = stepLogs(v);
+  const logs = stepLogs(v), stepNames = window.runStepNames?.(v.run) ?? v.run?.stepNames; // #41: once per draw
   const na = stepsThatDontApply(v, all);
   // #465: a deterministic step that wrote a log follows it live, as a session does (read-only)
   const logButtons = (s) => {
@@ -696,7 +696,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}${na.has(s.id) && !s.visits ? ' doesnt-apply' : ''}" data-testid="run-step-card" data-step="${esc(s.id)}"${na.has(s.id) && !s.visits ? ' data-doesnt-apply="1"' : ''}>
       <span class="dot"></span>
-      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, window.runStepNames?.(v.run) ?? v.run?.stepNames))}</span>${naLine(s)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, stepNames))}</span>${naLine(s)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
       ${logButtons(s)}
     </li>`;
@@ -733,7 +733,7 @@ function renderSteps() {
   box.querySelectorAll('.step-term [data-term]').forEach((b) => (b.onclick = async () => {
     const wrap = b.closest('.step-term');
     const card = b.closest('[data-step]');
-    const label = agentLabel(card.dataset.step, window.runStepNames?.(v.run) ?? v.run?.stepNames);
+    const label = agentLabel(card.dataset.step, stepNames);
     const msg = await termAction(b, { sessionId: b.dataset.log || wrap.dataset.log, runId: v.run?.id || state.run?.id, label: b.dataset.log ? `${label} base` : label });
     const line = wrap.querySelector('[data-term-msg]');
     line.textContent = msg.text;

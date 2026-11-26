@@ -105,10 +105,11 @@ module.exports = (ctx) => {
         updateAvailable: false, restorable: false, bundledVersion: null, trusted: w.accepted,
       });
       const { copy, sha } = runs[w.file];
-      // #41: the manifest's own description wins in every language (the YAML's description_key goes with it)
+      // #41: the manifest's own description wins, with its own catalog key (the YAML's goes with the YAML's text)
       if (w.entry.description) delete item.description_key;
       return {
         ...item, ...(w.entry.category ? { category: w.entry.category } : {}), ...(w.entry.description ? { description: w.entry.description } : {}),
+        ...(w.entry.description && w.entry.description_key ? { description_key: w.entry.description_key } : {}),
         runsCopy: copy, runs: copy === 'repository' ? `runs: repository @ ${sha}` : 'does not run for this project: the workspace copy (your models) runs',
       };
     })];
@@ -169,6 +170,7 @@ module.exports = (ctx) => {
         steps: wf.steps.map((s) => ({
           id: s.id,
           ...(s.display ? { display: s.display } : {}), // #245
+          ...(s.display_key ? { display_key: String(s.display_key) } : {}), // #41: its catalog key
           type: s.type || 'agent',
           agent: s.agents ? s.agents.join(' · ') : s.agent || null,
           agents: s.agents || null,

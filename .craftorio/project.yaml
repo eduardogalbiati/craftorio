@@ -39,7 +39,9 @@ workflows:
     file: workflows/ai-development-local-hero.yaml
     category: solo
     description: This repository's own copy of the solo flow
+    description_key: workflow_texts.ai_development_local_hero_manifest_description
   - name: ai-development-remote-hero
     file: workflows/ai-development-remote-hero.yaml
     category: solo
     description: The solo flow for contributors, ending in a pull request the maintainer merges
+    description_key: workflow_texts.ai_development_remote_hero_manifest_description
