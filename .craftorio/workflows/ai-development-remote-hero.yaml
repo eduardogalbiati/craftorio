@@ -159,6 +159,7 @@ metadata:
   name: ai-development-remote-hero
   version: 0.2.0
   description: "Tests first, landing as a pull request: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build, verification and the local merge. No push, no PR, no CI."
+  description_key: workflow_texts.ai_development_remote_hero_description
   tags: [dev, review, test, tests-first, tdd, build, remote, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: build
@@ -2755,16 +2756,16 @@ steps:
   # ============================ PULL REQUEST =================================
   # the pull request and the maintainer's merge (fragments/pr-pipeline.yaml); no CI to wait for
   - id: pr_open
-    display_key: workflow_texts.mockups_export_step_pr_open
+    display_key: workflow_texts.ai_development_remote_hero_step_pr_open
     fragment: pr-pipeline
     agent: ci_pusher
   # #807 a stacked run follows its parent pull request here until it merges
   - id: stack_follow
-    display_key: workflow_texts.mockups_export_step_stack_follow
+    display_key: workflow_texts.ai_development_remote_hero_step_stack_follow
     fragment: pr-pipeline
     agent: ci_pusher
   - id: pr_monitor
-    display_key: workflow_texts.mockups_export_step_pr_monitor
+    display_key: workflow_texts.ai_development_remote_hero_step_pr_monitor
     fragment: pr-pipeline
 
 # -----------------------------------------------------------------------------

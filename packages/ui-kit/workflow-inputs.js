@@ -330,7 +330,8 @@
   // the file's text stays the English and the fallback. A workflow without bundled origin or keys stays as it is.
   const i18n = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n);
   const snake = (s) => String(s ?? '').replace(/\.ya?ml$/, '').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
-  const namesKeys = (wf) => Object.values(wf.inputs || {}).some((d) => d && (d.label_key || d.help_key || d.options_key)) || (wf.steps || []).some((s) => s?.display_key);
+  // #41: `description_key` (metadata) names the description's key, as label_key does an input's
+  const namesKeys = (wf) => !!wf.description_key || Object.values(wf.inputs || {}).some((d) => d && (d.label_key || d.help_key || d.options_key)) || (wf.steps || []).some((s) => s?.display_key);
   function localized(wf) {
     const I18n = i18n();
     const bundled = ['bundled', 'default'].includes(wf?.origin);
@@ -340,7 +341,7 @@
     const options = (key, def) => Object.fromEntries([...new Set([...(def.enum || []).map(String), ...Object.keys(def.options || {})])].map((v) => [v, tr(optionLabel(def, v), def.options_key && `${def.options_key}_${snake(v)}`, `${key}_opt_${v}`)]));
     return {
       ...wf,
-      description: bundled ? I18n.translated(`projects.workflows_desc_${name}`, wf.description || '') : wf.description,
+      description: wf.description_key ? I18n.translated(String(wf.description_key), wf.description || '') : bundled ? I18n.translated(`projects.workflows_desc_${name}`, wf.description || '') : wf.description,
       steps: (wf.steps || []).map((s) => ({ ...s, display: tr(s.display || '', s.display_key, `step_${s.id}`) || s.display })),
       inputs: Object.fromEntries(Object.entries(wf.inputs || {}).map(([key, def]) => [key, {
         ...def,
@@ -349,6 +350,12 @@
         ...(def.enum || def.options ? { options: options(key, def) } : {}),
       }])),
     };
+  }
+
+  /** #41: a run's step id → name (`stepNames`, recorded in English) with its workflow's localized names winning. */
+  function stepNamesOf(stepNames, wf) {
+    const own = Object.fromEntries((localized(wf)?.steps || []).filter((s) => s?.display).map((s) => [s.id, s.display]));
+    return Object.keys(own).length ? { ...stepNames, ...own } : stepNames || null;
   }
 
   // ---- where a value comes from (#785) --------------------------------------------------------
@@ -440,7 +447,7 @@
       const hint = def?.multiple ? detected.join(',') : detected[0];
       if (k === 'language' && hint) {
         if (!field.dataset.wiTouched && !keep.includes(k)) set(rootEl, k, hint, { touched: false });
-        note(field, el.value === hint ? 'detected' : '', "Detected from the project's files");
+        note(field, el.value === hint ? t('workflow_inputs.detected') : '', t('workflow_inputs.detected_title'));
       }
       if (kind(k, def || {}) === 'branch') {
         const list = field.querySelector('datalist');
@@ -518,6 +525,7 @@
     set,
     shownDefault,
     sourceText,
+    stepNamesOf,
     toggleMore,
     valueText,
   };

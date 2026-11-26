@@ -203,16 +203,22 @@ function suiteCardsHtml(runId, stepNames) {
     const sel = out.selection;
     const listed = Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
     const scope = t(sel.mode === 'all' ? 'run.suite_whole' : listed ? 'run.suite_listed' : out.affected && out.scope === 'full' ? 'run.suite_affected_then_whole' : 'run.suite_affected_only');
-    const reasons = Object.entries(sel.reasons || {});
+    // #41: the engine's English "listed by <step>" / "the N test file(s) the step lists" redrawn in the interface language
+    const reasons = Object.entries(sel.reasons || {}).map(([f, why]) => {
+      const by = /^listed by (.+)$/.exec(why);
+      return [f, by ? t('run.suite_listed_by', { step: agentLabel(by[1], stepNames) }) : why];
+    });
+    const lists = /^the (\d+) test file\(s\) the step lists(?: \(not found: (.+)\))?$/.exec(sel.why || '');
+    const why = lists ? t('run.suite_listed_why', { count: lists[1] }) + (lists[2] ? ` ${t('run.suite_listed_missing', { files: lists[2] })}` : '') : sel.why;
     const more = reasons.length - SUITE_REASONS_SHOWN;
     const list = reasons.length
-      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, why]) => `<li><span class="mono text-cut" data-testid="run-suite-file" title="${esc(f)}">${esc(f)}</span>: <span class="text-prose">${esc(why)}</span></li>`).join('')}${more > 0 ? `<li class="muted">${t('run.and_more_more', { more })}</li>` : ''}</ul>`
+      ? `<ul>${reasons.slice(0, SUITE_REASONS_SHOWN).map(([f, w]) => `<li><span class="mono text-cut" data-testid="run-suite-file" title="${esc(f)}">${esc(f)}</span>: <span class="text-prose">${esc(w)}</span></li>`).join('')}${more > 0 ? `<li class="muted">${t('run.and_more_more', { more })}</li>` : ''}</ul>`
       : '';
     const logBtn = (log, label, testid) => (log ? `<button type="button" class="link-btn small" data-testid="${testid}" data-suite-log="${esc(log)}" title="${esc(log)}">${label}</button>` : '');
     const affectedLog = out.affected ? out.affected.log : out.scope === 'files' ? out.log : '';
     return `<div class="run-suite-card fit-box" data-testid="run-suite-card">
       <div><b title="${esc(stepId)}">${esc(agentLabel(stepId, stepNames))}</b> <span class="badge" data-testid="run-suite-scope" title="${esc(sel.why || '')}">${esc(scope)}</span>${out.round ? ` <span class="muted small">${t('run.round')} ${esc(out.round)}</span>` : ''}</div>
-      <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${sel.why ? `<div class="muted">${esc(sel.why)}</div>` : ''}</div>
+      <div class="small run-suite-selection" data-testid="run-suite-selection">${list}${why ? `<div class="muted">${esc(why)}</div>` : ''}</div>
       <div class="row">${logBtn(affectedLog, t(listed ? 'run.suite_listed_log' : 'run.suite_affected_log'), 'run-suite-affected-log')}${out.affected && out.scope === 'full' ? logBtn(out.log, t('run.suite_whole_log'), 'run-suite-full-log') : ''}</div>
     </div>`;
   }).join('');

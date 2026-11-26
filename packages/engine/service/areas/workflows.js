@@ -132,6 +132,8 @@ module.exports = (ctx) => {
         name: wf.metadata?.name || file,
         version: wf.metadata?.version,
         description: wf.metadata?.description,
+        // #41: the description's catalog key (a repository's own workflow), as an input's label_key
+        ...(wf.metadata?.description_key ? { description_key: String(wf.metadata.description_key) } : {}),
         category: wf.metadata?.category || 'build',
         tags: wf.metadata?.tags || [],
         // #286: what does not stop a run but does not work as written (an effort never passed)

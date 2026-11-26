@@ -145,6 +145,7 @@ metadata:
   name: ai-development-local-hero
   version: 0.2.0
   description: "Tests first: the test writer writes the acceptance tests from the issue before any code, the developer implements until they pass (never editing them), then review, the suite run by the orchestrator, build, verification and the local merge. No push, no PR, no CI."
+  description_key: workflow_texts.ai_development_local_hero_description
   tags: [dev, review, test, tests-first, tdd, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: build

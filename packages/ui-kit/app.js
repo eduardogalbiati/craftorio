@@ -792,7 +792,11 @@ function runInfo(x) {
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null, projectId: project?.id || null,
     // agent key → name: the YAML's display (#245), the Agents menu's own names winning
     agentNames: x.display?.agents || x.agent_names ? { ...x.display?.agents, ...x.agent_names } : null,
-    stepNames: x.display?.steps || null, // step id → name (#245)
+    // step id → name (#245); #41: read at each use, its workflow's names in the interface language winning
+    get stepNames() {
+      const wf = (state.workflows || []).find((w) => w && (w.file === x.workflow || w.name === x.workflow));
+      return window.WorkflowInputs ? WorkflowInputs.stepNamesOf(x.display?.steps, wf) : x.display?.steps || null;
+    },
     chain: ChainModel.runChain(x), // its chain (#134)
     // `type: workflow` steps (#174): the run that started this one, the runs this one started
     parentRun: x.parent_run || x.parentRun || null, childRuns: [...(x.childRuns || [])],

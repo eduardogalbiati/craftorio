@@ -12,6 +12,8 @@
   const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
   // id → [pill colour (style.css .pill-<colour>), label]
   const STATUS = {
+    // #41: a session's own statuses (the run screen's Sessions list)
+    active: ['running', 'Active'],
     cancelled: ['cancelled', 'Cancelled'],
     delivered: ['success', 'Delivered'],
     done: ['success', 'Done'],
@@ -30,6 +32,7 @@
     queued: ['idle', 'Queued'],
     released: ['success', 'Released'],
     resumed: ['idle', 'Resumed'],
+    retrying: ['running', 'Retrying'],
     running: ['running', 'Running'],
     simulated: ['idle', 'Simulated'],
     skipped: ['interrupted', 'Skipped'],
