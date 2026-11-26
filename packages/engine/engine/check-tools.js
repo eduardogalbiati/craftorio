@@ -128,7 +128,7 @@ function rust({ dir, installed }) {
   // --frozen: offline, and Cargo.lock stays as it is
   const offline = firstOf(dir, ['Cargo.lock']) ? '--frozen' : '--offline';
   // dependencies never downloaded, or a Cargo.lock that would have to change
-  const unready = /--offline was specified|--frozen was passed|failed to download|lock file .*needs to be updated/;
+  const unready = /--offline was specified|--frozen was (?:passed|specified)|failed to download|lock file .*needs to be updated/;
   const check = { command: `cargo check ${offline} --message-format short`, tool: 'cargo-check', unready };
   // rustup's `cargo-clippy` proxy is on the PATH even without the component: then `cargo check` runs instead
   if (installed('cargo-clippy')) return [{ command: `cargo clippy ${offline} --message-format short`, tool: 'clippy', unready, fallback: { ...check, when: /is not installed for the toolchain/ } }];

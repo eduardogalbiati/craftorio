@@ -15,8 +15,9 @@ const SUMMED = [
   /^test result: (?:ok|FAILED)\. (?<p>\d+) passed; (?<f>\d+) failed;/gm,
   // dotnet test: a line per test project
   /^\s*(?:Passed|Failed)!\s+-\s+Failed:\s+(?<f>\d+),\s+Passed:\s+(?<p>\d+),/gm,
-  // Maven Surefire: each module's total line (a class's line goes on with "Time elapsed")
-  /^(?:\[\w+\]\s+)?Tests run: (?<n>\d+), Failures: (?<f>\d+), Errors: (?<e>\d+), Skipped: (?<s>\d+)\s*$/gm,
+  // Maven Surefire: each module's total line, maybe with ", Flakes: N" (a class's line goes on
+  // with "Time elapsed")
+  /^(?:\[\w+\]\s+)?Tests run: (?<n>\d+), Failures: (?<f>\d+), Errors: (?<e>\d+), Skipped: (?<s>\d+)(?:, Flakes: \d+)?\s*$/gm,
 ];
 
 // the sum of every line `re` matches in `text`, or null when none does
