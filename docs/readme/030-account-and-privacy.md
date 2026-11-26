@@ -1,5 +1,8 @@
 ## Account and privacy
 
+This program will not transfer any information to other networked systems unless specifically requested by the
+user or the person installing or operating it (the code signing policy's privacy line).
+
 The app is free and open source. **Sign-in is off for now** (`enabled: false` in
 `packages/engine/domains/account/auth-config.js`): the app opens without an account and records nothing.
 The rest of this section describes the app with sign-in on.

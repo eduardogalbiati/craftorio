@@ -110,6 +110,15 @@ test('the README offers the source code (recommended while the builds are not si
   for (const [url] of text.matchAll(/https:\/\/github\.com\/eduardogalbiati\/craftorio\/releases\/latest\/download\/[^\s`]+/g)) assert.match(url, /\/download\/<file>$/);
 });
 
+test('#96: the README has the code signing policy SignPath asks for, and both guides say how to uninstall', () => {
+  const readme = read('README.md');
+  assert.match(readme, /## Code signing policy\n\nFree code signing provided by SignPath\.io, certificate by SignPath Foundation\./);
+  for (const role of ['**Committers**', '**Reviewers**', '**Approvers**']) assert.ok(readme.includes(role), role);
+  assert.match(readme, /This program will not transfer any information to other networked systems unless specifically requested/);
+  assert.match(readme, /\*\*Uninstall\.\*\*/);
+  assert.match(read(INSTALL), /## Uninstall \(only when the user asks\)/);
+});
+
 test('Codex: the handover and the workspace instructions name what its sandbox needs', () => {
   for (const file of [INSTALL, ORACLE]) assert.match(read(file), /sandbox_workspace_write\.network_access=true/, file);
 });

@@ -107,6 +107,8 @@ function packagerOptions({ platform, arch, out }) {
   return {
     dir: root,
     name: NAME,
+    // #96: the binary's metadata (Windows: product name and version come from NAME and package.json)
+    appCopyright: `Copyright (c) ${new Date().getFullYear()} Eduardo Galbiati`,
     platform,
     arch,
     out,

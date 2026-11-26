@@ -332,6 +332,13 @@ It prints `Verified OK`. A different hash or a failed check means the file is no
 release published: do not run it. This checks the download, not the app: the packages themselves
 are still not code-signed.
 
+**Uninstall.** Close the app, then delete what you installed: the unzipped folder (Windows, Linux tar.gz),
+`Craftorio.app` from Applications (macOS) or the AppImage (Linux); from the source code, its folder. Two folders
+stay, yours to delete or keep: the **workspace** (your projects, runs and settings: `craftorio-workspace` in your
+home folder, or the one shown in Settings › General) and the app's data folder `craftorio` (sign-in, the engine
+connection) in `%APPDATA%` (Windows), `~/Library/Application Support` (macOS) or `~/.config` (Linux). The
+workspace's path is registered in `HKCU\Software\Craftorio` (Windows) or `~/.craftorio.json` (macOS, Linux).
+
 **Sizing.** Each run in progress takes about 4 threads and 6 GB of RAM (its agent CLI, its tests,
 its tooling). The app reads this machine at start and proposes how many runs at once (1 to 6) and
 how many test workers per run (Settings › Execution › Concurrent runs, also shown in the Setup); a
@@ -345,7 +352,33 @@ are generated from one source image, `apps/desktop/assets/icon-source.png` (its 
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). To replace the icon, put a square PNG of 1024 px or more at `apps/desktop/assets/icon-source.png` (or pass its path)
 and run `npm run icons`, then commit the four files.
 
+## Code signing policy
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation. **Status:** applied for
+([#96](https://github.com/eduardogalbiati/craftorio/issues/96)); until it is approved the Windows and macOS packages
+are not signed, and each system warns once at the first start (see Install).
+
+Every signed package is built by the Deploy workflow (`.github/workflows/deploy.yml`) from a release tag of this
+repository, and each signing request is approved by hand.
+
+**Team roles**
+
+- **Committers**: [the repository's collaborators](https://github.com/eduardogalbiati/craftorio/graphs/contributors)
+  push to their own branches; `main` changes only through a pull request.
+- **Reviewers**: every pull request to `main` is reviewed by a code owner ([CODEOWNERS](.github/CODEOWNERS)):
+  Eduardo Galbiati.
+- **Approvers**: only the repository owner, Eduardo Galbiati, creates release tags (a tag ruleset enforces it) and
+  approves each signing request.
+
+**Privacy**: This program will not transfer any information to other networked systems unless specifically requested
+by the user or the person installing or operating it. The app's sign-in is off (see "Account and privacy"); the
+agent CLIs it opens (Claude Code, Codex, Grok Build) talk to their providers under the terms you accepted when you
+signed in to them.
+
 ## Account and privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the
+user or the person installing or operating it (the code signing policy's privacy line).
 
 The app is free and open source. **Sign-in is off for now** (`enabled: false` in
 `packages/engine/domains/account/auth-config.js`): the app opens without an account and records nothing.

@@ -212,3 +212,16 @@ stop.
 
 Offer to import a project, and to try a first run in simulation, which is free. Start nothing until the user
 chooses.
+
+## Uninstall (only when the user asks)
+
+**Ask** before each deletion, and close the app first (A: quit it; B: stop `npm start`):
+
+1. The app: A, the unzipped folder (Windows), `Craftorio.app` in Applications (macOS) or the AppImage or its
+   folder (Linux); B, the code folder.
+2. Only if the user wants their data gone too, each **asked** apart, as it cannot be undone: the workspace (its path
+   in `HKCU\Software\Craftorio` or `~/.craftorio.json`, else `craftorio-workspace` in the home folder), the app's
+   data folder `craftorio` (in `%APPDATA%`, `~/Library/Application Support` or `~/.config`), then the registry
+   key or `~/.craftorio.json`.
+
+Never delete an older install's `multiagent-orchestrator` folders or keys this way: they may still be in use.

@@ -51,6 +51,13 @@ It prints `Verified OK`. A different hash or a failed check means the file is no
 release published: do not run it. This checks the download, not the app: the packages themselves
 are still not code-signed.
 
+**Uninstall.** Close the app, then delete what you installed: the unzipped folder (Windows, Linux tar.gz),
+`Craftorio.app` from Applications (macOS) or the AppImage (Linux); from the source code, its folder. Two folders
+stay, yours to delete or keep: the **workspace** (your projects, runs and settings: `craftorio-workspace` in your
+home folder, or the one shown in Settings › General) and the app's data folder `craftorio` (sign-in, the engine
+connection) in `%APPDATA%` (Windows), `~/Library/Application Support` (macOS) or `~/.config` (Linux). The
+workspace's path is registered in `HKCU\Software\Craftorio` (Windows) or `~/.craftorio.json` (macOS, Linux).
+
 **Sizing.** Each run in progress takes about 4 threads and 6 GB of RAM (its agent CLI, its tests,
 its tooling). The app reads this machine at start and proposes how many runs at once (1 to 6) and
 how many test workers per run (Settings › Execution › Concurrent runs, also shown in the Setup); a
