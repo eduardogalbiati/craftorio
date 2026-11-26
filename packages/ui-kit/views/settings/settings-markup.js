@@ -286,8 +286,8 @@
               <h3 class="s-subtitle">${t('settings.base.title')}</h3>
               <div class="s-group">
                 <div class="s-row">
-                  <div class="s-label"><b>${t('settings.base.on_red')}</b><span>${t('settings.base.on_red_help')}</span></div>
-                  <div class="s-ctrl">${window.Select.markup(`id="set-base-check-on-red" aria-label="${t('settings.base.on_red')}" data-testid="base-check-on-red"`, [['off', t('settings.off')], ['issue', t('settings.base.issue')], ['fix', t('settings.base.fix')]], 'fix')}</div>
+                  <div class="s-label"><b>${t('settings.base.on_red')}</b><span data-testid="base-check-help">${t('settings.base.on_red_help')}</span></div>
+                  <div class="s-ctrl">${window.Select.markup(`id="set-base-check-on-red" aria-label="${t('settings.base.on_red')}" data-testid="base-check-on-red"`, [['off', t('settings.off')], ['issue', t('settings.base.issue')], ['fix', t('settings.base.fix')]], 'off')}</div>
                 </div>
               </div>
               <!-- #568: platform triggers, one switch per project (settings.js renderTriggers) -->

@@ -22,7 +22,9 @@
 //   #613: with failures, a second round runs only the failed tests' files (one call, same checkout,
 //   slot still held; a timing failure too, nothing runs a third time); only a test red twice is
 //   recorded (confirmed_at) and filed; red then green is logged ("red in the whole suite, green on the
-//   re-run") and kept as a flaky sighting. A second round that throws or errors counts as red.
+//   re-run") and kept as a flaky sighting. #78: a second round that throws or errors (timed out, did
+//   not start) confirms nothing: its tests stay sightings without confirmed_at, nothing is filed and
+//   the check is `error` (inconclusive). A `gh issue create` that errors looks the issue up by title.
 // - knownFailures: what the Roadmap shows ("N known failures on the base", backlog:get baseFailures).
 // Store: <workspace>/backlog/base-health/<project id>.json ({ failures, lastGreen, lastCheck, flaky }: #598,
 // lastCheck { commit, at, status green | red | error | no_tests } is the last check that reached the base's
@@ -127,6 +129,17 @@ function issueBody({ file, entries }, { commit, lastGreen, logFile, logText, run
   ].join('\n');
 }
 
+// #78: the issue titled `title` on the platform (its issue list, any state) → { url, number } or null
+async function issueByTitle(p, target, title, exec) {
+  if (typeof p.searchCommand !== 'function') return null;
+  const s = p.searchCommand({ target, query: title, state: 'all', limit: 20 });
+  let list;
+  try { list = JSON.parse(String(await exec(s.cli, s.args) || '')); } catch { return null; }
+  const hit = Array.isArray(list) ? list.find((x) => x?.title === title) : null;
+  const number = hit ? Number(hit.number ?? hit.iid) || null : null;
+  return number ? { url: hit.url || hit.web_url || null, number } : null;
+}
+
 // Files the group's bug issue, or updates the ones its entries have (a comment naming the tests
 // new to the group) → { url, number, action, test, title }; the entries without an issue get the
 // first one. A store from before #695 holds one issue per test: each of them is still updated.
@@ -170,8 +183,17 @@ async function fileIssue(ws, projectId, group, { platform, repo, exec, ...ctx })
     labels = await Promise.resolve(exec(l.cli, l.args)).then((out) => (p.parseLabelNames(out).includes('bug') ? ['bug'] : []), () => []);
   }
   const c = p.issueCreateCommand({ target, title: title.slice(0, 200), labels, file, text });
-  const url = String(await exec(c.cli, c.args) || '').match(/https?:\/\/\S+/)?.[0] || null;
-  const number = Number(url?.match(/\/issues\/(\d+)/)?.[1]) || null;
+  let url;
+  let number;
+  try {
+    url = String(await exec(c.cli, c.args) || '').match(/https?:\/\/\S+/)?.[0] || null;
+    number = Number(url?.match(/\/issues\/(\d+)/)?.[1]) || null;
+  } catch (e) {
+    // #78: the CLI answered an error, yet the issue may exist: looked up by its title before recording none
+    const found = await issueByTitle(p, target, title.slice(0, 200), exec);
+    if (!found) throw e;
+    ({ url, number } = found);
+  }
   for (const e of entries) e.issue = url ? { url, number } : null;
   return { url, number, action: 'created', test, title };
 }
@@ -244,18 +266,20 @@ function serialize(fn) {
 const normFile = (f) => String(f || '').split('\\').join('/');
 
 // #613 (widens #527's timing-only re-run): the second round, one call to rerunFiles with the distinct
-// files of the failed tests, in the check's checkout while the slot is held → { red, flaky }: red the
-// failures red again (same test and file), those without a file and all of them when the round throws
-// or returns an error (timed out, did not start); flaky the ones green on the re-run. Without
-// rerunFiles, all of them red.
+// files of the failed tests, in the check's checkout while the slot is held → { red, flaky, unconfirmed,
+// error }: red the failures red again (same test and file) and those without a file; flaky the ones
+// green on the re-run. #78: a round that throws or returns an error (timed out, did not start, cut
+// short) confirms nothing: the failures it should have re-run are `unconfirmed` (neither red nor flaky)
+// and `error` names why. Without rerunFiles, all of them red.
 async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log }) {
   const files = [...new Set(failures.filter((f) => f.file).map((f) => f.file))];
-  if (typeof rerunFiles !== 'function' || !files.length) return { red: failures, flaky: [] };
+  if (typeof rerunFiles !== 'function' || !files.length) return { red: failures, flaky: [], unconfirmed: [] };
   let r;
   try { r = await rerunFiles({ cwd, env, files, commit }); } catch (e) { r = { failures: [], error: e.message }; }
   if (!r || r.error) {
-    log('warn', `base check: the re-run of ${files.length} file(s) failed (${r?.error || 'no result'}): its tests count as red`);
-    return { red: failures, flaky: [] };
+    const error = `the re-run of ${files.length} file(s) failed (${r?.error || 'no result'})`;
+    log('warn', `base check: ${error}: it confirms nothing, its tests are neither red nor flaky`);
+    return { red: failures.filter((f) => !f.file), flaky: [], unconfirmed: failures.filter((f) => f.file), error };
   }
   const again = new Set((r.failures || []).filter((f) => f?.test).map((f) => `${normFile(f.file)}\n${f.test}`));
   const red = [];
@@ -266,7 +290,7 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
     try { runs = (typeof load === 'function' ? load() : []) || []; } catch { runs = []; }
     for (const f of flaky) log('info', `base check: ${f.test} (${f.file}) red in the whole suite, green on the re-run (load: ${runs.length ? runs.join(', ') : 'no run active'})`);
   }
-  return { red, flaky };
+  return { red, flaky, unconfirmed: [] };
 }
 
 /**
@@ -281,7 +305,9 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
  * and a log line say so), frees it however it ends.
  * #613: with failures, a second round (`rerunFiles`) runs only the failed tests' files; a test is
  * recorded (confirmed_at: what a run's suite may count as pre-existing) and filed only when red in
- * both rounds; red then green is a flaky sighting (the store's `flaky`), nothing filed.
+ * both rounds; red then green is a flaky sighting (the store's `flaky`), nothing filed. #78: a second
+ * round with no result leaves its failures unconfirmed (sightings) and, with nothing else red, the
+ * check is `error`.
  * @param {string} ws the workspace root
  * @param {{ projectId: string, repo: string, base: string, platform?: string, ghRepo?: string,
  *   trigger?: string, onRed?: string, releaseHoldsBase?: () => boolean,
@@ -333,6 +359,8 @@ function runBaseCheck(ws, opts) {
     let result;
     let failures = [];
     let flaky = [];
+    let unconfirmed = [];
+    let rerunError = null;
     try {
       info = await prepareBaseWorktree({ repo, base, dir, log, remote: false });
       if (!info) return { status: 'error', error: `${repo} is not a git repository`, commit: null, issues: [], fixItem: null };
@@ -341,7 +369,7 @@ function runBaseCheck(ws, opts) {
       try {
         result = await opts.runSuite({ cwd: info.workDir, env, commit: info.commit });
         failures = (result?.failures || []).filter((f) => f?.test);
-        if (failures.length) ({ red: failures, flaky } = await confirmTwice(failures, { ...opts, cwd: info.workDir, env, commit: info.commit, log }));
+        if (failures.length) ({ red: failures, flaky, unconfirmed, error: rerunError = null } = await confirmTwice(failures, { ...opts, cwd: info.workDir, env, commit: info.commit, log }));
       } catch (e) {
         result = { failures: [], log: '', error: e.message };
       }
@@ -357,6 +385,16 @@ function runBaseCheck(ws, opts) {
       const checked = (status) => { store.lastCheck = { commit: info.commit, at, status }; };
       // #613: the tests red in the whole suite, green on the re-run
       if (flaky.length) addFlaky(store, flaky, { commit: info.commit, at });
+      // #78: the failures a second round with no result could not confirm: sightings (no confirmed_at), nothing filed
+      for (const f of unconfirmed) upsert(store, f, at, info.commit);
+      if (!failures.length && unconfirmed.length) {
+        const dirLog = path.join(storeDir(ws), slug(projectId));
+        fs.mkdirSync(dirLog, { recursive: true });
+        fs.writeFileSync(path.join(dirLog, `${stamp(at)}-suite.log`), String(result?.log || ''));
+        checked('error');
+        writeStore(ws, projectId, store);
+        return { status: 'error', error: `${rerunError}: ${unconfirmed.length} failure(s) left unconfirmed`, commit: info.commit, issues: [], fixItem: null };
+      }
       // #527, #613: red only in the whole suite, green on the re-run: not a green suite either, nothing recorded but the check
       if (!failures.length && underLoad && !result?.error) {
         checked('green');

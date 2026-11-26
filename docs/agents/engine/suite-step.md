@@ -59,15 +59,21 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   red in both rounds is stored with `confirmed_at` and filed. A test red then green is logged "red
   in the whole suite, green on the re-run" with the runs active at the time and kept as a flaky
   sighting in the store (`flaky: [{ test, file, commit, at }]`), nothing filed or reopened; when
-  every failure was green on the re-run the check is `green` (`lastGreen` unchanged). A second
-  round that throws, times out or does not start counts as red for its tests; a failure without a
-  file is filed after the first round. The red tests file (or update) one issue per cause (#695):
+  every failure was green on the re-run the check is `green` (`lastGreen` unchanged). #78: a second
+  round that throws, times out or does not start confirms nothing: its tests stay in the store as
+  sightings without `confirmed_at`, nothing is filed and, with nothing else red, the check is `error`
+  (inconclusive, shown on the Roadmap like any check error); a failure without a file is filed after
+  the first round. A test the runner cancelled or never finished is not red either (node:test's
+  "Promise resolution is still pending…", or a `fail 0` / `cancelled N` summary,
+  `suite-counts.js splitCancelled`): a round with only cancelled tests is an `error` ("the suite was
+  cut short: N file(s) cancelled, 0 failed"). A `gh issue create` that answers an error looks the
+  issue up by its title before recording none. The red tests file (or update) one issue per cause (#695):
   the failures of one test file red since the same first red commit are one group, titled by the
   file (`Red on the base: test/doc-editor-646.test.js (19 tests)`) and listing every test, with the
   commit range (the last green check, the first red commit) and the log; a group whose entry has an
   issue comments on it (the newly red tests, last seen) instead of opening another, and the "Fix
   the base" item holds one issue per group. A test red again after a green check reopens its
-  issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `fix`)
+  issue. Settings › Execution `baseCheck.onRed` (`off` | `issue` | `fix`, default `off` since #85: no check runs until it is turned on) set to `fix`
   adds a fix item, mode auto, in a new stage before the roadmap's current one (`insertFrontStage`;
   none while the roadmap plans that issue already, nor for an issue a live run works on, #527; the
   item is marked `source: 'base-health'`, and the dispatcher skips it with a log line instead of

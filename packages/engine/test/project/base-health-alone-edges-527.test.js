@@ -90,16 +90,16 @@ test('#527 a check whose only failures are green alone is green-alone: the last 
   assert.equal(fx.creates.length, 1, 'only the plain failure was ever filed');
 });
 
-test('#527 a timed-out test whose re-run throws is kept: recorded and filed', async (t) => {
+// #78: a re-run that throws confirms nothing: the check is inconclusive, nothing filed
+test('#527 #78 a timed-out test whose re-run throws is not confirmed: the check is error, nothing filed', async (t) => {
   const { ws, locks } = tmpWs(t);
   const f = fixture(t, 'canonical');
   const fx = fakeExec();
   const rerunFiles = async () => { throw new Error('spawn EPERM'); };
   const r = await runBaseCheck(ws, { ...checkArgs(f.repo, locks, { exec: fx.exec, rerunFiles }), runSuite: suite([SLOW]) });
-  assert.equal(r.status, 'red');
-  assert.equal(fx.creates.length, 1);
-  assert.ok(fx.creates[0].includes(SLOW.test), fx.creates[0]);
-  assert.deepEqual(knownFailures(ws, PROJECT).map((x) => x.test), [SLOW.test]);
+  assert.equal(r.status, 'error');
+  assert.match(r.error, /spawn EPERM/);
+  assert.equal(fx.creates.length, 0);
 });
 
 test('#527 a timing assertion (a duration, not a timeout) is re-run and, green on the re-run, files nothing', async (t) => {

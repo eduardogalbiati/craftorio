@@ -19,7 +19,9 @@
 // #527: the check waits for the machine-wide suite slot (announced `waiting`, "base check waiting for
 // the suite slot", and in the server log) and inserts no fix item for an issue a live run works on
 // (ctx.liveRunForIssues). #613: with failures, the failed tests' files run once more in one command
-// (rerunFor, its own log) before anything is filed.
+// (rerunFor, its own log) before anything is filed. #78: a test the runner cancelled or never finished
+// is not red: a round with only cancelled tests is an `error` ("the suite was cut short: N file(s)
+// cancelled, 0 failed"). #85: the check is off unless Settings › Execution › Base check turns it on.
 
 const fs = require('fs');
 const path = require('path');
@@ -48,6 +50,7 @@ const {
   TEST_FILES_ENV,
 } = require('../../engine/suite-command-line');
 const { folderHasTests } = require('../../engine/test-paths');
+const { splitCancelled } = require('../../engine/suite-counts');
 
 module.exports = (ctx) => {
   // projectId -> the merge whose check a release deferred (the latest one: it checks the newest tip)
@@ -153,10 +156,18 @@ module.exports = (ctx) => {
     const r = await runCommand({ command, cwd, env, timeoutMs, logFile });
     let log = '';
     try { log = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
-    const failures = parseFailures(log, { cwd });
-    const error = r.timedOut ? 'the suite timed out' : r.error || (r.code && !failures.length ? `the suite exited with ${r.code}, no failure parsed` : null);
+    const { failures, cutShort } = redOf(log, cwd, 'the suite');
+    const error = r.timedOut ? 'the suite timed out' : r.error || cutShort || (r.code && !failures.length ? `the suite exited with ${r.code}, no failure parsed` : null);
     return { failures, log, error };
   };
+
+  // #78: the failures of a log without the tests the runner cancelled or never finished; only
+  // cancelled ones: `cutShort` names why the round says nothing about the tests
+  function redOf(log, cwd, what) {
+    const { failed, cancelled } = splitCancelled(log, parseFailures(log, { cwd }));
+    const files = new Set(cancelled.map((f) => f.file || f.test));
+    return { failures: failed, cutShort: !failed.length && cancelled.length ? `${what} was cut short: ${files.size} file(s) cancelled, 0 failed` : null };
+  }
 
   // #613: the second round, the failed tests' files in one command in the check's checkout (on the
   // command line, else through the list file of #553/#597 when the runner reads one), its log next to
@@ -187,8 +198,8 @@ module.exports = (ctx) => {
     const r = await runCommand({ command: run, cwd, env: { ...env, ...listEnv }, timeoutMs, logFile });
     let log = '';
     try { log = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
-    const failures = parseFailures(log, { cwd });
-    const error = r.timedOut ? 'the re-run timed out' : r.error || (r.code && !failures.length ? `the re-run exited with ${r.code}, no failure parsed` : null);
+    const { failures, cutShort } = redOf(log, cwd, 'the re-run');
+    const error = r.timedOut ? 'the re-run timed out' : r.error || cutShort || (r.code && !failures.length ? `the re-run exited with ${r.code}, no failure parsed` : null);
     return { failures, log, error };
   };
 

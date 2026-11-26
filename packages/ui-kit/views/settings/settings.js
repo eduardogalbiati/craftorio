@@ -87,7 +87,7 @@ async function renderSettings() {
   renderConcurrency();
   renderFallbackSettings();
   renderMemoryGuard();
-  $('#set-base-check-on-red').value = { onRed: 'fix', ...(state.settings.baseCheck || {}) }.onRed;
+  $('#set-base-check-on-red').value = { onRed: 'off', ...(state.settings.baseCheck || {}) }.onRed;
   renderOracleSettings();
   renderSelfHealing();
   renderAppUpdate();

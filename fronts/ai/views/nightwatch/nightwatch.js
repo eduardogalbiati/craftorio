@@ -219,8 +219,8 @@
     const p = s.permissions;
     const edit = nw.perms;
     const allowed = new Set(edit ? edit.allowed : p.allowed);
-    const rows = p.catalog.map((x) => `<label class="s-row nw-perm">
-        <div class="nw-perm-text"><b>${esc(x.label)}</b><div class="muted small nw-cut" title="${esc(`${x.does} ${x.undo}`)}">${esc(x.does)}</div><div class="muted small nw-cut nw-undo" title="${esc(x.undo)}">↶ ${esc(x.undo)}</div></div>
+    const rows = p.catalog.map((x) => `<label class="s-row nw-perm" data-testid="nw-perm">
+        <div class="nw-perm-text"><b>${esc(x.label)}</b><div class="muted small nw-cut" data-testid="nw-perm-help" title="${esc(`${x.does} ${x.undo}`)}">${esc(x.does)}</div><div class="muted small nw-cut nw-undo" title="${esc(x.undo)}">↶ ${esc(x.undo)}</div></div>
         <input type="checkbox" class="nw-perm-check" data-perm="${esc(x.id)}"${allowed.has(x.id) ? ' checked' : ''}${edit?.saving ? ' disabled' : ''} />
       </label>`).join('');
     const never = p.never.map((x) => `<span class="badge nw-never" title="${t('nightwatch.never_allowed_under_the_night_watch')}">🔒 ${esc(x.label)}</span>`).join('');

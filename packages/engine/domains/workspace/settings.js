@@ -51,8 +51,9 @@ const DEFAULT_SETTINGS = {
   // `triggers:` the app polls ({ <projectId>: true }; off by default) and the poll interval (0 = off)
   triggers: { enabled: {}, intervalMinutes: 2 },
   // Main stays green (#405, packages/engine/domains/project/base-health.js): what a red test on the base files: 'off', 'issue'
-  // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap)
-  baseCheck: { onRed: 'fix' },
+  // (a bug issue only) or 'fix' (the issue and a fix item at the front of the roadmap). #85: off by
+  // default (no check, no base worktree after a merge); a saved choice is kept as it is
+  baseCheck: { onRed: 'off' },
   // Keep awake (#162, apps/desktop/host/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
   // Control channel (#336, #32, packages/engine/control): outside sessions drive this app through a loopback

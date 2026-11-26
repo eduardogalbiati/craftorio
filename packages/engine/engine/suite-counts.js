@@ -2,6 +2,8 @@
 // The passed / failed counts a test runner prints at the end of the suite step's output (suite-step.js):
 // the agent reporter's JSON, node:test, TAP, Jest, pytest, cargo test, dotnet test, Maven Surefire,
 // Playwright. parseCounts(text) → { passed, failed }, both null when no summary is recognized.
+// #78: splitCancelled(text, failures) tells a cancelled test or file (node:test's pending-promise
+// message, or a `fail 0` / `cancelled N` summary) apart from a red one (the base check files only these).
 
 'use strict';
 
@@ -55,6 +57,31 @@ function parseCounts(text) {
   return { passed: null, failed: null };
 }
 
+// #78: what a runner prints for a test or file it cancelled or never finished (not a red test)
+const CANCELLED_ERRORS = [
+  // node:test: the file's event loop ended (or the file was killed) with tests still pending
+  /Promise resolution is still pending but the event loop has already resolved/,
+  /test did not finish before its parent and was cancelled/,
+];
+const isCancelled = (failure) => CANCELLED_ERRORS.some((re) => re.test(String(failure?.error || '')));
+
+// #78: the parsed failures (suite-step.js parseFailures) split into the red ones and the cancelled ones:
+// a cancellation message, or every one of them when node:test's summary says `fail 0` and `cancelled N`
+// → { failed, cancelled }
+function splitCancelled(text, failures) {
+  const t = clean(text);
+  const last = (re) => { const all = [...t.matchAll(re)]; return all.length ? Number(all[all.length - 1][1]) : null; };
+  const nodeFail = last(/^\s*(?:ℹ|#) fail (\d+)/gm);
+  const nodeCancelled = last(/^\s*(?:ℹ|#) cancelled (\d+)/gm);
+  const allCancelled = nodeFail === 0 && nodeCancelled > 0;
+  const failed = [];
+  const cancelled = [];
+  for (const f of failures || []) (allCancelled || isCancelled(f) ? cancelled : failed).push(f);
+  return { failed, cancelled };
+}
+
 module.exports = {
+  isCancelled,
   parseCounts,
+  splitCancelled,
 };

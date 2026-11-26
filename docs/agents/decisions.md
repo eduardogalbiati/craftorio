@@ -8,6 +8,16 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-25** (#85): the base check after a roadmap merge is off by default
+  (`DEFAULT_SETTINGS.baseCheck.onRed: 'off'`): no check, no base worktree, no issue and no "Fix the
+  base" stage until the owner turns it on in Settings › Execution › Base check. A workspace that saved
+  `issue` or `fix` keeps it; nothing is migrated. Why: new users got issues filed on their project and
+  a paid fix run proposed without having chosen it, and false reds reached them (#78).
+- **2026-11-25** (#87): the Night watch retries a failed item by default and never skips one: `skip`
+  is off in the default permissions (`retry` and `refresh` stay on). Without Skip, a run waiting at a
+  human gate is never moved past, whatever `settings.oracle.parkAfterMinutes` says: the gate waits for
+  the owner and the morning summary lists it. A saved permission list is kept. Why: a fix the owner
+  planned could drop out of a release without anyone choosing it.
 - **2026-11-25** (#69): the simulation is off by default, and the first-run Setup has two steps, Agents
   and First project. Setup never writes `developerMode`: a fresh workspace's Product Owner and Start are
   real, and a workspace that has developer mode on keeps it. The simulation is turned on in Settings ›
@@ -211,7 +221,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   starts without its change). The gate stays the owner's: nothing answers, stops or closes it. A gate
   answered later gives the item the run's outcome (done when it merged, else failed), and a parked
   item never pauses the roadmap after the fact. The Night watch moves on by itself only with the
-  `skip` permission, after `settings.oracle.parkAfterMinutes` (default 15) at the gate with nothing
+  `skip` permission (off by default since #87), after `settings.oracle.parkAfterMinutes` (default 15) at the gate with nothing
   else of the roadmap running; it still never answers a gate. Why: "my goal today is to work without
   stopping" (one gate held stages 96 to 104 for about 4 hours on the night of 2026-10-14).
   (#387, 2026-10-14, folded here to keep the log short) The developer builds with `design-system` beside `ui-conventions`, whose
