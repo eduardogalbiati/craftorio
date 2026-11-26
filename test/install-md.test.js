@@ -100,13 +100,13 @@ test('INSTALL.md: ends with the handover of the workspace folder, the new sessio
   assert.match(text, /read `<workspace>\/AGENTS\.md` before anything else/);
 });
 
-test('the README recommends the app with no clone (the repository is public) and keeps the clone for developers', () => {
+test('the README offers the source code (recommended while the builds are not signed) and the app with no clone', () => {
   const readme = read('README.md');
   assert.match(readme, /Install the Craftorio app \(the executable\) following https:\/\/github\.com\/eduardogalbiati\/craftorio\/blob\/main\/INSTALL\.md/);
   assert.match(readme, /Clone https:\/\/github\.com\/eduardogalbiati\/craftorio and install Craftorio from the source code following its INSTALL\.md/);
   const text = read(INSTALL);
   assert.match(text, /The app \(A\) needs no clone/);
-  assert.match(text, /recommend A: B is for developers/);
+  assert.match(text, /recommend B while the app's builds are not signed/);
   for (const [url] of text.matchAll(/https:\/\/github\.com\/eduardogalbiati\/craftorio\/releases\/latest\/download\/[^\s`]+/g)) assert.match(url, /\/download\/<file>$/);
 });
 

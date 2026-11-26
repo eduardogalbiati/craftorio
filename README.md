@@ -2,16 +2,18 @@
 
 ## Set it up with an AI session
 
-**Recommended: the app.** Paste this in Claude Code or Codex:
-
-```
-Install the Craftorio app (the executable) following https://github.com/eduardogalbiati/craftorio/blob/main/INSTALL.md
-```
-
-**For developers: from the source code.**
+**Recommended: from the source code.** Paste this in Claude Code or Codex (it needs Git and Node.js 24 or newer; it
+checks them and asks before installing what is missing):
 
 ```
 Clone https://github.com/eduardogalbiati/craftorio and install Craftorio from the source code following its INSTALL.md
+```
+
+**Or the app (the executable).** The builds are not signed yet, so Windows and macOS warn once when it first opens
+(Windows: **More info** › **Run anyway**).
+
+```
+Install the Craftorio app (the executable) following https://github.com/eduardogalbiati/craftorio/blob/main/INSTALL.md
 ```
 
 It downloads the app (or builds it from the code), checks it, creates the workspace folder and tells you the last step: open a session in that folder,

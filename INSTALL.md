@@ -13,11 +13,12 @@ code (B) is cloned.
 ## 1. Choose how to install
 
 When the user's request already says which (the app, the executable, or the source code), take it. Otherwise
-**ask**, and recommend A: B is for developers.
+**ask**, and recommend B while the app's builds are not signed (Windows and macOS warn when A first opens); A suits
+whoever does not want Git and Node.js.
 
 | | A. The app (executable) | B. The source code |
 |---|---|---|
-| For | using Craftorio (recommended) | developers: contributing, or running what is on `main` |
+| For | using Craftorio, without Git or Node.js (not signed yet: a warning at the first start) | using or contributing (recommended for now), or running what is on `main` |
 | Needs Git, Node.js and npm | no | yes |
 | How to update | download the next release | update the code |
 
