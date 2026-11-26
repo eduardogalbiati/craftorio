@@ -103,7 +103,7 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
   project has no step definitions. The same rule backs the `missing_test_ids` filter
   (`{{ worktree_dir | missing_test_ids(steps, renderer) }}`, one line per id) and test/e2e-playwright.test.js.
-  feature and fix pass their `steps_folders` / `ui_folders` inputs (#588; #80: no default, the
+  feature passes its `steps_folders` / `ui_folders` inputs (#588; #80: no default, the
   project's run defaults read them from its files, empty when it has none); the `ui_files(folders)`
   filter keeps the files of a list under the UI folders, so a change there routes to
   `developer_screenshots` and the UI reviewer. #80: `./` is the root (the pages and stylesheets

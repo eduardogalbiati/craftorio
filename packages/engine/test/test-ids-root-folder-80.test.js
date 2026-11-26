@@ -32,6 +32,19 @@ test('#80 an empty renderer list is the whole repository, never src/renderer', (
   assert.deepEqual(missingTestIds(root, { steps: ['features/steps'], renderer: [] }).map((m) => m.id), ['cart']);
 });
 
+test('#80 the root renderer skips specs, builds and tests: an id they cite is not defined by them', (t) => {
+  const root = site(t);
+  fs.mkdirSync(path.join(root, 'e2e'));
+  fs.writeFileSync(path.join(root, 'e2e/menu.spec.ts'), "getByTestId('cart')");
+  fs.mkdirSync(path.join(root, 'dist'));
+  fs.writeFileSync(path.join(root, 'dist/bundle.js'), "getByTestId('cart')");
+  for (const renderer of [[], ['./']]) {
+    assert.deepEqual(missingTestIds(root, { steps: ['features/steps'], renderer }).map((m) => m.id), ['cart']);
+  }
+  // a named folder keeps reading all its files
+  assert.deepEqual(missingTestIds(root, { steps: ['features/steps'], renderer: ['dist'] }).map((m) => m.id), ['order']);
+});
+
 test('#80 the missing_test_ids filter with no UI folders looks in the whole repository', (t) => {
   const root = site(t);
   const out = render('{{ dir | missing_test_ids(steps, ui) }}', { dir: root, steps: ['features/steps'], ui: [] });

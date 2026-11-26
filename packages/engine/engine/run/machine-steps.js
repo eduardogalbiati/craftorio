@@ -590,9 +590,11 @@ const methods = {
       output = { ...base, status: 'skipped', message: `Test id check skipped: the project has no BDD step definitions in ${folders.steps.join(', ')}.` };
     } else {
       const missing = testIds.missingTestIds(dir, folders);
+      // #80: the root folder reads as "the repository", not "."
+      const where = folders.renderer.map((f) => (testIds.normFolder(f) ? f : 'the repository')).join(', ');
       output = missing.length
-        ? { ...base, status: 'missing', missing, message: `${missing.length} test id(s) the E2E step definitions use are not in ${folders.renderer.join(', ')}:\n${testIds.missingTestIdLines(missing)}` }
-        : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer.join(', ')}.` };
+        ? { ...base, status: 'missing', missing, message: `${missing.length} test id(s) the E2E step definitions use are not in ${where}:\n${testIds.missingTestIdLines(missing)}` }
+        : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${where}.` };
     }
     this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'test_ids', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
     return output;

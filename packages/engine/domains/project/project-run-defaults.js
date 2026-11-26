@@ -33,7 +33,10 @@ const oracleSeeds = require('../oracle/oracle-seeds');
 const { checkCommand, checkCommands } = require('../../engine/check-step');
 const { foundChecks } = require('../../engine/check-tools');
 const { detectTestCommand } = require('../../engine/suite-step');
-const { UI_FILE } = require('../../engine/test-ids');
+const {
+  NON_UI_DIRS,
+  UI_FILE,
+} = require('../../engine/test-ids');
 const { detectLanguage, listBranches } = require('./project-inputs');
 const {
   modeOfPicks,
@@ -54,7 +57,6 @@ const OVERRIDABLE = ['base_behind', 'base_branch', 'check_command', 'e2e_command
 const WEB_DEPS = ['@angular/core', '@sveltejs/kit', 'next', 'nuxt', 'preact', 'react', 'react-dom', 'solid-js', 'svelte', 'vue'];
 const SERVER_DEPS = ['@hapi/hapi', '@nestjs/core', 'express', 'fastify', 'hono', 'koa', 'next', 'nuxt'];
 const E2E_CONFIGS = ['cypress.config.js', 'cypress.config.ts', 'playwright.config.js', 'playwright.config.ts', 'playwright.config.mjs'];
-const SKIP_DIRS = new Set(['.git', '.craftorio', '.github', '.multiagent', 'build', 'coverage', 'dist', 'docs', 'e2e', 'features', 'node_modules', 'out', 'target', 'test', 'tests', 'vendor']);
 // folders that hold several apps: the UI folder is one level deeper (apps/web/)
 const CONTAINERS = new Set(['apps', 'packages', 'services']);
 const STEPS_FOLDERS = ['features/steps', 'e2e/steps', 'tests/e2e/steps'];
@@ -81,7 +83,7 @@ function uiFolders(folder) {
     for (const e of entries) {
       const child = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name) && !e.name.startsWith('.') && depth < MAX_DEPTH) walk(child, depth + 1);
+        if (!NON_UI_DIRS.has(e.name) && !e.name.startsWith('.') && depth < MAX_DEPTH) walk(child, depth + 1);
       } else if (!rel && UI_FILE.test(e.name)) {
         found.add('./');
       } else if (UI_FILE.test(e.name)) {

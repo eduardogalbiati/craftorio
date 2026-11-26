@@ -18,6 +18,9 @@ const DEFAULT_RENDERER = 'src/renderer';
 const STEP_EXTS = ['.js', '.cjs', '.mjs', '.ts'];
 const RENDERER_EXTS = ['.cjs', '.html', '.js', '.jsx', '.mjs', '.svelte', '.ts', '.tsx', '.vue'];
 const SKIPPED_DIRS = new Set(['.git', 'node_modules']);
+// #80: the folders that hold no UI of a project (builds, tests, docs, tooling): skipped when its UI
+// folders are looked for (domains/project/project-run-defaults.js) and when the renderer is the root
+const NON_UI_DIRS = new Set(['.craftorio', '.git', '.github', '.multiagent', 'build', 'coverage', 'dist', 'docs', 'e2e', 'features', 'node_modules', 'out', 'target', 'test', 'tests', 'vendor']);
 // #80: a UI file (a page or a component), what finds a project's UI folders (domains/project/
 // project-run-defaults.js) and what the `ui_files` filter matches in a run without UI folders
 const UI_FILE = /\.(html|jsx|tsx|vue|svelte)$/i;
@@ -39,15 +42,15 @@ function testIdsUsed(source) {
 }
 
 // Every file under a repository-relative folder with one of the extensions, repository-relative
-// with forward slashes, sorted; [] when the folder does not exist.
-function listFiles(root, dir, exts) {
+// with forward slashes, sorted; [] when the folder does not exist. `skip`: the folder names not visited.
+function listFiles(root, dir, exts, skip = SKIPPED_DIRS) {
   const out = [];
   const visit = (rel) => {
     let entries;
     try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       const child = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) { if (!SKIPPED_DIRS.has(e.name)) visit(child); } else if (exts.includes(path.extname(e.name))) out.push(child);
+      if (e.isDirectory()) { if (!skip.has(e.name)) visit(child); } else if (exts.includes(path.extname(e.name))) out.push(child);
     }
   };
   visit(normFolder(dir));
@@ -75,9 +78,10 @@ function missingTestIds(root, { steps = DEFAULT_STEPS, renderer = DEFAULT_RENDER
   // `renderer`: one folder, or a list of folders (this app's page is spread over its UI kit and its fronts);
   // the step definitions inside a UI folder (fronts/<id>/features/steps, #588) never define an id
   const stepSet = new Set(files);
-  // #80: an empty list (a project without UI folders) is the whole repository, never src/renderer
+  // #80: an empty list (a project without UI folders) is the whole repository, never src/renderer; the
+  // root skips its builds, tests and docs (a spec or a bundle citing an id never defines it)
   const given = [].concat(renderer ?? []).filter((d) => String(d ?? '').trim());
-  const source = [...new Set((given.length ? given : ['']).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  const source = [...new Set((given.length ? given : ['']).flatMap((dir) => listFiles(root, dir, RENDERER_EXTS, normFolder(dir) ? SKIPPED_DIRS : NON_UI_DIRS)))].filter((f) => !stepSet.has(f)).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   return [...used].filter(([id]) => !source.includes(id)).map(([id, files]) => ({ id, files }));
 }
 
@@ -92,6 +96,7 @@ module.exports = {
   listFiles,
   missingTestIdLines,
   missingTestIds,
+  NON_UI_DIRS,
   normFolder,
   stepFiles,
   STYLE_FILE,

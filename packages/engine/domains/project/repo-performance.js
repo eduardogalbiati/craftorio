@@ -19,6 +19,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { readEvents } = require('../supervisor/supervisor');
+const { STYLE_FILE } = require('../../engine/test-ids');
 
 const CONFLICT_STEPS = new Set(['resolve_conflict', 'resolve_merge']);
 const MERGE_COMMAND = /\b(gh\s+pr|glab\s+mr)\s+merge\b/;
@@ -180,7 +181,7 @@ const LARGE_LINES = 1000;
 const RECOMMENDATIONS = [
   { kind: 'generated', test: (f) => f.generated, text: 'A tool generates this file: edit the generator or its source list instead, and regenerate it after the merge.' },
   { kind: 'test', test: (f) => /(^|\/)(test|tests|__tests__|spec)\//.test(f.file) || /\.(test|spec)\.[a-z]+$/.test(f.file), text: 'Every run adds its tests here: write one test file per feature, next to the existing ones.' },
-  { kind: 'stylesheet', test: (f) => /\.(css|scss|sass|less)$/.test(f.file), text: 'A shared stylesheet: move each screen\'s rules to a per-screen CSS file that the screen loads.' },
+  { kind: 'stylesheet', test: (f) => STYLE_FILE.test(f.file), text: 'A shared stylesheet: move each screen\'s rules to a per-screen CSS file that the screen loads.' },
   { kind: 'doc', test: (f) => /\.(md|mdx|rst|txt)$/i.test(f.file) || /(^|\/)docs?\//.test(f.file), text: 'A shared doc: split it into per-topic docs, or generate its tables from the code.' },
   { kind: 'registry', test: (f) => /(registry|registries|manifest|routes|channels|screens|skills|views|index|list)[^/]*\.[a-z]+$/i.test(f.file) || /^package\.json$/.test(f.file), text: 'A shared registry or list: one file per entry that the registry discovers (a folder it lists), so a feature adds a file instead of editing this one.' },
   { kind: 'large', test: (f) => f.lines >= LARGE_LINES, text: 'A large file touched for unrelated features: split it by area, one module per feature, so runs edit different files.' },
