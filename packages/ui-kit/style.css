@@ -83,7 +83,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
   padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
 }
 .brand { display: inline-flex; align-items: center; font-weight: 700; font-size: 15px; }
-/* the logo mark: apps/desktop/assets/logo.png, the app icon's centre (a margin, not gap: gap would split "Craft" from "orio") */
+/* the logo mark: packages/ui-kit/logo.png (served to a browser tab with the UI kit), the app icon's centre (a margin, not gap: gap would split "Craft" from "orio") */
 .brand-logo { width: 22px; height: 22px; margin-right: 8px; flex: none; }
 .login-card .brand-logo { width: 28px; height: 28px; }
 .brand span { color: #c07afe; } /* the logo's purple */

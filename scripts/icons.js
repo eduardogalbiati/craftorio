@@ -5,7 +5,7 @@
 // With no source image it first draws a placeholder (a graph of three agents) into
 // apps/desktop/assets/icon-source.png: replace that file with the real artwork and run it again.
 // The artwork is apps/desktop/assets/icon-source.png (a gear and circuit "C" on a dark rounded square, 1024 px,
-// transparent outside the square); its centre mark alone is apps/desktop/assets/logo.png, the header's logo.
+// transparent outside the square); its centre mark alone is packages/ui-kit/logo.png, the header's logo.
 
 const fs = require('fs');
 const path = require('path');
