@@ -97,8 +97,9 @@ Then('stage {int} is the last stage of the roadmap, with one item holding {strin
   await expect(stage(page, n + 1)).toHaveCount(0);
   const items = target.getByTestId('roadmap-item');
   await expect(items).toHaveCount(1);
-  await expect(items.first()).toContainText(a);
-  await expect(items.first()).toContainText(b);
+  // one locator for the item holding both: the roadmap redraws as the stage starts, so an element read
+  // between two checks may already be replaced
+  await expect(items.filter({ hasText: a }).filter({ hasText: b })).toHaveCount(1);
 });
 
 Then('stage {int} of the roadmap has started', async ({ e2e }, n) => {

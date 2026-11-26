@@ -17,6 +17,8 @@ Feature: Assigned issues go to the roadmap, the Backlog has no queue of its own
     And I open the Assign dialog for the selected issues
     And I tick "Run now" in the Assign dialog
     And I add the issues to the roadmap from the Assign dialog
+    # the simulated run of stage 6 can end within a second, and the roadmap's "Planned" filter hides a done item
+    And I show all the items of the roadmap
     And I scroll the roadmap down to stage 6
     Then stage 6 is the last stage of the roadmap, with one item holding "Plan me: a dark theme" and "Plan me: export to PDF"
     And stage 6 of the roadmap has started

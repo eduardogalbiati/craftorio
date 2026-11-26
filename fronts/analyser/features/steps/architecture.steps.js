@@ -528,10 +528,10 @@ Then('the {string} button shows its cost estimate or says there is none yet', as
     .toMatch(/≈\s*US\$\s*\d|no estimate yet/i);
 });
 
+// one check for both (shown, and saying so): the simulated run lasts about a second, so a second
+// check after "visible" could find it already gone
 Then('the City tab shows the analysis running', async ({ e2e }) => {
-  const running = analyzing(e2e.window).first();
-  await expect(running).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
-  await expect(running).toContainText(/Analyzing this project/i);
+  await expect(analyzing(e2e.window).filter({ hasText: /Analyzing this project/i }).first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
 });
 
 Then('the City tab no longer shows the analysis running', async ({ e2e }) => {
