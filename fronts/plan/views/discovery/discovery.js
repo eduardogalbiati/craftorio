@@ -1178,7 +1178,7 @@
     const id = dv.open?.id;
     if (!id) return;
     try {
-      await api.appendDiscoveryConversation(dv.openProject, id, { text: 'Ended the Grill me interview.' });
+      await api.appendDiscoveryConversation(dv.openProject, id, { text: t('discovery.ended_the_grill_me_interview') });
       await reloadHistory();
       refresh();
     } catch (e) { detailError(errMsg(e)); }

@@ -599,10 +599,22 @@
   }
 
   // A card's thread, oldest first: who, when, the entry's kind when it is not a note, its text; an
-  // entry about a run (a result, an automation's, #259) links the run and shows its cost.
+  // entry about a run (a result, an automation's, #259) links the run and shows its cost. The stored
+  // author "Grill me" (the engine's interviewer) and the kinds are shown in the interface language (#41).
+  const threadKindLabel = (kind) => ({
+    answer: t('inbox.thread_kind_answer'),
+    automation: t('inbox.thread_kind_automation'),
+    commit: t('inbox.thread_kind_commit'),
+    import: t('inbox.thread_kind_import'),
+    merge: t('inbox.thread_kind_merge'),
+    question: t('inbox.thread_kind_question'),
+    restore: t('inbox.thread_kind_restore'),
+    result: t('inbox.thread_kind_result'),
+  })[kind] || kind;
+  const threadAuthor = (author) => (!author ? t('inbox.thread_author_unknown') : author === 'Grill me' ? t('discovery.grill_me') : author);
   const threadHtml = (thread) => (thread.length ? thread.map((m) => `
       <div class="inbox-entry">
-        <div class="muted small"><b>${esc(m.author || 'unknown')}</b> <span title="${esc(m.ts ? dateOf(m.ts) : '')}">${esc(m.ts ? ncAgo(m.ts) : '')}</span>${m.kind && m.kind !== 'note' ? ` <span class="badge">${esc(m.kind)}</span>` : ''}</div>
+        <div class="muted small"><b>${esc(threadAuthor(m.author))}</b> <span title="${esc(m.ts ? dateOf(m.ts) : '')}">${esc(m.ts ? ncAgo(m.ts) : '')}</span>${m.kind && m.kind !== 'note' ? ` <span class="badge">${esc(threadKindLabel(m.kind))}</span>` : ''}</div>
         <div class="inbox-entry-text">${esc(m.text || '')}</div>
         ${m.runId ? `<div class="muted small inbox-entry-run"><button type="button" class="link-btn small" data-open-run="${esc(m.runId)}" data-testid="thread-run" title="${t('inbox.open_the_run')}">${t('inbox.run')} ${esc(m.runId)}</button>${typeof m.costUsd === 'number' ? ` · <span data-testid="thread-run-cost">$${esc(m.costUsd.toFixed(2))}</span>` : ''}</div>` : ''}
       </div>`).join('') : `<p class="muted small">${t('inbox.no_note_yet')}</p>`);
