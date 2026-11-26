@@ -24,15 +24,18 @@ function folder(t, files, { git = true } = {}) {
   return dir;
 }
 
+// #81: test files with no command end not_run with no_command (no test runner), no tests without it
+const ended = (out) => [out.status, Boolean(out.no_command)];
+
 test('#71 no command: a new, uncommitted test file counts; an ignored one does not', async (t) => {
-  assert.equal((await suiteWithoutCommand(folder(t, { 'a.test.js': '' }))).status, 'blocked');
-  assert.equal((await suiteWithoutCommand(folder(t, { '.gitignore': 'out\n', 'out/a.test.js': '' }))).status, 'not_run');
+  assert.deepEqual(ended(await suiteWithoutCommand(folder(t, { 'a.test.js': '' }))), ['not_run', true]);
+  assert.deepEqual(ended(await suiteWithoutCommand(folder(t, { '.gitignore': 'out\n', 'out/a.test.js': '' }))), ['not_run', false]);
 });
 
 test('#71 no command: the workflow\'s tests_paths say what a test file is', async (t) => {
   const dir = folder(t, { 'checks/a.txt': '' });
-  assert.equal((await suiteWithoutCommand(dir)).status, 'not_run');
-  assert.equal((await suiteWithoutCommand(dir, ['checks/**'])).status, 'blocked');
+  assert.deepEqual(ended(await suiteWithoutCommand(dir)), ['not_run', false]);
+  assert.deepEqual(ended(await suiteWithoutCommand(dir, ['checks/**'])), ['not_run', true]);
 });
 
 test('#71 no command: a folder git cannot list is never taken as a project with no tests', async (t) => {
@@ -98,7 +101,7 @@ test('#71 no_tests ask: the gate recommends no answer, so the supervisor leaves 
 });
 
 test('#71 a suite with no command names no log: none was written', async (t) => {
-  for (const [files, status] of [[{}, 'not_run'], [{ 'a.test.js': '' }, 'blocked']]) {
+  for (const [files, status] of [[{}, 'not_run'], [{ 'a.test.js': '' }, 'not_run']]) {
     const runDir = folder(t, {}, { git: false });
     const out = await runSuite({ command: '', cwd: folder(t, files), runDir, round: 1 });
     assert.deepEqual([out.status, out.log], [status, null]);

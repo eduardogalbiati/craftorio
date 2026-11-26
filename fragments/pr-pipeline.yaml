@@ -40,6 +40,7 @@ steps:
       Check CI for that new commit, not an older run.
       {% endif %}
       {% if vars.tested == 'no tests' %}Nothing was tested in this run: the project has no tests (#71). Say so in the PR/MR body ("Not tested: the project has no tests"); never write that the tests failed or passed.
+      {% elif vars.tested == 'no test command' %}Nothing was tested in this run: the project has no test runner (#81). Say so in the PR/MR body ("Not tested: no test command"); never write that the tests failed or passed.
       {% endif %}
       {% if inputs.mode == 'fork' %}Fork + PR: `origin` is the owner's fork, `upstream` the original repository (no push access to it).
       {% if inputs.parent_pr %}This branch builds on the earlier pull request {{ inputs.parent_pr }} (its parent branch: `{{ inputs.parent_branch }}`).
@@ -141,6 +142,7 @@ steps:
       {% if delegate_result %}The developer resolved the conflict and pushed: {{ delegate_result.text }}
       {% endif %}
       {% if vars.tested == 'no tests' %}Nothing was tested in this run: the project has no tests (#71). Say so in the PR/MR body ("Not tested: the project has no tests"); never write that the tests failed or passed.
+      {% elif vars.tested == 'no test command' %}Nothing was tested in this run: the project has no test runner (#81). Say so in the PR/MR body ("Not tested: no test command"); never write that the tests failed or passed.
       {% endif %}
       {% if inputs.mode == 'fork' %}Fork + PR: `origin` is the owner's fork, `upstream` the original repository (no push access to it).
       {% if inputs.parent_pr %}This branch builds on the earlier pull request {{ inputs.parent_pr }} (its parent branch: `{{ inputs.parent_branch }}`).

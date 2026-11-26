@@ -40,8 +40,9 @@
 // on a suite red only outside the change.
 // Output: { kind: 'suite', status: pass | fail | blocked | not_run (#71, suite-no-command.js), round, command, log, exit_code, duration_ms,
 // timed_out, timeout_ms, running, alone, failures, preexisting, preexisting_failures, base_check,
-// in_change, outside_change, reason, message }. `blocked`: the suite could not run (no worktree, no
-// command found, the command not found, or #400 the shell refused the command line: the log's last
+// in_change, outside_change, reason, message }; `no_command: true` on a `not_run` with test files but
+// no command found (#81). `blocked`: the suite could not run (no worktree, a folder git cannot list,
+// the command not found, or #400 the shell refused the command line: the log's last
 // line is a refusal of SHELL_REFUSALS and the log holds no test result, reason quoting that line).
 // It never throws and never calls the supervisor: the transitions route the result (back to the test
 // writer or the developer, or a gate).

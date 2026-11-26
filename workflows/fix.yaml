@@ -139,7 +139,7 @@ inputs:
     default: continue
     label: A project with no tests
     options: { continue: Continue, ask: Ask }
-    description: "When the project has no test command and no test file. Continue: the run goes on, reported as not tested because the project has no tests. Ask: the verify_failed gate waits for you. A project with test files and no known command always asks."
+    description: "When the project has no test command and no test file. Continue: the run goes on, reported as not tested because the project has no tests. Ask: the verify_failed gate waits for you. A project with test files and no known command goes on to the verification, reported as not tested: no test command."
 
 providers:
   claude:
@@ -317,6 +317,11 @@ steps:
       - when: "output.status == 'pass'"
         goto: verify_change
         set: { tested: "" }
+      # #81: test files but no test runner (a plain HTML site, a Markdown-only repository): a known gap,
+      # not a gate; the verification runs, the change reported as not tested: no test command
+      - when: "output.status == 'not_run' and output.no_command"
+        goto: verify_change
+        set: { tested: "no test command" }
       # #71: a project with no tests is not a failure (no_tests: ask keeps the gate)
       - when: "output.status == 'not_run' and inputs.no_tests != 'ask'"
         goto: verify_change
@@ -367,12 +372,12 @@ steps:
         set: { tested: "no tests" }
       - when: "approved and inputs.mode != 'local'"
         goto: ci
-        set: { tested: "{{ 'no tests' if steps.suite.output and steps.suite.output.status == 'not_run' else vars.tested or '' }}" }
+        set: { tested: "{{ ('no test command' if steps.suite.output.no_command else 'no tests') if steps.suite.output and steps.suite.output.status == 'not_run' else vars.tested or '' }}" }
       - when: "approved"
         merge: local
         goto: push_main
         on_error: resolve_merge
-        set: { tested: "{{ 'no tests' if steps.suite.output and steps.suite.output.status == 'not_run' else vars.tested or '' }}" }
+        set: { tested: "{{ ('no test command' if steps.suite.output.no_command else 'no tests') if steps.suite.output and steps.suite.output.status == 'not_run' else vars.tested or '' }}" }
       - when: "rejected"
         goto: end
         status: failed

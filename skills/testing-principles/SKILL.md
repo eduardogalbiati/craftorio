@@ -80,6 +80,16 @@ In a tests-first workflow (AI Development, local hero, #220) the test writer wri
   that changes one, `protect_files`), and **may add its own internal tests**.
 In the other workflows the rule stays: the developer never writes tests (only the test writer does).
 
+## A project with no test runner
+
+A project with no test command (a plain HTML site, a Markdown-only repository: no package.json,
+go.mod, pom.xml, build.gradle, *.csproj or pyproject.toml, and the workflow's `test_command` empty)
+has no test runner: nothing can run a test file there. Never invent one (no package.json, no
+framework, no runner script added just to run your tests): the suite step does not run, the run goes
+on to the build and the verification, reported as "Not tested: no test command" (#81). Say so in your
+answer: each criterion is then not testable automatically, with how to check it by hand (open the
+page, follow the link). Only when the task asks for a runner is adding one part of the change.
+
 ## Anti-patterns (reject them in your own tests)
 
 - **Tautological test**: the expected value is computed with the same logic as the production

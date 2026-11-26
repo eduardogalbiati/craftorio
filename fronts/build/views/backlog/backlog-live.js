@@ -121,9 +121,15 @@
     const msg = termMsg?.key === `${c.commit}:${c.startedAt}` ? termMsg : null;
     return `<div class="rm-base-check rm-head-line small" data-testid="base-check-card" data-status="${esc(c.status)}"><span class="${busy ? 'rm-spin' : 'rm-head-mark'}" aria-hidden="true"></span><b>${t('backlog_roadmap.base_check')}</b> <span class="muted" title="${esc(c.commit || '')}">${text}</span><span class="spacer"></span><span class="muted${msg?.error ? ' error' : ''}" data-term-msg data-check="${esc(`${c.commit}:${c.startedAt}`)}">${esc(msg?.text || '')}</span><button class="btn sm ghost" type="button" data-term="base-check" title="${esc(t('backlog_roadmap.follow_the_base_check_log'))}">${t('backlog_roadmap.view_terminal')}</button></div>`;
   }
-  // #71: an item whose run tested nothing because the project has no tests
-  const testedHtml = (x) => (x.tested === 'no tests'
-    ? `<span class="badge" data-testid="roadmap-item-tested" title="${esc(t('backlog_roadmap.item_no_tests_tip'))}">${esc(t('backlog_roadmap.item_no_tests'))}</span>` : '');
+  // #71: an item whose run tested nothing because the project has no tests (#81: or no test runner)
+  const TESTED_TEXTS = {
+    'no test command': () => [t('backlog_roadmap.item_no_test_command'), t('backlog_roadmap.item_no_test_command_tip')],
+    'no tests': () => [t('backlog_roadmap.item_no_tests'), t('backlog_roadmap.item_no_tests_tip')],
+  };
+  const testedHtml = (x) => {
+    const [label, tip] = TESTED_TEXTS[x.tested]?.() || [];
+    return label ? `<span class="badge" data-testid="roadmap-item-tested" title="${esc(tip)}">${esc(label)}</span>` : '';
+  };
   // #750: the header's numbers band (rm-head-stats) from RoadmapSummary.stats: four columns (Stages, Left, Forecast, Spent), each a
   // muted label, the value and a muted detail; "—" for an unknown value, the column always there. `minutes`: the view's time
   // format; `money`: the view's money format (the interface's locale, I18n.formatCost)

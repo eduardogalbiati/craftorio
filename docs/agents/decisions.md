@@ -200,6 +200,11 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   #71: a project with no test command and no test file is not a failure: feature and fix go on,
   reported as not tested because the project has no tests (input `no_tests: continue | ask`, default
   `continue`); test files with no known command still open the gate.
+  #81: test files with no known command (a plain HTML site, a Markdown-only repository) no longer open
+  the gate: the suite ends `not_run` with `no_command`, feature goes on to the build and fix to the
+  verification, reported as "Not tested: no test command", whatever `no_tests` says. No runner is
+  invented (no fallback `node --test`: the test files may not even be JS). A given command that
+  cannot run still opens the gate.
   Why: a flaky or hanging test the change never touched held the roadmap for hours at the gate (#386).
   #395: the roadmap can move on past an item or a stage without answering its human
   gate ("Move on": the item is `parked`, which counts as finished for its stage, and the next stage

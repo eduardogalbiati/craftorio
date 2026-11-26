@@ -12,7 +12,6 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
 const I18n = require('@craftorio/shared/i18n');
 const { loadPage, settle } = require('./agent-chat-page-harness');
 
@@ -111,15 +110,14 @@ test('#70 pt-BR feature test_failed: the help of "continue" tells no tests apart
 });
 
 test('#70 pt-BR feature test_failed: the reason "no test command" the issue quotes reads in Portuguese, naming test_command', { timeout: 30000 }, async (t) => {
-  // the reason comes from the engine's own suite step (a git folder with a test file and no command), its
-  // interface language already pt-BR: it may be translated there or when the gate opens
+  // the reason comes from the engine's own suite step (a folder git cannot list and no command: #81, a git
+  // folder with test files now goes on, not run), its interface language already pt-BR: it may be
+  // translated there or when the gate opens
   const { suiteWithoutCommand } = require('@craftorio/engine/engine/suite-no-command');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-70-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   fs.mkdirSync(path.join(dir, 'test'));
   fs.writeFileSync(path.join(dir, 'test', 'a.test.js'), '');
-  execFileSync('git', ['init', '-q'], { cwd: dir });
-  execFileSync('git', ['add', '.'], { cwd: dir });
   I18n.setLanguage('pt-BR');
   const { status, reason } = await suiteWithoutCommand(dir);
   assert.equal(status, 'blocked');

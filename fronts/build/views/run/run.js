@@ -178,8 +178,10 @@ function testsPlanHtml(plan) {
 
 // #396: a run that went on to the build without a green suite (the owner's policy on a suite red
 // only outside the change, or Continue at the test gate), as a warn badge; its failures and their
-// class on hover. '' for a run tested green or without a suite. #71: nothing to test, a neutral badge.
+// class on hover. '' for a run tested green or without a suite. #71: nothing to test, a neutral badge;
+// #81: test files but no test runner, a neutral badge too.
 function testedPillHtml(r) {
+  if (r.tested === 'no test command') return ` <span class="badge" data-testid="run-tested-pill" title="${esc(t('run.no_test_command_tip'))}">${t('run.no_test_command')}</span>`;
   if (r.tested === 'no tests') return ` <span class="badge" data-testid="run-tested-pill" title="${esc(t('run.no_tests_tip'))}">${t('run.no_tests')}</span>`;
   if (r.tested !== 'not green') return '';
   const fails = (r.testedFailures || []).map((f) => `${f.test}${f.file ? ` (${f.file})` : ''}${f.class ? `: ${f.class}` : ''}`);

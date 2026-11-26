@@ -242,8 +242,9 @@
   }
 
   // #396: the end's pill of a run that went on without a green suite (the event's summary, else its row's `tested`)
-  // (#71: or with nothing to test, a neutral pill)
+  // (#71: or with nothing to test, a neutral pill; #81: or with no test runner)
   const TESTED = {
+    'no test command': () => ` <span class="pill" data-testid="runchat-tested" title="${esc(t('runchat.no_test_command_tip'))}">${t('runchat.no_test_command')}</span>`,
     'no tests': () => ` <span class="pill" data-testid="runchat-tested" title="${esc(t('runchat.no_tests_tip'))}">${t('runchat.no_tests')}</span>`,
     'not green': () => ` <span class="pill pill-warn" data-testid="runchat-tested" title="${t('runchat.the_run_reached_the_build_without')}">${t('runchat.not_tested_green')}</span>`,
   };
