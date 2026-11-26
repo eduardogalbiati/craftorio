@@ -66,14 +66,15 @@ const CANCELLED_ERRORS = [
 const isCancelled = (failure) => CANCELLED_ERRORS.some((re) => re.test(String(failure?.error || '')));
 
 // #78: the parsed failures (suite-step.js parseFailures) split into the red ones and the cancelled ones:
-// a cancellation message, or every one of them when node:test's summary says `fail 0` and `cancelled N`
+// a cancellation message, or every one of them when every node:test summary of the log says `fail 0`
+// and one says `cancelled N` (a log with two summaries, one with real failures, keeps those red)
 // → { failed, cancelled }
 function splitCancelled(text, failures) {
   const t = clean(text);
-  const last = (re) => { const all = [...t.matchAll(re)]; return all.length ? Number(all[all.length - 1][1]) : null; };
-  const nodeFail = last(/^\s*(?:ℹ|#) fail (\d+)/gm);
-  const nodeCancelled = last(/^\s*(?:ℹ|#) cancelled (\d+)/gm);
-  const allCancelled = nodeFail === 0 && (nodeCancelled ?? 0) > 0;
+  const all = (re) => [...t.matchAll(re)].map((m) => Number(m[1]));
+  const nodeFails = all(/^\s*(?:ℹ|#) fail (\d+)/gm);
+  const nodeCancelled = all(/^\s*(?:ℹ|#) cancelled (\d+)/gm);
+  const allCancelled = nodeFails.length > 0 && nodeFails.every((n) => n === 0) && nodeCancelled.some((n) => n > 0);
   const failed = [];
   const cancelled = [];
   for (const f of failures || []) (allCancelled || isCancelled(f) ? cancelled : failed).push(f);

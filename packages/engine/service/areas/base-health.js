@@ -166,7 +166,7 @@ module.exports = (ctx) => {
   function redOf(log, cwd, what) {
     const { failed, cancelled } = splitCancelled(log, parseFailures(log, { cwd }));
     const files = new Set(cancelled.map((f) => f.file || f.test));
-    return { failures: failed, cutShort: !failed.length && cancelled.length ? `${what} was cut short: ${files.size} file(s) cancelled, 0 failed` : null };
+    return { failures: failed, cancelled, cutShort: !failed.length && cancelled.length ? `${what} was cut short: ${files.size} file(s) cancelled, 0 failed` : null };
   }
 
   // #613: the second round, the failed tests' files in one command in the check's checkout (on the
@@ -198,9 +198,9 @@ module.exports = (ctx) => {
     const r = await runCommand({ command: run, cwd, env: { ...env, ...listEnv }, timeoutMs, logFile });
     let log = '';
     try { log = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
-    const { failures, cutShort } = redOf(log, cwd, 'the re-run');
+    const { failures, cancelled, cutShort } = redOf(log, cwd, 'the re-run');
     const error = r.timedOut ? 'the re-run timed out' : r.error || cutShort || (r.code && !failures.length ? `the re-run exited with ${r.code}, no failure parsed` : null);
-    return { failures, log, error };
+    return { failures, cancelled, log, error };
   };
 
   // #527: the wait for the machine-wide suite slot, in the server log and on the Roadmap

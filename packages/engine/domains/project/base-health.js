@@ -270,7 +270,8 @@ const normFile = (f) => String(f || '').split('\\').join('/');
 // error }: red the failures red again (same test and file) and those without a file; flaky the ones
 // green on the re-run. #78: a round that throws or returns an error (timed out, did not start, cut
 // short) confirms nothing: the failures it should have re-run are `unconfirmed` (neither red nor flaky)
-// and `error` names why. Without rerunFiles, all of them red.
+// and `error` names why; a failure whose test or file the round cancelled (`cancelled`) is unconfirmed
+// too. Without rerunFiles, all of them red.
 async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log }) {
   const files = [...new Set(failures.filter((f) => f.file).map((f) => f.file))];
   if (typeof rerunFiles !== 'function' || !files.length) return { red: failures, flaky: [], unconfirmed: [] };
@@ -282,15 +283,26 @@ async function confirmTwice(failures, { rerunFiles, cwd, env, commit, load, log 
     return { red: failures.filter((f) => !f.file), flaky: [], unconfirmed: failures.filter((f) => f.file), error };
   }
   const again = new Set((r.failures || []).filter((f) => f?.test).map((f) => `${normFile(f.file)}\n${f.test}`));
+  // #78: a test (or the file of a test) the re-run cancelled was not seen green: unconfirmed, not flaky
+  const cancelled = (r.cancelled || []).filter(Boolean);
+  const cancelledFiles = new Set(cancelled.map((f) => normFile(f.file || f.test)));
+  const cancelledTests = new Set(cancelled.filter((f) => f.test).map((f) => `${normFile(f.file)}\n${f.test}`));
   const red = [];
   const flaky = [];
-  for (const f of failures) (!f.file || again.has(`${normFile(f.file)}\n${f.test}`) ? red : flaky).push(f);
+  const unconfirmed = [];
+  for (const f of failures) {
+    const key = `${normFile(f.file)}\n${f.test}`;
+    if (!f.file || again.has(key)) red.push(f);
+    else if (cancelledTests.has(key) || cancelledFiles.has(normFile(f.file))) unconfirmed.push(f);
+    else flaky.push(f);
+  }
+  if (unconfirmed.length) log('warn', `base check: ${unconfirmed.length} failure(s) cancelled on the re-run: neither red nor flaky`);
   if (flaky.length) {
     let runs = [];
     try { runs = (typeof load === 'function' ? load() : []) || []; } catch { runs = []; }
     for (const f of flaky) log('info', `base check: ${f.test} (${f.file}) red in the whole suite, green on the re-run (load: ${runs.length ? runs.join(', ') : 'no run active'})`);
   }
-  return { red, flaky, unconfirmed: [] };
+  return { red, flaky, unconfirmed, error: unconfirmed.length ? `the re-run cancelled ${unconfirmed.length} failure(s)` : null };
 }
 
 /**
