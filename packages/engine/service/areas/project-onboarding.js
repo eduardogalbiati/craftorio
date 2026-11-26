@@ -719,13 +719,13 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(projectId);
   }
 
-  // #632: the answers of the three questions, each among its values (onboarding-model.js CREATE_ANSWERS)
+  // #632: the answers of the questions, each among its values (onboarding-model.js CREATE_ANSWERS); #57: kind too
   function cleanAnswers(answers) {
     const a = { ...OnboardingModel.CREATE_DEFAULTS, ...(answers && typeof answers === 'object' ? answers : {}) };
     for (const [k, values] of Object.entries(OnboardingModel.CREATE_ANSWERS)) {
       if (!values.includes(a[k])) throw clientError(`The answer ${k} must be one of: ${values.join(', ')}.`);
     }
-    return { mode: a.mode, ci: a.ci, release: a.release };
+    return { mode: a.mode, ci: a.ci, release: a.release, kind: a.kind };
   }
 
   // #632: the local repository of a new project: git init on main, README.md and .gitignore in a first commit
@@ -754,7 +754,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const provider = wanted?.provider || null;
     if (provider && !Platforms.findPlatform(provider)?.cli) throw clientError(`No CLI creates repositories on ${provider}.`);
     const profile = { ...cleanAnswers(answers), tests: 'unit' };
-    const p = await projects.createProject(projectsDir, { name }, { git, fresh: true }).catch((e) => { throw clientError(String(e?.message || e)); });
+    // #57: the kind answered is the owner's pick, saved on the project (runDefaultsWith reads it first)
+    const p = await projects.createProject(projectsDir, { name, kind: profile.kind }, { git, fresh: true }).catch((e) => { throw clientError(String(e?.message || e)); });
     projects.updateProject(projectsDir, p.id, { onboarding: { step: 'repository', picks: {}, finished: false } });
     const folder = p.folder;
     try {

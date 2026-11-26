@@ -296,7 +296,8 @@ test('#632 create step: the folder line reads <workspace>/projects/field-notes',
 test('#632 create step: "How will you work on it?" asks where changes land, CI and how you release', { timeout: 20000 }, async () => {
   const app = await atCreate();
   const groups = allByTestId(wizardMarkup(app), 'wizard-question').map((e) => e.attrs['data-question']);
-  assert.deepEqual(groups, ['mode', 'ci', 'release']);
+  // #57: and the project's kind
+  assert.deepEqual(groups, ['mode', 'ci', 'release', 'kind']);
   const text = wizardText(app);
   const missing = ['How will you work on it?', 'Where changes land', 'CI', 'How you release'].filter((s) => !text.includes(s));
   assert.deepEqual(missing, []);
@@ -347,7 +348,7 @@ test('#632 create step: a click on a chip makes it the picked one of its questio
 test('#632 Next sends the name, README start, no remote and the default answers', { timeout: 20000 }, async () => {
   const app = await atCreate();
   await typeName(app, NAME);
-  assert.deepEqual(await sent(app), { name: 'Field Notes', starts: 'readme', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone' } });
+  assert.deepEqual(await sent(app), { name: 'Field Notes', starts: 'readme', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone', kind: 'frontend' } });
 });
 
 test('#632 Next with the private-repository box ticked sends remote { provider: github }', { timeout: 20000 }, async () => {
@@ -384,7 +385,8 @@ for (const [q, label, answers] of [
     const app = await atCreate();
     await typeName(app, NAME);
     await pickChip(app, q, label);
-    assert.deepEqual((await sent(app)).answers, answers);
+    // #57: the kind's default answer goes with them
+    assert.deepEqual((await sent(app)).answers, { ...answers, kind: 'frontend' });
   });
 }
 

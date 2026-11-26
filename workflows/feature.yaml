@@ -1645,6 +1645,7 @@ steps:
     summary: |
       The developer finished {% if previous_step in ['check_failed', 'develop', 'developer_screenshots', 'issue_not_done', 'requirements_left_out', 'rule_check', 'docs_check', 'secret_scan', 'testid_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request{% else %}the implementation{% endif %}: {{ steps.develop.output.summary | one_line(160) }}
       {{ steps.develop.output.issues | issue_lines }}
+      {% set nr = steps.develop.output | screen_not_reviewed(inputs) %}{% if nr %}Screen not reviewed: {{ nr }}{% endif %}
     message: |
       The developer finished {% if previous_step in ['check_failed', 'develop', 'developer_screenshots', 'issue_not_done', 'requirements_left_out', 'rule_check', 'docs_check', 'secret_scan', 'testid_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
       Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
@@ -1665,6 +1666,7 @@ steps:
       {% if steps.secret_scan.output and steps.secret_scan.output.status == 'skipped' %}{{ steps.secret_scan.output.message }}{% endif %}
       {% if tests_plan %}{{ tests_plan }}{% endif %}
       {% if inputs.screenshots == 'off' %}Screenshots: off in this run (the evidence is the diff, the logs and the test results).{% elif steps.developer_screenshots.output %}Screenshots: {{ steps.developer_screenshots.output.message }}{% endif %}
+      {% set nr = steps.develop.output | screen_not_reviewed(inputs) %}{% if nr %}Screen not reviewed: {{ nr }}{% endif %}
       {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
       {% set e2e = steps.acceptance_tests.output | e2e_scenarios %}{% if inputs.e2e_tests == 'off' %}E2E scenarios: off in this run.{% elif e2e %}{{ e2e }}{% else %}E2E scenarios: none written for this issue.{% endif %}
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
@@ -2016,6 +2018,7 @@ steps:
       The review loop did not converge in 3 iterations.
       Go on to testing anyway: move on to testing. Stop the run: the run ends as cancelled.
       {% if tests_plan %}{{ tests_plan }}{% endif %}
+      {% set nr = steps.develop.output | screen_not_reviewed(inputs) %}{% if nr %}Screen not reviewed: {{ nr }}{% endif %}
     transitions:
       # #203, #223: the same test routing as code_review's (#81 included)
       - when: "approved and no_test_command and inputs.no_tests != 'ask' and inputs.unit_tests != 'off' and (steps.acceptance_tests.output.tests_added or []) | length == 0"

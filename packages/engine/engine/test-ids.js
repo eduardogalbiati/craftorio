@@ -35,6 +35,27 @@ function normFolder(p) {
   return f === '.' ? '' : f;
 }
 
+// The files of a list (a step's files_changed) under the project's UI folders (#588), compared with
+// forward slashes; folders: one or a list, repository-relative. #80: the root folder ('./') holds the
+// pages and stylesheets anywhere (UI_FILE, STYLE_FILE), never a README or a package.json; without folders
+// (none given, or an empty list: an empty project) a UI file is a page or a component by its extension.
+// The `ui_files` template filter (engine/run/templates.js) and the result summary (#57) use it.
+function uiFiles(files, folders) {
+  const dirs = [].concat(folders ?? []).filter((d) => String(d ?? '').trim()).map(normFolder);
+  const under = (f, d) => (d === '' ? UI_FILE.test(f) || STYLE_FILE.test(f) : f === d || f.startsWith(`${d}/`));
+  return [].concat(files ?? []).filter((f) => (dirs.length ? dirs.some((d) => under(normFolder(f), d)) : UI_FILE.test(normFolder(f))));
+}
+
+// #57: why a change with UI files (uiFiles of develop's files_changed) gets no visual review, '' when it has
+// no UI file or its screens are reviewed: screenshots off (a backend or docs project, or the run's own pick),
+// or (reviewed === false, the run ended without screenshots) none taken. The gates' and result.md's
+// "Screen not reviewed: <reason>".
+function screenNotReviewed(develop, inputs, reviewed = true) {
+  if (!uiFiles(develop?.files_changed, inputs?.ui_folders).length) return '';
+  if (inputs?.screenshots === 'off') return 'screenshots are off in this run (the project\'s kind is backend or docs, or the run turned them off); change the project\'s kind or the run\'s screenshots input to review it';
+  return reviewed ? '' : 'no screenshots were taken in this run';
+}
+
 // The unique static ids of `getByTestId(...)` in a source text, in order of first use.
 function testIdsUsed(source) {
   const ids = [...String(source || '').matchAll(/getByTestId\(\s*(['"])([^'"$`]+)\1/g)].map((m) => m[2]);
@@ -101,8 +122,10 @@ module.exports = {
   missingTestIds,
   NON_UI_DIRS,
   normFolder,
+  screenNotReviewed,
   stepFiles,
   STYLE_FILE,
   testIdsUsed,
   UI_FILE,
+  uiFiles,
 };

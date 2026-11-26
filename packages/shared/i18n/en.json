@@ -3758,6 +3758,7 @@
   "onboarding.new_create_failed": "The project could not be created",
   "onboarding.new_empty": "Empty",
   "onboarding.new_empty_text": "git init only.",
+  "onboarding.new_kind": "What you are building",
   "onboarding.new_mode": "Where changes land",
   "onboarding.new_mode_local": "Local: merge here, push main",
   "onboarding.new_mode_remote": "Local + remote: pull requests on GitHub",

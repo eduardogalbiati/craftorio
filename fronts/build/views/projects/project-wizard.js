@@ -44,8 +44,9 @@
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
 //   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), #25/#35 wizard-no-remote-hint (without a repository the issues live in a local backlog), the folder line
-//   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the three questions
-//   wizard-question data-question="mode" | "ci" | "release" with their wizard-chip buttons (aria-pressed on the
+//   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the questions
+//   wizard-question data-question="mode" | "ci" | "release" | "kind" (#57: frontend / full-stack / backend,
+//   saved as the project's kind) with their wizard-chip buttons (aria-pressed on the
 //   pick, OnboardingModel.CREATE_ANSWERS / CREATE_DEFAULTS). Next (api.createOnboarding) creates it, ready at
 //   once: step 3 ("Workflows") without the clone; a private repository not made shows wizard-remote-warning.
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
@@ -296,7 +297,8 @@
   const newSlug = () => M.slugify(cur.model.name);
   const newFolder = () => `<workspace>/projects/${newSlug()}`; // i18n-ignore
   // the answer's i18n key: pr+release → onboarding.new_ci_pr_release
-  const answerLabel = (q, v) => t(`onboarding.new_${q}_${String(v).replace(/[^a-z0-9]+/gi, '_')}`);
+  // #57: the kind's chips read the kinds' own labels (KIND_LABELS)
+  const answerLabel = (q, v) => t(q === 'kind' && M.KIND_LABELS?.[v] ? M.KIND_LABELS[v] : `onboarding.new_${q}_${String(v).replace(/[^a-z0-9]+/gi, '_')}`);
 
   // under the box: the repository it makes (<account>/<slug>), or how to sign in when no CLI is
   function remoteHint() {

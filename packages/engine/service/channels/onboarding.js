@@ -26,8 +26,9 @@ module.exports = (ctx) => [
   // { name, repo }: checks the access, creates the project and starts its clone; never waits for the clone
   { channel: 'onboarding:start', method: 'startOnboarding', params: 'data', schema: { params: args({ name: text(200, 'The project name.'), repo: text(2000, 'The repository URL.') }, ['name', 'repo']), result: OBJECT }, fn: (data) => ctx.onboardingStart(data) },
   // #632 { name, starts, remote, answers }: creates a new project (git init, README and .gitignore, a first
-  // commit on main), its private remote only when asked and gh / glab is signed in; ready at once, no clone
-  { channel: 'onboarding:create', method: 'createOnboarding', params: 'data', schema: { params: args({ name: text(200, 'The project name.'), starts: text(10, 'What the project starts with: readme or empty.'), remote: described(OPTIONS, 'The private remote to create: null, or { provider: github or gitlab }.'), answers: shape({ mode: STRING, ci: STRING, release: STRING }) }, ['name']), result: OBJECT }, fn: (data) => ctx.onboardingCreate(data) },
+  // commit on main), its private remote only when asked and gh / glab is signed in; ready at once, no clone;
+  // #57: answers.kind is saved on the project as the owner's pick
+  { channel: 'onboarding:create', method: 'createOnboarding', params: 'data', schema: { params: args({ name: text(200, 'The project name.'), starts: text(10, 'What the project starts with: readme or empty.'), remote: described(OPTIONS, 'The private remote to create: null, or { provider: github or gitlab }.'), answers: shape({ mode: STRING, ci: STRING, release: STRING, kind: STRING }) }, ['name']), result: OBJECT }, fn: (data) => ctx.onboardingCreate(data) },
   { channel: 'onboarding:status', method: 'onboardingStatus', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingStatus(opts) },
   // the paid part (the project map: the city plan and the Oracle's report), only on the owner's click
   { channel: 'onboarding:analyze', method: 'analyzeOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingAnalyze(opts) },

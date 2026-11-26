@@ -16,6 +16,8 @@
 //   profile does not say unit tests only). A backend project gets no UI default: ui_folders [],
 //   screenshots off, e2e_tests off, steps_folders []. #80: pages at the root give the UI folder './'
 //   (the `ui_files` filter reads it as the root-level files); only folders the project has are listed.
+//   #57: an empty project (a README and dotfiles, what "Create new project" makes) has kind null, undecided:
+//   screenshots stay on with no UI folder, so a first change with UI files gets its screenshots and review.
 // - resolveRunInputs({ typed, roadmap, project, workflow }) → { values, sources }: per input of the
 //   workflow, what the owner typed (the dialog, the CLI's --input) > the roadmap / queue item's saved
 //   inputs > the project's run defaults > the workflow's default; `sources[key]` says which one.
@@ -118,9 +120,19 @@ function hasCode(folder) {
   return walk('', 0);
 }
 
+// #57: a new project's folder: nothing but a README (any case, any extension) and dotfiles at its root
+// ("Create new project" makes README.md and .gitignore); its kind is not decided by its files yet
+const README = /^readme(\.[^.]+)?$/i;
+function isEmptyProject(folder) {
+  let entries;
+  try { entries = fs.readdirSync(folder, { withFileTypes: true }); } catch { return false; }
+  return entries.every((e) => e.name.startsWith('.') || (e.isFile() && README.test(e.name)));
+}
+
 /**
  * What the project's files tell for its runs: { node, webFramework, server, uiFolders, e2eCommand,
- * e2eSuite, stepsFolders, kind }. #84: kind docs when it holds no code (documents only).
+ * e2eSuite, stepsFolders, kind }. #84: kind docs when it holds no code (documents only). #57: kind null
+ * (undecided) for an empty project (isEmptyProject): its first change decides whether it has screens.
  */
 function projectFacts(folder) {
   if (!folder || !isDir(folder)) return { node: false, webFramework: false, server: false, uiFolders: [], e2eCommand: null, e2eSuite: false, stepsFolders: [], kind: 'backend' };
@@ -134,7 +146,8 @@ function projectFacts(folder) {
   const e2eCommand = detectE2eCommand(folder);
   const e2eSuite = !!e2eCommand || E2E_CONFIGS.some((f) => exists(folder, f));
   const hasUi = webFramework || ui.length > 0;
-  const kind = hasUi ? (server ? 'full-stack' : 'frontend') : !pkg && !server && !hasCode(folder) ? 'docs' : 'backend';
+  const noCode = !hasUi && !pkg && !server && !hasCode(folder);
+  const kind = hasUi ? (server ? 'full-stack' : 'frontend') : noCode && isEmptyProject(folder) ? null : noCode ? 'docs' : 'backend';
   return { node: !!pkg, webFramework, server, uiFolders: ui, e2eCommand, e2eSuite, stepsFolders: STEPS_FOLDERS.filter((f) => isDir(path.join(folder, f))), kind };
 }
 
@@ -165,7 +178,8 @@ function runDefaultsWith({ project, profile = null, defaultBranch = null } = {})
   const kind = [project?.kind, p.kind].find((k) => KINDS.includes(k)) || facts.kind;
   const mode = wizardMode(project) || (MODES.includes(p.mode) ? p.mode : null);
   const suite = str(p.e2eCommand) || facts.e2eCommand;
-  // #84: a docs project has no UI either
+  // #84: a docs project has no UI either; #57: an undecided one (null, an empty project) keeps screenshots on, no
+  // UI folder yet: the feature workflow's UI steps follow the UI files of the developer's change
   const noUi = kind === 'backend' || kind === 'docs';
   const e2eOff = noUi || !suite || p.tests === 'unit';
   const variant = wizardVariant(project);

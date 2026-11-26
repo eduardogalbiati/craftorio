@@ -2,7 +2,7 @@
 // Templates and expressions of a run (#250, from packages/engine/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
-// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `check_command`, `checks_off`, `expected_docs`, `issue_numbers`,
+// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `screen_not_reviewed`, `check_command`, `checks_off`, `expected_docs`, `issue_numbers`,
 // `issue_lines`, `one_line`, `secret_findings`, `secret_review`, `suite_lines`, `tests_plan_text`, `translated`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
@@ -178,17 +178,16 @@ tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
   } catch { return ''; }
 });
 
-// The files of a list (a step's files_changed) under the project's UI folders (#588), compared with
-// forward slashes; folders: one or a list, repository-relative. #80: the root folder ('./', a site
-// with its pages at the root) holds the pages and stylesheets anywhere (testIds.UI_FILE, STYLE_FILE),
-// never a README or a package.json; without folders (none given, or an empty list: an empty project)
-// a UI file is a page or a component by its extension (testIds.UI_FILE), never Craftorio's src/renderer.
+// The files of a list (a step's files_changed) under the project's UI folders (#588, #80; the rule:
+// packages/engine/engine/test-ids.js uiFiles); without folders a UI file is known by its extension,
+// never Craftorio's src/renderer.
 //   when: "(output.files_changed or []) | ui_files(inputs.ui_folders) | length"
-tpl.addFilter('ui_files', (files, folders) => {
-  const dirs = [].concat(folders ?? []).filter((d) => String(d ?? '').trim()).map(testIds.normFolder);
-  const under = (f, d) => (d === '' ? testIds.UI_FILE.test(f) || testIds.STYLE_FILE.test(f) : f === d || f.startsWith(`${d}/`));
-  return [].concat(files ?? []).filter((f) => (dirs.length ? dirs.some((d) => under(testIds.normFolder(f), d)) : testIds.UI_FILE.test(testIds.normFolder(f))));
-});
+tpl.addFilter('ui_files', (files, folders) => testIds.uiFiles(files, folders));
+
+// #57: why the developer's change, with UI files, gets no visual review ('' when it has none or is reviewed;
+// packages/engine/engine/test-ids.js screenNotReviewed), for the gates' "Screen not reviewed: <reason>".
+//   {% set nr = steps.develop.output | screen_not_reviewed(inputs) %}{% if nr %}Screen not reviewed: {{ nr }}{% endif %}
+tpl.addFilter('screen_not_reviewed', (develop, inputs) => testIds.screenNotReviewed(develop, inputs));
 
 // The mockups an issue's text embeds or links (#670, packages/engine/engine/ui-review-checks.js):
 // [{ file, ref }]; [] for an issue without mockups, whose screens are reviewed as before.

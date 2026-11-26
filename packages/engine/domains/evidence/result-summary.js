@@ -2,12 +2,13 @@
 // (WorkflowRun.finish, before workflow.finished) from the run's summary (the event's `summary`):
 // the status, what was done per issue (the last step output with an `issues` list), the commits
 // (the worktree branch and head, the local merge), the tests (each suite step: pass/fail and
-// counts; the coverage summary), a secret scan that did not pass (#49), the screenshots (the final evidence set, new elements #185; #80: a run without UI folders says the screenshots and the UI review were skipped) and
+// counts; the coverage summary), a secret scan that did not pass (#49), the screenshots (the final evidence set, new elements #185; #80: a run without UI folders says the screenshots and the UI review were skipped; #57: a change with UI files and none says "Screen not reviewed: <reason>") and
 // links to the key artifacts. It is the first artifact of the run (category `result`,
 // packages/engine/domains/evidence/artifact-categories.js) and what the owner opens. No model call.
 const fs = require('fs');
 const path = require('path');
 const { readEvidence } = require('./evidence');
+const { screenNotReviewed } = require('../../engine/test-ids');
 
 const MAX_FINDINGS = 10;
 const posix = (p) => String(p).split(path.sep).join('/');
@@ -89,7 +90,10 @@ function screenshotsSection(runDir, summary) {
   }
   // #80: a run whose project has no UI folders (an input it has, left empty) and took no screenshots says why
   const uiFolders = summary?.inputs?.ui_folders;
-  if (Array.isArray(uiFolders) && !uiFolders.length && !shots.length) {
+  // #57: a developer's change with UI files and no screenshots says why its screen was not reviewed
+  const notReviewed = screenNotReviewed(summary?.steps?.develop?.output, summary?.inputs, shots.length > 0);
+  if (notReviewed) lines.push(`- Screen not reviewed: ${notReviewed}.`);
+  else if (Array.isArray(uiFolders) && !uiFolders.length && !shots.length) {
     lines.push('- The run has no UI folders: the screenshots and the UI review were skipped.');
   }
   let ev = null;

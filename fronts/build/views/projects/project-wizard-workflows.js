@@ -253,6 +253,7 @@
     // files, projectFacts); a backend gets no UI step. wizard-kind-select, cur().kind
     // #781: it opens on the kind the analysis found (profile.kind), marked wizard-kind-detected until the owner
     // changes it; "Detect from the files" stays only while no kind is known. Not changed, no kind is sent (#735)
+    // #57: a new project's kind is the one answered at the create step (its profile), already saved: no mark
     function kindField() {
       const labels = M.KIND_LABELS || {};
       const found = profileOf()?.kind;
@@ -261,7 +262,7 @@
       const kinds = [...(detected ? [] : [['', t('onboarding.kind_detect')]]), ...Object.entries(labels).map(([v, key]) => [v, t(key)])];
       const attrs = `data-testid="wizard-kind-select" aria-label="${esc(t('ways_of_working.f_kind'))}"`;
       const control = window.Select.markup(attrs, kinds, value);
-      const mark = detected && !cur().kind ? `<span class="small muted" data-testid="wizard-kind-detected">${esc(t('onboarding.kind_detected', { kind: t(labels[detected]) }))}</span>` : '';
+      const mark = detected && !cur().kind && cur().model.source !== 'new' ? `<span class="small muted" data-testid="wizard-kind-detected">${esc(t('onboarding.kind_detected', { kind: t(labels[detected]) }))}</span>` : '';
       return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}${mark}</div>`;
     }
 
