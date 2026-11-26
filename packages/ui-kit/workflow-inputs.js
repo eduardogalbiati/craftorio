@@ -22,7 +22,8 @@
 // owner set. A container with data-wi-scope (or the form) is where show_if reads the other values;
 // its data-wi-context (JSON) adds values that are not in it (the Roadmap item's mode).
 // inputPills(workflow, inputs) shows a run's inputs as read-only pills ("Unit tests: Run existing",
-// #216) on the cards that list them.
+// #216) on the cards that list them. #41: stepNamesOf / runStepNames(run, workflows) name a run's steps
+// in the interface language at draw time (a repository workflow read once per project).
 // #785: resolved(defs, saved, runDefaults) gives each value and its source, formHtml's `sources` says
 // it per field; differing / differHtml: the saved values that differ from the project's.
 // #50: checksOf(given, runDefaults) is what a run's rule check runs (`check_command`, else the run defaults'
@@ -352,10 +353,32 @@
     };
   }
 
-  /** #41: a run's step id → name (`stepNames`, recorded in English) with its workflow's localized names winning. */
+  /** #41: a run's step id → name (`stepNames`, recorded in English) with its workflow's localized names winning
+   * where the run recorded no name or the workflow's current English one (a past version's name stays, #245). */
   function stepNamesOf(stepNames, wf) {
-    const own = Object.fromEntries((localized(wf)?.steps || []).filter((s) => s?.display).map((s) => [s.id, s.display]));
+    const shown = localized(wf)?.steps || [];
+    const own = Object.fromEntries((wf?.steps || []).map((s, i) => [s, shown[i]?.display])
+      .filter(([s, name]) => s?.id && name && (!stepNames?.[s.id] || stepNames[s.id] === s.display)).map(([s, name]) => [s.id, name]));
     return Object.keys(own).length ? { ...stepNames, ...own } : stepNames || null;
+  }
+
+  // #41: a run's step names at draw time (runInfo keeps the recorded ones, so a copy of the run never freezes a
+  // language): its workflow from `workflows` (state.workflows), else its project's repository workflows, read
+  // once per project (root.api) and the screen redrawn (root.scheduleRender) when they arrive.
+  const repoWorkflows = new Map();
+  function runStepNames(run, workflows) {
+    if (!run) return null;
+    const same = (w) => w && (w.file === run.workflow || w.name === run.workflow);
+    let wf = (workflows || []).find(same);
+    if (!wf && run.projectId && typeof root.api?.listWorkflows === 'function') {
+      if (!repoWorkflows.has(run.projectId)) {
+        repoWorkflows.set(run.projectId, []);
+        root.api.listWorkflows({ projectId: run.projectId, repositoryOnly: true })
+          .then((list) => { repoWorkflows.set(run.projectId, Array.isArray(list) ? list : []); root.scheduleRender?.(); }, () => {});
+      }
+      wf = repoWorkflows.get(run.projectId).find(same);
+    }
+    return stepNamesOf(run.stepNames, wf);
   }
 
   // ---- where a value comes from (#785) --------------------------------------------------------
@@ -520,6 +543,7 @@
     read,
     refresh,
     resolved,
+    runStepNames,
     sameValue,
     scopeAttrs,
     set,

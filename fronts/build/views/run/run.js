@@ -204,7 +204,7 @@ function suiteCardsHtml(runId, stepNames) {
     const listed = Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
     const scope = t(sel.mode === 'all' ? 'run.suite_whole' : listed ? 'run.suite_listed' : out.affected && out.scope === 'full' ? 'run.suite_affected_then_whole' : 'run.suite_affected_only');
     // #41: the engine's English "listed by <step>" / "the N test file(s) the step lists" redrawn in the interface language
-    const reasons = Object.entries(sel.reasons || {}).map(([f, why, by = /^listed by (.+)$/.exec(why)]) => [f, by ? t('run.suite_listed_by', { step: agentLabel(by[1], stepNames) }) : why]);
+    const reasons = Object.entries(sel.reasons || {}).map(([f, why]) => { const by = /^listed by (.+)$/.exec(why); return [f, by ? t('run.suite_listed_by', { step: agentLabel(by[1], stepNames) }) : why]; });
     const lists = /^the (\d+) test file\(s\) the step lists(?: \(not found: (.+)\))?$/.exec(sel.why || '');
     const why = lists ? t('run.suite_listed_why', { count: lists[1] }) + (lists[2] ? ` ${t('run.suite_listed_missing', { files: lists[2] })}` : '') : sel.why;
     const more = reasons.length - SUITE_REASONS_SHOWN;
@@ -286,7 +286,7 @@ function renderRunSummary() {
     ${(r.issueSaves || []).map((s) => `<div class="small" title="${t('run.the_accepted_document_was_saved_to')}">${t('run.saved_to_issue')} <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? t('run.as_a_comment') : t('run.description_replaced')} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="${t('run.time_the_run_waited_for_your')}">${t('run.waiting_for_you_at_gates')} <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
-    ${suiteCardsHtml(r.id, r.stepNames)}
+    ${suiteCardsHtml(r.id, window.runStepNames?.(r) ?? r.stepNames)}
     ${scratchHtml(r.id)}
     ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
@@ -696,7 +696,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}${na.has(s.id) && !s.visits ? ' doesnt-apply' : ''}" data-testid="run-step-card" data-step="${esc(s.id)}"${na.has(s.id) && !s.visits ? ' data-doesnt-apply="1"' : ''}>
       <span class="dot"></span>
-      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, v.run?.stepNames))}</span>${naLine(s)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span><span title="${esc(s.id)}">${esc(agentLabel(s.id, window.runStepNames?.(v.run) ?? v.run?.stepNames))}</span>${naLine(s)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? t('run.human_approval') : s.type === 'screenshots' ? t('run.screenshots_no_agent') : s.type === 'suite' ? t('run.test_suite_no_agent') : s.type === 'test_ids' ? t('run.test_id_check_no_agent') : s.type === 'check' ? t('run.rule_checks_no_agent') : s.type === 'release_version' ? t('run.release_version_no_agent') : s.type === 'project_map' ? t('run.project_map_no_agent') :s.type === 'workflow' ? t('run.child_workflow_runs') : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
       ${logButtons(s)}
     </li>`;
@@ -733,7 +733,7 @@ function renderSteps() {
   box.querySelectorAll('.step-term [data-term]').forEach((b) => (b.onclick = async () => {
     const wrap = b.closest('.step-term');
     const card = b.closest('[data-step]');
-    const label = agentLabel(card.dataset.step, v.run?.stepNames);
+    const label = agentLabel(card.dataset.step, window.runStepNames?.(v.run) ?? v.run?.stepNames);
     const msg = await termAction(b, { sessionId: b.dataset.log || wrap.dataset.log, runId: v.run?.id || state.run?.id, label: b.dataset.log ? `${label} base` : label });
     const line = wrap.querySelector('[data-term-msg]');
     line.textContent = msg.text;

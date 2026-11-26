@@ -105,6 +105,8 @@ module.exports = (ctx) => {
         updateAvailable: false, restorable: false, bundledVersion: null, trusted: w.accepted,
       });
       const { copy, sha } = runs[w.file];
+      // #41: the manifest's own description wins in every language (the YAML's description_key goes with it)
+      if (w.entry.description) delete item.description_key;
       return {
         ...item, ...(w.entry.category ? { category: w.entry.category } : {}), ...(w.entry.description ? { description: w.entry.description } : {}),
         runsCopy: copy, runs: copy === 'repository' ? `runs: repository @ ${sha}` : 'does not run for this project: the workspace copy (your models) runs',

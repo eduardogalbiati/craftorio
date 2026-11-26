@@ -62,11 +62,13 @@
   }
   // #245: a step by its readable name, its id in the tooltip
   // (a run recorded without them: its workflow's own `display` names, as the Run screen's progress)
+  // #41: with WorkflowInputs (the app), the recorded names and the workflow's in the interface language (stepNamesOf)
   const workflowStepNames = () => {
     const wf = (state.workflows || []).find((w) => w && (w.file === chat.model.run?.workflow || w.name === chat.model.run?.workflow));
+    if (typeof WorkflowInputs === 'object') return WorkflowInputs.stepNamesOf(chat.model.run?.stepNames, wf);
     return wf ? Object.fromEntries((wf.steps || []).filter((s) => s.display).map((s) => [s.id, s.display])) : null;
   };
-  const stepName = (stepId) => (!stepId ? '' : chat.model.run?.stepNames ? chat.model.stepName(stepId) : displayName(stepId, workflowStepNames()));
+  const stepName = (stepId) => (!stepId ? '' : chat.model.run?.stepNames && typeof WorkflowInputs !== 'object' ? chat.model.stepName(stepId) : displayName(stepId, workflowStepNames()));
   const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? t('runchat.visit_visit', { visit }) : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML

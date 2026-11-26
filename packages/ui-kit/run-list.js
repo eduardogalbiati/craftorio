@@ -653,7 +653,8 @@ function runProgressStrip(r) {
   const status = live?.trail ? live.run?.status || r.status : r.status;
   const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
   const skipped = chips.length - MAX_CHIPS;
-  const stepNames = r.stepNames || live?.run?.stepNames;
+  const named = r.stepNames ? r : live?.run; // #41: its names in the interface language (app.js runStepNames)
+  const stepNames = window.runStepNames?.(named) ?? named?.stepNames;
   const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => (c.grouped ? RunProgress.groupName(c.name, t) : stepName(c.name, stepNames))).join(' › ')}` : '';
   return `<div class="rp-strip" data-testid="run-progress-strip">${skipped > 0 ? `<span class="rp-skip" tabindex="0" aria-label="${esc(folded)}">+${skipped}${foldCard(folded)}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow, stepNames)).join('<span class="rp-sep">›</span>')}</div>`;
 }

@@ -777,7 +777,7 @@ async function hydrateRun(runId) {
   // the gates it still waits at say so, as when they were asked (the badge and gate card read v.approvals)
   const shown = (state.view === 'run' && state.runId === runId) || window.duoShowsRun?.(runId) || window.arenaShowsRun?.(runId) || window.runChatShowsRun?.(runId);
   if (!v.past && !shown) {
-    for (const g of v.approvals.values()) showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), t('app.step_step_id_click_to_open', { step_id: agentLabel(g.step_id, v.run?.stepNames) }), runId, g);
+    for (const g of v.approvals.values()) showToast(t('app.approval_waiting_run', { run: runLabel(v.run) }), t('app.step_step_id_click_to_open', { step_id: agentLabel(g.step_id, runStepNames(v.run)) }), runId, g);
   }
   renderRunListsSoon();
   scheduleRender();
@@ -792,11 +792,8 @@ function runInfo(x) {
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null, projectId: project?.id || null,
     // agent key → name: the YAML's display (#245), the Agents menu's own names winning
     agentNames: x.display?.agents || x.agent_names ? { ...x.display?.agents, ...x.agent_names } : null,
-    // step id → name (#245); #41: read at each use, its workflow's names in the interface language winning
-    get stepNames() {
-      const wf = (state.workflows || []).find((w) => w && (w.file === x.workflow || w.name === x.workflow));
-      return window.WorkflowInputs ? WorkflowInputs.stepNamesOf(x.display?.steps, wf) : x.display?.steps || null;
-    },
+    // step id → name as recorded (#245); runStepNames(run) names them in the interface language (#41)
+    stepNames: x.display?.steps || null,
     chain: ChainModel.runChain(x), // its chain (#134)
     // `type: workflow` steps (#174): the run that started this one, the runs this one started
     parentRun: x.parent_run || x.parentRun || null, childRuns: [...(x.childRuns || [])],
@@ -822,6 +819,8 @@ function openSaveAfterAccept(v) {
 // An agent's readable name (display-name.js); the slug stays in tooltips. A step's too (#245), with
 // the run's stepNames.
 const agentLabel = (slug, names) => (window.displayName ? displayName(slug, names) : String(slug || ''));
+// A run's step names in the interface language, read at each draw (#41: workflow-inputs.js runStepNames).
+function runStepNames(run) { return window.WorkflowInputs?.runStepNames ? WorkflowInputs.runStepNames(run, state.workflows) : run?.stepNames || null; }
 
 // Finished runs that are not shown are forgotten (their chat and files keep everything).
 function pruneRuns() {
