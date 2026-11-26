@@ -4,7 +4,7 @@
 // GitHub Pages lets a browser keep every file for 10 minutes: the pages name their scripts and
 // stylesheets with a version of the content (`assets/reader.js?v=<hash>`, stampAssets), so a new
 // publish never runs the old reader against new data.
-// The page's icon is the app's (apps/desktop/assets/: icon-source.svg and icon.png), copied, never kept twice.
+// The page's icon is the app's (apps/desktop/assets/icon.png), copied, never kept twice.
 // With a token (GH_TOKEN or GITHUB_TOKEN) it also writes docs/work/github.json, and from git
 // docs/work/activity.json (scripts/site-data.js: which issues may be published, and why).
 // What it adds is docs/work/index.json, the list of items ([{ name, kind: 'item' | 'milestone' }]),
@@ -37,7 +37,7 @@ const COPIED = /\.(md|png|jpe?g|webp|gif)$/i;
 const ITEM = /^[a-z0-9][a-z0-9._-]*$/i;
 const ROOT_FILES = ['CHANGELOG.md', 'CHANGELOG.pt-BR.md'];
 // the app's icon, as the page's: [source in the repository, published path]
-const ICONS = [['apps/desktop/assets/icon-source.svg', 'assets/icon.svg'], ['apps/desktop/assets/icon.png', 'assets/icon.png']];
+const ICONS = [['apps/desktop/assets/icon.png', 'assets/icon.png']];
 
 function workItems(root) {
   const dir = path.join(root, 'docs', 'work');

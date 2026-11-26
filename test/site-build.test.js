@@ -24,7 +24,6 @@ function plant() {
   put('docs/work/no-stage/notes.md', 'not an item');
   put('docs/work/open-source/milestone.md', '---\nkind: milestone\n---\n');
   put('CHANGELOG.md', '# Changelog');
-  put('apps/desktop/assets/icon-source.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
   put('apps/desktop/assets/icon.png', 'png');
   return root;
 }
@@ -44,7 +43,7 @@ test('the site holds the reader, the markdown, the images, the changelog and the
   fs.writeFileSync(path.join(out, 'stale.txt'), 'from an earlier build');
   const { items, files } = buildSite(root, out);
   assert.deepEqual(items, ['later', 'onboarding', 'open-source']);
-  for (const f of ['index.html', 'assets/reader.js', 'assets/icon.svg', 'assets/icon.png', 'docs/work/README.md', 'docs/work/onboarding/intent.pt-BR.md', 'docs/work/onboarding/images/mock-1.jpg', 'CHANGELOG.md', 'docs/work/index.json']) {
+  for (const f of ['index.html', 'assets/reader.js', 'assets/icon.png', 'docs/work/README.md', 'docs/work/onboarding/intent.pt-BR.md', 'docs/work/onboarding/images/mock-1.jpg', 'CHANGELOG.md', 'docs/work/index.json']) {
     assert.ok(files.includes(f), f);
     assert.ok(fs.existsSync(path.join(out, f)), f);
   }
