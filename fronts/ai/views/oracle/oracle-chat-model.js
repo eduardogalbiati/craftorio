@@ -105,15 +105,9 @@
   }
 
   // ---- part 2 (#123): action cards, delegations, wake-ups, the Night watch -------------------
-  // status → [label, pill] (the shared status pill: .pill.pill-<pill>)
-  const ACTION_STATUS = {
-    proposed: ['Waiting for you', 'cancelled'],
-    running: ['Running', 'running'],
-    done: ['Done', 'success'],
-    failed: ['Failed', 'failed'],
-    dismissed: ['Dismissed', 'idle'],
-    undone: ['Undone', 'idle'],
-  };
+  // status → pill (the shared status pill: .pill.pill-<pill>); its label oracle_chat_model.status_<status>, read at
+  // the call so it follows the interface language (#41)
+  const ACTION_STATUS = { proposed: 'cancelled', running: 'running', done: 'success', failed: 'failed', dismissed: 'idle', undone: 'idle' };
   const DELEGATES = { analyzer: 'Analyzer', checker: 'Checker', 'issue-draft': 'Product Owner (issue draft)', 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
 
   /**
@@ -122,7 +116,7 @@
    */
   function actionView(action = {}, { unavailable = false } = {}) {
     const status = action.status || 'proposed';
-    const [label, pill] = ACTION_STATUS[status] || [status, 'idle'];
+    const [label, pill] = ACTION_STATUS[status] ? [t(`oracle_chat_model.status_${status}`), ACTION_STATUS[status]] : [status, 'idle'];
     const preview = !!action.result?.preview;
     return {
       status,

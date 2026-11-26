@@ -782,13 +782,13 @@
   // could not be read. A cut line whose release run started (`stage.release.runId`) places its
   // release (named like the line) and its row gives way to the block.
   // a release's state: [badge tone, label, what it means, what the stages after its cut line wait for]
-  const RELEASE_BLOCK = {
-    checking: ['live', 'Checking', 'Its release run checks the whole unit and E2E suites', 'the stages below wait for the check'],
-    waiting: ['warn', 'Waiting for you', 'Its Ship gate waits for you: open the run to Ship or Hold', 'the stages below wait for Ship'],
-    shipped: ['', 'Shipped', 'Pushed and tagged', ''],
-    held: ['warn', 'On hold', 'Its release run ended without shipping', 'the stages below wait: resume its run from its Ship gate, or Resume the roadmap'],
-    failed: ['error', 'Failed', 'Its release run failed', 'the stages below wait: open the run, then Resume the roadmap to check the release again'],
-  };
+  const RELEASE_BLOCK = (status) => ({ // #41: read at the call, in the interface language
+    checking: ['live', t('backlog_roadmap.release_checking'), t('backlog_roadmap.release_checking_help'), t('backlog_roadmap.release_checking_waits')],
+    waiting: ['warn', t('backlog_roadmap.station_waiting'), t('backlog_roadmap.release_waiting_help'), t('backlog_roadmap.release_waiting_waits')],
+    shipped: ['', t('backlog_roadmap.release_shipped'), t('backlog_roadmap.release_shipped_help'), ''],
+    held: ['warn', t('backlog_roadmap.release_held'), t('backlog_roadmap.release_held_help'), t('backlog_roadmap.release_held_waits')],
+    failed: ['error', t('backlog_roadmap.release_failed'), t('backlog_roadmap.release_failed_help'), t('backlog_roadmap.release_failed_waits')],
+  })[status];
   // the release workflow's stations (workflows/release.yaml)
   const RELEASE_STATIONS = [['unit', 'Unit tests'], ['e2e', 'E2E scenarios'], ['fix', 'Fix'], ['ship', 'Ship']];
   // an item's runs (RoadmapModel.itemRuns); where each release goes and the filter's choice: RoadmapModel.releaseView
@@ -827,7 +827,7 @@
   // The release block: its state, its release run's stations with their rounds, its time, cost and
   // fixes, "Open run" (at the Ship gate, the gate waits there: nothing here answers it).
   // #555: a planned release (its release entry, no run yet) has the same card: Planned, the stages it closes and its estimate
-  const blockState = (x) => (x.status === 'planned' ? ['', t('backlog_roadmap.release_planned'), t('backlog_roadmap.release_planned_help'), ''] : RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking);
+  const blockState = (x) => (x.status === 'planned' ? ['', t('backlog_roadmap.release_planned'), t('backlog_roadmap.release_planned_help'), ''] : RELEASE_BLOCK(x.status) || RELEASE_BLOCK('checking'));
   const closesText = (x) => (x.closes || []).map((c) => `${t('backlog_roadmap.stage')} ${c.number}${c.name ? ` ${c.name}` : ''}`).join(', ');
   const plannedFacts = (x) => [closesText(x) ? t('backlog_roadmap.release_closes', { stages: closesText(x) }) : '',
     x.estimate?.usd != null ? `≈ ${money(x.estimate.usd)}${x.estimate.minutes ? ` · ${mins(x.estimate.minutes)}` : ''}` : ''].filter(Boolean).join(' · ');
@@ -864,7 +864,7 @@
   // short commit, a link to the Releases screen; not shipped, the version, its state and what the
   // stages after its cut line wait for.
   function releaseLineHtml(x) {
-    const [, label, , waits] = RELEASE_BLOCK[x.status] || RELEASE_BLOCK.checking;
+    const [, label, , waits] = RELEASE_BLOCK(x.status) || RELEASE_BLOCK('checking');
     const shipped = x.status === 'shipped';
     const when = shipped && x.date ? t('backlog_roadmap.shipped_on', { date: shortDate(x.date), time: clock(x.date) }) : shipped ? t('backlog_roadmap.shipped') : '';
     const tag = x.tag ? `tag ${x.tag}${x.commit ? ` (${String(x.commit).slice(0, 7)})` : ''}` : '';

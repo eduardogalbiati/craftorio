@@ -61,7 +61,7 @@
    * `skip`: keys never shown (e.g. the mode, which has its own toggle).
    */
   function inputPills(workflow, inputs, { skip = [], defaults = false } = {}) {
-    const defs = workflow?.inputs || {};
+    const defs = (workflow && localized(workflow))?.inputs || {}; // #41: labels and options in the interface language
     return Object.entries(inputs || {}).filter(([k, v]) => v != null && v !== '' && !skip.includes(k)).map(([k, v]) => {
       const def = defs[k] || {};
       const atDefault = def.default != null && String(def.default) === String(v);

@@ -94,6 +94,9 @@
   const belowBar = (c) => !(typeof c.clarity?.score === 'number' && c.clarity.score >= barOf(c));
   // the store's refusal of a move into Ready below the bar (packages/engine/domains/discovery/discovery.js)
   const REFUSED = /below the clarity bar/i;
+  // #41: the store's English refusal redrawn in the interface language from its numbers (else as it came)
+  const refusedWhy = (msg) => { const s = msg.match(/its clarity is (\d+)%, the bar is (\d+)%/), n = msg.match(/no clarity score yet \(the bar is (\d+)%\)/);
+    return s ? t('discovery.refused_score', { score: s[1], bar: s[2] }) : n ? t('discovery.refused_no_score', { bar: n[1] }) : msg; };
 
   // The cards of a column in the board's order (a card the board does not list goes last).
   function cardsIn(column) {
@@ -358,8 +361,8 @@
     } else {
       const n = cardsIn(column).length;
       const why = [];
-      if (col.wip != null && n >= col.wip) why.push(`${col.title} is at its WIP limit (${n} / ${col.wip}).`);
-      if (!isFast(card) && skipsShape(card.column, column)) why.push('This card skips Shape: only bugs and hotfixes take the fast lane.');
+      if (col.wip != null && n >= col.wip) why.push(t('discovery.wip_limit_reached', { title: col.title, n, wip: col.wip }));
+      if (!isFast(card) && skipsShape(card.column, column)) why.push(t('discovery.skips_shape'));
       if (why.length && !(await confirmDialog(t('discovery.move_to_title', { title: col.title }), t('discovery.value_move_title_there_anyway', { value: why.join(' '), title: card.title }), t('discovery.move_anyway')))) return;
     }
     if (projectId !== dv.projectId) return; // another project was chosen while the question was open
@@ -367,7 +370,7 @@
     let moved = null;
     try { moved = await api.moveDiscoveryCard(projectId, id, column, index); } catch (e) {
       const msg = errMsg(e);
-      if (REFUSED.test(msg)) dv.refused = { id, text: `"${card.title}" stays in ${columnOf(card.column)?.title || card.column}. ${msg}` };
+      if (REFUSED.test(msg)) dv.refused = { id, text: t('discovery.refused_stays_in', { title: card.title, column: columnOf(card.column)?.title || card.column, why: refusedWhy(msg) }) };
       else dv.error = msg;
     }
     await refresh();

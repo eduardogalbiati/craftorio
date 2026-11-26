@@ -256,6 +256,7 @@ function stepFlow(w) {
 }
 
 function workflowCard(w) {
+  w = WorkflowInputs.localized(w); // #41: description, modes and stations in the interface language
   const open = wfDefs.open.has(w.file);
   const agents = Object.entries(w.agents || {});
   const avatars = agents.slice(0, 6).map(([n, a]) => `<span class="wf-av" title="${esc(`${n} · ${a.provider}${a.model ? `/${a.model}` : ''}`)}">${robotAvatar(a.provider, a.model, 'idle', w.name, n)}</span>`).join('')
