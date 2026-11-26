@@ -89,8 +89,11 @@ When('I scroll the roadmap down to stage {int}', async ({ e2e }, n) => {
     await expect.poll(() => stages.count(), { timeout: 3000 }).toBeGreaterThan(count).catch(() => {});
   }
   await expect(target).toBeAttached({ timeout: LOAD_TIMEOUT });
-  await stageMenuButton(page, n).scrollIntoViewIfNeeded();
-  await expect(stageMenuButton(page, n)).toBeInViewport();
+  // the roadmap redraws on its runs' events (a stage that starts): scroll again when the button was replaced
+  await expect(async () => {
+    await stageMenuButton(page, n).scrollIntoViewIfNeeded({ timeout: 2000 });
+    await expect(stageMenuButton(page, n)).toBeInViewport({ timeout: 2000 });
+  }).toPass({ timeout: LOAD_TIMEOUT });
 });
 
 // marks the stage's element and its cards (a property on the DOM nodes, nothing in the app: an element

@@ -25,7 +25,6 @@ const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
 
-const ROOT = path.join(__dirname, '..', '..', '..', '..');
 const LOAD_TIMEOUT = 30000;
 // the simulated designer writes the screen and the gallery lists it
 const DESIGNER_TIMEOUT = 60000;
@@ -48,7 +47,7 @@ async function findMockupWindow(e2e) {
 }
 
 Given('the project has the mockup {string} with a button {string}', async ({ e2e }, title, label) => {
-  const mockups = require(path.join(ROOT, 'fronts', 'plan', 'engine', 'domains', 'mockups'));
+  const mockups = require('@craftorio/engine/fronts/plan/domains/mockups');
   const html = `<main class="page"><header class="page-head"><h1>${title}</h1><button class="export">${label}</button></header></main>`;
   const { slug, commit } = mockups.createScreen(path.join(e2e.scratch, 'workspace'), e2e.project.id, { title, html, source: { kind: 'prompt' } });
   expect(slug).toBeTruthy();
@@ -61,7 +60,7 @@ Given('the project has the mockup {string} with a button {string}', async ({ e2e
 Given('the mockup {string} is attached to the Discovery card {string}, in Ready and {int}% clear', async ({ e2e }, title, cardTitle, score) => {
   const seeded = e2e.seededMockups?.[title];
   expect(seeded, `the mockup "${title}" was seeded in this scenario`).toBeTruthy();
-  const mockups = require(path.join(ROOT, 'fronts', 'plan', 'engine', 'domains', 'mockups'));
+  const mockups = require('@craftorio/engine/fronts/plan/domains/mockups');
   const att = mockups.attachment(path.join(e2e.scratch, 'workspace'), e2e.project.id, { slug: seeded.slug, commit: seeded.commit });
   const data = Buffer.from(JSON.stringify(att, null, 2), 'utf8').toString('base64');
   const res = await e2e.window.evaluate(async ({ projectId, cardTitle, score, name, data }) => {
@@ -168,7 +167,7 @@ Then('the designer chat shows a selection chip for {string}', async ({ e2e }, te
 
 const COMPARE_SIDES = ['mockup-compare-before', 'mockup-compare-after'];
 
-const mockups = () => require(path.join(ROOT, 'fronts', 'plan', 'engine', 'domains', 'mockups'));
+const mockups = () => require('@craftorio/engine/fronts/plan/domains/mockups');
 const kitPanel = (page) => view(page).getByTestId('mockups-kit-panel');
 
 // a side of the comparison: its text, whether the side is an element or an iframe

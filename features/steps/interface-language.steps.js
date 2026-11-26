@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
-const { When, Then } = require('./fixtures');
+const { Given, When, Then } = require('./fixtures');
 const { demoProjectCard } = require('../support/run-screen');
 const { tableTexts } = require('../support/english-texts');
 
@@ -261,6 +261,20 @@ Then('the Start panel shows none of these English texts:', async ({ e2e }, table
 Then('the open screen\'s title is {string}', async ({ e2e }, title) => {
   const heading = openScreen(e2e.window).getByRole('heading', { level: 1 }).filter({ visible: true }).first();
   await expect(heading).toHaveText(title, { timeout: LOAD_TIMEOUT });
+});
+
+// #28 with #745: the Backlog shows its platform select (with Bitbucket as coming soon) only for a project
+// whose repository URL names no platform it knows; GitHub's and GitLab's get a badge, a local project
+// neither (#39). The project is written through the projects domain, then the window reloads.
+Given('the workspace has a project {string} whose repository is on a host the app cannot tell', async ({ e2e }, name) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const engine = (...p) => require(path.join(__dirname, '..', '..', 'packages', 'engine', ...p));
+  const projects = engine('domains', 'project', 'projects');
+  const dir = engine('domains', 'workspace', 'workspace').setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false }).projects;
+  const created = await projects.createProject(dir, { name, description: 'A project on a self-hosted git server (simulated data)' });
+  projects.updateProject(dir, created.id, { repo: `https://git.example.com/team/${name}` });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
 });
 
 // an option of a visible select of the open screen, e.g. the Backlog's platform select "Bitbucket (em breve)"

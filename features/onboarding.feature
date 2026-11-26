@@ -71,8 +71,12 @@ Feature: Bring a project in with a guided wizard
     Then the project wizard closes right away
     And the project page of "review-642" is open
     And the project page shows the Next steps card
-    And the Next steps card offers "issue with the PO", "idea" and "Keep refactoring"
-    And the Next steps card shows "release CI" and "screenshots" as coming later
+    # #22: the idea typed in the review is in the Inbox, so the idea step is marked done (no "Open the Inbox");
+    # #75: the sample's code is a Node backend (no web framework, no UI folder), so no screenshots step
+    And the Next steps card offers "issue with the PO" and "Keep refactoring"
+    And the Next steps card shows the first idea as captured
+    And the Next steps card shows "release CI" as coming later
+    And the Next steps card does not propose investigating screenshots
     When I open "Inbox" in the sidebar
     Then the Inbox lists the idea "Export the city as an image"
 
@@ -590,10 +594,11 @@ Feature: Bring a project in with a guided wizard
     Then the project page shows the Next steps card
     And the Next steps card has no refactors step and no button that adds 0
 
+  # #75: the screenshots step is only kept for a project with a user interface, so the repository is a web front end
   @issue-744
   Scenario: A step of the Next steps card that cannot be used yet says why, in its tooltip and in a visible line
     Given the app is open
-    And a local git repository is ready to import
+    And a local git repository of a web front end is ready to import
     When I open the project wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "later-744"

@@ -1,3 +1,5 @@
+# @webgl: the city has to be drawn, so the app gets software WebGL where there is no GPU (Xvfb, WSL, CI)
+@webgl
 Feature: The project city opens framing the whole city, and zoom out moves the camera away
   The City (the City tab of a project, the city expanded over the whole window) opens with every
   district and the top of the tallest building in sight, even when one file is far larger than the rest

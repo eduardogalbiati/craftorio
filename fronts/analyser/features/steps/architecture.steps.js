@@ -97,7 +97,12 @@ const visible = (locator) => locator.filter({ visible: true });
 // Architecture tab. The modal comes last in the document, so it wins when both are shown.
 // #730: the Architecture tab is split into the City tab (#project-panel-city) and the Health tab
 // (#project-panel-health, the facts); the one shown is the one these steps read.
-const tab = (page) => visible(page.locator('[data-testid="city-modal"], [data-testid="project-page"] :is(#project-panel-architecture, #project-panel-city, #project-panel-health)')).last();
+// #381: the city expanded over the whole window is position: fixed, so the City tab around it has no
+// box of its own and Playwright counts it as hidden: the tab that holds an expanded city is the shown one too.
+const tab = (page) => {
+  const panels = page.locator('[data-testid="city-modal"], [data-testid="project-page"] :is(#project-panel-architecture, #project-panel-city, #project-panel-health)');
+  return visible(panels).or(panels.filter({ has: page.locator('[data-testid="project-city"].expanded') })).last();
+};
 const byId = (page, id) => visible(tab(page).getByTestId(id)).first();
 // #730: the City's action is the city's own button, or the tab's when the city did not load
 const analyzeButton = (page) => visible(tab(page).locator('[data-testid="architecture-analyze"], [data-testid="project-city-analyze"]')).first();
@@ -523,10 +528,10 @@ Then('the {string} button shows its cost estimate or says there is none yet', as
     .toMatch(/≈\s*US\$\s*\d|no estimate yet/i);
 });
 
+// one check for both (shown, and saying so): the simulated run lasts about a second, so a second
+// check after "visible" could find it already gone
 Then('the City tab shows the analysis running', async ({ e2e }) => {
-  const running = analyzing(e2e.window).first();
-  await expect(running).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
-  await expect(running).toContainText(/Analyzing this project/i);
+  await expect(analyzing(e2e.window).filter({ hasText: /Analyzing this project/i }).first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
 });
 
 Then('the City tab no longer shows the analysis running', async ({ e2e }) => {

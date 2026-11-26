@@ -58,6 +58,14 @@ const show = process.env.CRAFTORIO_E2E_SHOW === '1';
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
+// #849: a machine without a usable GPU (Xvfb on Linux, WSL, a CI runner) has WebGL turned off, so the
+// City and the run's 3D view would only say "WebGL is not available". A scenario tagged @webgl
+// (CRAFTORIO_E2E_SOFTWARE_WEBGL=1, features/steps/fixtures.js) gets Chromium's software WebGL
+// (SwiftShader), only a fallback: where the GPU works, WebGL stays on it, and nothing but WebGL changes
+// (compositing and rasterization stay as they were). Not for every scenario: a city drawn in software
+// keeps the renderer busy, and a scenario that watches a short simulated run (the City's "Analyzing")
+// would miss it.
+if (process.env.CRAFTORIO_E2E_SOFTWARE_WEBGL === '1') app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 // #329: the scenarios run in English whatever the computer's language (the interface follows it until chosen)
 app.commandLine.appendSwitch('lang', 'en-US');
 

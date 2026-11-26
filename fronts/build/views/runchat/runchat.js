@@ -138,6 +138,15 @@
       ${resumeButton()}<button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_another')}">${t('runchat.resume_from_step')}</button></div>`;
   }
 
+  // the gate's summary card (#213); #30: a check_environment gate says its cause in one line, in the
+  // interface language (as on the Run screen), instead of the engine's English card
+  function gateSummaryHtml(it, open, full) {
+    const envText = window.gateEnvironmentText?.(it) || '';
+    if (envText) return `<p class="gate-card-what" data-testid="check-environment-message">${esc(envText)}</p>`;
+    if (it.brief?.headline) return window.gateCardHtml?.(chat.runId, open ? it : { ...it, runApp: false, localPreview: null }, full);
+    return open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
+  }
+
   function gateHtml(it) {
     const off = !chat.live || it.resolved || it.closed ? ' disabled' : '';
     // #288: a gate an interrupted run left waiting: nobody can take the answer, resuming brings it back
@@ -150,7 +159,7 @@
     const buttons = choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
       const title = waits ? why : c.intent ? c.title : '';
-      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
+      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-testid="run-gate-choice" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
     }).join('')
       + (stale ? resumeButton() : '')
       // #183: "Interact with Oracle" at the end of the row
@@ -168,13 +177,12 @@
     // a report (#290: the release summary) leads the message, rendered on its own
     const parts = window.gateReportParts?.(it) || { reportHtml: '', message: it.message };
     const full = `${parts.reportHtml}<div class="rc-body md">${md(parts.message)}</div>`;
-    const card = it.brief?.headline ? window.gateCardHtml?.(chat.runId, open ? it : { ...it, runApp: false, localPreview: null }, full)
-      : open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
+    const card = gateSummaryHtml(it, open, full);
     const help = !it.resolved && !it.closed && !waits ?window.gateButtonsHelpHtml?.(it) || '' : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
     const main = `<div class="duo-meta"><b>${t('runchat.human_gate')}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
       ${card || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${help}${state}`;
-    return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-gate="${esc(it.approvalId)}">
+    return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-testid="run-chat-gate" data-gate="${esc(it.approvalId)}">
       ${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div></div>`;
   }
 

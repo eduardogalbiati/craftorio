@@ -215,11 +215,14 @@ test('#183 Run screen (renderRunGates): the gate card has the Interact with Orac
 test('#183 run chat (gateHtml): the gate card has the Interact with Oracle button next to its choices', () => {
   const fn = /\n {2}function gateHtml\(it\) \{[\s\S]*?\n {2}\}/.exec(runchatSrc)?.[0];
   assert.ok(fn, 'gateHtml not found in views/runchat/runchat.js: the source moved');
+  // its summary card (gateSummaryHtml, #30's environment line) is a function of its own
+  const summary = /\n {2}function gateSummaryHtml\(it, open, full\) \{[\s\S]*?\n {2}\}/.exec(runchatSrc)?.[0];
+  assert.ok(summary, 'gateSummaryHtml not found in views/runchat/runchat.js: the source moved');
   const sandbox = gateSandbox({ chat: { live: true, runId: RUN_ID } });
   vm.runInContext(
     'const md = (t) => `<pre>${esc(t)}</pre>`; const clock = () => "10:00";'
     + 'const stepTag = (s) => `<span class="rc-step">${esc(s)}</span>`;'
-    + `${fn}\nthis.gateHtml = gateHtml;`,
+    + `${summary}\n${fn}\nthis.gateHtml = gateHtml;`,
     sandbox,
   );
   const html = sandbox.gateHtml({

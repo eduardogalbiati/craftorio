@@ -10,6 +10,8 @@
 // What the screens expose (the renderer's contract for these steps):
 // - data-testid="run-gate": the gate card (existing), data-run its run; its summary reads "step: <id>";
 //   data-testid="run-gate-choice": its choice buttons (existing), named by their label;
+// - data-testid="run-chat-gate": the same gate in the run chat, with the same choices and cause: the run
+//   reopens in the view it was left in (a remembered Chat), so the sidebar's run may land on either;
 // - data-testid="check-environment-message" (NEW): inside the gate card, the one-line cause, e.g.
 //   en "the project's dependencies are not installed: run npm ci in <folder>",
 //   pt-BR "as dependências do projeto não estão instaladas: rode npm ci em <pasta>";
@@ -29,7 +31,7 @@ const LOAD_TIMEOUT = 30000;
 const GATE_TIMEOUT = 120000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const stepIdOf = (name) => name.trim().toLowerCase().replace(/\s+/g, '_');
-const visibleGates = (page) => page.getByTestId('run-gate').filter({ visible: true });
+const visibleGates = (page) => page.getByTestId('run-gate').or(page.getByTestId('run-chat-gate')).filter({ visible: true });
 const gateCard = (page) => visibleGates(page).first();
 const environmentMessage = (page) => gateCard(page).getByTestId('check-environment-message');
 const gateChoice = (page, name) => gateCard(page).getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) });

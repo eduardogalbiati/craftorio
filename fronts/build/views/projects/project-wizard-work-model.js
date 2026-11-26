@@ -29,10 +29,11 @@
       return true;
     }
 
-    // #851: Light, the default, carries the Recommended label
+    // #851: Light, the default, carries the Recommended label, after a space: the radio's name reads
+    // "Light Recommended …", not "LightRecommended …" (the badge is an inline element of the label)
     const choice = (id) => `<label class="wizard-choice">
         <input type="radio" name="wizard-work-model" value="${esc(id)}" id="wizard-work-model-${esc(id)}" data-testid="wizard-work-model-${esc(id)}"${picked() === id ? ' checked' : ''}>
-        <span><strong>${esc(t(`onboarding.work_model_${id}`))}${id === 'light' && recommended ? recommended() : ''}</strong><span class="muted small">${esc(t(`onboarding.work_model_${id}_text`))}</span></span>
+        <span><strong>${esc(t(`onboarding.work_model_${id}`))}${id === 'light' && recommended ? ` ${recommended()}` : ''}</strong><span class="muted small">${esc(t(`onboarding.work_model_${id}_text`))}</span></span>
       </label>`;
 
     // "Where the files live": #851 only for Standard and Full (Light writes nothing to docs/work/)

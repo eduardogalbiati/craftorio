@@ -388,6 +388,8 @@
         localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
         // Run App without a config (#108): the step has local_preview: true
         runApp: !!ev.run_app,
+        // #30: a check_environment gate's cause ({ reason, dir, manager, install, command }), said in one line
+        environment: ev.environment || null,
         // "Accept and save to issue #n" ({ choice, issue }) in a run about an issue (#125)
         saveToIssue: ev.save_to_issue || null,
         resolved: null, closed: false,
