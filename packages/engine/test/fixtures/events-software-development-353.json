@@ -246,7 +246,7 @@
     {"type":"session.message_received","step_id":"build","session.provider":"mock","session.simulates":"claude"},
     {"type":"handoff.saved","step_id":"build"},
     {"type":"session.updated","session.provider":"mock","session.simulates":"claude"},
-    {"type":"step.finished","step_id":"build","output":{"build_status":"success","dev_vulnerabilities":"(simulated) dev_vulnerabilities","failure_class":"code","report":"(simulated) report","vulnerabilities":{"critical":0,"high":0,"low":0,"moderate":0}}},
+    {"type":"step.finished","step_id":"build","output":{"build_status":"success","dev_vulnerabilities":"(simulated) dev_vulnerabilities","failure_class":"code","preexisting_vulnerabilities":"(simulated) preexisting_vulnerabilities","report":"(simulated) report","vulnerabilities":{"critical":0,"high":0,"low":0,"moderate":0}}},
     {"type":"step.transition","from":"build","to":"evidence"},
     {"type":"step.started","step_id":"evidence"},
     {"type":"log"},

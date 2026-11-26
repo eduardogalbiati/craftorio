@@ -8,6 +8,7 @@
 // #630 removed software-development.yaml (now feature.yaml in remote mode, tests first, the merge
 // left to the team on the platform): re-recorded from feature.yaml (#723), two runs gave 443 events.
 // #725: the E2E steps use new wizard test ids, so the testid_check step's message lists 151 (was 146).
+// The build step's output gains `preexisting_vulnerabilities` (a vulnerability already on the base, never blocking).
 // #724 #739 #743: the onboarding E2E steps use the wizard's new test ids: 156.
 // #726: the "Why" label's test id wizard-workflow-why: 157.
 // #731: the onboarding E2E steps check the project's City and Architecture tab test ids: 160.

@@ -31,6 +31,20 @@ Use the tool's severity when it gives one. Otherwise take the CVSS score from th
 If the severity cannot be determined, count it as **high** and say so. Being wrong on the safe
 side costs a fix; being wrong the other way ships a vulnerability.
 
+## What the change brings, and what was already there
+
+A run blocks only on what its change brings: a vulnerable package the branch added, or one whose
+version it changed, in the manifests and lockfiles since the base. A vulnerability already on the base
+(the change did not touch that dependency) is reported apart, as preexisting, and never blocks the run:
+an old Next.js advisory must not stop a one-line text change, and no run fixes it on the side.
+
+## Fixes
+
+The smallest fix that removes the vulnerability: a patch or minor version, or the ecosystem's override
+for a transitive dependency. Never upgrade across a major version, and never change a dependency the
+change did not touch, unless the task asks for it. When only a major upgrade fixes it, report it with
+that fix and change nothing.
+
 ## Exit codes are not build failures
 
 Audit tools exit non-zero when they find vulnerabilities. Only a failure to install, compile or
