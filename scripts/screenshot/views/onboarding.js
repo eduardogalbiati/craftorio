@@ -20,6 +20,8 @@
 // no Retry (the simulation-only hook CRAFTORIO_E2E_ISSUES_FAIL answers the issue read as gh does)
 // --review running (with --mode review, #852): the project map still running, City and Findings with the same
 // running indicator, the languages bar's loading placeholder
+// --review no-push (with --mode review, #79): the clone's push check fails (the simulation-only hook
+// CRAFTORIO_E2E_GIT_PUSH=0), the review shows wizard-push-notice with its "Run gh auth setup-git" button
 // Nothing reaches the network nor a model (CRAFTORIO_SIMULATION_ONLY).
 
 const fs = require('fs');
@@ -82,6 +84,8 @@ function seed({ args, ws, project, projects, workspace }) {
   workspace.writeSettings(ws, { lastProject: null });
   reachableRepo = null;
   if (args.review === 'issues-off') process.env.CRAFTORIO_E2E_ISSUES_FAIL = 'disabled';
+  // #79: the clone's push check fails as git does without credentials: the review shows wizard-push-notice
+  if (args.review === 'no-push') process.env.CRAFTORIO_E2E_GIT_PUSH = '0';
   if (['analysis', 'review'].includes(args.mode)) {
     const folder = path.join(ws.root, 'onboarding-demo', 'billing-api');
     fs.rmSync(folder, { recursive: true, force: true });
@@ -197,8 +201,9 @@ async function open({ args, click, js, pause, win }) {
 module.exports = {
   modes: MODES,
   open,
-  // #845: the review of a repository with Issues turned off; #852: the review with the project map still running
-  options: { review: ['issues-off', 'manual', 'running'] },
+  // #845: the review of a repository with Issues turned off; #852: the review with the project map still running;
+  // #79: the review of a clone that cannot push (its push notice and setup-git button)
+  options: { review: ['issues-off', 'manual', 'no-push', 'running'] },
   sampleRepository,
   seed,
   typeIn,
