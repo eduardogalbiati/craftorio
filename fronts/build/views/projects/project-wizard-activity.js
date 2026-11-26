@@ -6,7 +6,8 @@
 // - followAnalysis(): api.workflowInterviewState while the profile job runs: at each onboarding:changed and every
 //   second, one last read when it ended, none before nor after. A failed read changes nothing;
 // - backlogLine(): wizard-review-backlog-activity while the backlog is read (api.backlogProgress at the opening and
-//   every second, followBacklog), backlogBody(): its summary and issues, that it is empty, or that the repository has
+//   every second, followBacklog), backlogBody(): its summary and issues (#37: open, not archived, most recent first,
+//   counted as open; window.BacklogArchive), that none is open, or that the repository has
 //   Issues turned off (#845: wizard-review-backlog-issues-disabled, a link to its settings, no Retry), and backlogFailure(): the
 //   failed read's reason with wizard-review-backlog-retry (readBacklog(pid) reads it; onClick(e), before the wizard's: that Retry);
 // - #852 languagesBlock(state): the review's project card languages: the bar once the facts are read, before that
@@ -108,7 +109,14 @@
       return Line().html({ state: 'running', testid: 'wizard-review-backlog-activity', text: source ? t('onboarding.backlog_reading_from', { source }) : t('onboarding.review_pending_backlog'), meta });
     }
 
-    const backlogDone = (count) => Line().html({ state: 'done', testid: 'wizard-review-backlog-activity', text: t('onboarding.review_backlog_empty'), summary: count ? t('onboarding.backlog_read', { count }) : '' });
+    const backlogDone = (count) => Line().html({ state: 'done', testid: 'wizard-review-backlog-activity', text: t('onboarding.review_backlog_empty'), summary: count ? t('onboarding.backlog_open', { count }) : '' });
+
+    // #37: the work to do: open issues without the `archived` label (BacklogArchive), most recent first
+    const updatedAt = (i) => Date.parse(i.updatedAt) || 0;
+    const openIssues = (issues) => {
+      const A = window.BacklogArchive;
+      return (issues || []).filter((i) => A.issueState(i) === 'open' && !A.hasLabel(i, A.ARCHIVED_LABEL)).sort((a, b) => updatedAt(b) - updatedAt(a));
+    };
 
     // the Backlog card of a failed read: its reason with its Retry; '' with none
     function backlogFailure() {
@@ -128,7 +136,7 @@
     // the Backlog card once read: the summary and the issues, or that it is empty
     function backlogBody() {
       if (cur().review.backlog?.issuesDisabled) return issuesDisabledBody(cur().review.backlog);
-      const issues = cur().review.backlog?.issues || [];
+      const issues = openIssues(cur().review.backlog?.issues);
       if (!issues.length) return backlogDone(0);
       return `${backlogDone(issues.length)}<ul class="wizard-review-list">${issues.map((i) => `<li class="fit-box"><span class="mono muted">#${esc(i.number)}</span> <span class="text-cut" title="${esc(i.title)}">${esc(i.title)}</span></li>`).join('')}</ul>`;
     }

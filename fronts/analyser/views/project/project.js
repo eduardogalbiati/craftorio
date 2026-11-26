@@ -28,6 +28,8 @@
 // clone has a lockfile and no node_modules (api.onboardingStatus's deps), names the command and runs it
 // (api.installOnboardingDeps: npm ci, --ignore-scripts per the project's setting);
 // #35: a project with no repository (created without a remote) has a local backlog, so its first entry is the PO's too;
+// #40: next-step-accept-workflows, shown while some repository workflows await acceptance (api.listWorkflows repositoryOnly,
+// awaitsAcceptance), leads to Workflows › Definitions (Actions showWorkflowDefinition);
 // next-steps-dismiss), remembered per project in localStorage craftorio.nextSteps.
 // openProjectView (the Projects cards, the Conflict map links, scripts/screenshot.js) and
 // loadProjectRunsThrottled (app.js run events) stay globals. Registers itself with registerView
@@ -57,6 +59,8 @@ const PV_NEXT_STEPS_KEY = 'craftorio.nextSteps';
 // #744: the PO's issue first
 const PV_NEXT_STEPS = [
   ['po-issue', 'onboarding.next_steps_po_issue', 'onboarding.next_steps_po_issue_text', 'onboarding.open_po', null],
+  // #40: shown only while some of the repository's own workflows await the owner's acceptance
+  ['accept-workflows', 'onboarding.next_steps_accept_workflows', 'onboarding.next_steps_accept_workflows_text', 'onboarding.review_and_accept', null],
   // #30: shown only while the imported clone has a lockfile and no installed dependencies
   ['install-deps', 'onboarding.deps_title', 'onboarding.deps_missing', 'onboarding.deps_install', null],
   ['refactors', 'onboarding.next_steps_refactors', null, 'onboarding.next_steps_file_add', null],
@@ -105,6 +109,17 @@ function loadNextStepDeps(pv) {
   pv.nextStepDeps = null;
   new Promise((resolve) => resolve(api.onboardingStatus?.(pv.id))).then((s) => s?.deps || null, () => null).then((deps) => {
     pv.nextStepDeps = deps;
+    if (state.pv === pv && state.view === 'project') renderProjectView();
+  });
+}
+
+// #40: the repository's workflows awaiting the owner's acceptance (awaitsAcceptance, workflows-acceptance.js), read
+// once per page and again on the way back (show() clears it: an acceptance on Definitions takes the entry away)
+function loadNextStepAwaiting(pv) {
+  if (nextSteps()[pv.id] !== 'open' || pv.nextStepAwaiting !== undefined) return;
+  pv.nextStepAwaiting = null;
+  new Promise((resolve) => resolve(api.listWorkflows?.({ projectId: pv.id, repositoryOnly: true }))).then((list) => list, () => []).then((list) => {
+    pv.nextStepAwaiting = (Array.isArray(list) ? list : []).filter((w) => window.awaitsAcceptance?.(w));
     if (state.pv === pv && state.view === 'project') renderProjectView();
   });
 }
@@ -193,6 +208,7 @@ function nextStepsMarkup(pv) {
   // #35: the PO's entry stays first with or without a repository (a project with none has a local backlog)
   const shown = PV_NEXT_STEPS.filter(([step]) => (step !== 'refactors' || !Array.isArray(pv.nextStepProposals) || pv.nextStepProposals.length)
     && (step !== 'screenshots' || hasInterface(pv))
+    && (step !== 'accept-workflows' || pv.nextStepAwaiting?.length)
     && (step !== 'install-deps' || ['missing', 'installing', 'failed'].includes(pv.nextStepDeps?.status)));
   // mock-7's head: "<name> is ready", its workflows' count, then "city and refactor backlog done" once the
   // ranking made proposals
@@ -224,6 +240,8 @@ function onNextStepClick(step) {
   // #744: the Product Owner's chat in issue mode on this project (the Build front's backlog-po.js)
   else if (step === 'po-issue' && state.pv) window.Actions?.call('openPoIssue', state.pv.id);
   else if (step === 'install-deps') installNextStepDeps(state.pv);
+  // #40: Workflows › Definitions at the first workflow awaiting acceptance (the owner accepts it there)
+  else if (step === 'accept-workflows' && state.pv?.nextStepAwaiting?.length) window.Actions?.call('showWorkflowDefinition', state.pv.nextStepAwaiting[0].file);
   else if (step === 'idea') showView('inbox');
   else if (step === 'cadence' && state.pv) {
     state.pv.tab = 'health';
@@ -236,7 +254,7 @@ function newProjectPage(id) {
   const tab = projectTabs()[id];
   return {
     id, project: state.projects.find((p) => p.id === id) || null, runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map(),
-    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepDeps: undefined, nextStepKind: undefined, nextStepKindRead: null, nextStepPicked: new Set(),
+    nextStepProposals: undefined, nextStepIdeas: undefined, nextStepDeps: undefined, nextStepAwaiting: undefined, nextStepKind: undefined, nextStepKindRead: null, nextStepPicked: new Set(),
     tab: PV_TABS.some(([t]) => t === tab) ? tab : 'overview',
   };
 }
@@ -324,6 +342,7 @@ function renderProjectView() {
   loadNextStepProposals(pv);
   loadNextStepIdeas(pv);
   loadNextStepDeps(pv);
+  loadNextStepAwaiting(pv);
   loadNextStepKind(pv);
   $('#project-next-steps-box').innerHTML = nextStepsMarkup(pv);
   $('#project-info').innerHTML = `
@@ -435,6 +454,7 @@ registerView({
     else if (state.pv) {
       state.pv.nextStepIdeas = undefined; // #22: the Inbox read again on the way back
       state.pv.nextStepKindRead = null; // #75: and the kind (a user interface may have been added)
+      state.pv.nextStepAwaiting = undefined; // #40: and the acceptance (accepted on Definitions meanwhile)
     }
     renderProjectView();
     loadProjectRuns(state.pv?.runs ? 'refresh' : 'reset');

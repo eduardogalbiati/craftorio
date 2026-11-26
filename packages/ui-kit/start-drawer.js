@@ -16,6 +16,8 @@
 // #50: #start-checks (start-check-commands) shows, for a workflow with a check_command and a project, the rule checks
 // the run will use: the Check command field's, else those found in the project; `data-state="off"` when off.
 // #69: #start-real-note, above Start, says a real run uses the CLI subscriptions; hidden while Simulation is checked.
+// #40: a project whose default is a repository workflow awaiting acceptance (awaitsAcceptance, workflows-acceptance.js)
+// opens on the bundled Feature (DefaultWorkflow.LOCAL), not lastWorkflow, and #start-awaiting-note links to Definitions.
 
 const LS_KEY = 'craftorio.inputs';
 const PIPE = 'pipe:';
@@ -47,7 +49,11 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   // only when Start offers it: a default the Setup hid (#319) falls back to lastWorkflow, not the first listed
   const defaultFile = projectDefault && `${projectDefault}.yaml`;
   const offered = state.workflows.some((w) => w.file === defaultFile && !hiddenFromStart(w));
-  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || (offered ? defaultFile : state.settings.lastWorkflow));
+  // #40: a repository default awaiting the owner's acceptance falls back to the bundled Feature, never lastWorkflow
+  const awaiting = !offered && rec && projectDefault ? await defaultAwaitsAcceptance(rec.id, projectDefault) : false;
+  renderAwaitingNote(awaiting ? projectDefault : null);
+  const fallback = awaiting ? window.DefaultWorkflow?.LOCAL : state.settings.lastWorkflow;
+  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || (offered ? defaultFile : fallback));
   if (inputs && (!workflow || state.wf?.file === workflow)) {
     for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
@@ -65,6 +71,28 @@ function renderRealNote() {
   if (!el) return;
   el.textContent = t('start_drawer.real_run_note');
   el.classList.toggle('hidden', devMode() && !!$('#mock-toggle')?.checked);
+}
+
+// #40: whether the project's default is one of its repository workflows still awaiting acceptance
+// (api.listWorkflows() without a project does not list them)
+async function defaultAwaitsAcceptance(projectId, name) {
+  const repo = await Promise.resolve().then(() => api.listWorkflows({ projectId, repositoryOnly: true })).catch(() => []);
+  return (repo || []).some((w) => (w.name === name || w.file === `${name}.yaml`) && window.awaitsAcceptance?.(w));
+}
+
+// #40: the hint naming the default that awaits acceptance, with a way to Workflows › Definitions
+function renderAwaitingNote(name) {
+  const el = $('#start-awaiting-note');
+  if (!el) return;
+  el.classList.toggle('hidden', !name);
+  el.innerHTML = name
+    ? `${esc(t('start_drawer.default_awaiting_acceptance', { name }))} <button type="button" class="link-btn" data-testid="start-drawer-open-definitions">${esc(t('start_drawer.open_definitions'))}</button>`
+    : '';
+  el.onclick = (e) => {
+    if (!name || !e.target?.closest?.('button')) return;
+    closeDrawer();
+    window.Actions?.call('showWorkflowDefinition', `${name}.yaml`);
+  };
 }
 
 // The drawer's main free-text field (usually `task`), picked by selectWorkflow()

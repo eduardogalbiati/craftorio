@@ -505,7 +505,7 @@
     const r = cur.review;
     const later = sectionState('projectMap', true) === 'later' && cur.model.source !== 'new' ? `<p class="muted small">${esc(t('onboarding.review_later'))}</p>` : '';
     const openCity = `<button type="button" class="btn sm" data-act="open-city" data-testid="wizard-open-city">${esc(t('onboarding.open_city'))}</button>`;
-    return `<div class="wizard-review" data-testid="wizard-review">${later}${pushNotice(cur.onboarding)}
+    return `<div class="wizard-review" data-testid="wizard-review">${later}${pushNotice(cur.onboarding)}${column.awaitingNotice()}
         <div class="wizard-review-grid">
           ${projectCard()}
           ${reviewSection('city', 'onboarding.review_city_title', 'projectMap', r.city !== undefined, cityBody, 'onboarding.review_pending_city', openCity)}
@@ -828,9 +828,11 @@
     else if (act === 'workflows-analyze' && cur.projectId) await analyze();
     else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
     else if (act === 'finish') finish();
+    // #40: the default awaiting acceptance opens on Workflows › Definitions (the onboarding goes on, in the tray)
+    else if (act === 'review-accept') { const file = `${e.target.closest('[data-act]').dataset.workflow}.yaml`; close(); window.Actions?.call('showWorkflowDefinition', file); }
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
-      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, ...freshReview() };
+      cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, awaiting: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }
