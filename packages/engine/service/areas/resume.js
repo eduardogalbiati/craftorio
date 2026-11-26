@@ -175,7 +175,7 @@ module.exports = (ctx) => {
     const stop = runStop(r.runId);
     let wfSteps = [];
     try { if (r.file) wfSteps = loadWorkflow(ctx.projectWorkflowFile(r.projectId, r.file)).steps; } catch { /* the workflow is gone: the facts without its steps */ }
-    const stepName = (id) => wfSteps.find((s) => s.id === id)?.name || displayName(id);
+    const stepName = (id) => wfSteps.find((s) => s.id === id)?.name || displayName(id, null, 'en');
     const at = stepName(stop.stoppedAt) || 'its first step';
     const firstLine = String(r.error || '').split('\n')[0].trim();
     const reason = stop.limit ? `Stopped by a limit (${stop.limit}) at ${at}${r.status === 'interrupted' ? ', then the app closed' : ''}.`

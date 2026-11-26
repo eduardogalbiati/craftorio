@@ -204,10 +204,7 @@ function suiteCardsHtml(runId, stepNames) {
     const listed = Object.values(sel.reasons || {}).length > 0 && Object.values(sel.reasons).every((why) => /^listed by /.test(why));
     const scope = t(sel.mode === 'all' ? 'run.suite_whole' : listed ? 'run.suite_listed' : out.affected && out.scope === 'full' ? 'run.suite_affected_then_whole' : 'run.suite_affected_only');
     // #41: the engine's English "listed by <step>" / "the N test file(s) the step lists" redrawn in the interface language
-    const reasons = Object.entries(sel.reasons || {}).map(([f, why]) => {
-      const by = /^listed by (.+)$/.exec(why);
-      return [f, by ? t('run.suite_listed_by', { step: agentLabel(by[1], stepNames) }) : why];
-    });
+    const reasons = Object.entries(sel.reasons || {}).map(([f, why, by = /^listed by (.+)$/.exec(why)]) => [f, by ? t('run.suite_listed_by', { step: agentLabel(by[1], stepNames) }) : why]);
     const lists = /^the (\d+) test file\(s\) the step lists(?: \(not found: (.+)\))?$/.exec(sel.why || '');
     const why = lists ? t('run.suite_listed_why', { count: lists[1] }) + (lists[2] ? ` ${t('run.suite_listed_missing', { files: lists[2] })}` : '') : sel.why;
     const more = reasons.length - SUITE_REASONS_SHOWN;

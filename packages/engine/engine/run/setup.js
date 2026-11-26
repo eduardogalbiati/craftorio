@@ -225,7 +225,7 @@ const methods = {
   // #245: what the screens call each agent and step (the YAML's `display`, else the readable id),
   // recorded in workflow.started so a past run keeps its own version's names
   displayNames() {
-    const named = (id, x) => (typeof x?.display === 'string' && x.display.trim()) || displayName(id);
+    const named = (id, x) => (typeof x?.display === 'string' && x.display.trim()) || displayName(id, null, 'en');
     return {
       agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, named(k, a)])),
       steps: Object.fromEntries(this.wf.steps.map((s) => [s.id, named(s.id, s)])),

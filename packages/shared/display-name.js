@@ -20,21 +20,22 @@
     }).join(' ');
   }
 
-  function one(slug, names) {
+  function one(slug, names, lang) {
     const key = String(slug || '').trim();
     if (!key) return '';
     const own = names && typeof names[key] === 'string' && names[key].trim() ? names[key].trim() : '';
     const plain = derived(key);
     const I18n = i18n();
-    if (!I18n?.translated) return own || plain;
+    if (lang === 'en' || !I18n?.translated) return own || plain;
     const catalogKey = `agent_names.${key}`;
     const english = I18n.t(catalogKey, {}, 'en');
     if (own && own !== plain && own !== english) return own;
     return I18n.translated(catalogKey, own || plain);
   }
 
-  function displayName(slug, names) {
-    return String(slug || '').split(' · ').map((s) => one(s, names)).filter(Boolean).join(' · ');
+  /** `lang` 'en': the recorded English name, never translated (the engine records names with it). */
+  function displayName(slug, names, lang) {
+    return String(slug || '').split(' · ').map((s) => one(s, names, lang)).filter(Boolean).join(' · ');
   }
 
   if (typeof module === 'object' && module.exports) module.exports = { displayName };
