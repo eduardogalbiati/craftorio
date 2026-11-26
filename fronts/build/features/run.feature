@@ -404,6 +404,19 @@ Feature: Runs and gates
     When I switch the run to its chat
     Then the run chat's summary says "no tests"
 
+  # ---- #81: a project with no test runner ------------------------------------------------------------
+  # A plain HTML site or a Markdown-only repository: no test command can be found. The run does not stop
+  # at the test gate for it: it goes on to the build and says it was not tested for lack of a command.
+  @issue-81
+  Scenario: A run on a project with no test runner says it was not tested for lack of a test command
+    Given the app is open
+    And the demo project has a finished AI Development run "cmd00081" whose suite was not run because there is no test command
+    When I open "Runs" in the sidebar
+    And I search the runs for "cmd00081"
+    And I view the run "cmd00081" from the list
+    Then the run shows a "Not tested: no test command" pill
+    And the run's pill does not say "Not tested green"
+
   @issue-71
   Scenario: A run whose gate the supervisor answered says so in its chat
     Given the app is open

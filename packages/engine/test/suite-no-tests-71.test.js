@@ -10,7 +10,7 @@
 //   fail or blocked), its message says "not run: the project has no tests";
 // - going on from it records `tested: "no tests"` (the transition's `set`), never "not green";
 // - the input `no_tests: continue | ask` (default continue) of both workflows keeps the gate with `ask`;
-// - test files with no command found: still `blocked`, the reason says so and names test_command.
+// - test files with no command found: no longer `blocked` since #81 (no-test-runner-81.test.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -45,7 +45,8 @@ function repo(t, files) {
 }
 const passing = async () => ({ code: 0, timedOut: false, error: null });
 const suiteOf = (t, files, opts = {}) => runSuite({ command: '', cwd: repo(t, files), runDir: tmp(t, 'no-tests-71-run-'), round: 1, run: passing, ...opts });
-const TEST_FILES = { 'test/app.test.js': "require('node:test');\n" };
+// a suite that could not run for want of a command (#81: no longer what test files without a command give)
+const BLOCKED = { kind: 'suite', status: 'blocked', round: 1, failures: [], reason: "no test command: set the workflow's test_command input", message: "The suite could not run: no test command: set the workflow's test_command input" };
 
 // the suite step's first matching transition for this output
 function route(name, output, inputs = {}) {
@@ -74,12 +75,7 @@ test('#71 suite: source files without tests (no manifest) are still a project wi
   assert.equal(out.status, 'not_run');
 });
 
-test('#71 suite: test files but no command found stays blocked, says there are test files and to set test_command', async (t) => {
-  const out = await suiteOf(t, TEST_FILES);
-  assert.equal(out.status, 'blocked');
-  assert.match(out.reason, /test_command/);
-  assert.match(out.reason, /test files?/i);
-});
+// #81: test files with no command found are no longer blocked (no-test-runner-81.test.js)
 
 test('#71 suite: a given command runs even without a test file', async (t) => {
   const out = await suiteOf(t, {}, { command: 'npm test' });
@@ -87,7 +83,7 @@ test('#71 suite: a given command runs even without a test file', async (t) => {
 });
 
 test('#71 suite: tests and a command found in the project run as before', async (t) => {
-  const out = await suiteOf(t, { ...TEST_FILES, 'package.json': '{"name":"p","scripts":{"test":"node --test"}}\n' });
+  const out = await suiteOf(t, { 'test/app.test.js': "require('node:test');\n", 'package.json': '{"name":"p","scripts":{"test":"node --test"}}\n' });
   assert.equal(out.status, 'pass');
 });
 
@@ -101,12 +97,6 @@ for (const [name, { gate, on }] of Object.entries(FLOWS)) {
   test(`#71 ${name}: no_tests ask keeps the gate ${gate} for a project with no tests`, async (t) => {
     const out = await suiteOf(t, {});
     assert.equal(out.status, 'not_run');
-    assert.equal(route(name, out, { no_tests: 'ask' }).goto, gate);
-  });
-
-  test(`#71 ${name}: test files with no command go to ${gate}, whatever no_tests says`, async (t) => {
-    const out = await suiteOf(t, TEST_FILES);
-    assert.equal(route(name, out).goto, gate);
     assert.equal(route(name, out, { no_tests: 'ask' }).goto, gate);
   });
 
@@ -128,8 +118,8 @@ for (const [name, { gate, on }] of Object.entries(FLOWS)) {
 
 // ---- what the gates say ----
 
-test('#71 fix: verify_failed for a suite with no command says to set test_command, not that rounds of fixes failed', async (t) => {
-  const out = await suiteOf(t, TEST_FILES);
+test('#71 fix: verify_failed for a suite with no command says to set test_command, not that rounds of fixes failed', () => {
+  const out = BLOCKED;
   const text = render(workflow('fix').steps.find((s) => s.id === 'verify_failed').message, renderCtx(out));
   assert.match(text, /test_command/);
   assert.doesNotMatch(text, /after the rounds of fixes/);
@@ -145,8 +135,8 @@ test('#71 feature: test_failed kept by no_tests ask says the project has no test
   }
 });
 
-test('#71 feature: test_failed for test files with no command recommends setting test_command', async (t) => {
-  const out = await suiteOf(t, TEST_FILES);
+test('#71 feature: test_failed for a suite with no command recommends setting test_command', () => {
+  const out = BLOCKED;
   const gate = workflow('feature').steps.find((s) => s.id === 'test_failed');
   assert.match(render(gate.recommend, renderCtx(out)), /test_command/);
 });

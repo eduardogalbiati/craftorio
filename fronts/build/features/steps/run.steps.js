@@ -652,6 +652,24 @@ Given('the demo project has a finished AI Development run {string} whose suite w
   ], {}, { tested: 'no tests', tested_failures: [] });
 });
 
+// ---- #81: a project with no test runner -----------------------------------------------------------
+// The suite of such a run found no test command: the run goes on to the build and records
+// `tested: "no test command"`; the same pill (run-tested-pill) says "Not tested: no test command".
+const NO_COMMAND_SUITE = {
+  ...NOT_RUN_SUITE, reason: 'no test command', message: 'The suite was not run: no test command.',
+};
+Given('the demo project has a finished AI Development run {string} whose suite was not run because there is no test command', async ({ e2e }, suffix) => {
+  seedAiDevRun(e2e, suffix, `A run on a project with no test runner (${suffix})`, (at) => [
+    ...agentTurn(at, 1, 20, 'develop', 'developer', 'Done.'),
+    { ts: at(20), type: 'step.finished', step_id: 'develop', duration_ms: 19 * 6e4, output: { summary: 'Implemented the task.' } },
+    { ts: at(21), type: 'step.started', step_id: 'suite', step_type: 'suite', visit: 1 },
+    { ts: at(21), type: 'step.finished', step_id: 'suite', duration_ms: 1000, output: NO_COMMAND_SUITE },
+    { ts: at(21), type: 'step.transition', from: 'suite', to: 'build' },
+    { ts: at(22), type: 'step.started', step_id: 'build', step_type: 'build', visit: 1 },
+    { ts: at(25), type: 'step.finished', step_id: 'build', duration_ms: 3 * 6e4, output: { status: 'pass', message: 'The build passed.' } },
+  ], {}, { tested: 'no test command', tested_failures: [] });
+});
+
 Then('the run\'s pill does not say {string}', async ({ e2e }, text) => {
   await expect(visibleTestId(e2e.window, 'run-tested-pill')).not.toContainText(text);
 });
