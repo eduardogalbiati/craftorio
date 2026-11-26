@@ -1,5 +1,5 @@
 {
- "hash": "2eb75bcbc298",
+ "hash": "dce9053890d7",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -9179,6 +9179,9 @@
          "type": "string"
         },
         "release": {
+         "type": "string"
+        },
+        "kind": {
          "type": "string"
         }
        }

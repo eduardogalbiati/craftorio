@@ -179,13 +179,13 @@ tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
 });
 
 // The files of a list (a step's files_changed) under the project's UI folders (#588, #80; the rule:
-// packages/engine/engine/test-ids.js uiFiles); without folders a UI file is known by its extension,
+// packages/shared/ui-files.js uiFiles); without folders a UI file is known by its extension,
 // never Craftorio's src/renderer.
 //   when: "(output.files_changed or []) | ui_files(inputs.ui_folders) | length"
 tpl.addFilter('ui_files', (files, folders) => testIds.uiFiles(files, folders));
 
 // #57: why the developer's change, with UI files, gets no visual review ('' when it has none or is reviewed;
-// packages/engine/engine/test-ids.js screenNotReviewed), for the gates' "Screen not reviewed: <reason>".
+// packages/shared/ui-files.js screenNotReviewed), for the gates' "Screen not reviewed: <reason>".
 //   {% set nr = steps.develop.output | screen_not_reviewed(inputs) %}{% if nr %}Screen not reviewed: {{ nr }}{% endif %}
 tpl.addFilter('screen_not_reviewed', (develop, inputs) => testIds.screenNotReviewed(develop, inputs));
 

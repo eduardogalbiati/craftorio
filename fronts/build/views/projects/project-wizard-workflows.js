@@ -253,10 +253,11 @@
     // files, projectFacts); a backend gets no UI step. wizard-kind-select, cur().kind
     // #781: it opens on the kind the analysis found (profile.kind), marked wizard-kind-detected until the owner
     // changes it; "Detect from the files" stays only while no kind is known. Not changed, no kind is sent (#735)
-    // #57: a new project's kind is the one answered at the create step (its profile), already saved: no mark
+    // #57: a new project's kind is the one answered at the create step (its profile), already saved: no mark;
+    // a resumed wizard has no answers' profile, so the saved project's kind is read
     function kindField() {
       const labels = M.KIND_LABELS || {};
-      const found = profileOf()?.kind;
+      const found = profileOf()?.kind || (cur().model.source === 'new' ? recordOf(cur().projectId)?.kind : '');
       const detected = labels[found] ? found : '';
       const value = cur().kind || detected;
       const kinds = [...(detected ? [] : [['', t('onboarding.kind_detect')]]), ...Object.entries(labels).map(([v, key]) => [v, t(key)])];

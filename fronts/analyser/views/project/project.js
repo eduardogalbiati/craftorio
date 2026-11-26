@@ -128,7 +128,8 @@ function loadNextStepAwaiting(pv) {
 // clears nextStepKindRead; the kind read before stays until then); '' when it could not be read
 function loadNextStepKind(pv) {
   if (nextSteps()[pv.id] !== 'open' || pv.nextStepKindRead) return;
-  const read = new Promise((resolve) => resolve(api.projectInputHints?.(pv.id))).then((hints) => hints?.detectedKind || '', () => '');
+  // #57: null is an empty project (no kind detected yet), kept apart from '' (not readable)
+  const read = new Promise((resolve) => resolve(api.projectInputHints?.(pv.id))).then((hints) => (hints && hints.detectedKind === null ? null : hints?.detectedKind || ''), () => '');
   pv.nextStepKindRead = read;
   read.then((kind) => {
     if (pv.nextStepKindRead !== read) return; // a newer read answers
@@ -141,8 +142,8 @@ function loadNextStepKind(pv) {
 // not readable: offered, as before)
 function hasInterface(pv) {
   const kind = pv.project?.kind || pv.nextStepKind;
-  // #84: a docs project (no code) has no interface either
-  return kind !== undefined && kind !== 'backend' && kind !== 'docs';
+  // #84: a docs project (no code) has no interface either; #57: nor an empty one with no kind picked (null)
+  return kind !== undefined && kind !== null && kind !== 'backend' && kind !== 'docs';
 }
 
 // #30: npm ci in the clone (the service honours the project's "ignore install scripts"), then the entry again

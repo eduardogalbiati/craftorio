@@ -915,8 +915,8 @@ Feature: Bring a project in with a guided wizard
     And the workflow card "feature" does not say "Tests first"
 
   # #75: the screenshots step is not offered to a project with no interface: one the analysis detected as backend
-  # (the sample repository has no UI), one with no code yet, or one kept as backend. Left out, not shown disabled
-  # (#22 accepted both).
+  # (the sample repository has no UI), or one kept as backend. Left out, not shown disabled (#22 accepted both).
+  # #57: a new project is asked its kind (Frontend by default, which lists the step); one created as backend does not.
   @issue-75
   Scenario: An imported repository detected as backend sees no screenshots step
     Given the app is open
@@ -936,7 +936,7 @@ Feature: Bring a project in with a guided wizard
     And the Next steps card has no screenshots step
 
   @issue-75
-  Scenario: A new project with no code yet sees no screenshots step
+  Scenario: A new project created as backend sees no screenshots step
     Given the app is open
     When I open the project wizard
     And I choose to create a new project in the wizard
@@ -945,7 +945,8 @@ Feature: Bring a project in with a guided wizard
     Then the wizard is on its "analysis" step
     When I go to the next step of the wizard
     Then the wizard is on its "review" step
-    When I finish the wizard
+    When I pick "Backend (no UI)" as the review's Project type
+    And I finish the wizard
     Then the project page of "empty-75" is open
     And the project page shows the Next steps card
     And the Next steps card has no screenshots step

@@ -1,5 +1,5 @@
-// #57 internals: the reason a UI change is not reviewed (packages/engine/engine/test-ids.js screenNotReviewed,
-// uiFiles) and what an empty project is (projectFacts: kind null for a README and dotfiles only).
+// #57 internals: the reason a UI change is not reviewed (packages/shared/ui-files.js screenNotReviewed,
+// uiFiles, re-exported by packages/engine/engine/test-ids.js) and what an empty project is (projectFacts: kind null for a README and dotfiles only).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
