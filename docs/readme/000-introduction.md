@@ -2,13 +2,19 @@
 
 ## Set it up with an AI session
 
-Paste this in Claude Code or Codex (you need access to this repository):
+**Recommended: the app.** Paste this in Claude Code or Codex:
 
 ```
-Clone https://github.com/eduardogalbiati/craftorio and install Craftorio following its INSTALL.md
+Install the Craftorio app (the executable) following https://github.com/eduardogalbiati/craftorio/blob/main/INSTALL.md
 ```
 
-It installs the app (the executable, or from the source code: you choose), creates the workspace folder and tells you the last step: open a session in that folder,
+**For developers: from the source code.**
+
+```
+Clone https://github.com/eduardogalbiati/craftorio and install Craftorio from the source code following its INSTALL.md
+```
+
+It downloads the app (or builds it from the code), checks it, creates the workspace folder and tells you the last step: open a session in that folder,
 which then works as the **Oracle** and manages the app for you, also from the phone. The steps it follows:
 [INSTALL.md](INSTALL.md).
 

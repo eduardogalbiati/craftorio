@@ -7,44 +7,36 @@ accept a workflow, a trust prompt or a system's security warning: those are the 
 
 A step already done is not done again: look first, then say what you found.
 
-Not reading this from a clone? Clone the repository first: while it is private, a web page or the GitHub CLI answers
-"404" to someone whose Git has access. The clone is only to read this guide; B may use it as its code.
+The repository is public: reading this guide from its web page is enough. The app (A) needs no clone; only the source
+code (B) is cloned.
 
 ## 1. Choose how to install
 
-**Ask** which one, unless the user already said it:
+When the user's request already says which (the app, the executable, or the source code), take it. Otherwise
+**ask**, and recommend A: B is for developers.
 
 | | A. The app (executable) | B. The source code |
 |---|---|---|
-| For | using Craftorio | contributing, or running what is on `main` |
-| Needs Node.js and npm | no | yes |
+| For | using Craftorio (recommended) | developers: contributing, or running what is on `main` |
+| Needs Git, Node.js and npm | no | yes |
 | How to update | download the next release | update the code |
 
-A needs a published release:
-
-```
-gh release view --repo eduardogalbiati/craftorio
-```
-
-"Release not found" with access to the repository means that there is none yet: say so and offer B. Never take the
-executable from anywhere else, an older repository included.
+A takes the latest published release, https://github.com/eduardogalbiati/craftorio/releases/latest (or
+`gh release view --repo eduardogalbiati/craftorio`). Say its version. If there is none, say so and offer B. Never take
+the executable from anywhere else, an older repository included.
 
 ## 2. Check the computer
 
 | Needed | For | How to check |
 |---|---|---|
-| Git | both | `git --version` |
 | Claude Code, 2.1.277 or newer | both | `claude --version` |
-| Access to the repository | both | `git ls-remote https://github.com/eduardogalbiati/craftorio.git HEAD` |
-| GitHub CLI, signed in | A, to download (or the user downloads in the browser) | `gh auth status` |
+| Git | B (the app's projects need it too, later) | `git --version` |
 | Node.js 24 or newer | B | `node --version` |
 
 Optional: Codex CLI (`codex --version`) for the workflows that use it; GitHub CLI or GitLab CLI for issues and pull
 requests.
 
-List what is missing with its official install page, and **ask** before installing anything. The repository may be
-private: if access is refused, the user needs to be given it by the owner, and to sign in. Stop here until it
-answers.
+List what is missing with its official install page, and **ask** before installing anything.
 
 ## 3A. Get the app
 
@@ -57,9 +49,12 @@ answers.
 | macOS, Intel | `Craftorio-darwin-x64.zip` |
 | Linux (x64) | `Craftorio-linux-x64.AppImage` (or `Craftorio-linux-x64.tar.gz`) |
 
-```
-gh release download --repo eduardogalbiati/craftorio --pattern "<file>" --pattern SHA256SUMS --dir "<new empty folder>"
-```
+Download the file and `SHA256SUMS` into a new empty folder, from the latest release:
+
+- Windows (PowerShell): `Invoke-WebRequest -Uri https://github.com/eduardogalbiati/craftorio/releases/latest/download/<file> -OutFile "<folder>\<file>"`, then the same for
+  `SHA256SUMS`
+- macOS and Linux: `curl -fL -o "<folder>/<file>" https://github.com/eduardogalbiati/craftorio/releases/latest/download/<file>`, then the same for `SHA256SUMS`
+- With the GitHub CLI: `gh release download --repo eduardogalbiati/craftorio --pattern "<file>" --pattern SHA256SUMS --dir "<folder>"`
 
 **Check it before opening it.** Compute the file's SHA-256 and compare it with its line in `SHA256SUMS`:
 

@@ -100,9 +100,14 @@ test('INSTALL.md: ends with the handover of the workspace folder, the new sessio
   assert.match(text, /read `<workspace>\/AGENTS\.md` before anything else/);
 });
 
-test('the prompt of the README clones first, so it works on a private repository, and INSTALL.md says why', () => {
-  assert.match(read('README.md'), /Clone https:\/\/github\.com\/eduardogalbiati\/craftorio and install Craftorio following its INSTALL\.md/);
-  assert.match(read(INSTALL), /Clone the repository first/);
+test('the README recommends the app with no clone (the repository is public) and keeps the clone for developers', () => {
+  const readme = read('README.md');
+  assert.match(readme, /Install the Craftorio app \(the executable\) following https:\/\/github\.com\/eduardogalbiati\/craftorio\/blob\/main\/INSTALL\.md/);
+  assert.match(readme, /Clone https:\/\/github\.com\/eduardogalbiati\/craftorio and install Craftorio from the source code following its INSTALL\.md/);
+  const text = read(INSTALL);
+  assert.match(text, /The app \(A\) needs no clone/);
+  assert.match(text, /recommend A: B is for developers/);
+  for (const [url] of text.matchAll(/https:\/\/github\.com\/eduardogalbiati\/craftorio\/releases\/latest\/download\/[^\s`]+/g)) assert.match(url, /\/download\/<file>$/);
 });
 
 test('Codex: the handover and the workspace instructions name what its sandbox needs', () => {
