@@ -213,7 +213,7 @@ test('#781 the backlog read: the line is done with a summary counting the issues
   const app = await atReview({ api: { backlogProgress: async () => null } });
   const line = activity(app);
   assert.equal(line?.attrs['data-state'], 'done');
-  assert.match(textOf(line), /1 issue/);
+  assert.match(textOf(line), /1 open issue/); // #37: the count says it counts the open issues
   assert.equal(textOf(section(app, 'wizard-review-backlog')).includes('Login fails on Safari'), true, 'the issue\'s row');
 });
 

@@ -805,15 +805,24 @@
     await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId)));
   }
 
+  // the clicks that leave the wizard: Finish, Open the city, and (#40) the default awaiting acceptance,
+  // which opens on Workflows › Definitions (the onboarding goes on, in the tray)
+  function onLeaveClick(act, e) {
+    if (act === 'finish') finish();
+    else if (act === 'open-city') finish({ city: true });
+    else if (act === 'review-accept') { const file = `${e.target.closest('[data-act]').dataset.workflow}.yaml`; close(); window.Actions?.call('showWorkflowDefinition', file); }
+    else return false;
+    return true;
+  }
+
   async function onClick(e) {
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
     if (!act || !cur) return;
     if (act === 'close' || act === 'cancel') close();
     else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
-    else if (onCreateClick(act, e) || onRepoClick(act, e)) return;
+    else if (onCreateClick(act, e) || onRepoClick(act, e) || onLeaveClick(act, e)) return;
     else if (act === 'source-git-url') toRepository();
     else if (act === 'source-folder') await fromFolder();
-    else if (act === 'open-city') finish({ city: true });
     else if (act === 'create-issue') {
       const button = e.target.closest('[data-act]');
       await createIssue(Number(button.dataset.finding), button.dataset.prioritize !== undefined);
@@ -827,9 +836,6 @@
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
     else if (act === 'workflows-analyze' && cur.projectId) await analyze();
     else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
-    else if (act === 'finish') finish();
-    // #40: the default awaiting acceptance opens on Workflows › Definitions (the onboarding goes on, in the tray)
-    else if (act === 'review-accept') { const file = `${e.target.closest('[data-act]').dataset.workflow}.yaml`; close(); window.Actions?.call('showWorkflowDefinition', file); }
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
       cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, awaiting: undefined, ...freshReview() };

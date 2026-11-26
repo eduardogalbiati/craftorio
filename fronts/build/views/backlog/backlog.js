@@ -575,12 +575,11 @@
     sel.innerHTML = bl.pipelines.length
       ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${bl.pipelines.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
       : options;
-    const files = [...bl.workflows.map((w) => w.file), ...bl.pipelines.map((p) => PIPE + p.file)];
+    // #40: the preselection never lands on a workflow awaiting acceptance (proposed, remembered or the default)
+    const files = [...bl.workflows.filter((w) => !awaiting(w)).map((w) => w.file), ...bl.pipelines.map((p) => PIPE + p.file)];
     // nothing remembered: the project's default workflow (#195, #486, #790: its own, then its manifest's; its set first in the list)
-    // #40: never on a workflow awaiting acceptance (remembered or the default), unless the Product Owner proposed it
-    const ready = files.filter((f) => !bl.workflows.some((w) => w.file === f && awaiting(w)));
-    sel.value = [prefill?.workflow].find((f) => f && files.includes(f))
-      || [load(WORKFLOW_KEY), DefaultWorkflow.current().file, ready[0]].find((f) => f && ready.includes(f)) || files[0];
+    sel.value = [prefill?.workflow, load(WORKFLOW_KEY), DefaultWorkflow.current().file, files[0]].find((f) => f && files.includes(f));
+    if (sel.selectedIndex < 0 && sel.options.length) sel.selectedIndex = 0; // every workflow awaits acceptance
     // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
     $b('#assign-mock').checked = !!state.simulationOnly;
     // #446: several issues go as one roadmap item by default (when they fit one run), as the Product Owner's groups
