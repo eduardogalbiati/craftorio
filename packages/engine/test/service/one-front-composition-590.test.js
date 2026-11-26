@@ -37,8 +37,8 @@ const { createServer } = require('../../server');
 // #568: triggers:status; #30: onboarding:install-deps; #35: backlog:create-issue, backlog:update-issue,
 // backlog:close-issue and backlog:file-local for the local backlog of a project with no remote;
 // #74: architecture:estimate takes `others`; #49: cli-setup:start's `id` names gitleaks; #79: onboarding:setup-git
-// and the onboarding state's pushCheck).
-const MAIN_CONTRACT = '2eb75bcbc298';
+// and the onboarding state's pushCheck; #57: onboarding:create's answers.kind).
+const MAIN_CONTRACT = 'dce9053890d7';
 const TOKEN = 'test-token-0123456789';
 
 const CHANNEL = (id) => `// the ${id} front's channel\nmodule.exports = (ctx) => [{ channel: '${id}:ping', method: '${id}Ping', schema: { result: { type: 'object' } }, fn: () => ({ pong: ctx.${id}Word() }) }];\n`;

@@ -3,12 +3,16 @@
 // channel's edge, no model is called.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const productOwner = require('../../domains/po/product-owner');
 const { makeService, roadmapProject } = require('./helpers');
 
 async function asked(t, name, params) {
   const { service, api } = makeService(t);
   const p = await roadmapProject(api, service.workspace(), t, [1], name);
+  // #57: an empty folder is an undecided project (kind null): give it code, so its kind is decided
+  fs.writeFileSync(path.join(p.folder, 'main.go'), 'package main\n');
   const real = productOwner.ask;
   t.after(() => { productOwner.ask = real; });
   const calls = [];
