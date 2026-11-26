@@ -157,8 +157,9 @@ Feature: Backlog Product Owner
   # #431's scenarios went with them); a recommendation shows its workflow and inputs as grouped decisions,
   # each with where its value comes from, and "Editar" changes them before "Colocar no roadmap". An item
   # keeps only the inputs chosen, so the project's configuration reaches the run. The scenarios read the
-  # sources as the issue words them, so the interface is in Portuguese; the inputs' labels and values
-  # ("E2E tests", "Fork + PR") are the workflow's own, the same in both languages. The project is the
+  # sources as the issue words them, so the interface is in Portuguese; the inputs' labels
+  # ("E2E tests", "Mode") are the workflow's own, the same in both languages; the Roadmap item editor shows the
+  # values translated (#83: "Desligado", "Escrever", "Código primeiro"). The project is the
   # issue's: kind backend, variant fork-code, a Cargo.toml (test command "cargo test"), one open issue,
   # so the simulated plan has one recommendation.
   @issue-785 @issue-806
@@ -178,9 +179,9 @@ Feature: Backlog Product Owner
     And I open the Roadmap
     And I edit the inputs of the roadmap item "Expor as métricas do cache"
     Then the item editor shows "Fork + PR" for "Mode", marked "do projeto"
-    And the item editor shows "Off" for "E2E tests", marked "do projeto"
-    And the item editor shows "Code first" for "Test order", marked "do projeto"
-    And the item editor shows "Off" for "Screenshots", marked "do projeto"
+    And the item editor shows "Desligado" for "E2E tests", marked "do projeto"
+    And the item editor shows "Código primeiro" for "Test order", marked "do projeto"
+    And the item editor shows "Desligado" for "Screenshots", marked "do projeto"
     And the item editor shows "cargo test" for "Test command", marked "do projeto"
 
   @issue-785
@@ -232,9 +233,9 @@ Feature: Backlog Product Owner
     And I close the Product Owner
     And I open the Roadmap
     And I edit the inputs of the roadmap item "Expor as métricas do cache"
-    Then the item editor shows "Write" for "E2E tests", marked "neste item"
+    Then the item editor shows "Escrever" for "E2E tests", marked "neste item"
     And the item editor shows "Fork + PR" for "Mode", marked "do projeto"
-    And the item editor shows "Off" for "Screenshots", marked "do projeto"
+    And the item editor shows "Desligado" for "Screenshots", marked "do projeto"
 
   # #26: the question box belongs to the project's conversation. Text typed in the demo project's box
   # and not sent is not shown in another project's box, so it is never glued in front of that
