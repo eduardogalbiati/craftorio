@@ -37,6 +37,7 @@ unfinished onboarding at its step with its picks; the card of such a project sho
 finished" (`project-onboarding-unfinished`) with Continue. New project with the URL of a repository whose
 project exists (`onboarding:start`, same repository whatever its case, trailing slash or `.git`) resumes it
 when unfinished, and for a finished one says it exists with Open the project: never a second project.
+Step 2's repository list and its filter: `project-wizard-repos.js` (split out for the size cap; #103 reads a URL).
 
 ## The work model (#633)
 

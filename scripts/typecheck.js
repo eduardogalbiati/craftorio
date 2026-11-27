@@ -183,6 +183,7 @@ const UNCHECKED = [
   'fronts/build/views/projects/project-wizard-activity.js',
   'fronts/build/views/projects/project-wizard-cli.js',
   'fronts/build/views/projects/project-wizard-costs.js',
+  'fronts/build/views/projects/project-wizard-repos.js',
   'fronts/build/views/projects/project-wizard-resume.js',
   'fronts/build/views/projects/project-wizard-review.js',
   'fronts/build/views/projects/project-wizard-tray.js',

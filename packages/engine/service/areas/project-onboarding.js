@@ -176,6 +176,12 @@ function e2eCityPlan() {
   if (simulation.simulationOnly() && process.env.CRAFTORIO_E2E_CITY_PLAN_FAIL === '1') throw new Error('The simulated city plan failed (e2e).');
 }
 
+// #101: the E2E hook of a simulated run (features/steps/project-wizard-101-102-103.steps.js):
+// CRAFTORIO_E2E_ONBOARDING_ANALYZE_REFUSE=1 makes analyze() refuse before starting anything
+function e2eAnalyzeRefuse() {
+  if (simulation.simulationOnly() && process.env.CRAFTORIO_E2E_ONBOARDING_ANALYZE_REFUSE === '1') throw clientError('The simulated analysis was refused (e2e).');
+}
+
 // #724 #743: the clone is not one of those jobs (follow() awaits projects.cloneJob): in a simulated run
 // CRAFTORIO_E2E_ONBOARDING_HOLD=clone keeps it cloning, CRAFTORIO_E2E_ONBOARDING_CLONE_DELAY_MS slows it
 function e2eCloneWait() {
@@ -724,6 +730,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
 
   /** Asks for the paid part: runs it now on a ready project, else once the clone is ready. */
   async function analyze(projectId) {
+    e2eAnalyzeRefuse();
     const s = states.get(projectId);
     if (!s) throw clientError(`No onboarding runs for the project ${projectId}.`);
     const w = workOf(projectId);
