@@ -212,6 +212,7 @@ function takeLang(argv, a) {
 const VALUE_OPTIONS = {
   '--agents-window': 'agentsWindow',
   '--budget': 'budget',
+  '--cause': 'cause',
   '--issues': 'issues',
   '--live': 'live',
   '--oracle': 'oracle',
@@ -222,6 +223,7 @@ const VALUE_OPTIONS = {
   '--release-filter': 'releaseFilter',
   '--review': 'review',
   '--roadmap': 'roadmap',
+  '--source': 'source',
 };
 
 function parseArgs(argv, views = VIEWS) {

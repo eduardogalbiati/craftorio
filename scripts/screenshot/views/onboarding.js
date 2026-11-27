@@ -5,10 +5,15 @@
 //   repository    step 2 with a URL and a name typed, before Next (#848: the demo account's repositories
 //                 under the field, filtered by --fill "#wizard-repo=<text>")
 //   cloning       the Repository step cloning in place (#743: Next's spinner and "Cloning <name>…", no
-//                 status card; #724: the tray stays hidden behind the open wizard) (the real onboarding:changed
-//                 channel says cloning for the project an import just made: a clone of a local repository
-//                 ends too fast to capture)
-//   access-error  a repository the app cannot reach: wizard-error data-error="no-access", its Retry and Edit
+//                 status card; #724: the tray stays hidden behind the open wizard) (onboarding:start answers
+//                 cloning for a demo project: a clone of a local repository ends too fast to capture, and #107: a
+//                 failed import no longer leaves a project to say cloning again)
+//   access-error  a repository the app cannot reach (#107: refused before anything is made): wizard-error
+//                 data-error="repo-no-access" (--cause no-access, the default) | "repo-not-found" (--cause
+//                 not-found), its Retry and Edit; the simulation-only hook CRAFTORIO_E2E_REPO_ACCESS gives git's answer
+// --source new (with --mode repository, #108): Create new project's step 2 with "garden-log" typed while a
+// project holds that folder (projects:list answers it), so the folder line shows garden-log-2; --fill
+// "#wizard-new-name=" shows the required line, --fill "#wizard-new-name=Lista de Tarefas" the slug folder
 //   analysis      a local git repository imported (file://, no network): the jobs and the cost, before the click
 //                 (#74: the simulation-only hook CRAFTORIO_E2E_ONBOARDING_COSTS gives the analyses their amounts)
 //   review        that repository analysed (simulated) and the review step
@@ -97,6 +102,8 @@ function seed({ args, ws, project, projects, workspace }) {
   if (args.review === 'issues-off') process.env.CRAFTORIO_E2E_ISSUES_FAIL = 'disabled';
   // #79: the clone's push check fails as git does without credentials: the review shows wizard-push-notice
   if (args.review === 'no-push') process.env.CRAFTORIO_E2E_GIT_PUSH = '0';
+  // #107: git's answer to the access check of the unreachable demo URL (no network reached)
+  if (args.mode === 'access-error') process.env.CRAFTORIO_E2E_REPO_ACCESS = args.cause || 'no-access';
   if (['analysis', 'review'].includes(args.mode)) {
     const folder = path.join(ws.root, 'onboarding-demo', 'billing-api');
     fs.rmSync(folder, { recursive: true, force: true });
@@ -145,14 +152,40 @@ function stubRepos() {
   ipcMain.handle('onboarding:repos', () => DEMO_REPOS);
 }
 
+// #108 (--source new): a project already holds garden-log, so the wizard (projects:list at open) shows garden-log-2;
+// stubbed once Home shows its empty state, which it keeps
+function stubTakenProject() {
+  const { ipcMain } = require('electron');
+  ipcMain.removeHandler('projects:list');
+  ipcMain.handle('projects:list', () => [{ id: 'garden-log', name: 'garden-log' }]);
+}
+
+// #743 (cloning): onboarding:start answers the clone running for a demo project, as a slow clone does
+function stubCloning() {
+  const { ipcMain } = require('electron');
+  const waiting = { status: 'waiting' };
+  ipcMain.removeHandler('onboarding:start');
+  ipcMain.handle('onboarding:start', () => ({ projectId: 'billing-api', status: 'cloning', cli: null, jobs: { clone: { status: 'running' }, facts: waiting, profile: waiting, projectMap: waiting, ranking: waiting } }));
+}
+
 async function open({ args, click, js, pause, win }) {
   const mode = args.mode || 'start';
   if (mode === 'start' || mode === 'repository') stubAccounts();
   if (mode === 'repository') stubRepos();
+  if (mode === 'cloning') stubCloning();
   await click('.nav-item[data-view="dashboard"]');
+  if (args.source === 'new') stubTakenProject();
   await click('[data-testid="home-empty-create-project"]');
   await waitFor(js, '[data-testid="project-wizard"] [data-step="start"][aria-current="step"]', 10000);
   if (mode === 'start') return;
+  if (mode === 'repository' && args.source === 'new') {
+    await click('[data-testid="wizard-source-new"]');
+    await click('[data-testid="wizard-next"]');
+    await waitFor(js, '#wizard-new-name', 5000);
+    await typeIn(js, '#wizard-new-name', 'garden-log');
+    await waitFor(js, '[data-testid="wizard-new-folder"][title$="garden-log-2"]', 5000);
+    return;
+  }
   if (mode === 'new-workflows') {
     await click('[data-testid="wizard-source-new"]');
     await click('[data-testid="wizard-next"]');
@@ -171,14 +204,13 @@ async function open({ args, click, js, pause, win }) {
   await typeIn(js, '#wizard-name', 'billing-api');
   if (mode === 'repository') return;
   await click('[data-testid="wizard-next"]');
-  if (unreachable) {
-    await waitFor(js, '[data-testid="wizard-error"][data-error="no-access"]', IMPORT_WAIT_MS);
-    if (mode === 'access-error') return;
-    // the project the failed import made, said cloning again (what Retry shows while the clone runs)
-    const projectId = await js('return document.querySelector(\'[data-testid="tray-item"]\')?.dataset.project || null;');
-    if (!projectId) throw new Error('the failed import left no project in the tray');
-    win.webContents.send('onboarding:changed', { projectId, status: 'cloning', cli: null, jobs: { clone: { status: 'running' }, facts: { status: 'waiting' }, profile: { status: 'waiting' }, projectMap: { status: 'waiting' }, ranking: { status: 'waiting' } } });
-    await waitFor(js, '[data-testid="tray-item"][data-status="cloning"]', 5000);
+  if (mode === 'access-error') {
+    const code = args.cause === 'not-found' ? 'repo-not-found' : 'repo-no-access';
+    await waitFor(js, `[data-testid="wizard-error"][data-error="${code}"]`, IMPORT_WAIT_MS);
+    return;
+  }
+  if (mode === 'cloning') {
+    await waitFor(js, '#wizard-next[aria-busy="true"]', IMPORT_WAIT_MS);
     return;
   }
   await waitFor(js, '[data-testid="wizard-cost"] [data-testid="wizard-cost-total"]', IMPORT_WAIT_MS);
@@ -215,7 +247,12 @@ module.exports = {
   // #845: the review of a repository with Issues turned off; #852: the review with the project map still running;
   // #79: the review of a clone that cannot push (its push notice and setup-git button)
   // #40: a repository whose own default workflow awaits acceptance (with --mode analysis or review)
-  options: { review: ['awaiting', 'issues-off', 'manual', 'no-push', 'running'] },
+  // #107: the cause of a refused import (with --mode access-error); #108: Create new project's step 2 (with --mode repository)
+  options: {
+    cause: ['no-access', 'not-found'],
+    review: ['awaiting', 'issues-off', 'manual', 'no-push', 'running'],
+    source: ['new'],
+  },
   sampleRepository,
   seed,
   typeIn,
