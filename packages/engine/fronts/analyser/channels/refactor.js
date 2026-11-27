@@ -13,6 +13,7 @@
 // backlog); refactor:addToRoadmap with `file` (#642, the onboarding's review) files the same way first.
 // #730: ctx.fileFinding / ctx.planFinding file a finding of the Oracle's report as an issue (no proposal) and
 // plan it in that waiting stage (architecture:createIssue, the Health tab); the proposals made before stay.
+// #105: a project with no repository files the finding as a local issue (the local backlog).
 // The cadence ("Add a refactor to the roadmap every X runs", <workspace>/refactor/<project id>/
 // cadence.json { on, every, since }) listens to run:event: after every X real finished runs of the
 // project since it was turned on (or since its last item) the top ranked proposal with an issue and
@@ -285,6 +286,12 @@ module.exports = (ctx) => {
     await syncedFirst(p);
     const data = backlog.readBacklog(ctx.ws.backlog, p.id);
     const { kind, title, files, evidence, refactor } = finding;
+    // #105: a project with no repository (nor a synced one) files into its local backlog (po-draft-command.js's choice)
+    if (!p.repo && !data?.repo) {
+      const proposal = { kind, title, files, evidence, refactor };
+      const n = await backlog.localCreateCommand({ dir: ctx.ws.backlog, projectId: p.id, title: refactorIssues.issueTitle(proposal), labels: [refactorIssues.LABEL], text: refactorIssues.issueText(proposal) }).run();
+      return { issue: Number(n), issueUrl: null };
+    }
     const draft = asClient(() => refactorIssues.issueDraft({ root: root(), project: p, proposal: { id: 'finding', kind, title, files, evidence, refactor }, data }));
     const file = ctx.host?.fileIssue || (simulation.simulationOnly() ? simulatedFiler(p) : (d) => refactorIssues.runDraft({ backlogDir: ctx.ws.backlog, project: p, draft: d }));
     const out = await file(draft);

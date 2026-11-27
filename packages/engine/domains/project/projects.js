@@ -20,12 +20,16 @@
 // #741: `onboarding: { step, picks, finished }`, the new-project wizard's state (service/areas/project-onboarding.js).
 // #742: ownedFolder / folderChanges: the checks before a removal deletes the project's folder.
 // #633: `workModel` (light / standard / full, spec R9), how work on the project is documented, picked at onboarding.
+// #105: a folder on this computer given as a file:// URL is the clone's `source` (the clone's origin, where a run
+// pushes), not the project's repository: `repo` is the folder's own origin when it is a git URL, else none (local backlog).
 
 const fs = require('fs');
 const path = require('path');
+const { fileURLToPath } = require('url');
 const {
   cloneFolder,
   execGit,
+  isGitUrl,
   pushableUrl,
 } = require('../workspace/workspace');
 const { insideFolder } = require('../machine/platform-paths');
@@ -80,8 +84,8 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
   const job = (async () => {
     try {
       const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
-      // #79: cloned with the URL runs can push with (SSH when the platform CLI's protocol is ssh)
-      const { url } = await pushableUrl(p.repo);
+      // #79: cloned with the URL runs can push with (SSH when the platform CLI's protocol is ssh); #105: from the folder
+      const { url } = await pushableUrl(p.source || p.repo);
       await git(['clone', url, p.folder], path.dirname(p.folder));
       const patch = { status: 'ready', cloneError: null };
       if (!cleanWorkflows(p.workflows).length) {
@@ -135,6 +139,21 @@ async function prepareFolder(folder, { repo, cloned, fresh, git }) {
   return repo;
 }
 
+// #105: the origin of the folder a file:// URL names, kept when it is a git URL (a platform's repository); else null
+async function folderRemote(source, git) {
+  let folder;
+  try { folder = fileURLToPath(source); } catch { return null; }
+  const origin = await git(['remote', 'get-url', 'origin'], folder).then((s) => String(s || '').trim(), () => '');
+  return origin && isGitUrl(origin) ? origin : null;
+}
+
+// #105: the given repository, or for a file:// folder its remote (folderRemote) and the folder as the clone's source
+async function repoAndSource(given, git) {
+  const repo = String(given || '').trim() || null;
+  if (!repo || !/^file:\/\//i.test(repo)) return { repo, source: null };
+  return { repo: await folderRemote(repo, git), source: repo };
+}
+
 /**
  * Creates a project. If `repo` is given and the folder is not a git repository, it returns at once
  * with status 'cloning' and clones the repository into it in the background (the folder must be
@@ -153,13 +172,17 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
   let id = slugify(name);
   for (let i = 2; fs.existsSync(metaFile(dir, id)); i++) id = `${slugify(name)}-${i}`;
 
-  let repo = data.repo?.trim() || null;
+  const resolved = await repoAndSource(data.repo, git);
+  const { source } = resolved;
+  let { repo } = resolved;
+  const from = source || repo;
   // #84: the clone's own name, or its free sibling (name-2…) when that folder holds something else
-  const defaultFolder = repo && reposDir ? cloneFolder(repo, reposDir).dir : path.join(dir, id);
+  const defaultFolder = from && reposDir ? cloneFolder(from, reposDir).dir : path.join(dir, id);
   const folder = path.resolve(data.folder?.trim() || defaultFolder);
 
-  const cloned = !!repo && !isDir(path.join(folder, '.git'));
-  repo = await prepareFolder(folder, { repo, cloned, fresh, git });
+  const cloned = !!from && !isDir(path.join(folder, '.git'));
+  const prepared = await prepareFolder(folder, { repo: from, cloned, fresh, git });
+  if (!source) repo = prepared;
 
   const localPreview = cleanLocalPreview(data.localPreview);
   // #472: a repository the app cloned (not the user's own checkout) installs without its scripts
@@ -174,7 +197,7 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
   // #745: the platform the wizard picked for a host its URL does not name; #735: the confirmed kind
   const platform = cleanPlatform(data.platform);
   const kind = cleanKind(data.kind);
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), ...(workflowKinds ? { workflowKinds } : {}), createdAt: new Date().toISOString() };
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(source ? { source } : {}), ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), ...(workflowKinds ? { workflowKinds } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   if (project.status === 'cloning') startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
   return readProject(dir, id);
@@ -184,7 +207,7 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
 async function retryClone(dir, id, { git = execGit } = {}) {
   const p = readProject(dir, id);
   if (p.status !== 'failed') throw new Error('Only a project whose clone failed can retry it.');
-  if (!p.repo) throw new Error('The project has no repository to clone.');
+  if (!p.source && !p.repo) throw new Error('The project has no repository to clone.');
   fs.rmSync(p.folder, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(p.folder), { recursive: true });
   patchMeta(dir, id, { status: 'cloning', cloneError: null });

@@ -72,7 +72,8 @@ module.exports = (ctx) => {
     // #465: the base check's last state (running, green, red), the Roadmap's "Base check" card
     const baseCheck = ctx.baseCheckState?.(data.projectId) || null;
     const { queue: _retired, ...synced } = data;
-    return { ...synced, local, roadmap, refresh, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
+    // #105: without a local push status, a local backlog (no repository) keeps its `local: true`
+    return { ...synced, local: local || (synced.local === true ? true : null), roadmap, refresh, autoEpic: !!project?.autoEpic, issues, releases, conflictMap, baseFailures, baseCheck };
   }
 
   // The Backlog Refresh banner (#161, packages/engine/domains/backlog/backlog-refresh.js): the merges on the base since the

@@ -38,6 +38,8 @@
 // failed, lockfile, command, reason? }` (depsOf, in the change that makes it ready, and on restore): the machine
 // checks (rule_check) need them. installDeps runs `npm ci` (with --ignore-scripts under the project's setting,
 // #472) in the clone through `install` (default: deps-cache.js runCommand).
+// #105: a folder imported by its file:// URL (the project's `source`): gh / glab follow its real remote (`repo`),
+// no push permission or push check is read (its runs push to the folder), and with no remote the profile is local.
 
 const fs = require('fs');
 const path = require('path');
@@ -379,7 +381,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       if (name === 'profile' && !result?.profile) throw Object.assign(new Error('The ways of working analysis answered no profile.'), { noProfile: true });
       // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile); #738: its mode
       // follows the fork choice (no push access: an external contribution)
-      const profile = result?.profile ? withForkMode(result.profile, states.get(id)?.fork) : null;
+      // #105: a folder with no remote works locally
+      const profile = result?.profile ? withForkMode(withRemoteMode(result.profile, projectOf(id)), states.get(id)?.fork) : null;
       // #74: git's profile, the rest of it paid: it waits for the analysis (startPaid)
       if (result?.needsOracle) {
         change(id, {}, { [name]: { status: 'waiting', profile } });
@@ -519,7 +522,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   async function start(/** @type {{ name?: string, repo?: string }} */ { name, repo } = {}) {
     if (typeof name !== 'string' || !name.trim()) throw clientError('The project name is missing.');
     if (typeof repo !== 'string' || !repo.trim()) throw clientError('The repository URL is missing.');
-    const existing = projects.listProjects(projectsDir).find((x) => !x.error && sameRepo(x.repo, repo));
+    // #105: a folder imported before is found by its source (its repo is the folder's remote)
+    const existing = projects.listProjects(projectsDir).find((x) => !x.error && (sameRepo(x.repo, repo) || sameRepo(x.source, repo)));
     if (existing) {
       if (!existing.onboarding || existing.onboarding.finished) return { exists: true, finished: true, projectId: existing.id };
       return status(existing.id);
@@ -531,8 +535,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const reachable = access.status === 'reachable' || p.status === 'ready';
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
     if (!reachable) noAccess(p.id, access);
-    // #738: read before the profile job, so its mode already says fork
-    else await readPush(p.id, p.repo);
+    // #738: read before the profile job, so its mode already says fork; #105: a folder's runs push to the folder
+    else if (!p.source) await readPush(p.id, p.repo);
     checkCli(p.id, p.repo);
     if (reachable) cloning(p.id);
     return status(p.id);
@@ -557,6 +561,11 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   function withForkMode(profile, fork) {
     if (!fork) return profile;
     return { ...profile, mode: fork.status === 'declined' ? 'local' : 'fork' };
+  }
+
+  // #105: a folder imported with no remote (a source, no repository) has no pull request to open: local mode
+  function withRemoteMode(profile, project) {
+    return project?.source && !project.repo ? { ...profile, mode: 'local' } : profile;
   }
 
   // #738: the fork's state, and the profile job's mode with it when the profile is there
@@ -697,7 +706,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       // a project already cloned (its folder was kept) goes on without the access check and the clone
       if (p.status !== 'ready') {
         if (s.code === 'no-access') {
-          const access = await projects.checkAccess(p.repo, { git });
+          const access = await projects.checkAccess(p.source || p.repo, { git });
           if (access.status !== 'reachable') { noAccess(projectId, access); return status(projectId); }
         }
         await projects.retryClone(projectsDir, projectId, { git });
@@ -798,7 +807,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const s = states.get(id);
     const p = projectOf(id);
     if (!s || !p?.folder || (s.access?.push === false && !p.fork)) return;
-    if (simulation.e2eGitPush() === null && (simulation.simulationOnly() || !isGitUrl(p.repo))) return;
+    // #105: a folder's clone pushes to the folder (its source), never to its remote
+    if (simulation.e2eGitPush() === null && (simulation.simulationOnly() || !isGitUrl(p.repo) || p.source)) return;
     change(id, { pushCheck: { status: 'checking' } });
     /** @type {{ ok: boolean, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }} */
     const r = await Promise.resolve().then(() => pushCheck(p.folder)).catch((e) => ({ ok: false, reason: String(e?.message || e) }));
