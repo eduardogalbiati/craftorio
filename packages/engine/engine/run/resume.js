@@ -10,15 +10,14 @@
 // Recovery (#607) is not a resume: a run the app died in continues in its own folder, with its own id,
 // at its last finished turn. `recoveryStateFromEvents` adds what that needs to the resume state (each
 // step's last output, each session's last snapshot, the turn the crash cut); `seedRecovery`
-// (constructor) puts it back in the engine, the gate clock included (#10), `startRecovered` (start) records the recovery and the lost
-// turn. The service's start-up picks the runs (packages/engine/service/areas/recover.js). The worktree
+// (constructor) puts it back in the engine, the gate clock included (`gateClockFromEvents`, #10),
+// `startRecovered` (start) records the recovery and the lost turn. The service's start-up picks the runs (packages/engine/service/areas/recover.js). The worktree
 // reuse is in packages/engine/engine/run/checkout.js (setupWorktree); the dialog and its channels in packages/engine/domains/supervisor/supervisor.js.
 
 'use strict';
 
 const { checkAttachments, emptyUsage, seedClaudeTotal } = require('../providers');
 const { attemptSummary, noteToolCall } = require('./turns');
-const { gateClockFromEvents } = require('./costs');
 const { unknownUsd } = require('@craftorio/shared/session-cost');
 const { GATE } = require('./field-rules');
 const { prMonitorSeed } = require('./transitions');
@@ -68,7 +67,8 @@ const RUN_STATE_REDUCERS = {
   'handoff.saved': (acc, ev) => {
     if (ev.note) acc.handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path ?? null };
   },
-  'approval.requested': (acc, ev) => { acc.gates.set(ev.approval_id, { step: ev.step_id, approval_id: ev.approval_id }); },
+  // requestedAt (ms): when it was asked, for the gate clock (gateClockFromEvents, #10)
+  'approval.requested': (acc, ev) => { acc.gates.set(ev.approval_id, { step: ev.step_id, approval_id: ev.approval_id, requestedAt: Date.parse(ev.ts) }); },
   'approval.resolved': (acc, ev) => { acc.gates.delete(ev.approval_id); },
   // #607: a recovery never answers the gate the crash left open, it asks it again under a new id:
   // the gates opened before it are over, and the run continues at the step it recovered at
@@ -99,9 +99,54 @@ function runStateFromEvents(events, summary = null) {
   const cut = !acc.finished || acc.finished.status === 'paused';
   const step = acc.lastStarted?.step_id;
   if (cut && step && !acc.finishedVisits.has(visitKey(acc.lastStarted)) && --acc.visits[step] <= 0) delete acc.visits[step];
-  const open = [...acc.gates.values()].pop() || null;
+  const last = [...acc.gates.values()].pop();
+  const open = last ? { step: last.step, approval_id: last.approval_id } : null;
   const sessions = Object.fromEntries(Object.entries(acc.latestSession).map(([agent, id]) => [agent, { session_id: id, provider_session_id: acc.providerIds.get(id) ?? null }]));
   return { nextStep: nextStepOf(acc, open, summary), visits: acc.visits, vars: acc.vars, sessions, handoffs: acc.handoffs, openGate: open };
+}
+
+// #10: the gate clock (#416) of a run rebuilt from its log, through the resume state's reducers (a
+// gate opens and closes where it does for runStateFromEvents): the time waited with at least one gate
+// open (total, closed intervals; since: the start of the interval still open, ms), the answered waits
+// per step (gateWaits, as resolveApproval counts them: a withdrawn gate and the gate a resume
+// confirmed are no wait) and the gate left open ({ step, requestedAt } ms, or null). A recovery closes
+// the gates opened before it, and the clock with them (startRecovered does the same live); the gate
+// it asks again keeps the time it was first asked (gates.js firstAskedAt), so its wait_ms counts it all.
+const GATE_CLOCK_EVENTS = ['approval.requested', 'approval.resolved', 'run.recovered'];
+/** @param {any[]} events @returns {{ total: number, since: number | null, gateWaits: Record<string, { waits: number, wait_ms: number }>, openGate: { step: string, requestedAt: number } | null }} */
+function gateClockFromEvents(events) {
+  const acc = { gates: new Map(), cursor: null };
+  /** @type {Record<string, { waits: number, wait_ms: number }>} */
+  const gateWaits = {};
+  let total = 0;
+  /** @type {number | null} */
+  let since = null;
+  /** @type {{ step: string, requestedAt: number } | null} */
+  let carried = null; // the gate a recovery left open, until it is asked again
+  for (const ev of events || []) {
+    if (!GATE_CLOCK_EVENTS.includes(ev.type)) continue;
+    const at = Date.parse(ev.ts);
+    if (!Number.isFinite(at)) continue;
+    if (ev.type === 'run.recovered') carried = ev.gate ? [...acc.gates.values()].pop() || carried : null;
+    if (ev.type === 'approval.resolved' && !ev.withdrawn && !ev.confirmed_at_resume && typeof ev.wait_ms === 'number' && ev.step_id) {
+      const w = (gateWaits[ev.step_id] ??= { waits: 0, wait_ms: 0 });
+      w.waits++;
+      w.wait_ms += ev.wait_ms;
+    }
+    RUN_STATE_REDUCERS[ev.type](acc, ev);
+    if (ev.type === 'approval.requested') {
+      const asked = acc.gates.get(ev.approval_id);
+      if (carried && carried.step === asked.step) asked.requestedAt = carried.requestedAt;
+      carried = null;
+    }
+    if (acc.gates.size) since ??= at;
+    else if (since != null) {
+      total += Math.max(0, at - since);
+      since = null;
+    }
+  }
+  const open = [...acc.gates.values()].pop() || carried;
+  return { total, since, gateWaits, openGate: open ? { step: open.step, requestedAt: open.requestedAt } : null };
 }
 
 // #607: the resume state plus what a recovery continues with, a pure function of the run's log too:
@@ -265,6 +310,9 @@ const methods = {
       step_id: r.nextStep, after_seq: r.from, gate: !!r.nextStep && GATE.includes(this.wf.steps.find((s) => s.id === r.nextStep)?.type),
       lost_turns: r.lostTurns.map((t) => ({ session_id: t.session_id, step_id: t.step_id, turn: t.turn })),
     });
+    // #10: the gates open before the recovery are over (gateClockFromEvents): the time waited at them
+    // stays gate time, and a gate the recovered step asks again starts the clock again
+    this.syncGateClock();
     for (const lost of r.lostTurns) this.recordLostTurn(lost);
     // #811: a fix round the restart cut (prMonitorSeed) ends failed, so the card offers "Ask for a fix" again
     const cut = this.prFixInterrupted;
@@ -272,6 +320,15 @@ const methods = {
       this.prFixInterrupted = null;
       this.emitEvent('pr.fix', { step_id: r.nextStep, ...cut, status: 'failed', reason: 'the app restarted during the fix' });
     }
+  },
+
+  // #10: a step visit starts (runStep): only the recovered step's first visit asks the open gate again
+  // with its first requested_at (gates.js firstAskedAt); a later visit asks a new gate
+  noteRecoveredVisit() {
+    const r = this.recovered;
+    if (!r) return;
+    if (r.visited) r.openGate = null;
+    r.visited = true;
   },
 
   // #607: a turn the crash cut, recorded as a stopped attempt with what its stream reported (#233,
@@ -347,6 +404,7 @@ const methods = {
 };
 
 module.exports = {
+  gateClockFromEvents,
   methods,
   pausedError,
   recoveryStateFromEvents,

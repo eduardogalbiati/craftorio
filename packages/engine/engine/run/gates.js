@@ -4,8 +4,8 @@
 // the gate brief) and waits for `resolveApproval` (the public API the service and the UI answer
 // with; a `feedback_required` choice without a text is refused); `withdrawApproval` closes an
 // open gate, `pendingGates` lists them for runs:active. The time a gate is open is not run time
-// (`syncGateClock`, #416; a gate a recovery asks again keeps its first requested_at, #10), and an answer given while the run is over a limit stops the run at the
-// gate before it is taken. Automation never crosses a gate:
+// (`syncGateClock`, #416; a gate a recovery asks again keeps its first requested_at, #10), and an
+// answer given while the run is over a limit stops the run at the gate before it is taken. Automation never crosses a gate:
 // `kind: escalation` only lets the supervisor on call try first (packages/engine/engine/run/supervision.js).
 
 'use strict';
@@ -20,7 +20,7 @@ const { extractJson, validateSchema } = require('./outputs');
 const { pausedError } = require('./resume');
 
 // #10: a gate's requested_at, now; the gate a recovery asks again keeps the time it was first asked
-// (its wait_ms counts it all), once
+// (its wait_ms counts it all), once, in the recovered step's first visit (runStep forgets it after)
 function firstAskedAt(run, stepId) {
   const reasked = run.recovered?.openGate?.step === stepId ? run.recovered.openGate : null;
   if (reasked) run.recovered.openGate = null;

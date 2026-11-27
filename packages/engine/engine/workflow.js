@@ -594,6 +594,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     st.firstVisitAt ??= Date.now();
     st.tools = { ran: 0, denials: 0, denied: [] }; // this visit's tool calls, for the blocked-loop check
     st.turnRecs = []; // this visit's turn records (turnLog), marked as waste when the visit was blocked
+    this.noteRecoveredVisit(); // #10
     this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: stepAgentLabel(step) });
 
     // a loop that ran out and sent the run here (finishStep handles the targets that are not gates)
