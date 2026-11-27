@@ -26,7 +26,7 @@ Feature: The Usage screen
     Then the GitHub Actions card says 'Actions minutes unavailable: GitHub billing usage needs the gh "user" scope' and suggests "gh auth refresh -s user"
     When I click the ▶ of "gh auth refresh -s user"
     Then the confirm dialog asks "Run this command?"
-    When I click "Run" in the confirm dialog
+    When I click "▶ Run" in the confirm dialog
     Then a terminal tab opens in the dock running "gh auth refresh -s user"
     And no toast says "Run this on the computer where the app runs"
 
