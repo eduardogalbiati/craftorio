@@ -75,12 +75,15 @@ test('#424 an explicit interface language wins over the computer\'s language', (
   assert.equal(agentsLanguage({ language: { interface: 'pt-BR' } }), 'pt-BR');
 });
 
-test('#424 issuesLanguage stays English by default with the computer in pt-BR', () => {
+// #110 changed the default: the Issues language follows the interface language, as the agents' does
+// (it was English whatever the interface, #424).
+test('#110 issuesLanguage follows the interface language by default with the computer in pt-BR', () => {
   onComputer('pt-BR');
-  const { issuesLanguage, languageLine } = load();
-  assert.equal(issuesLanguage({}), 'en');
-  assert.equal(issuesLanguage({ language: { agents: 'interface' } }), 'en');
-  assert.match(languageLine({}), /commit messages in English\./);
+  const { issuesLanguage } = load();
+  assert.equal(issuesLanguage({}), 'pt-BR');
+  assert.equal(issuesLanguage({ language: { agents: 'interface' } }), 'pt-BR');
+  assert.equal(issuesLanguage({ language: { interface: 'en' } }), 'en');
+  assert.equal(issuesLanguage({ language: { interface: 'pt-BR', issues: 'es' } }), 'es');
 });
 
 test('#424 the computer back in English: "Same as the interface" is English again (nothing kept from before)', () => {

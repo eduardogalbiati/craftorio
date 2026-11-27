@@ -25,6 +25,16 @@ Then('the {string} language is {string}', async ({ e2e }, name, label) => {
   await expect(select.locator('option:checked')).toHaveText(label, { timeout: LOAD_TIMEOUT });
 });
 
+// #110: the language the select resolves to while none was chosen: either the option of that language
+// ("Português (Brasil)") or a default option naming it ("Igual à interface (Português (Brasil))"),
+// whatever the developer picks; never another language
+Then('the {string} language resolves to {string}', async ({ e2e }, name, label) => {
+  const select = languageSelect(e2e.window, name);
+  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^(${esc}|.*\\(${esc}\\))$`), { timeout: LOAD_TIMEOUT });
+});
+
 // the options' labels, all of them and in this order ("A, B, C")
 Then('the {string} language list offers {string}', async ({ e2e }, name, list) => {
   const select = languageSelect(e2e.window, name);

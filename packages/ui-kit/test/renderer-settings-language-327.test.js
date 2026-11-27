@@ -74,10 +74,14 @@ test('#327 AI agents: "Same as the interface" first (value interface), then ever
   assert.equal(opts.find((o) => o.value === 'pt-BR').label, 'Português (Brasil)');
 });
 
-test('#328 Issues: every language and no "Same as the interface"; English selected by default', () => {
+// #110: the Issues default follows the interface (English here); the select may offer it as
+// "Same as the interface (English)" or select English itself.
+test('#328 Issues: every language; with the interface in English, the selected default resolves to English', () => {
   const opts = optionsOf(loadView().LanguageSettings.markup({}), 'settings-language-issues');
-  assert.deepEqual(opts.map((o) => o.value), LANGUAGE_CODES);
-  assert.deepEqual(opts.filter((o) => o.selected).map((o) => o.value), ['en']);
+  assert.deepEqual(opts.filter((o) => o.value !== 'interface').map((o) => o.value), LANGUAGE_CODES);
+  const selected = opts.filter((o) => o.selected);
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].value === 'en' || (selected[0].value === 'interface' && /\(English\)/.test(selected[0].label)), true);
 });
 
 test('#327 the saved languages are the selected options', () => {

@@ -59,6 +59,11 @@ Given('the app is open on a new workspace of a machine without {string}', async 
   await e2e.open({ empty: true, env: { CRAFTORIO_E2E_CLI_MISSING: cliId(name) } });
 });
 
+// #110: the same with two CLIs missing (e.g. Grok Build and GitLab CLI, whose install hints are prose)
+Given('the app is open on a new workspace of a machine without {string} and {string}', async ({ e2e }, first, second) => {
+  await e2e.open({ empty: true, env: { CRAFTORIO_E2E_CLI_MISSING: `${cliId(first)},${cliId(second)}` } });
+});
+
 Then('Agents & CLIs lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI and Git, each with a status', async ({ e2e }) => {
   const page = e2e.window;
   await expect(section(page)).toBeVisible({ timeout: LOAD_TIMEOUT });

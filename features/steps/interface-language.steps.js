@@ -257,6 +257,11 @@ Then('the Start panel shows none of these English texts:', async ({ e2e }, table
   await expectNoneOfTheseTexts(startPanelPart(e2e.window), table, 'the Start panel');
 });
 
+// #110: the first-run Setup (data-testid="setup", setup.steps.js), the step it is on
+Then('the Setup shows none of these English texts:', async ({ e2e }, table) => {
+  await expectNoneOfTheseTexts(e2e.window.getByTestId('setup'), table, 'the Setup');
+});
+
 // the open screen's title: its visible level-1 heading
 Then('the open screen\'s title is {string}', async ({ e2e }, title) => {
   const heading = openScreen(e2e.window).getByRole('heading', { level: 1 }).filter({ visible: true }).first();
