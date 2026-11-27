@@ -583,3 +583,131 @@ Then('the document links back to the maintain of the item {string}', async ({ e2
   await expect.poll(async () => (await links.evaluateAll((as) => as.map((a) => a.getAttribute('href') || '')))
     .some((href) => pointsBack.test(href)), { timeout: RUN_TIMEOUT, message: `a link to docs/work/${slug}/maintain.md` }).toBe(true);
 });
+
+// ---- #12: a row reads its documents' `issue:` front matter, and a built and tested item is done --------
+// Assumes these data-testids (the developer adds them), inside a docs-item row:
+//   docs-item-issue-link   the link to the issue named in the item's documents' `issue:` front matter,
+//                          its text holding the issue's number ("#629") (its href depends on the
+//                          project's remote, not checked); absent when no document names an issue
+//   docs-item-done         the row's "Done" state, shown once the plan is built and the test passed
+// "Write the plan" and "Create epic and phase issues" stay buttons of the row, found by their names.
+// The items are seeded as committed files of the demo project's repository, as an earlier run leaves them:
+// an accepted intent and a signed-off spec, and for a done item a built plan (every Progress row done)
+// and a test.md with `status: passed`.
+
+const SEED_DOCS = {
+  intent: { status: 'accepted', title: 'Intent', body: ['## Problem', '', 'Owners cannot take old runs out of the list.'] },
+  spec: { status: 'signed off', title: 'Spec', body: ['## Requirements', '', '**R1. Export.** A button exports the runs.'] },
+  plan: { status: 'accepted', title: 'Plan', body: ['## Order of work', '', '1. Step 1.', '2. Step 2.', '', '## Progress', '', '| Step | Status | Run | Commit / PR |', '|---|---|---|---|', '| 1. Step 1 | done | run-1 | abc1234 |', '| 2. Step 2 | done | run-2 | def5678 |'] },
+  test: { status: 'passed', title: 'Test', body: ['## Suite and tests', '', '| Run | Unit | E2E | Result |', '|---|---|---|---|', '| run-2 | 120 passed | 3 passed | pass |'] },
+};
+
+const seedDoc = (slug, title, doc, issue, lang) => {
+  const d = SEED_DOCS[doc];
+  return [
+    '---',
+    `item: ${slug}`,
+    ...(issue ? [`issue: ${JSON.stringify(issue)}`] : []),
+    `stage: ${doc}`,
+    `status: ${d.status}`,
+    'date: 2026-10-01',
+    lang === 'en' ? `translation: ${doc}.pt-BR.md` : `source: ${doc}.md`,
+    '---',
+    '',
+    `# ${d.title}: ${title}`,
+    '',
+    ...d.body,
+    '',
+  ].join('\n');
+};
+
+function seedItem(e2e, title, docs, issue) {
+  const folder = demoFolder(e2e);
+  const slug = slugOf(title);
+  const dir = path.join(folder, 'docs', 'work', slug);
+  fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(path.join(folder, '.git'))) git(e2e, folder, ['init', '-q', '-b', 'main']);
+  for (const doc of docs) {
+    fs.writeFileSync(path.join(dir, `${doc}.md`), seedDoc(slug, title, doc, issue, 'en'));
+    fs.writeFileSync(path.join(dir, `${doc}.pt-BR.md`), seedDoc(slug, title, doc, issue, 'pt-BR'));
+  }
+  git(e2e, folder, ['add', '-A']);
+  git(e2e, folder, ['commit', '-q', '-m', `Record the ${docs[docs.length - 1]} of ${title}`]);
+  e2e.docItem = { title, slug, dir };
+}
+
+Given('the demo project\'s repository has the item {string} with a signed-off spec filed as {string}', async ({ e2e }, title, issue) => {
+  seedItem(e2e, title, ['intent', 'spec'], issue);
+});
+
+Given('the demo project\'s repository has the item {string} with a signed-off spec and no issue', async ({ e2e }, title) => {
+  seedItem(e2e, title, ['intent', 'spec'], null);
+});
+
+Given('the demo project\'s repository has the item {string} built and tested, its test passed', async ({ e2e }, title) => {
+  seedItem(e2e, title, ['intent', 'spec', 'plan', 'test'], '#629 (phase 1 of epic eduardogalbiati/multiagent-orchestrator#628)');
+});
+
+Then('the item {string} does not offer {string}', async ({ e2e }, title, action) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(row.getByRole('button', { name: action, exact: true })).toHaveCount(0);
+});
+
+Then('the item {string} offers {string} and {string}', async ({ e2e }, title, first, second) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  for (const name of [first, second]) await expect(row.getByRole('button', { name, exact: true })).toBeEnabled();
+});
+
+Then('the item {string} links to the issue {string}', async ({ e2e }, title, issue) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  const link = row.getByTestId('docs-item-issue-link');
+  await expect(link).toHaveCount(1);
+  await expect(link).toBeVisible();
+  await expect(link).toContainText(issue);
+});
+
+Then('the item {string} links to no issue', async ({ e2e }, title) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(row.getByTestId('docs-item-issue-link')).toHaveCount(0);
+});
+
+Then('the item {string} is shown as {string}', async ({ e2e }, title, state) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  const done = row.getByTestId('docs-item-done');
+  await expect(done).toBeVisible();
+  await expect(done).toHaveText(new RegExp(`^\\s*${escapeRe(state)}\\s*$`));
+});
+
+Then('the item {string} is not shown as done', async ({ e2e }, title) => {
+  const row = item(e2e.window, title);
+  await expect(row).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(row.getByTestId('docs-item-done')).toHaveCount(0);
+});
+
+const SDLC_NAMES = ['Plan', 'Design', 'Build', 'Test', 'Deploy', 'Maintain'];
+
+Then('the item {string} shows the stages {string} all done', async ({ e2e }, title, names) => {
+  const stages = item(e2e.window, title).getByTestId('docs-item-stages');
+  await expect(stages).toBeVisible({ timeout: RUN_TIMEOUT });
+  const expected = listOf(names);
+  for (const name of expected) await expect(stages).toContainText(`${name} ✓`);
+  // no stage of the chain is left open: every stage it shows is one of these, checked
+  const text = (await stages.textContent()) || '';
+  expect((text.match(/✓/g) || []).length, 'every stage of the chain is checked').toBe(expected.length);
+  for (const name of SDLC_NAMES.filter((n) => !expected.includes(n))) expect(text, `the chain stops at "${expected[expected.length - 1]}"`).not.toContain(name);
+});
+
+Then('the item {string} is listed after the item {string}', async ({ e2e }, later, earlier) => {
+  const page = e2e.window;
+  await expect(item(page, later)).toBeVisible({ timeout: RUN_TIMEOUT });
+  await expect(item(page, earlier)).toBeVisible();
+  const titles = await page.getByTestId('docs-item').getByTestId('docs-item-title').allTextContents();
+  const at = (title) => titles.findIndex((t) => t.includes(title));
+  expect(at(earlier), `"${earlier}" is listed`).toBeGreaterThanOrEqual(0);
+  expect(at(later), `"${later}" is listed after "${earlier}"`).toBeGreaterThan(at(earlier));
+});

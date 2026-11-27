@@ -138,3 +138,32 @@ Feature: Write an item's intent and spec with the writer, change by change, up t
     When I open "Documents" in the sidebar
     And I open the "Intents" tab of the Documents screen
     Then the intents list shows the intent "Export runs as CSV" as "accepted"
+
+  # #12: a row reads the item's documents' `issue:` front matter: an item already filed links to its issue
+  # instead of offering to file it again, and a built and tested item reads "Done" below the ones in progress
+  @issue-12
+  Scenario: An item whose documents name its issue links to that issue instead of offering to create it
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with a signed-off spec filed as "#629 (phase 1 of epic eduardogalbiati/multiagent-orchestrator#628)"
+    When I open "Documents" in the sidebar
+    Then the item "Export runs as CSV" does not offer "Create epic and phase issues"
+    And the item "Export runs as CSV" links to the issue "#629"
+
+  @issue-12
+  Scenario: An item with a signed-off spec, no plan and no issue still offers to write the plan and to create its issues
+    Given the app is open
+    And the demo project's repository has the item "Export runs as CSV" with a signed-off spec and no issue
+    When I open "Documents" in the sidebar
+    Then the item "Export runs as CSV" offers "Write the plan" and "Create epic and phase issues"
+    And the item "Export runs as CSV" links to no issue
+
+  @issue-12
+  Scenario: A built item whose test passed is shown as done, its stages complete, after the items in progress
+    Given the app is open
+    And the demo project's repository has the item "Archive old runs" built and tested, its test passed
+    And the demo project's repository has the item "Export runs as CSV" with an accepted intent
+    When I open "Documents" in the sidebar
+    Then the item "Archive old runs" is shown as "Done"
+    And the item "Archive old runs" shows the stages "Plan, Design, Build, Test" all done
+    And the item "Export runs as CSV" is not shown as done
+    And the item "Archive old runs" is listed after the item "Export runs as CSV"
