@@ -144,7 +144,12 @@ async function folderRemote(source, git) {
   let folder;
   try { folder = fileURLToPath(source); } catch { return null; }
   const origin = await git(['remote', 'get-url', 'origin'], folder).then((s) => String(s || '').trim(), () => '');
-  return origin && isGitUrl(origin) ? origin : null;
+  return origin && isGitUrl(origin) ? withoutCredentials(origin) : null;
+}
+
+// #105: an http(s) URL without its user:token part, so the project's record never holds a credential
+function withoutCredentials(url) {
+  return String(url).replace(/^(https?:\/\/)[^@/]+@/i, '$1');
 }
 
 // #105: the given repository, or for a file:// folder its remote (folderRemote) and the folder as the clone's source

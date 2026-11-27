@@ -65,8 +65,12 @@
       const row = (f, i) => {
         const target = f.files?.[0]?.path || f.kind || '';
         const busy = cur().filing != null ? ' disabled' : '';
+        // #105: a local issue has no URL, so its number shows without a link
+        const filedLink = f.filed?.issueUrl
+          ? `<a class="small" data-testid="wizard-review-finding-issue" href="${esc(f.filed.issueUrl)}" target="_blank" rel="noopener">#${esc(f.filed.issue)}</a>`
+          : `<span class="small" data-testid="wizard-review-finding-issue">#${esc(f.filed?.issue)}</span>`;
         const action = f.filed
-          ? `<a class="small" data-testid="wizard-review-finding-issue" href="${esc(f.filed.issueUrl || '')}" target="_blank" rel="noopener">#${esc(f.filed.issue)}</a>`
+          ? filedLink
           : `<button type="button" class="btn sm" data-act="create-issue" data-testid="wizard-review-create-issue" data-finding="${i}"${busy}>${esc(t('project_architecture.create_issue'))}</button>
             <button type="button" class="btn sm" data-act="create-issue" data-testid="wizard-review-create-issue-prioritize" data-finding="${i}" data-prioritize${busy}>${esc(t('project_architecture.create_issue_prioritize'))}</button>`;
         return `<li class="wizard-review-finding fit-box" data-testid="wizard-review-finding" data-finding="${i}">
