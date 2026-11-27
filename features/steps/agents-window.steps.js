@@ -126,6 +126,43 @@ Then('the Agents window\'s conversation answers', async ({ e2e }) => {
   await expect(chat.getByTestId('agent-chat-send')).toBeEnabled({ timeout: LOAD_TIMEOUT });
 });
 
+// #77: the header's model (data-testid="agents-window-model", new: the model span of headerHtml in
+// packages/ui-kit/agents-window.js) is the one the Oracle's status in the pane shows: its badge
+// data-testid="oracle-model" is titled with the model id, then ", effort <effort>" when set.
+const headerModel = (win) => pane(win).getByTestId('agents-window-header').getByTestId('agents-window-model');
+const statusModel = (win) => pane(win).getByTestId('oracle-model');
+const isStatusModel = (title, model) => !!model && (title === model || title.startsWith(`${model},`));
+
+Then('the Agents window\'s header shows the model {string}', async ({ e2e }, model) => {
+  await expect(headerModel(agentsWindow(e2e))).toHaveText(model, { timeout: LOAD_TIMEOUT });
+});
+
+Then('the Agents window\'s header shows the model the Oracle\'s status shows', async ({ e2e }) => {
+  const win = agentsWindow(e2e);
+  await expect(statusModel(win)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(headerModel(win)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const model = (await headerModel(win).textContent() || '').trim();
+  const title = (await statusModel(win).getAttribute('title')) || '';
+  expect(isStatusModel(title, model), `the header's model "${model}" is the Oracle's status model ("${title}")`).toBe(true);
+});
+
+// never a model the Oracle does not use: no model in the header while the status shows none, and the
+// status's model as soon as it shows one (checked right away, so before the Oracle's state loads too)
+Then('the Agents window\'s header shows no model but the Oracle\'s', async ({ e2e }) => {
+  const win = agentsWindow(e2e);
+  const check = async () => {
+    const shown = await headerModel(win).count();
+    if (!shown) return true;
+    const model = (await headerModel(win).first().textContent() || '').trim();
+    const title = (await statusModel(win).count()) ? (await statusModel(win).first().getAttribute('title')) || '' : '';
+    return shown === 1 && isStatusModel(title, model);
+  };
+  expect(await check(), 'the header shows no model, or the Oracle\'s status model').toBe(true);
+  await expect(statusModel(win)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect.poll(check, { timeout: LOAD_TIMEOUT, message: 'the header shows the Oracle\'s status model only' }).toBe(true);
+  await expect(headerModel(win)).toHaveCount(1);
+});
+
 // #76: closed as its title bar's X does (the window's own close), and gone from the app's windows
 When('I close the Agents window', async ({ e2e }) => {
   const win = agentsWindow(e2e);

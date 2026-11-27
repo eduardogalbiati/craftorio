@@ -25,6 +25,27 @@ Feature: The Agents window
     And the "Product Owner" chat answers
     And the Agents window's conversation answers
 
+  # #77: the header shows the model the Oracle's service runs on once it answers, nothing before, never
+  # another one (no fallback). The simulated Oracle runs on its default model, claude-opus-5-5 (its status
+  # badge reads "Opus 5.5"). Assumes data-testid="agents-window-model" (new) on the header's model.
+  @issue-77
+  Scenario: The Agents window's header shows the Oracle's model
+    Given the app is open
+    When I open the Agents window with Ctrl+Shift+A
+    And I pick "Oracle" in the Agents window
+    Then the Agents window's header shows the model "claude-opus-5-5"
+    And the Agents window's header shows the model the Oracle's status shows
+
+  @issue-77
+  Scenario: The Agents window's header never shows a model the Oracle does not use
+    Given the app is open
+    When I open the Oracle
+    And I open the Agents window from the "Oracle" drawer
+    Then the Agents window's header shows no model but the Oracle's
+    When I send the message "Which runs failed this week, and why?" in the Agents window
+    Then the Agents window's conversation answers
+    And the Agents window's header shows no model but the Oracle's
+
   # #76: the listeners of run:event are the app's own, made once at its start: a window or a screen that opens adds
   # none (features/support/electron-main.js counts them).
   @issue-76
