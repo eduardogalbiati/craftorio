@@ -381,7 +381,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       if (name === 'profile' && !result?.profile) throw Object.assign(new Error('The ways of working analysis answered no profile.'), { noProfile: true });
       // #630: the profile job keeps its profile, for the wizard's step 3 (jobs.profile.profile); #738: its mode
       // follows the fork choice (no push access: an external contribution)
-      // #105: a folder with no remote works locally
+      // #105: a local folder's mode follows its remote (withRemoteMode)
       const profile = result?.profile ? withForkMode(withRemoteMode(result.profile, projectOf(id)), states.get(id)?.fork) : null;
       // #74: git's profile, the rest of it paid: it waits for the analysis (startPaid)
       if (result?.needsOracle) {
@@ -563,9 +563,11 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return { ...profile, mode: fork.status === 'declined' ? 'local' : 'fork' };
   }
 
-  // #105: a folder imported with no remote (a source, no repository) has no pull request to open: local mode
+  // #105: a folder imported from this computer (a source) follows its git: with no remote it has no pull request
+  // to open (local mode), with a remote (its real repository) it opens pull requests there (remote mode)
   function withRemoteMode(profile, project) {
-    return project?.source && !project.repo ? { ...profile, mode: 'local' } : profile;
+    if (!project?.source) return profile;
+    return { ...profile, mode: project.repo ? 'remote' : 'local' };
   }
 
   // #738: the fork's state, and the profile job's mode with it when the profile is there
