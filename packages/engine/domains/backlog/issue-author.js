@@ -7,6 +7,8 @@
 // - withAuthors: the synced issues with `authorAssociation` (their own, else the adapter's authors read) and `outside`;
 // - awaitsOwner: an outside issue the owner has not approved, or edited since (textHash, approvalHolds), never planned
 //   nor run (roadmap.js propose and cleanItem, backlog.js runInputs, the runs:start channel);
+// - proposalAwaitingOwner: the numbers of a PO proposal that still await the owner (propose leaves them out and says so);
+// - refuseAwaitingOwner: throws "approve it in the Backlog first" when a new roadmap item awaits the owner (cleanItem);
 // - trustFields: the fields a copy of an issue (a roadmap or queue item) keeps.
 
 const crypto = require('crypto');

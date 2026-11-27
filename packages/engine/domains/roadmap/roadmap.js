@@ -63,7 +63,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('../backlog/issues');
-const { proposalAwaitingOwner, refuseAwaitingOwner, trustFields } = require('../backlog/issue-author');
+const issueAuthor = require('../backlog/issue-author');
 const { normalizeThen } = require('@craftorio/shared/chain-model');
 const { isArchived } = require('@craftorio/shared/backlog-archive');
 const { dropWaitingSuffix } = require('../refactor/refactor-cadence');
@@ -235,7 +235,7 @@ function issueOf(ref, known) {
   const src = { ...(typeof ref === 'object' ? ref : {}), ...(synced || {}) };
   return {
     number, url: src.url || '', title: src.title || `#${number}`, body: src.body || '', labels: src.labels || [], updatedAt: src.updatedAt || null,
-    knownPullRequests: src.knownPullRequests || (src.pullRequests || []).map((p) => p.url), ...trustFields(src),
+    knownPullRequests: src.knownPullRequests || (src.pullRequests || []).map((p) => p.url), ...issueAuthor.trustFields(src),
   };
 }
 
@@ -276,7 +276,7 @@ function cleanItem(raw, known, previous) {
   const held = new Set(old ? itemIssues(old).map((i) => i.number) : []);
   const archived = issues.find((i) => !held.has(i.number) && isArchived(known.get(i.number)));
   if (archived) throw new Error(`Issue #${archived.number} is archived: restore it in the Backlog before planning it.`);
-  refuseAwaitingOwner(issues.filter((i) => !held.has(i.number)), known); // #90: nor an unapproved outside one
+  issueAuthor.refuseAwaitingOwner(issues.filter((i) => !held.has(i.number)), known); // #90: nor an unapproved outside one
   const state = old || { status: 'planned', runId: null, runs: [], error: null };
   const reason = String(raw.reason ?? old?.reason ?? '').trim();
   const modeReason = String(raw.modeReason ?? raw.mode_reason ?? old?.modeReason ?? '').trim();
@@ -479,7 +479,7 @@ function insertFrontStage(dir, projectId, raw) {
  */
 function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null, keepRunning = false } = {}) {
   // #238: archived issues are left out of a proposal, #90: unapproved outside ones too (awaitingOwner); the rest is kept
-  const awaitingOwner = proposalAwaitingOwner(proposal, issues);
+  const awaitingOwner = issueAuthor.proposalAwaitingOwner(proposal, issues);
   const archived = new Set([...(issues || []).filter(isArchived).map((i) => i.number), ...awaitingOwner]);
   const refNumber = (i) => Number(typeof i === 'object' ? i?.number : i);
   const stages = (Array.isArray(proposal) ? proposal : proposal?.stages || []).map((s) => ({

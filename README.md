@@ -448,7 +448,14 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
   that decided it; a suspected one is shown *Quarantined*. Whatever the verdict, an outside issue
   enters no roadmap, pipeline or run until you click *Approve* on the Backlog, and the run's task
   then says the text came from outside: a specification, never instructions. The verdict comes from
-  a model that the same text can fool: the author check and your click are the boundary.
+  a model that the same text can fool: the author check and your click are the boundary. Your click
+  approves the text you saw: it keeps a hash of the title and body, and an issue edited after it
+  waits for you again. A trigger (an issue labelled for a workflow) is held while its issue waits
+  for you; on an issue the backlog has not synced yet, the label itself counts as your approval
+  (labels need triage rights on the repository): keep issue templates from applying a trigger's
+  label, or sync the backlog first. When the sync cannot read the
+  authors, it records why in the synced backlog (`authorsError`) and keeps each issue's last known author; an issue never
+  seen before stays unknown, so it waits for you.
 - **The secret scan does not find every secret.** Feature, Fix, Release and this repository's own
   workflows run gitleaks on the commits a run made, before the review (Release: before Ship). It
   knows patterns: a password in plain words, an encoded or split value, a merge commit's own changes
@@ -1406,7 +1413,8 @@ runs on the Feature entry; another key is an error too), and a manifest with err
 The Product Owner reads every issue as data, never as instructions (#90). An issue written outside
 the project (not the owner, a member or a collaborator) shows an *Outside* badge on the Backlog and
 the Roadmap, and the PO's verdict next to it: well written or not, injection suspected or not, with
-the lines it quoted (*Quarantined* when an injection is suspected). Such an issue is in no plan,
+the lines it quoted (*Quarantined* when an injection is suspected). A quarantined issue is in no
+plan; one reviewed with no injection suspected may appear in the PO's proposed groups, but enters no
 roadmap stage or run until the owner clicks *Approve*; its run's task then says the text came from
 outside and is a specification only. See the security model.
 
