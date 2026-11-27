@@ -16,7 +16,9 @@ const folderImport = require('../domains/project/folder-import');
 const projects = require('../domains/project/projects');
 const { createOnboarding } = require('../service/areas/project-onboarding');
 
-const git = (cwd, args) => execFileSync('git', ['-c', 'user.name=Owner', '-c', 'user.email=owner@example.com', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', '-c', 'commit.gpgsign=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+// no automatic maintenance or gc: on a macOS runner a commit's background maintenance left
+// .git/objects/maintenance.lock in the folder between two file lists (v1.1.0's Deploy)
+const git = (cwd, args) => execFileSync('git', ['-c', 'user.name=Owner', '-c', 'user.email=owner@example.com', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', '-c', 'commit.gpgsign=false', '-c', 'maintenance.auto=false', '-c', 'gc.auto=0', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 function tmp(t, prefix = 'folder-edges-98-') {
   const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
