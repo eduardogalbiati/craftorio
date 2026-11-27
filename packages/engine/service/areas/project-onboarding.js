@@ -81,7 +81,8 @@ const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const PAID = ['projectMap'];
 
-// the reason of an access check that did not reach the repository: git's own last line; no-git and no-network
+// the reason of an access check that did not reach the repository: git's own last fatal: / remote: / ERROR: line
+// (not the hint lines "Please make sure…" / "and the repository exists." under it), else its last line; no-git and no-network
 // (no message of their own in the wizard) lead with a sentence. #107: the three causes (repo-not-found |
 // repo-no-access | not-a-git-repo) are worded by the wizard in the interface language, git's line is the detail
 const ACCESS_LEADS = {
@@ -89,7 +90,8 @@ const ACCESS_LEADS = {
   'no-network': 'The repository could not be reached: check the network connection and retry.',
 };
 function accessReason(access) {
-  const detail = String(access.message || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-1)[0] || '';
+  const lines = String(access.message || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const detail = lines.filter((l) => /^(fatal|remote|error):/i.test(l)).slice(-1)[0] || lines.slice(-1)[0] || '';
   const lead = ACCESS_LEADS[access.status];
   if (!lead) return detail || undefined;
   return detail ? `${lead} (${detail})` : lead;
@@ -485,16 +487,19 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const w = workOf(id);
     if (!provider) { change(id, { cli: null }); w.cli = Promise.resolve(); return w.cli; }
     change(id, { cli: { provider, status: 'checking' } });
-    w.cli = Promise.resolve().then(() => cli(provider)).then((found) => cliState(provider, found), () => cliState(provider, null))
-      .then((c) => change(id, { cli: c }));
+    w.cli = cliOf(provider).then((c) => change(id, { cli: c }));
     return w.cli;
+  }
+
+  // the state of gh / glab for a provider (a failed lookup counts as not found)
+  function cliOf(provider) {
+    return Promise.resolve().then(() => cli(provider)).then((found) => cliState(provider, found), () => cliState(provider, null));
   }
 
   // #107: gh / glab for a refused import's provider (no project to follow: checked once, answered with the refusal)
   function refusedCli(repo) {
     const provider = providerOf(repo);
-    if (!provider) return Promise.resolve(null);
-    return Promise.resolve().then(() => cli(provider)).then((found) => cliState(provider, found), () => cliState(provider, null));
+    return provider ? cliOf(provider) : Promise.resolve(null);
   }
 
   // waits for the clone (and the CLI check), then ready with the free part, or failed with the clone's reason

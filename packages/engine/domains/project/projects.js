@@ -240,14 +240,11 @@ async function checkAccess(repo, { git = lsRemote } = {}) {
     // the network first: an SSH host that cannot be resolved also says "Could not read from remote repository"
     if (e?.code === 'ETIMEDOUT' || /Could not resolve host|Failed to connect|Couldn't connect|Connection (timed out|refused)|timed out|Network is unreachable|No such host/i.test(message)) return { status: 'no-network', message };
     // not-a-git-repo only for a folder on this computer (an SSH URL with a wrong path says the same words)
-    const cause = localOrigin(repo) && /does not appear to be a git repository|not a git repository/i.test(message) ? 'not-a-git-repo'
+    const cause = !isGitUrl(String(repo || '').trim()) && /does not appear to be a git repository|not a git repository/i.test(message) ? 'not-a-git-repo'
       : /not found|does not appear to be a git repository/i.test(message) ? 'repo-not-found' : 'repo-no-access';
     return { status: 'no-access', cause, message };
   }
 }
-
-// #107: a file:// URL or a path (no scheme, not user@host:path): a folder on this computer
-const localOrigin = (repo) => /^file:\/\//i.test(String(repo || '').trim()) || !/^[a-z][a-z0-9+.-]*:\/\/|^[^@\s/]+@[^:\s]+:/i.test(String(repo || '').trim());
 
 // #639: git ls-remote with the allowlisted environment of the platform CLIs (their tokens), no prompt;
 // the SSH agent's socket passes too, so an SSH URL the clone (full environment) reaches answers 'reachable'
