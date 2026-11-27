@@ -59,6 +59,7 @@ function pickProjectFolder() {
   fs.mkdirSync(path.join(dir, 'docs'));
   fs.writeFileSync(path.join(dir, 'README.md'), '# Team handbook\n');
   fs.writeFileSync(path.join(dir, 'docs', 'onboarding.md'), '# Onboarding\n');
+  process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
   electron.dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
 }
 

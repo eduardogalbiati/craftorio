@@ -305,9 +305,14 @@ service.events.on('notify', (n) => {
 
 // Resolves the workspace before opening the window. If the registered folder (or the default
 // ~/craftorio-workspace) does not exist, asks whether to create the default or pick another.
+// Whether a workspace this process picks is registered for the next launches: not when it came from
+// CRAFTORIO_WORKSPACE or a simulation (tests, E2E), so they never touch the owner's registered one.
+let registerWorkspace = true;
 async function ensureWorkspace() {
   const r = workspace.resolveWorkspace();
-  if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' && r.source !== 'simulation' });
+  registerWorkspace = r.source !== 'env' && r.source !== 'simulation';
+  // already resolved (registered, default or env): opened as it is, no #106 check
+  if (r.dir) return workspace.setupWorkspace(r.dir, { persist: registerWorkspace, check: false });
 
   // #329: no workspace, so no setting yet: the computer's language when it has a catalog
   const lang = I18n.resolveLanguage('', app.getLocale());
@@ -325,12 +330,12 @@ async function ensureWorkspace() {
       cancelId: 2,
       noLink: true,
     });
-    if (response === 0) return workspace.setupWorkspace(r.fallback);
+    if (response === 0) return workspace.setupWorkspace(r.fallback, { check: false }); // it does not exist yet
     if (response === 2) return null;
     const dir = await pickWorkspaceDir();
     if (!dir) continue;
     try {
-      return workspace.setupWorkspace(dir, { lang });
+      return workspace.setupWorkspace(dir, { check: true, lang });
     } catch (e) {
       // #106: a folder holding another project's files is refused, untouched: say why, ask again
       await dialog.showMessageBox({ type: 'warning', title: t('dialog.workspace', {}, lang), message: e.message, noLink: true });
@@ -483,7 +488,7 @@ ipc.handle('dialog:pickFolder', async () => {
 ipc.handle('workspace:change', async () => {
   if (service.isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
   const dir = await pickWorkspaceDir(win);
-  if (dir) service.setWorkspace(workspace.setupWorkspace(dir));
+  if (dir) service.setWorkspace(workspace.setupWorkspace(dir, { check: true, persist: registerWorkspace }));
   // the endpoint follows the workspace (its own setting, its own control/ folder)
   if (dir) await updateControl().catch((e) => console.error('control channel:', e.message));
   return service.workspace();

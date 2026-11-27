@@ -119,9 +119,7 @@ function resolveWorkspace({ store = defaultStore(), env = process.env, home = os
   return { dir: null, source: null, registered, fallback };
 }
 
-// #106: what marks a folder as a Craftorio workspace already (names from layout()), and the files the
-// OS leaves in any folder, which do not make it "another project's"
-const WORKSPACE_MARKS = ['index.db', 'runs', 'settings.json', 'workflows'];
+// #106: the files the OS leaves in any folder, which do not make it "another project's"
 const OS_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
 
 /**
@@ -134,14 +132,18 @@ function workspaceFolderProblem(root, { lang } = {}) {
   if (!isDir(root)) return fs.existsSync(root) ? refused() : null; // a file is no folder to seed
   const names = fs.readdirSync(root).filter((n) => !OS_FILES.has(n));
   if (!names.length) return null;
-  if (WORKSPACE_MARKS.some((m) => names.includes(m))) return null;
+  // a Craftorio workspace: the folders setupWorkspace always creates, together (one generic name
+  // like runs/ alone is another project's output)
+  const ws = layout(root);
+  if (isDir(ws.runs) && isDir(ws.workflows)) return null;
   return refused();
 }
 
 /**
- * Creates the workspace structure and registers the path. `check` (default: when the path is
- * registered, i.e. a folder the user chose) refuses a folder holding other files before anything is
- * written into it (#106): it throws, nothing is created, the path is not registered.
+ * Creates the workspace structure and registers the path (`persist`). `check` refuses a folder
+ * holding other files before anything is written into it (#106): it throws, nothing is created, the
+ * path is not registered. Callers pass it explicitly: true where the user chose the folder, false
+ * where it was already resolved; it defaults to `persist` for callers that pass neither.
  */
 function setupWorkspace(dir, { store = defaultStore(), persist = true, check = persist, lang } = {}) {
   const root = path.resolve(dir);

@@ -122,7 +122,7 @@ if (listen.error) {
   process.exit(1);
 }
 const found = args.workspace ? { dir: args.workspace, source: 'arg' } : workspace.resolveWorkspace();
-const ws = workspace.setupWorkspace(found.dir || found.fallback, { persist: !['arg', 'env', 'simulation'].includes(found.source) });
+const ws = workspace.setupWorkspace(found.dir || found.fallback, { persist: !['arg', 'env', 'simulation'].includes(found.source), check: false });
 
 // One engine per workspace (#112): the desktop app holds this lock on the workspace it opens, and so
 // does the server; two engines on one workspace would take each other's runs for interrupted.

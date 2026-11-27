@@ -91,7 +91,7 @@ const args = parseArgs(process.argv.slice(2));
 // With no interactive terminal, creates the default folder if none exists. An agent's check
 // (CRAFTORIO_SIMULATION_ONLY=1) gets its run's scratch workspace or a temporary one, never the owner's (#120).
 const found = resolveWorkspace();
-const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' && found.source !== 'simulation' });
+const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' && found.source !== 'simulation', check: false });
 // Same defaults as the app: bundled skills and workflows are seeded into the workspace.
 seedSkills(path.join(root, 'skills'), ws.skills);
 seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows);
