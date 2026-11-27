@@ -4,7 +4,8 @@
 // - listItems(dir) → [{ item, title?, stage, docs: [{ doc, file, status, translation }] }] from the front
 //   matter of docs/work/<item>/intent.md, spec.md, (#633) plan.md and (#702) test.md once a run wrote it
 //   (a `not started` skeleton is not listed) (stage: the latest document's; title: the latest document's
-//   heading, #670); [] without docs/work;
+//   heading, #670; issue?: #12, the first document's `issue:` front matter, quotes dropped, when it names
+//   a `#N`); [] without docs/work;
 // - readDoc(dir, { item, doc }) → { item, doc, status, source: { file, markdown }, translation: { file, markdown } | null };
 // - createDoc(dir, { item, doc, title, date }) → { item, doc, commit }: the playbook's skeleton of the
 //   document and its pt-BR translation (the sections of DocModel's lint, one line each to write), one
@@ -144,6 +145,7 @@ function listItems(dir) {
     const docs = [];
     let stage = null;
     let title = null;
+    let issue = null;
     for (const doc of LISTED) {
       const text = readText(path.join(work, entry.name, `${doc}.md`));
       if (text === null) continue;
@@ -155,12 +157,14 @@ function listItems(dir) {
       docs.push({ doc, file: `docs/work/${entry.name}/${doc}.md`, status, translation: fm.translation || null });
       stage = fm.stage || doc;
       if (doc !== 'test') title = titleOf(text) || title;
+      // #12 the issue (or the epic's phase issue) the first document names in its `issue:` field
+      issue = issue || DocModel.issueRef(fm.issue)?.text || null;
     }
     // #650: the Maintain stage's document, apart from `docs` (the pre-flow's, whose latest is the row's
     // stage and pill) for the editor's stepper
     const text = docs.length ? readText(path.join(work, entry.name, 'maintain.md')) : null;
     const maintain = text === null ? null : { file: `docs/work/${entry.name}/maintain.md`, status: DocModel.frontMatter(text).status || 'no incidents' };
-    if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs, ...(maintain ? { maintain } : {}) });
+    if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs, ...(issue ? { issue } : {}), ...(maintain ? { maintain } : {}) });
   }
   return items.sort((a, b) => a.item.localeCompare(b.item));
 }

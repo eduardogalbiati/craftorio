@@ -113,7 +113,9 @@
   }
 
   function renderList() {
-    $('#docs-list').innerHTML = DocsList.itemsHtml(docs.items, docs.projectId);
+    // #12 the project (its repo, its platform) gives the issue links their page
+    const project = (state.projects || []).find((p) => p.id === docs.projectId) || null;
+    $('#docs-list').innerHTML = DocsList.itemsHtml(docs.items, docs.projectId, project);
   }
 
   function onListClick(e) {

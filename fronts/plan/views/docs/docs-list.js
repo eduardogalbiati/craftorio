@@ -1,6 +1,7 @@
 // Documents screen (#647, #671, #650, views/docs/docs.js): the item's SDLC steps with their documents
 // and the markup of the list area: the Items rows (their stage chain, the pill of their latest
-// document, their actions, #671 mock-1) and the Intents tab (#650, spec R16: every
+// document, their actions, #671 mock-1; #12 the link to the issue their documents name in `issue:`
+// instead of "Create epic", and a Done badge, the row last, once the plan is built and the test passed) and the Intents tab (#650, spec R16: every
 // docs/work/<item>/intent.md with its status and its link back to the maintain.md that opened it).
 // Markup only, from the values docs.js passes; the clicks are docs.js's (data-docs-*). Uses app.js
 // globals (esc, t), DocsPanels.openLabel and DocModel.ACCEPTED. Browser: window.DocsList.
@@ -44,16 +45,43 @@
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
     // #633 the plan (plan.md) is written from the signed-off spec, at its own gate
     if (spec && signedOff(spec.status) && !names.includes('plan')) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
-    if (spec && signedOff(spec.status)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
+    // #12 an item whose documents name its issue already has it: no second epic
+    if (spec && signedOff(spec.status) && !issueOf(it)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
     return open.join('');
   }
+
+  // #12 the item's issue from its documents' `issue:` field (DocModel.issueRef), null without one
+  const issueOf = (it) => (it.issue ? window.DocModel?.issueRef?.(it.issue) || null : null);
+  // #12 a ref's page: owner/repo#N on the project's host (github.com without one), #N in the project's repository
+  function issueHref(ref, project) {
+    const P = window.Platforms;
+    const repo = P?.parseRepoUrl?.(project?.repo);
+    const path = ref.repo || repo?.path;
+    if (!P || !path) return '';
+    const platform = (repo && P.projectPlatform?.(project)) || P.findPlatform?.('github');
+    return platform?.issueUrl?.(`https://${repo?.host || platform.host}/${path}`, ref.number) || '';
+  }
+  // #12 the row's link to its issue, "Epic owner/repo#628 · #629" for an epic's phase
+  function issueLink(it, project) {
+    const ref = issueOf(it);
+    if (!ref) return '';
+    const name = (r) => `${r.repo || ''}#${r.number}`;
+    const label = ref.epic ? `${t('docs.item_epic', { ref: name(ref.epic) })} · ${name(ref)}` : t('docs.item_issue', { ref: name(ref) }); // i18n-ignore
+    const href = issueHref(ref, project);
+    return `<a class="docs-item-issue small" data-testid="docs-item-issue-link"${href ? ` href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(ref.text)}">${esc(label)}</a>`;
+  }
+
+  // #12 a built plan whose test passed: the item is done
+  const isDone = (it) => it.docs.some((d) => d.doc === 'plan' && d.status === 'built') && it.docs.some((d) => d.doc === 'test' && d.status === 'passed');
 
   // #671 the stage chain of a row, "Plan ✓ · Design": the steps up to the item's, done ones checked
   function stagesHtml(it) {
     const latest = it.docs[it.docs.length - 1];
-    const at = STAGE_STEP[it.stage] ?? Math.max(0, stepOfDoc(latest?.doc));
+    // #12 a done item's chain reaches Test, every step checked
+    const finished = isDone(it);
+    const at = Math.max(STAGE_STEP[it.stage] ?? Math.max(0, stepOfDoc(latest?.doc)), finished ? STAGE_STEP.test : 0);
     const current = it.docs.find((d) => d.doc === SDLC[at].doc);
-    const done = (i) => i < at || (i === at && !!current && (current.status === acceptedStatus(current.doc) || signedOff(current.status)));
+    const done = (i) => finished || i < at || (i === at && !!current && (current.status === acceptedStatus(current.doc) || signedOff(current.status)));
     return SDLC.slice(0, at + 1).map((s, i) => `<span class="docs-stage${done(i) ? ' done' : ''}">${s.name()}${done(i) ? ' ✓' : ''}</span>`).join('<span class="docs-sep">·</span>'); // i18n-ignore
   }
 
@@ -72,16 +100,20 @@
   const noProject = () => `<div class="empty-state"><b>${t('docs.no_project_chosen')}</b><p class="muted">${t('docs.choose_a_project_in_the_header')}</p></div>`;
 
   // the Items tab: one row per docs/work/<item>/
-  function itemsHtml(items, projectId) {
+  // #12 project: the project's { repo, platform } for the issue links (optional); done items come last
+  function itemsHtml(items, projectId, project = null) {
     if (!projectId) return noProject();
     if (!items.length) return `<div class="empty-state" data-testid="docs-empty"><b>${t('docs.no_item_yet')}</b><p class="muted">${t('docs.start_with_new_item')}</p></div>`;
-    return items.map((it) => `
-      <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
+    const ordered = [...items].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
+    return ordered.map((it) => `
+      <div class="docs-item${isDone(it) ? ' is-done' : ''}" data-testid="docs-item" data-item="${esc(it.item)}">
         <div class="docs-item-main" title="${esc(`docs/work/${it.item}/`)}">
           <b class="docs-item-title" data-testid="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
           <span class="docs-sep muted">·</span>
           <span class="docs-item-stages muted" data-testid="docs-item-stages">${stagesHtml(it)}</span>
         </div>
+        ${issueLink(it, project)}
+        ${isDone(it) ? `<span class="badge docs-done" data-testid="docs-item-done">${t('docs.item_done')}</span>` : ''}
         ${pillHtml(it)}
         <div class="row docs-item-actions">${itemActions(it)}</div>
       </div>`).join('');
@@ -138,6 +170,7 @@
     docFile,
     fileName,
     intentsHtml,
+    isDone,
     itemsHtml,
     signedOff,
     statusBadge,

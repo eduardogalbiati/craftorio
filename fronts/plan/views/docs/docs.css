@@ -18,6 +18,10 @@
 .docs-item-doc { display: inline-flex; align-items: center; gap: 4px; }
 .docs-item > .docs-pill { flex-shrink: 0; }
 .docs-item-actions { gap: 6px; flex-shrink: 0; flex-wrap: nowrap; justify-content: flex-end; }
+/* #12 the issue the item's documents name (cut, the full value on hover) and the Done badge */
+.docs-item-issue { color: var(--accent); font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; max-width: 40%; }
+.docs-item-issue:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.docs-item > .badge.docs-done { flex-shrink: 0; }
 /* #650 the Items / Intents tabs over the list; an intent row is one button (title · file, its link back, its status) */
 .docs-views { margin: 0 0 10px; }
 .docs-intent-row { width: 100%; font: inherit; color: var(--text); text-align: left; cursor: pointer; }

@@ -37,6 +37,8 @@
 // - planBuilt(markdown): every Progress row done (`done` / `feito`), at least one row;
 // - planStatus(markdown): the plan's effective status, `built` when planBuilt, else its front matter's
 //   `status` without an inline `# comment` ('' without one);
+// - issueRef(value) (#12): an `issue:` front matter value (quotes dropped) → { text, repo, number, epic:
+//   { repo, number } | null } (its first `[owner/repo]#N`, the epic from `epic owner/repo#N`), null without one;
 // - isItemName(name): a work item's folder name (letters, digits, `.`, `_`, `-`, 100 characters, no `..`);
 // - addTableRow(markdown, headings, row): the row in the first table of the section titled one of
 //   `headings` (`## …` lines), in place of its "nothing yet" row (every cell `—` but the last), else
@@ -403,6 +405,17 @@
     return String(frontMatter(markdown).status || '').replace(/\s+#.*$/, '').trim();
   }
 
+  // #12 an `issue:` front matter value: its first `[owner/repo]#N` and the epic it names (`epic owner/repo#N`)
+  const ISSUE_REF = /(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/;
+  function issueRef(value) {
+    const text = String(value ?? '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+    const first = ISSUE_REF.exec(text);
+    if (!first) return null;
+    const epic = new RegExp(`\\bepic\\s+${ISSUE_REF.source}`, 'i').exec(text);
+    const ref = (m) => ({ repo: m[1] || null, number: Number(m[2]) });
+    return { text, ...ref(first), epic: epic ? ref(epic) : null };
+  }
+
   function isItemName(name) {
     const s = String(name ?? '');
     return ITEM_NAME.test(s) && !s.includes('..');
@@ -437,6 +450,7 @@
     blocks,
     frontMatter,
     isItemName,
+    issueRef,
     itemName,
     lintDoc,
     lintTranslation,
