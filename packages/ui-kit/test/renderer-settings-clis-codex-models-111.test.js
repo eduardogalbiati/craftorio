@@ -73,6 +73,13 @@ test('#111 Settings › Agents & CLIs: with no usable Codex model the Codex radi
   assert.equal('disabled' in codexRadio(app).attrs, true, 'the Codex radio is disabled');
 });
 
+test('#111 Settings › Agents & CLIs: a partial fallback (only gpt-6.2-sol offered) warns and disables the Codex radio', async () => {
+  const app = await openClis(['gpt-6.2-sol']);
+  const shown = warningText(app);
+  assert.ok(shown && shown.includes('gpt-6.1-terra') && shown.includes('gpt-6-luna'), `the models without a substitute: ${shown}`);
+  assert.equal('disabled' in codexRadio(app).attrs, true, 'the Codex radio is disabled');
+});
+
 test('#111 Settings › Agents & CLIs: the full list, or no known list, shows no warning', async () => {
   for (const models of [FULL, undefined]) {
     const app = await openClis(models);

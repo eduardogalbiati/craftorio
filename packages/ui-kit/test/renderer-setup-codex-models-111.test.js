@@ -81,6 +81,14 @@ test('#111 Setup: with no usable Codex model the card warns and Codex cannot be 
   assert.equal('disabled' in codexRadio(app).attrs, true, 'the Codex radio is disabled');
 });
 
+test('#111 Setup: a partial fallback (only gpt-6.2-sol offered) warns, names the models left out and disables Codex', { timeout: 30000 }, async () => {
+  const app = await openSetup({ models: ['gpt-6.2-sol'] });
+  const shown = warningText(card(app, 'codex'));
+  assert.ok(shown && shown.includes('gpt-6.1-terra') && shown.includes('gpt-6-luna'), `the models without a substitute: ${shown}`);
+  assert.equal('disabled' in codexRadio(app).attrs, true, 'the Codex radio is disabled');
+  assert.equal('checked' in codexRadio(app).attrs, false, 'and not chosen');
+});
+
 test('#111 Setup: the full model list, or no known list, shows no warning and leaves Codex choosable', { timeout: 30000 }, async () => {
   for (const models of [FULL, undefined]) {
     const app = await openSetup({ models });
