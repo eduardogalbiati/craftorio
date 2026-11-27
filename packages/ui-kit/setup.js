@@ -12,7 +12,8 @@
 //   the engine's machine (SettingsClis.run, cli-setup:start) with its console under the rows.
 //   #97: the step asks which AI is the orchestrator: the Claude Code and Codex cards carry a "Use as orchestrator"
 //   radio (one group, off while that CLI is missing or signed out; Grok Build none), saved at once as
-//   settings.orchestratorProvider (and again by Finish: the only ready AI is the default); the chosen card reads
+//   settings.orchestratorProvider (the only ready AI is the default, saved once the CLIs are checked, and again
+//   by Finish), the workflows read again (their requirements follow it); the chosen card reads
 //   Required (SetupModel.requiredTools) and the missing note names it.
 // - First project: the projects, and New project opening the onboarding wizard (#643,
 //   the action openProjectWizard of fronts/build/views/projects/project-wizard.js, no button without
@@ -123,32 +124,37 @@
 
   // ---------- Agents ----------
   const statesOf = () => Object.fromEntries((setup.tools || []).map((t) => [t.id, window.SetupModel.statusBadge(t).state]));
-  // #97: the CLIs that can lead a run (Grok Build cannot)
-  const ORCHESTRATORS = ['claude', 'codex'];
-  // the Setup's orchestrator: the saved one (settings.orchestratorProvider, claude by default), unless it is not
-  // ready and the other one is the only one ready
+  // #97: the CLIs that can lead a run (Grok Build cannot) and the saved one (claude by default):
+  // packages/shared/orchestrator-models.js
+  const Orch = () => window.OrchestratorModels;
+  const savedOrchestrator = () => Orch().orchestratorOf(state.settings?.orchestratorProvider);
+  // the Setup's orchestrator: the saved one, unless it is not ready and the other one is the only one ready
   function orchestrator() {
-    const saved = ORCHESTRATORS.includes(state.settings?.orchestratorProvider) ? state.settings.orchestratorProvider : 'claude';
+    const saved = savedOrchestrator();
     const states = statesOf();
-    const ready = ORCHESTRATORS.filter((id) => states[id] === 'ready');
+    const ready = Orch().ORCHESTRATORS.filter((id) => states[id] === 'ready');
     return ready.length === 1 && states[saved] !== 'ready' ? ready[0] : saved;
   }
   // One AI card's "Use as orchestrator" radio (also Settings › Agents & CLIs', window.SetupRows): one group
-  // (name="orchestrator"), off until that CLI is installed and signed in; `testid`: the label's own test id
+  // (name="orchestrator"; Settings' radios sit in their own <form>, another group), off until that CLI is
+  // installed and signed in; `testid`: the label's own test id
   function orchestratorRadio(tool, chosen, { testid = null } = {}) {
-    if (!ORCHESTRATORS.includes(tool.id)) return '';
+    if (!Orch().ORCHESTRATORS.includes(tool.id)) return '';
     const ready = window.SetupModel.statusBadge(tool).state === 'ready';
     const tip = ready ? '' : ` title="${esc(t('setup.orchestrator_not_ready', { name: tool.name || window.SetupModel.toolName(tool.id) }))}"`;
     return `<label class="setup-orchestrator${ready ? '' : ' off'}"${testid ? ` data-testid="${esc(testid)}"` : ''}${tip}><input type="radio" name="orchestrator" value="${esc(tool.id)}" data-testid="setup-orchestrator-${esc(tool.id)}"${chosen === tool.id ? ' checked' : ''}${ready ? '' : ' disabled'}><span>${esc(t('setup.use_as_orchestrator'))}</span></label>`;
   }
 
-  async function saveOrchestrator(id) {
+  // saved at once; the workflows read again (their requirements are computed on the saved orchestrator, the
+  // missing note reads them); focus: back on the radio chosen (not after checkAgents' default)
+  async function saveOrchestrator(id, { focus = true } = {}) {
     try {
       state.settings = await api.setSettings({ orchestratorProvider: id });
     } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
+    try { state.workflows = await api.listWorkflows(); } catch { /* the list stays */ }
     if (!setup.open) return;
     render();
-    $s(`[data-testid="setup-orchestrator-${id}"]`)?.focus({ preventScroll: true });
+    if (focus) $s(`[data-testid="setup-orchestrator-${id}"]`)?.focus({ preventScroll: true });
   }
   const bundled = () => (state.workflows || []).filter((w) => !w.error && w.origin !== 'custom' && w.requirements);
 
@@ -252,7 +258,10 @@
     setup.tools = null;
     if (onTools()) render();
     setup.tools = await loadCliStatus();
-    if (setup.open) render();
+    if (!setup.open) return;
+    // #97: the only ready AI shown as the orchestrator is saved as one (a Skip or Esc then keeps it too)
+    if (orchestrator() !== savedOrchestrator()) await saveOrchestrator(orchestrator(), { focus: false });
+    else render();
   }
 
   async function runAction(btn) {
@@ -346,8 +355,10 @@
     setup.open = false;
     document.getElementById('setup-modal').classList.add('hidden');
     document.body.classList.remove('setup-open');
-    // #97: its orchestrator radios share a name with Settings › Agents & CLIs': none left behind in the page
+    // #97: its orchestrator radios share a name with Settings › Agents & CLIs': none left behind in the page,
+    // and Settings' rows (open under it after "Run setup again") show the orchestrator saved here
     $s('#setup-body').innerHTML = '';
+    window.SettingsClis?.refresh?.();
   }
 
   // #643: settings.hiddenWorkflows is never written here, an older workspace keeps what it hides
@@ -422,7 +433,6 @@
   window.Setup = { isOpen: () => setup.open, open, skip };
   window.SetupRows = { // LOGOS: the project wizard's provider tiles too
     LOGOS,
-    ORCHESTRATORS,
     TOOL_IDS,
     cliRow,
     orchestratorRadio,

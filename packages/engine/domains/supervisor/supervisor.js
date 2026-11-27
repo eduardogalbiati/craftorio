@@ -22,6 +22,7 @@ const path = require('path');
 const yaml = require('js-yaml');
 const registry = require('@craftorio/shared/providers');
 const Language = require('@craftorio/shared/language');
+const OrchestratorModels = require('@craftorio/shared/orchestrator-models');
 
 // The supervisor's words reach the person and decisions.tsv, and its instructions reach the agents, so
 // the language is pinned instead of following the task's (#94, #121): English, or the AI agents
@@ -364,7 +365,8 @@ function resumeSpec(runDir, fromStep) {
     if (to) agentOverrides[ev.agent] = { ...agentOverrides[ev.agent], provider: to[1], model: to[2] };
   }
   // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
+  // orchestrator (#97): the orchestrator AI the run recorded, which its resume keeps (run/orchestrator-choice.js)
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null, orchestrator: started.orchestrator_ai || null,
     // runs recorded before groups have a single `issue`
     issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, stoppedAt: stoppedStep(events), steps, sessions, sessionAccounts, cliTotals, handoffs, worktree,
     childRuns: [...childRuns.values()], agentOverrides: Object.keys(agentOverrides).length ? agentOverrides : null };
@@ -410,11 +412,13 @@ function withoutGateDecisions(wf, steps) {
   return Object.fromEntries(Object.entries(steps || {}).filter(([id]) => !gates.has(id)));
 }
 
-// The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file.
+// The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file;
+// #97: a run that moved to the chosen orchestrator AI (orchestrator_applied) asks that AI's supervisor.
 function supervisorConfig(runDir, workflowsDir) {
   const started = readEvents(runDir).find((e) => e.type === 'workflow.started') || {};
   let wf = {};
   try { wf = readRunWorkflow(workflowsDir, started.file) || {}; } catch { /* workflow file gone */ }
+  if (started.orchestrator_applied) wf = OrchestratorModels.applyOrchestrator(wf, started.orchestrator_ai, { bundled: true });
   const orch = wf.orchestrator || {};
   const providerName = orch.supervisor?.provider || orch.provider || 'claude';
   const provider = wf.providers?.[providerName] || DEFAULT_PROVIDER;

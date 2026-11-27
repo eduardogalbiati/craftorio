@@ -20,8 +20,9 @@
 //   marked and scrolled to; the close button goes back to the screen it was opened from, then calls onClose.
 //   Leaving Settings another way ends that visit (onShow, settings.js's view show): a later visit marks no
 //   CLI and its close button calls no old onClose.
-// - window.SettingsClis = { render, run, consoleHtml }: settings.js renderTools draws the rows with render;
-//   setup.js runs its own rows' actions in the browser with run and shows consoleHtml.
+// - window.SettingsClis = { render, run, consoleHtml, refresh }: settings.js renderTools draws the rows with render;
+//   setup.js runs its own rows' actions in the browser with run and shows consoleHtml, and redraws the rows with
+//   refresh when it closes (#97: the orchestrator it saved).
 // Uses app.js globals ($, esc, t, state, showView, confirmDialog, showToast, errMsg), settings.js's
 // showSettingsTab, command-hint.js's runSuggestedCommand and start-drawer.js's setCliStates.
 
@@ -83,19 +84,22 @@
     renderOrchestrator(tools);
   }
 
-  // #97: the orchestrator AI, the saved one checked (claude when none), the Setup's radios (off while not ready)
+  // #97: the orchestrator AI, the saved one checked (claude when none), the Setup's radios (off while not ready),
+  // inside their own <form>: a radio group is its form owner's, so the Setup's radios (no form) opened over
+  // Settings ("Run setup again") form another group (neither unchecks the other, the arrows stay in the dialog)
   function renderOrchestrator(tools) {
     const box = $('#set-orchestrator');
     if (!box) return;
-    const saved = state.settings?.orchestratorProvider === 'codex' ? 'codex' : 'claude';
+    const saved = window.OrchestratorModels.orchestratorOf(state.settings?.orchestratorProvider);
     const row = (id) => {
       const tool = tools.find((x) => x.id === id) || { id, checking: true };
       const name = tool.name || window.SetupModel.toolName(id);
       return `<div class="s-row"><div class="s-label"><b>${esc(name)}</b><span>${esc(window.SetupModel.statusBadge(tool).label)}</span></div>
         <div class="s-ctrl">${window.SetupRows.orchestratorRadio(tool, saved, { testid: `settings-orchestrator-${id}` })}</div></div>`;
     };
-    box.innerHTML = `<div class="s-row"><div class="s-label"><b>${esc(t('settings.agents.orchestrator'))}</b><span>${esc(t('settings.agents.orchestrator_help'))}</span></div></div>
-      ${window.SetupRows.ORCHESTRATORS.map(row).join('')}`;
+    box.innerHTML = `<form class="settings-orchestrator-form" data-orchestrator-form><div class="s-row"><div class="s-label"><b>${esc(t('settings.agents.orchestrator'))}</b><span>${esc(t('settings.agents.orchestrator_help'))}</span></div></div>
+      ${window.OrchestratorModels.ORCHESTRATORS.map(row).join('')}</form>`;
+    box.querySelector('form').onsubmit = (e) => e.preventDefault();
   }
 
   // a new orchestrator: saved at once, for the next run (a running one keeps its own); the Start panel's
@@ -263,6 +267,13 @@
     watch();
   }
 
-  window.SettingsClis = { consoleHtml, mount, onShow, render, run };
+  window.SettingsClis = {
+    consoleHtml,
+    mount,
+    onShow,
+    refresh: renderRows, // #97: the rows again (the Setup closed over Settings, maybe with another orchestrator)
+    render,
+    run,
+  };
   window.Settings = { ...(window.Settings || {}), open };
 })();

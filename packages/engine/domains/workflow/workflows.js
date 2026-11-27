@@ -158,16 +158,19 @@ function isBundledWorkflowFile(file, workspaceDir, bundledDir = BUNDLED_WORKFLOW
   const dir = path.resolve(path.dirname(String(file || '')));
   if (bundledDir && dir === path.resolve(bundledDir)) return true;
   if (workspaceDir && dir === path.resolve(workspaceDir)) {
-    const origin = workflowStatus(bundledDir, workspaceDir)[path.basename(String(file))]?.origin;
-    return !!origin && origin !== 'custom';
+    return isBundledOrigin(workflowStatus(bundledDir, workspaceDir)[path.basename(String(file))]?.origin);
   }
   return undefined;
 }
+
+// #97: a workflowStatus origin of a bundled default's copy, as written or edited (not 'custom')
+const isBundledOrigin = (origin) => origin === 'default' || origin === 'modified';
 
 module.exports = {
   addedGates,
   BUNDLED_WORKFLOWS_DIR,
   editedWorkspaceCopy,
+  isBundledOrigin,
   isBundledWorkflowFile,
   isWorkflowFile,
   repositoryEntry,

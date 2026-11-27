@@ -315,7 +315,8 @@ module.exports = (ctx) => {
     const { agentOverrides, sessions, notices } = withChangedInputs(spec, wf, inputs);
     return ctx.startWorkflowRun({
       file: spec.file, inputs: { ...spec.inputs, ...(inputs || {}) }, attachments: spec.attachments, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues, agentOverrides,
-      resume: { runId: spec.runId, fromStep, steps, sessions, sessionAccounts: spec.sessionAccounts, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns, ...(pausedAt ? { paused: true } : {}) },
+      // orchestrator (#97): the resumed run stays on the orchestrator AI the run recorded
+      resume: { runId: spec.runId, orchestrator: spec.orchestrator, fromStep, steps, sessions, sessionAccounts: spec.sessionAccounts, cliTotals: spec.cliTotals, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns, ...(pausedAt ? { paused: true } : {}) },
       ...(notices.length ? { notices } : {}),
       ...(child ? { parent: child.parent, onFinished: child.onFinished, notices: child.notices, signal: child.signal, onSlotWait: child.onSlotWait } : {}),
     });

@@ -416,7 +416,7 @@ module.exports = (ctx) => {
 
   // recover (#607, areas/recover.js): { runId, events, worktree, personas, owner } a run the app died in,
   // continued in its own folder with its own id; `owner` is its owner.json, already taken over
-  async function startWorkflowRun(/** @type {import('../../../shared/types').RunStart} */ { file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, workspaceWorkflow = false }) {
+  async function startWorkflowRun(/** @type {import('../../../shared/types').RunStart} */ { file, inputs, mock, mockSequences = null, resume = null, recover = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null, agentOverrides = null, workspaceWorkflow = false, orchestrator = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // a resumed run continues that work, a recovered run (#607) is that run
@@ -489,6 +489,8 @@ module.exports = (ctx) => {
         // #862: the options Settings give every run (memory guard, idle warning, models, fallbacks,
         // accounts, language, test workers), shared with the CLI (scripts/run.js)
         ...runOptionsFromSettings({ settings, ws, mock }),
+        // #97: a child run's parent's orchestrator AI over the setting (a resumed or recovered run keeps its recorded one)
+        ...(orchestrator ? { orchestrator } : {}),
         // #337: tonight's limits, read at each check (a raise reaches the run at its next one)
         nightLimits: () => nightLimits.tonightLimits(ws.oracle || path.join(ws.root, 'oracle')),
         // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
@@ -617,7 +619,8 @@ module.exports = (ctx) => {
         parentRun.emitEvent('log', { level: 'warn', step_id: parent.step_id, message: `${parent.step_id}: child run ${old.runId} could not be resumed (${e.message}); starting it again.` });
       }
     }
-    started ||= await startWorkflowRun({ file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, ...child });
+    // #97: a child runs on its parent's orchestrator AI, not on a setting changed since
+    started ||= await startWorkflowRun({ file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, orchestrator: parentRun.orchestratorAI, ...child });
     return {
       runId: started.runId, finished, stop: () => active.get(started.runId)?.stop(),
       pause: () => active.get(started.runId)?.pause(), cancelPause: () => active.get(started.runId)?.cancelPause(),

@@ -357,7 +357,7 @@
  * @typedef {{ file: string, inputs?: any, mock?: boolean, mockSequences?: any, resume?: any, recover?: any, projectId?: string | null,
  *   issues?: RoadmapIssue[] | null, allowKeptWork?: boolean, notices?: { level: string, message: string }[], attachments?: any, then?: any,
  *   from?: any, parent?: any, onFinished?: ((event: any) => void) | null, signal?: AbortSignal | null,
- *   onSlotWait?: ((why: string) => void) | null, agentOverrides?: any, workspaceWorkflow?: boolean }} RunStart
+ *   onSlotWait?: ((why: string) => void) | null, agentOverrides?: any, workspaceWorkflow?: boolean, orchestrator?: string | null }} RunStart
  */
 
 /**

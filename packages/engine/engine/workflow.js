@@ -228,14 +228,14 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
   // recover (#607): { runId, events, worktree } a run the app died in, continued in its own folder with
   //   its own id at its last finished turn (packages/engine/engine/run/resume.js seedRecovery); not a resume
   // orchestrator, bundledWorkflow (#97): settings.orchestratorProvider and whether the file is a bundled
-  //   default (undefined = by the workflow's name); see packages/engine/engine/run/orchestrator-choice.js.
+  //   default (undefined = by the workflow's name); a resumed/recovered run keeps its recorded one (run/orchestrator-choice.js).
   constructor(/** @type {import('../../shared/types').RunOptions} */ { file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, serverForegroundMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts, orchestrator, bundledWorkflow }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
-    const chosen = orchestratorChoice.orchestratedWorkflow(loadWorkflow(file), inputs, orchestrator, bundledWorkflow); // #97
-    this.wf = chosen.wf;
-    this.onOrchestrator = chosen.onOrchestrator; // the workflow moved to the chosen orchestrator
+    const chosen = orchestratorChoice.orchestratedWorkflow(loadWorkflow(file), inputs, { orchestrator, bundledWorkflow, resume, recover }); // #97
+    // onOrchestrator: the workflow moved to the run's orchestrator AI (orchestratorAI, recorded in workflow.started)
+    ({ wf: this.wf, onOrchestrator: this.onOrchestrator, orchestrator: this.orchestratorAI } = chosen);
     this.mock = !!mock;
     this.language = functionOrNull(language);
     this.architectureOracle = functionOrNull(architectureOracle);
@@ -429,7 +429,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
       attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       then: this.then || undefined,
-      from: this.from || undefined,
+      from: this.from || undefined, ...orchestratorChoice.startedFields(this),
       parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
@@ -868,7 +868,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     const child = new WorkflowRun({
       file: found, inputs, mock: this.mock, runsDir: this.ctx.runs_dir, skillsDirs: this.skillsDirs.filter((d) => d !== BUNDLED_SKILLS),
       budget: this.budget, prices: this.prices, projectId: this.projectId, worktreesDir: this.worktreesDir, parent,
-      accounts: this.providerAccounts, accountCooldownMs: this.accountCooldownMs,
+      accounts: this.providerAccounts, accountCooldownMs: this.accountCooldownMs, orchestrator: this.orchestratorAI, // #97
       ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs, serverForegroundMs: this.serverForegroundMs, testWorkers: this.workers?.testWorkers,
       notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
     });

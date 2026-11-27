@@ -21,9 +21,10 @@
   const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
   const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git', gitleaks: 'Gitleaks' };
   const SHORT = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok', git: 'Git' };
-  // #97: the orchestrator's CLI and git (Grok Build is never the orchestrator)
+  // #97: the orchestrator's CLI (orchestrator-models.js orchestratorOf: Grok Build is never one) and git
+  const orchestratorOf = (/** @type {unknown} */ v) => (node ? require('./orchestrator-models') : root.OrchestratorModels).orchestratorOf(v);
   /** @param {{ orchestrator?: string }} [opts] */
-  const requiredTools = (opts) => [opts?.orchestrator === 'codex' ? 'codex' : 'claude', 'git'].sort();
+  const requiredTools = (opts) => [orchestratorOf(opts?.orchestrator), 'git'].sort();
   const forge = () => t('setup.forge');
 
   const toolName = (id) => NAMES[id] || String(id || '');
