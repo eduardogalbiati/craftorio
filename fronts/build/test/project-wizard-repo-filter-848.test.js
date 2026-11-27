@@ -200,3 +200,72 @@ test('#848 a click on a filtered option fills the field with its https URL and t
   assert.equal(repo, FREEMY_URL);
   assert.equal(name, M.displayNameFromUrl(FREEMY));
 });
+
+// ---- #103: a URL (or owner/name with a trailing slash) typed in the filter ------------------------------------
+// The contract assumed here: the filter box (#wizard-repo-filter) reads a URL of the picked platform's host
+// (https://github.com/… with GitHub picked, https://gitlab.com/… with GitLab picked; a trailing `/` or `.git`
+// dropped) as its owner/name, and an owner/name with a trailing `/` as that owner/name; a URL of another host lists
+// nothing. The platform is picked on the toggle (wizard-provider-<id>, data-act="provider"). Typing in the filter
+// never changes the URL field (#wizard-repo) nor the name (#wizard-name).
+
+const URL_NAMES = ['acme/app', 'acme/shop', 'beta/app-kit', 'other/tool', 'acme/blog', 'zeta/notes'];
+const urlRepos = (names) => names.map((name, i) => ({ name, private: false, updatedAt: new Date(Date.parse('2026-11-19T10:00:00Z') - i * 86400000).toISOString() }));
+const URL_ACCOUNTS = [...ACCOUNTS, { provider: 'gitlab', cli: 'glab', installed: true, signedIn: true, account: 'eduardogalbiati' }];
+const URL_REPOS = { github: urlRepos(URL_NAMES), gitlab: urlRepos(URL_NAMES) };
+
+// the repository step with these repositories on both platforms, `provider` picked on the toggle
+async function atRepositoryOn(provider = 'github') {
+  const app = await W.opened({ accounts: URL_ACCOUNTS, repos: URL_REPOS });
+  await W.toRepository(app);
+  assert.equal(W.currentStep(app), 'repository');
+  if (provider !== 'github') {
+    const tile = H.findEl(W.wizardMarkup(app), (e) => e.attrs['data-act'] === 'provider' && e.attrs['data-provider'] === provider);
+    assert.ok(tile, `the platform toggle offers ${provider}`);
+    await W.clickRendered(app, tile, ['#project-wizard']);
+    await app.settle(10);
+    const on = H.findEl(W.wizardMarkup(app), (e) => e.attrs['data-act'] === 'provider' && e.attrs['aria-pressed'] === 'true');
+    assert.equal(on?.attrs['data-provider'] ?? null, provider, 'the platform picked');
+  }
+  const listMarkup = track(app);
+  assert.deepEqual(optionsOf(listMarkup()), ['acme/app', 'acme/shop', 'beta/app-kit', 'other/tool', 'acme/blog'], `the ${provider} repositories are listed before the filter`);
+  return { app, listMarkup };
+}
+
+for (const [what, provider, text, expected] of [
+  ['the GitHub URL of a repository, GitHub picked', 'github', 'https://github.com/acme/app', ['acme/app']],
+  ['the GitHub URL with a trailing slash', 'github', 'https://github.com/acme/app/', ['acme/app']],
+  ['the GitHub URL ending in .git', 'github', 'https://github.com/acme/app.git', ['acme/app']],
+  ['the GitLab URL of a repository, GitLab picked', 'gitlab', 'https://gitlab.com/acme/app', ['acme/app']],
+  ['the GitLab URL ending in .git, GitLab picked', 'gitlab', 'https://gitlab.com/acme/app.git', ['acme/app']],
+  ['owner/name with a trailing slash', 'github', 'acme/app/', ['acme/app']],
+  ['owner/name with spaces around it', 'github', '  acme/app  ', ['acme/app']],
+  ['a URL of another host', 'github', 'https://example.com/acme/app', []],
+]) {
+  test(`#103 the filter, ${what} (${JSON.stringify(text)}): lists ${JSON.stringify(expected)}`, async () => {
+    const { app, listMarkup } = await atRepositoryOn(provider);
+    await W.typeInto(app, FILTER, text);
+    assert.deepEqual(optionsOf(listMarkup()), expected);
+  });
+}
+
+for (const [what, text, expected] of [
+  ['part of an owner', 'acm', ['acme/app', 'acme/shop', 'acme/blog']],
+  ['part of a name', 'app', ['acme/app', 'beta/app-kit']],
+  ['mixed case', 'AcMe/Sh', ['acme/shop']],
+  ['nothing typed', '', ['acme/app', 'acme/shop', 'beta/app-kit', 'other/tool', 'acme/blog']],
+]) {
+  test(`#103 guard: plain text in the filter, ${what} (${JSON.stringify(text)}), filters as before`, async () => {
+    const { app, listMarkup } = await atRepositoryOn('github');
+    await W.typeInto(app, FILTER, text);
+    assert.deepEqual(optionsOf(listMarkup()), expected);
+  });
+}
+
+test('#103 guard: a URL typed in the filter changes neither the URL field nor the name', async () => {
+  const { app } = await atRepositoryOn('github');
+  await W.typeInto(app, FILTER, 'https://github.com/acme/app');
+  assert.equal(String(app.el('#wizard-repo').value ?? ''), '', 'the URL field (#wizard-repo) stays empty');
+  assert.equal(String(app.el('#wizard-name').value ?? ''), '', 'the name (#wizard-name) stays empty');
+  assert.equal(String(H.findEl(W.wizardMarkup(app), (e) => e.attrs.id === 'wizard-repo')?.attrs.value ?? ''), '', 'the rendered URL field stays empty');
+  assert.equal(String(H.findEl(W.wizardMarkup(app), (e) => e.attrs.id === 'wizard-name')?.attrs.value ?? ''), '', 'the rendered name stays empty');
+});

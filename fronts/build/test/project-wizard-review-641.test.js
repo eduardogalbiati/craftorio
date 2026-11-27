@@ -294,3 +294,41 @@ test('#641 Escape closes the wizard, and the tray stays', async () => {
   assert.equal(H.findEl(wizardMarkup(app), (e) => 'data-step' in e.attrs), null, 'the wizard is closed');
   assert.ok(trayItem(app), 'the tray item is still there');
 });
+
+// ---- #102: the review while the clone still runs, the analysis left for later ----------------------------
+// The contract assumed here: Define manually then Continue while the engine's status is cloning saves
+// analyzeLater (no analysis asked for: the engine's state has no `wanted`, onboarding:analyze's mark of an
+// analysis asked during the clone); the review's city and findings blocks (wizard-review-city /
+// wizard-review-findings) then say data-state="later" with no running indicator (wizard-review-running) in them,
+// as they do once the clone is ready; with `wanted` set they stay pending (the analysis runs once the clone ends).
+
+const blockOf = (app, id) => byTestId(wizardMarkup(app), `wizard-review-${id}`);
+const blockState = (app, id) => blockOf(app, id)?.attrs['data-state'] ?? null;
+const runningIn = (app, id) => !!byTestId(blockOf(app, id)?.outer || '', 'wizard-review-running');
+
+// step 3 during the clone, Define manually, Continue: the review, the clone still running
+async function reviewWhileCloning() {
+  const app = await imported(CLONING);
+  if (currentStep(app) !== 'analysis') await press(app, 'wizard-next');
+  assert.equal(currentStep(app), 'analysis', 'step 3 while the clone runs');
+  await press(app, 'wizard-workflows-choice-manual');
+  await press(app, 'wizard-next');
+  await app.settle(20);
+  assert.equal(currentStep(app), 'review', 'the review while the clone runs');
+  return app;
+}
+
+for (const id of ['city', 'findings']) {
+  test(`#102 Define manually then Continue while cloning (no analysis wanted): wizard-review-${id} is later, not pending`, async () => {
+    const app = await reviewWhileCloning();
+    assert.equal(blockState(app, id), 'later', `wizard-review-${id} data-state: ${blockState(app, id)}`);
+    assert.equal(runningIn(app, id), false, `no wizard-review-running in wizard-review-${id}`);
+  });
+
+  test(`#102 guard: left for later while cloning, then the engine marks the analysis wanted: wizard-review-${id} stays pending`, async () => {
+    const app = await reviewWhileCloning();
+    await emit(app, { ...CLONING, wanted: true });
+    await app.settle(20);
+    assert.equal(blockState(app, id), 'pending', `wizard-review-${id} data-state: ${blockState(app, id)}`);
+  });
+}

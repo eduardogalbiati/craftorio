@@ -302,3 +302,86 @@ test('#20 guard (#850): a new project, Continue on step 3: the city stays left f
   assert.equal(cityState(app), 'later');
   assert.equal(reviewText(app).includes(REVIEW_LATER), false, reviewText(app));
 });
+
+// ---- 9. #101: a refused Analyze with AI gives step 3 back as it was ----------------------------------------------
+// The contract assumed here: the engine refuses onboarding:analyze / onboarding:retry by throwing (its clientError,
+// a rejected api promise); the wizard then shows the app's toast (#toast) with the reason and the workflows column
+// (wizard-workflows-column data-state) goes back to where it was before the click (choose / manual), Continue with it;
+// the saved wizard (api.saveOnboardingWizard picks) goes back too: no workflowsMode 'analyze', analyzeLater as it was.
+
+const REFUSAL = 'no model credits left';
+const refused = async () => { throw new Error(REFUSAL); };
+const columnState = (app) => W.byTestId(W.wizardMarkup(app), 'wizard-workflows-column')?.attrs['data-state'] ?? null;
+const toastText = (app) => H.visibleText(String(W.existing(app, 'toast')?.innerHTML || W.existing(app, 'toast')?.textContent || ''));
+// the last saved picks ({} when nothing was saved)
+const lastSavedPicks = (app) => JSON.parse(JSON.stringify(app.callsTo('saveOnboardingWizard').at(-1)?.[0] || {})).picks || {};
+
+test('#101 Analyze with AI refused from the two choices: the column is back on choose, Continue disabled, a toast says why', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ analyzeOnboarding: refused });
+  assert.equal(columnState(app), 'choose', 'the two choices before the click');
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await app.settle(20);
+  assert.equal(analyzeCalls(app).length, 1, 'api.analyzeOnboarding was asked once');
+  assert.equal(columnState(app), 'choose', `wizard-workflows-column data-state: ${columnState(app)}`);
+  assert.equal('disabled' in nextOf(app).attrs, true, 'Continue is disabled again');
+  assert.equal(toastText(app).includes(REFUSAL), true, `the toast: "${toastText(app)}"`);
+});
+
+test('#101 Analyze with AI refused from the manual rows: the column is back on manual, Continue still enabled', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ analyzeOnboarding: refused });
+  await W.press(app, 'wizard-workflows-choice-manual');
+  assert.equal(columnState(app), 'manual', 'the manual rows before the click');
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await app.settle(20);
+  assert.equal(analyzeCalls(app).length, 1, 'api.analyzeOnboarding was asked once');
+  assert.equal(columnState(app), 'manual', `wizard-workflows-column data-state: ${columnState(app)}`);
+  assert.equal('disabled' in nextOf(app).attrs, false, 'Continue stays enabled (the workflows defined by hand)');
+  assert.equal(toastText(app).includes(REFUSAL), true, `the toast: "${toastText(app)}"`);
+});
+
+// the click runs api.retryOnboarding when the profile job failed while the analysis runs (#74)
+test('#101 Analyze with AI refused on the retry path (a failed profile while analyzing): the column is back on choose, Continue disabled', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ retryOnboarding: refused });
+  await W.emit(app, stateWith('analyzing', { facts: { status: 'done' }, profile: { status: 'failed', error: 'boom' }, projectMap: { status: 'running' } }));
+  assert.equal(columnState(app), 'choose', 'the two choices before the click');
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await app.settle(20);
+  assert.equal(app.callsTo('retryOnboarding').length, 1, 'the click asked api.retryOnboarding');
+  assert.equal(analyzeCalls(app).length, 0, 'not api.analyzeOnboarding');
+  assert.equal(columnState(app), 'choose', `wizard-workflows-column data-state: ${columnState(app)}`);
+  assert.equal('disabled' in nextOf(app).attrs, true, 'Continue is disabled again');
+  assert.equal(toastText(app).includes(REFUSAL), true, `the toast: "${toastText(app)}"`);
+});
+
+test('#101 Analyze with AI refused from the two choices: the last saved wizard has no workflowsMode analyze, analyzeLater false as before', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ analyzeOnboarding: refused });
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await app.settle(20);
+  const picks = lastSavedPicks(app);
+  assert.notEqual(picks.workflowsMode, 'analyze', `the last saved picks.workflowsMode: ${JSON.stringify(picks)}`);
+  assert.equal(picks.analyzeLater, false, `the last saved picks.analyzeLater: ${JSON.stringify(picks)}`);
+});
+
+test('#101 Define manually, Continue, Back, then Analyze with AI refused: the last saved wizard is manual and analyzeLater again', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ analyzeOnboarding: refused });
+  await W.press(app, 'wizard-workflows-choice-manual');
+  await toReview(app);
+  assert.equal(savedAnalyzeLater(app), true, 'saved as left for later after Continue');
+  await W.press(app, 'wizard-back');
+  assert.equal(W.currentStep(app), 'analysis', 'back on step 3');
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await app.settle(20);
+  const picks = lastSavedPicks(app);
+  assert.equal(picks.workflowsMode, 'manual', `the last saved picks.workflowsMode: ${JSON.stringify(picks)}`);
+  assert.equal(picks.analyzeLater, true, `the last saved picks.analyzeLater: ${JSON.stringify(picks)}`);
+  assert.equal(columnState(app), 'manual', `wizard-workflows-column data-state: ${columnState(app)}`);
+});
+
+test('#101 guard: Analyze with AI accepted: one api.analyzeOnboarding call, the column analyzing, Continue enabled', { timeout: 30000 }, async () => {
+  const app = await atAnalysis();
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await app.settle(20);
+  assert.deepEqual(analyzeCalls(app), ['p-new'], 'one call, for the project');
+  assert.equal(columnState(app), 'analyzing', `wizard-workflows-column data-state: ${columnState(app)}`);
+  assert.equal('disabled' in nextOf(app).attrs, false, 'Continue is enabled');
+});
