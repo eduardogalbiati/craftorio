@@ -67,7 +67,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   (#168); "Cannot find module" only in the project's clone = a stale install there; merged locally
   but not pushed = the issues stay open until the owner pushes.
 
-<!-- skill: issue-writing sha256:9299eaf5ba39 -->
+<!-- skill: issue-writing sha256:7b3376cf269b -->
 ## issue-writing (issues someone else can finish)
 
 - Search first: no duplicate; link related issues. One problem per issue; split past ~8 tasks.

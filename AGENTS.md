@@ -10,7 +10,7 @@ Installing the app: [INSTALL.md](INSTALL.md).
 ## Hard rules
 
 - **Everything in the app is English**: source, UI, bundled workflows and skills, README, logs,
-  tests. What agents write follows Settings › Language (default: the interface language, #327, #328, #110).
+  tests. What agents write follows Settings › Language (see decisions.md, #327).
 - **Skill naming**: language/platform skills are `<capability>-<suffix>`, one per suffix in every
   family (a test enforces it). Languages: `js`, `python`, `go`, `java`, `csharp`; platforms: `gh`,
   `gl`. What a family shares is a suffix-less skill referenced with `uses:`. `code-review` is one
