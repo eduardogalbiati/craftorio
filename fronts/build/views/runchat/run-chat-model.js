@@ -2,9 +2,11 @@
 // events.jsonl): one message per agent turn, the orchestrator's transitions and loops as system
 // lines, human gates with their answers, the supervisor's interventions, and fan-out steps
 // (`agents: [...]`) grouped. No DOM here: runchat.js renders it, a test feeds it engine events.
+// #110: a machine step's message with a message_key reads in the interface language (I18n.translated).
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
-  const t = (...a) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.t(...a) ?? a[0];
+  const i18n = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n);
+  const t = (...a) => i18n()?.t(...a) ?? a[0];
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a
   // simulation it is "mock", so the model name tells which CLI it stands for (the provider registry,
   // packages/shared/providers/, resolves both).
@@ -109,7 +111,10 @@
       counts: machineCounts(o, it.counts), failures: machineFailures(o),
       scope: o.scope || it.scope, why: o.selection?.why ? firstLine(o.selection.why, it.step) : it.why,
       // why it did not simply pass (test ids missing, a broken red check, a skipped check), in the engine's words
-      summary: o.status && !['pass', 'passed', 'ok', 'success'].includes(o.status) && o.message ? firstLine(o.message, it.step) : null,
+      // #110: the engine's English as the catalog's text for its message_key, in the interface language
+      summary: o.status && !['pass', 'passed', 'ok', 'success'].includes(o.status) && o.message
+        ? (o.message_key ? i18n()?.translated(o.message_key, firstLine(o.message, it.step), o.message_params || {}) ?? firstLine(o.message, it.step) : firstLine(o.message, it.step))
+        : null,
       error: ev.error ? clip(String(o.error || o.message || 'unknown error'), 600) : null,
     });
     if (o.timeout_ms) it.timeoutMin = Math.round(o.timeout_ms / 60e3);

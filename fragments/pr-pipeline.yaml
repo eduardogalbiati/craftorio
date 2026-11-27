@@ -116,15 +116,16 @@ steps:
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     display: CI failed
-    # #79: with no PR/MR opened (a push refused, no credentials) the message says so, never an empty link
+    # #79: with no PR/MR opened (a push refused, no credentials) the message says so, never an empty link.
+    # #110: in the interface language (engine.ci_failed_*); what CI or git said stays as it came.
     message: |
-      {% if steps.ci.output.pr_url %}CI on {{ steps.ci.output.pr_url }} did not pass (status: {{ steps.ci.output.ci_status }}).
-      Last error: {{ steps.ci.output.failure_log or '(none reported)' }}
-      Approve to check CI again (after a re-run or a fix of yours); reject to stop the run as failed
-      (the branch and the PR/MR keep the work).
-      {% else %}CI failed: no PR was opened: {{ steps.ci.output.failure_log or '(no reason reported)' }}
-      Approve to try again (after fixing what stopped it, e.g. git's credentials: `gh auth setup-git` on GitHub); reject to stop
-      the run as failed (the run's branch keeps the work).
+      {% if steps.ci.output.pr_url %}{% filter translated('engine.ci_failed_pr', { url: steps.ci.output.pr_url, status: steps.ci.output.ci_status, error: steps.ci.output.failure_log or '(none reported)' }) %}CI on {{ steps.ci.output.pr_url }} did not pass (status: {{ steps.ci.output.ci_status }}).
+      Last error: {{ steps.ci.output.failure_log or '(none reported)' }}{% endfilter %}
+      {% filter translated('engine.ci_failed_pr_choices') %}Approve to check CI again (after a re-run or a fix of yours); reject to stop the run as failed
+      (the branch and the PR/MR keep the work).{% endfilter %}
+      {% else %}{% filter translated('engine.ci_failed_no_pr', { reason: steps.ci.output.failure_log or '(no reason reported)' }) %}CI failed: no PR was opened: {{ steps.ci.output.failure_log or '(no reason reported)' }}{% endfilter %}
+      {% filter translated('engine.ci_failed_no_pr_choices') %}Approve to try again (after fixing what stopped it, e.g. git's credentials: `gh auth setup-git` on GitHub); reject to stop
+      the run as failed (the run's branch keeps the work).{% endfilter %}
       {% endif %}
     transitions:
       - when: "approved"

@@ -45,10 +45,18 @@ function setupGitText(platform) {
 // what to do when git has no credentials for an HTTPS remote; no platform (a host none of them serves): a
 // credential helper for that host
 function httpsFix(platform, host = platform?.host) {
+  return httpsFixWithKey(platform, host).fix;
+}
+
+// #110: httpsFix as { fix (English), fixKey, fixParams }: the screens show the catalog's text for fixKey
+function httpsFixWithKey(platform, host = platform?.host) {
   const command = setupGitText(platform);
-  return command
-    ? `Run \`${command}\` so git pushes with the ${platform.cli} login, or set the remote to its SSH URL.`
-    : `Configure a git credential helper for ${host || 'this host'}, or set the remote to its SSH URL.`;
+  if (command) {
+    return { fix: `Run \`${command}\` so git pushes with the ${platform.cli} login, or set the remote to its SSH URL.`, fixKey: 'onboarding.push_fix_https_cli', fixParams: { command, cli: platform.cli } };
+  }
+  return host
+    ? { fix: `Configure a git credential helper for ${host}, or set the remote to its SSH URL.`, fixKey: 'onboarding.push_fix_https_helper', fixParams: { host } }
+    : { fix: 'Configure a git credential helper for this host, or set the remote to its SSH URL.', fixKey: 'onboarding.push_fix_https_helper_any', fixParams: {} };
 }
 
 // what to do about a refused push → { fix, setupGit? }: git's credentials over HTTPS (setupGit: the platform
@@ -60,12 +68,16 @@ function pushFix(reason, origin) {
   const command = setupGitText(platform);
   if (/Permission denied \(publickey|Host key verification failed|no such identity/i.test(reason)) {
     const sshHost = host || platform?.host || 'the host';
-    return { fix: `git's SSH key is not accepted by ${sshHost}: add your SSH key to your account (test it with \`ssh -T git@${sshHost}\`), or set the remote to its HTTPS URL${command ? ` and run \`${command}\`` : ''}.` };
+    return {
+      fix: `git's SSH key is not accepted by ${sshHost}: add your SSH key to your account (test it with \`ssh -T git@${sshHost}\`), or set the remote to its HTTPS URL${command ? ` and run \`${command}\`` : ''}.`,
+      fixKey: command ? 'onboarding.push_fix_ssh_cli' : 'onboarding.push_fix_ssh',
+      fixParams: { host: sshHost, command },
+    };
   }
   if (NO_HTTPS_CREDENTIALS.test(reason) && !isSshUrl(origin)) {
-    return { fix: httpsFix(platform, host), ...(command && platform ? { setupGit: { platform: platform.id, command } } : {}) };
+    return { ...httpsFixWithKey(platform, host), ...(command && platform ? { setupGit: { platform: platform.id, command } } : {}) };
   }
-  return { fix: 'Check that your account may push to this repository (or fork it) and that the remote is reachable.' };
+  return { fix: 'Check that your account may push to this repository (or fork it) and that the remote is reachable.', fixKey: 'onboarding.push_fix_rights', fixParams: {} };
 }
 
 /**
@@ -75,7 +87,8 @@ function pushFix(reason, origin) {
  * git's useful line (gitSaidLine); the fix is read from its whole message.
  * @param {string} dir
  * @param {{ run: (args: string[], cwd: string) => Promise<any>, remote?: string }} options
- * @returns {Promise<{ ok: boolean, unchecked?: true, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }>}
+ * #110: `fix` stays English; `fixKey` + `fixParams` name its catalog text (onboarding.push_fix_*) for the screens.
+ * @returns {Promise<{ ok: boolean, unchecked?: true, reason?: string, fix?: string, fixKey?: string, fixParams?: object, setupGit?: { platform: string, command: string } }>}
  */
 async function checkPushAccess(dir, { run, remote = 'origin' }) {
   const origin = await Promise.resolve().then(() => run(['remote', 'get-url', remote], dir)).then((s) => String(s || '').trim(), () => '');

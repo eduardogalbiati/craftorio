@@ -17,6 +17,7 @@
 // Each read draws the wizard only when a line changed; the Oracle's reading and its clock move in place, so a second's
 // tick neither takes the focus from the step nor restarts the shine.
 // Uses app.js globals (api, errMsg, esc, t), window.OnboardingModel, window.ActivityLine and window.AgentChat.elapsed (m:ss).
+// #110: the Oracle's reading of a tool call as window.LiveTurn.stepLabel words it (never a raw tool name).
 
 (function () {
   const TICK_MS = 1000;
@@ -24,6 +25,8 @@
   const LANGUAGE_NAMES = { csharp: 'C#', go: 'Go', java: 'Java', js: 'JavaScript', php: 'PHP', python: 'Python', ruby: 'Ruby', rust: 'Rust', ts: 'TypeScript' };
   // the engine's words (backlog.js syncBacklog, issues.js fetchIssues) for a project with no platform to read issues from
   const NO_TRACKER = /no repository|not a recognizable git URL/i;
+  // #110: the tool names LiveTurn.stepLabel reads as an activity (with mcp__… ones)
+  const TOOL_NAMES = ['Agent', 'Bash', 'Glob', 'Grep', 'LS', 'Read', 'Task', 'TodoWrite', 'WebFetch', 'WebSearch', 'shell'];
 
   window.ProjectWizardActivity = function ({ cur, jobOf, loadReview, platformLabel, renderSoon }) {
     const M = window.OnboardingModel;
@@ -44,6 +47,14 @@
       return Number.isFinite(at) ? window.AgentChat.elapsed(Date.now() - at) : '';
     };
 
+    // #110: the Oracle's reading as the engine records it (seed-runs.js readingOf: "<tool> <target>", or the model's
+    // words) → a tool call as LiveTurn's label in the interface language; the model's words as they came
+    function readingText(reading) {
+      const [, name = '', on = ''] = String(reading).match(/^(\S+)\s*([\s\S]*)$/) || [];
+      if (!window.LiveTurn || !(name.startsWith('mcp__') || TOOL_NAMES.includes(name))) return reading;
+      return window.LiveTurn.stepLabel({ name, input: { file_path: on, path: on, pattern: on, command: on } });
+    }
+
     // a phase as ActivityLine's options
     function lineOf(p) {
       const base = { state: p.state, testid: `wizard-phase-${p.id}`, text: t(`onboarding.phase_${p.id}${p.state === 'done' ? '_done' : ''}`) };
@@ -52,7 +63,7 @@
       if (p.id !== 'oracle') return base;
       if (p.state === 'skipped') return { ...base, summary: t('onboarding.phase_oracle_not_needed') };
       if (p.state !== 'running') return base;
-      return { ...base, text: p.reading ? t('onboarding.phase_oracle_reading', { reading: p.reading }) : t('onboarding.phase_oracle_running'), meta: oracleClock(p.since) };
+      return { ...base, text: p.reading ? t('onboarding.phase_oracle_reading', { reading: readingText(p.reading) }) : t('onboarding.phase_oracle_running'), meta: oracleClock(p.since) };
     }
 
     const phases = () => M.analysisPhases({ job: jobOf('profile'), interview: cur()?.interview || null });

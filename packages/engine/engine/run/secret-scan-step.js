@@ -2,6 +2,7 @@
 // `type: secret_scan` (#49): the secret scan of a run's own commits, a step without an agent as those of
 // machine-steps.js (`runSecretScanStep`; `secretScan` what it answers, `secretScanRefs` the refs whose
 // commits are not the run's). packages/engine/engine/secret-scan.js runs gitleaks and reads its report.
+// #110: a scan that did not run names its catalog key (message_key, message_params) next to its English message.
 
 'use strict';
 
@@ -26,12 +27,14 @@ const methods = {
 
   async secretScan(step) {
     const given = (key) => render(String(step[key]), this.ctx).trim();
-    const skipped = (why) => ({ status: 'skipped', message: `${secretScan.NOT_SCANNED}: ${why}.` });
+    // #110: message stays English (prompts, the result summary); message_key/message_params give the screens' text
+    const said = (key, params = {}) => ({ message_key: `engine.${key}`, message_params: params });
+    const skipped = (why, key, params) => ({ status: 'skipped', message: `${secretScan.NOT_SCANNED}: ${why}.`, ...said(key, params) });
     const worktree = this.ctx.worktree_dir;
-    if (step.enabled != null && /^(off|false|no)$/i.test(given('enabled'))) return skipped('turned off for this run');
-    if (!worktree || !fs.existsSync(worktree)) return skipped('the run has no checkout');
+    if (step.enabled != null && /^(off|false|no)$/i.test(given('enabled'))) return skipped('turned off for this run', 'secret_scan_off');
+    if (!worktree || !fs.existsSync(worktree)) return skipped('the run has no checkout', 'secret_scan_no_checkout');
     const file = await secretScan.findGitleaks();
-    if (!file) return { status: 'skipped', message: secretScan.notInstalledMessage() };
+    if (!file) return { status: 'skipped', message: secretScan.notInstalledMessage(), ...said('secret_scan_not_installed') };
     let dir;
     let range;
     try {
@@ -39,8 +42,10 @@ const methods = {
       dir = await git(['rev-parse', '--show-toplevel'], worktree);
       range = await secretScan.commitRange(dir, step.since != null ? { since: given('since') } : { refs: this.secretScanRefs() });
     } catch (e) {
-      const why = `the run's commits could not be read (${String(e.message).split('\n')[0]})`;
-      return this.machine.simulated ? skipped(why) : { status: 'error', message: `${secretScan.NOT_SCANNED}: ${why}.` };
+      const error = String(e.message).split('\n')[0];
+      const why = `the run's commits could not be read (${error})`;
+      return this.machine.simulated ? skipped(why, 'secret_scan_commits', { error })
+        : { status: 'error', message: `${secretScan.NOT_SCANNED}: ${why}.`, ...said('secret_scan_commits', { error }) };
     }
     const env = withCliPath(childEnv(process.env, { passthrough: this.envPassthrough() }));
     const scanned = await secretScan.scanSecrets({ dir, file, range, env, signal: this.abort.signal });

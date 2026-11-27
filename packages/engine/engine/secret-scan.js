@@ -189,7 +189,9 @@ async function scanSecrets({ dir, file, range, env, signal }) {
     if (ended.code === FOUND_EXIT_CODE && findings?.length) {
       return { status: 'fail', findings, message: `${findings.length} finding(s) in the commits:\n${findings.map(findingLine).join('\n')}` };
     }
-    return { status: 'error', findings: [], message: `${NOT_SCANNED}: gitleaks failed (${errorLine(ended)}).` };
+    // #110: the screens' text by its catalog key; the English message feeds the prompts
+    const error = errorLine(ended);
+    return { status: 'error', findings: [], message: `${NOT_SCANNED}: gitleaks failed (${error}).`, message_key: 'engine.secret_scan_failed', message_params: { error } };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

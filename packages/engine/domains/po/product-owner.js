@@ -454,7 +454,8 @@ function calibrateGroups(groups, step) {
     const of = groups.filter((g) => g.stage === s);
     const per = step.maxRuns || of.length;
     of.forEach((g, n) => {
-      const over = g.complexity > step.maxComplexity ? [`Complexity ${g.complexity}: over ${step.maxComplexity}, the most a group gets at ${step.name}.`] : [];
+      // #110: in the interface language, the step's name too (step.name: its catalog name, po-calibration.js nameOf)
+      const over = g.complexity > step.maxComplexity ? [I18n.t('po.group_over_cap', { complexity: g.complexity, max: step.maxComplexity, name: step.name })] : [];
       out.push({ ...g, stage: next + Math.floor(n / per), warnings: [...new Set([...g.warnings, ...over])] });
     });
     next += Math.ceil(of.length / per);
@@ -474,10 +475,10 @@ function costedGroups(groups, { level, costLevel, issues, history, workflows, ru
     // #235: a tests-first workflow's test inputs are not the Cost step's to set
     out = out.map((g) => (poCalibration.testsFirst((workflows || []).find((w) => w.file === g.workflow) || { file: g.workflow }) ? g : { ...g, ...costInputs(g, costStep, workflows) }));
     const base = level ? poCalibration.step(level) : { maxRuns: null };
-    out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel, 'en') });
+    out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel) });
     if (costStep.testBatch) out = testBatchStages(out, { issues, history, workflows });
   } else if (level) {
-    out = calibrateGroups(out, poCalibration.step(level));
+    out = calibrateGroups(out, { ...poCalibration.step(level), name: poCalibration.nameOf(level) });
   }
   if (!runs) return out;
   return out.map((g) => {
@@ -756,7 +757,11 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   const hotConflicts = separateSharedFiles(planned, [...new Set(spots.map((s) => s.file))], todo);
   return {
     summary: [
-      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration, 'en') : poCalibration.plannedFor(calibration, cost, 'en')}.`,
+      // #110: the head line and the calibration's name in the interface language (never "Speed-leaning" in pt-BR)
+      I18n.t(question ? 'po.simulated_plan_head_to' : 'po.simulated_plan_head', {
+        question: question ? clip(question, 120) : '',
+        planned: cost == null ? poCalibration.label(calibration) : poCalibration.plannedFor(calibration, cost),
+      }),
       `${todo.length} ${attached.size ? 'attached ' : ''}issues to do:${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label (complexity ${step.maxComplexity} at most per run); repo-wide changes first and alone, then ${step.maxRuns ? `stages of at most ${step.maxRuns} runs` : 'one stage with every other run'}.`,
       `${splits.length ? `${splits.length} issue${splits.length > 1 ? 's are' : ' is'} too big for one run: see the proposed splits.` : 'No issue is too big for one run.'} ${epicPlan.place.length + epicPlan.create.length ? `Epics: ${epicPlan.place.length} issue${epicPlan.place.length === 1 ? '' : 's'} to place, ${epicPlan.create.length} epic${epicPlan.create.length === 1 ? '' : 's'} to create.` : ''}`.trim(),
     ].join('\n\n'),

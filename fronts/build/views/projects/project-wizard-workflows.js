@@ -1,4 +1,5 @@
-/* global api, DefaultWorkflow, esc, state, t */
+/* global api, DefaultWorkflow, esc, I18n, state, t */
+// #110: the push notice's fix in the interface language (the check's fixKey); git's reason as it came.
 // #725: the new-project wizard's step 3 right column, "Suggested workflows" (mock-4, #630), split out of
 // project-wizard.js (its size cap). window.ProjectWizardColumn({ costHint, cur, jobOf, phasesHtml }) gives the wizard, over
 // its own state (`cur()`: the onboarding, the model, the owner's picks and cur.workflowsMode):
@@ -111,7 +112,7 @@
         : '';
       return `<div class="wizard-alert warn" data-testid="wizard-push-notice" role="alert">
           <strong>${esc(t('onboarding.push_notice'))}</strong>
-          <p class="small">${esc(check.fix || '')}</p>
+          <p class="small">${esc(check.fixKey ? I18n.translated(check.fixKey, check.fix || '', check.fixParams || {}) : check.fix || '')}</p>
           ${check.reason ? `<p class="mono muted small text-cut" title="${esc(check.reason)}">${esc(check.reason)}</p>` : ''}
           ${fix}
         </div>`;
