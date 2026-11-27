@@ -10,7 +10,7 @@
 // Recovery (#607) is not a resume: a run the app died in continues in its own folder, with its own id,
 // at its last finished turn. `recoveryStateFromEvents` adds what that needs to the resume state (each
 // step's last output, each session's last snapshot, the turn the crash cut); `seedRecovery`
-// (constructor) puts it back in the engine, `startRecovered` (start) records the recovery and the lost
+// (constructor) puts it back in the engine, the gate clock included (#10), `startRecovered` (start) records the recovery and the lost
 // turn. The service's start-up picks the runs (packages/engine/service/areas/recover.js). The worktree
 // reuse is in packages/engine/engine/run/checkout.js (setupWorktree); the dialog and its channels in packages/engine/domains/supervisor/supervisor.js.
 
@@ -18,6 +18,7 @@
 
 const { checkAttachments, emptyUsage, seedClaudeTotal } = require('../providers');
 const { attemptSummary, noteToolCall } = require('./turns');
+const { gateClockFromEvents } = require('./costs');
 const { unknownUsd } = require('@craftorio/shared/session-cost');
 const { GATE } = require('./field-rules');
 const { prMonitorSeed } = require('./transitions');
@@ -219,12 +220,17 @@ const methods = {
   // #607: a recovered run's engine state from its log (recover: { events, worktree }), as the process
   // the app died in held it: each visited step's last output and visits, `vars`, the handoff notes,
   // every agent session (an open persistent one is the agent's again), the event, session and gate
-  // counters, the progress trail and the attachments its workflow.started recorded; any other run: none
+  // counters, the progress trail and the attachments its workflow.started recorded, the gate clock and
+  // gate waits (#10, gateClockFromEvents); any other run: none
   seedRecovery(recover) {
     this.recovered = null;
     if (!recover) return;
     const events = recover.events || [];
     const state = recoveryStateFromEvents(events);
+    // #10: the time already waited at gates (the open one included), so checkLimits never counts it as work
+    const clock = gateClockFromEvents(events);
+    this.gateClock = { total: clock.total, since: clock.since };
+    this.gateWaits = clock.gateWaits;
     for (const [id, visits] of Object.entries(state.visits)) {
       const output = state.outputs[id] ?? null;
       if (this.ctx.steps[id]) Object.assign(this.ctx.steps[id], { output, outputs: output ? [output] : [], visits });
@@ -245,7 +251,7 @@ const methods = {
     for (const ev of events) if (ev.type !== 'session.stream') this.trail.apply(ev);
     Object.assign(this, { seq: state.seq, nSession: state.nSession, nApproval: state.nApproval, prevStepId: state.lastFinished });
     this.attachments = events.find((e) => e.type === 'workflow.started')?.attachments || {};
-    this.recovered = { nextStep: state.nextStep, lostTurns: state.lostTurns, startedAt: state.startedAt, worktree: recover.worktree || null, from: state.seq };
+    this.recovered = { nextStep: state.nextStep, lostTurns: state.lostTurns, startedAt: state.startedAt, worktree: recover.worktree || null, from: state.seq, openGate: clock.openGate };
     // #809: recovered in its PR monitor: it holds no run slot from the start (another recovered run may
     // start before its first read), with its last card and when it last changed
     if (this.wf.steps.find((s) => s.id === state.nextStep)?.type === 'pr_monitor') Object.assign(this, prMonitorSeed(events, state.nextStep));

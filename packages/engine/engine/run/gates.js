@@ -4,7 +4,7 @@
 // the gate brief) and waits for `resolveApproval` (the public API the service and the UI answer
 // with; a `feedback_required` choice without a text is refused); `withdrawApproval` closes an
 // open gate, `pendingGates` lists them for runs:active. The time a gate is open is not run time
-// (`syncGateClock`, #416), and an answer given while the run is over a limit stops the run at the
+// (`syncGateClock`, #416; a gate a recovery asks again keeps its first requested_at, #10), and an answer given while the run is over a limit stops the run at the
 // gate before it is taken. Automation never crosses a gate:
 // `kind: escalation` only lets the supervisor on call try first (packages/engine/engine/run/supervision.js).
 
@@ -18,6 +18,14 @@ const { render } = require('./templates');
 const { parseDuration } = require('./load');
 const { extractJson, validateSchema } = require('./outputs');
 const { pausedError } = require('./resume');
+
+// #10: a gate's requested_at, now; the gate a recovery asks again keeps the time it was first asked
+// (its wait_ms counts it all), once
+function firstAskedAt(run, stepId) {
+  const reasked = run.recovered?.openGate?.step === stepId ? run.recovered.openGate : null;
+  if (reasked) run.recovered.openGate = null;
+  return new Date(reasked ? reasked.requestedAt : Date.now()).toISOString();
+}
 
 // What the supervisor on call found, under a gate's message ('' without a diagnosis)
 function diagnosisText(diagnosis) {
@@ -131,7 +139,7 @@ const methods = {
     });
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
-    const requestedAt = new Date().toISOString();
+    const requestedAt = firstAskedAt(this, step.id);
     const timeout = parseDuration(step.timeout, null);
     // the folder the run's work is in (its worktree; a simulation works in the repository folder)
     const workDir = this.ctx.worktree_dir || this.inputs.repo_path || null;

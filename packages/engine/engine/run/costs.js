@@ -7,7 +7,8 @@
 // children's spend, the price of a turn on a model Claude Code does not know (`priceUnrecognizedTurn`,
 // #369), and the step timing and context metrics of the summary (`timingSummary`,
 // `contextSummary`). `childRunCost`: what a child run cost from its summary (#175);
-// `childRunTotal`: the same with its mark (#72).
+// `childRunTotal`: the same with its mark (#72). `gateClockFromEvents`: a recovered run's gate clock
+// and gate waits, from its log (#10).
 
 'use strict';
 
@@ -36,12 +37,60 @@ const childRunCost = (summary) => +((+summary?.cost_usd || 0) + (+summary?.child
 // #72: that cost and, when it includes one the app does not know, its mark (a child run's result)
 const childRunTotal = (summary) => ({ cost_usd: childRunCost(summary), ...(summary?.cost_approx || (summary?.child_runs || []).some((c) => c.cost_approx) ? { cost_approx: true } : {}) });
 
+// #10: the gate clock (#416) of a run rebuilt from its log, a pure function of its events: the time
+// waited with at least one gate open (total, closed intervals; since: the start of the interval still
+// open, ms), the answered waits per step (gateWaits, as resolveApproval counts them: a withdrawn gate
+// stops the clock but is no wait) and the gate still open ({ step, requestedAt } ms, or null). A
+// recovery asks the open gate again under a new id (run.recovered gate: true): the clock goes on and
+// the gate asked again keeps the time it was first asked.
+/** @param {any[]} events @returns {{ total: number, since: number | null, gateWaits: Record<string, { waits: number, wait_ms: number }>, openGate: { step: string, requestedAt: number } | null }} */
+function gateClockFromEvents(events) {
+  /** @type {Map<string, { step: string, requestedAt: number }>} */
+  const open = new Map();
+  /** @type {Record<string, { waits: number, wait_ms: number }>} */
+  const gateWaits = {};
+  let total = 0;
+  /** @type {number | null} */
+  let since = null;
+  /** @type {{ step: string, requestedAt: number } | null} */
+  let carried = null;
+  const close = (at) => {
+    if (since != null) total += Math.max(0, at - since);
+    since = null;
+  };
+  for (const ev of events || []) {
+    if (!['approval.requested', 'approval.resolved', 'run.recovered'].includes(ev.type)) continue;
+    const at = Date.parse(ev.ts);
+    if (!Number.isFinite(at)) continue;
+    if (ev.type === 'approval.requested') {
+      const first = carried && carried.step === ev.step_id ? carried.requestedAt : at;
+      open.set(ev.approval_id, { step: ev.step_id, requestedAt: first });
+      carried = null;
+      since ??= at;
+    } else if (ev.type === 'approval.resolved') {
+      if (!ev.withdrawn && typeof ev.wait_ms === 'number' && ev.step_id) {
+        const w = (gateWaits[ev.step_id] ??= { waits: 0, wait_ms: 0 });
+        w.waits++;
+        w.wait_ms += ev.wait_ms;
+      }
+      if (open.delete(ev.approval_id) && !open.size && !carried) close(at);
+    } else {
+      carried = ev.gate ? [...open.values()].pop() || carried : null;
+      open.clear();
+      if (!carried) close(at);
+    }
+  }
+  const last = [...open.values()].pop() || carried;
+  return { total, since, gateWaits, openGate: last ? { step: last.step, requestedAt: last.requestedAt } : null };
+}
+
 const methods = {
   checkLimits() {
     const lim = this.wf.orchestrator?.limits || {};
     const day = this.dayLimits();
     const maxDur = this.effectiveLimits().duration;
-    // #416: the limit measures the work, not the time waiting for the owner at gates
+    // #416: the limit measures the work, not the time waiting for the owner at gates (#10: a recovered
+    // run's gate clock comes back from its log in seedRecovery, before its first check)
     const gateWaitMs = this.gateClockMs();
     const worked = Date.now() - this.startedAt - gateWaitMs;
     if (maxDur && worked > maxDur) {
@@ -278,6 +327,7 @@ const methods = {
 module.exports = {
   childRunCost,
   childRunTotal,
+  gateClockFromEvents,
   kTokens,
   methods,
 };
