@@ -5,11 +5,14 @@ Feature: A run looks for secrets in its own commits, and says so when it could n
   Start panel.
 
   # CRAFTORIO_E2E_CLI_MISSING=gitleaks (simulation only, as for the other CLIs): the machine has no
-  # gitleaks, whatever the one running the scenarios has.
+  # gitleaks, whatever the one running the scenarios has. Gitleaks is listed on the Setup's second step,
+  # Version control, with Git and the forges' CLIs.
   @issue-49
   Scenario: The Setup of a machine without gitleaks lists it as optional, with its install command
     Given the app is open on a new workspace of a machine without "Gitleaks"
-    Then the first-run Setup is open on its "Agents" step
+    Then the first-run Setup is open on its "Connect your AIs" step
+    When I go to the Setup's next step
+    Then the first-run Setup is open on its "Version control" step
     And the Setup reads "Not installed" for "Gitleaks"
     And the Setup marks "Gitleaks" as optional
     And the Setup shows how to install "Gitleaks"

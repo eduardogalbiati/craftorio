@@ -1,10 +1,16 @@
-// #69 (acceptance tests, written before the code): the first-run Setup has two steps, Agents and First
-// project (no Try it safely), and never turns the simulation mode on. Owner's decision, 2026-11-25.
+// #69 (acceptance tests, written before the code): the first-run Setup has no Try it safely step and never turns
+// the simulation mode on. Owner's decision, 2026-11-25.
+// Layout rework of 2026-11-26 (the owner's decisions): the Agents step became two, "Connect your AIs" (agents: the
+// AI CLIs) and "Version control" (versioning: Git, Gitleaks, the GitHub and GitLab CLIs), so the Setup has three
+// steps; Next is disabled on AIs while no AI CLI is ready and on Version control while Git is not, where a link
+// "Continue with simulations only" (setup-simulation-only) goes on anyway; Skip (and Esc, which is Skip) exists on
+// First project only.
 //
 // The contract assumed here:
-// - packages/ui-kit/setup.js draws the stepper items data-step="agents" and data-step="first-project", nothing else;
-//   window.Setup.open(<a step that does not exist>) opens on Agents;
-// - Finish and Skip never turn settings.developerMode on, nor off for a workspace that has it on;
+// - packages/ui-kit/setup.js draws the stepper items data-step="agents", "versioning" and "first-project", nothing
+//   else; window.Setup.open(<a step that does not exist>) opens on AIs;
+// - Finish, Skip and "Continue with simulations only" never turn settings.developerMode on, nor off for a workspace
+//   that has it on;
 // - the Start drawer says that a real run uses the CLI subscription: #start-real-note
 //   (data-testid="start-real-note") in the page's Start drawer, its text set when the drawer opens; it has the class
 //   `hidden` while the Simulation box is checked (developer mode on; start-real-note-69.test.js);
@@ -25,10 +31,15 @@ const PROJECT = { id: 'p1', name: 'Shop', folder: 'C:/p/shop', exists: true };
 const WORKFLOWS = [
   { file: 'analyze-project.yaml', name: 'analyze-project', description: 'Analyze a project', category: 'analysis', inputs: { project_dir: { type: 'path', label: 'Project' } } },
 ];
-const TITLES = { agents: 'Connect your agents', project: 'Add your first project' };
+const TITLES = { agents: 'Connect your AIs', versioning: 'Connect version control', project: 'Add your first project' };
+// what env:details answers: an AI CLI and Git ready, so Next is enabled on both CLI steps
+const TOOLS = [
+  { id: 'claude', name: 'Claude Code', path: 'C:/bin/claude.cmd', connected: true },
+  { id: 'git', name: 'Git', path: 'C:/bin/git.exe', connected: true },
+];
 
 // The page on a workspace with these settings; setSettings merges the patch like the engine does
-function page({ settings = { setupDone: false }, projects = [PROJECT] } = {}) {
+function page({ settings = { setupDone: false }, projects = [PROJECT], tools = TOOLS } = {}) {
   let saved = clone(settings);
   return loadApp({
     api: {
@@ -38,7 +49,7 @@ function page({ settings = { setupDone: false }, projects = [PROJECT] } = {}) {
       listWorkflows: async () => clone(WORKFLOWS),
       listProjects: async () => clone(projects),
       listPipelines: async () => [],
-      envDetails: async () => [],
+      envDetails: async () => clone(tools),
       machineProfile: async () => ({ line: '8 cores' }),
       startRun: async () => ({ runId: 'r1' }),
     },
@@ -53,7 +64,9 @@ const turnedOn = (app) => patches(app).filter((p) => p.developerMode === true).l
 const devModeBody = (app) => !!app.sandbox.document.body.classList.contains('dev-mode');
 const simulationBox = (app) => app.el('#mock-toggle').checked === true;
 
+// the fake DOM clicks a disabled button too: a press of Next is one on an enabled Next
 async function pressNext(app) {
+  assert.equal(app.el('#setup-modal #btn-setup-next').disabled, false, 'Next is enabled');
   await app.click('#setup-modal #btn-setup-next');
   await app.settle(10);
 }
@@ -83,21 +96,29 @@ async function confirmSkip(app) {
   await app.settle(10);
 }
 
+// Skip exists on First project only: go there first
+async function toFirstProject(app) {
+  for (let i = 0; i < 3 && title(app) !== TITLES.project; i++) await pressNext(app);
+  assert.equal(title(app), TITLES.project);
+}
+
 async function skip(app) {
+  await toFirstProject(app);
+  assert.equal(app.el('#setup-modal #btn-setup-skip').hidden, false, 'First project has a Skip');
   closedLayers(app);
   app.run('window.Setup.skip()'); // resolves once the confirm is answered
   await confirmSkip(app);
   assert.equal(setupOpen(app), false, 'the Setup was skipped');
 }
 
-// ---- two steps --------------------------------------------------------------------------------------
+// ---- three steps ------------------------------------------------------------------------------------
 
-test('#69 the stepper draws two steps: agents, first-project', () => {
+test('#69 the stepper draws three steps: agents, versioning, first-project', () => {
   const modals = String(page().defs.get('setup')?.modals || '');
-  assert.deepEqual(H.findAll(modals, (e) => e.attrs['data-step']).map((e) => e.attrs['data-step']), ['agents', 'first-project']);
+  assert.deepEqual(H.findAll(modals, (e) => e.attrs['data-step']).map((e) => e.attrs['data-step']), ['agents', 'versioning', 'first-project']);
 });
 
-for (const [lang, names] of [['en', ['Agents', 'First project']], ['pt-BR', ['Agentes', 'Primeiro projeto']]]) {
+for (const [lang, names] of [['en', ['Connect your AIs', 'Version control', 'First project']], ['pt-BR', ['Conecte suas IAs', 'Versionamento', 'Primeiro projeto']]]) {
   test(`#69 the stepper's names in ${lang}: ${names.join(', ')}`, () => {
     const app = page();
     app.sandbox.I18n.setLanguage(lang);
@@ -107,45 +128,58 @@ for (const [lang, names] of [['en', ['Agents', 'First project']], ['pt-BR', ['Ag
   });
 }
 
-test('#69 one Next from Agents lands on First project, whose button reads Finish', async () => {
+test('#69 Next from AIs lands on Version control, and one more on First project, whose button reads Finish', async () => {
   const app = await booted();
   assert.equal(title(app), TITLES.agents);
+  assert.equal(nextLabel(app), 'Next');
+  await pressNext(app);
+  assert.equal(title(app), TITLES.versioning);
   assert.equal(nextLabel(app), 'Next');
   await pressNext(app);
   assert.equal(title(app), TITLES.project);
   assert.equal(nextLabel(app), 'Finish');
 });
 
-test('#69 Back goes from First project to Agents, where it is disabled', async () => {
+test('#69 Back goes from First project to Version control, then to AIs, where it is disabled', async () => {
   const app = await booted();
   const back = app.el('#setup-modal #btn-setup-back');
-  assert.equal(back.disabled, true, 'nothing before Agents');
+  assert.equal(back.disabled, true, 'nothing before AIs');
+  await pressNext(app);
+  assert.equal(back.disabled, false, 'Version control has a Back');
   await pressNext(app);
   assert.equal(back.disabled, false, 'First project has a Back');
+  await app.click('#setup-modal #btn-setup-back');
+  await app.settle(10);
+  assert.equal(title(app), TITLES.versioning);
+  assert.equal(back.disabled, false);
   await app.click('#setup-modal #btn-setup-back');
   await app.settle(10);
   assert.equal(title(app), TITLES.agents);
   assert.equal(back.disabled, true);
 });
 
-test('#69 a second Next finishes: the Setup closes and setupDone is saved', async () => {
+test('#69 a third Next finishes: the Setup closes and setupDone is saved', async () => {
   const app = await booted();
   await pressNext(app);
+  await pressNext(app);
+  assert.equal(setupOpen(app), true, 'two Next: still open, on First project');
+  assert.equal(patches(app).some((p) => p.setupDone === true), false);
   await pressNext(app);
   assert.equal(setupOpen(app), false);
   assert.equal(patches(app).some((p) => p.setupDone === true), true);
 });
 
-test('#69 Enter in the Setup is Next: Agents goes to First project', async () => {
+test('#69 Enter in the Setup is Next: AIs goes to Version control', async () => {
   const app = await booted();
   const modal = app.el('#setup-modal');
   for (const fn of modal.listeners.keydown || []) await fn({ key: 'Enter', target: app.el('#setup-lead'), preventDefault() {}, stopPropagation() {} });
   await app.settle(10);
-  assert.equal(title(app), TITLES.project);
+  assert.equal(title(app), TITLES.versioning);
 });
 
-test('#69 Esc in the Setup is Skip, after its confirm', async () => {
+test('#69 Esc in the Setup is Skip, after its confirm (on First project, the only step with a Skip)', async () => {
   const app = await booted();
+  await toFirstProject(app);
   closedLayers(app);
   const pressed = app.key('Escape'); // waits for the confirm's answer
   await confirmSkip(app);
@@ -154,8 +188,72 @@ test('#69 Esc in the Setup is Skip, after its confirm', async () => {
   assert.equal(patches(app).some((p) => p.setupDone === true), true);
 });
 
+for (const [name, presses] of [['AIs', 0], ['Version control', 1]]) {
+  test(`#69 ${name} has no Skip: its button is hidden and Esc asks nothing and leaves the Setup open`, async () => {
+    const app = await booted();
+    for (let i = 0; i < presses; i++) await pressNext(app);
+    assert.equal(app.el('#setup-modal #btn-setup-skip').hidden, true);
+    closedLayers(app);
+    await app.key('Escape');
+    await app.settle(10);
+    assert.equal(app.el('#confirm-modal').classList.contains('hidden'), true, 'no confirm');
+    assert.equal(setupOpen(app), true);
+    assert.equal(patches(app).some((p) => p.setupDone === true), false);
+  });
+}
+
+// ---- Next waits for an AI CLI, then for Git ---------------------------------------------------------
+
+const simulationLink = (app) => app.el('#setup-modal #btn-setup-simulation');
+
+test('#69 with an AI CLI and Git ready, no step shows "Continue with simulations only"', async () => {
+  const app = await booted();
+  assert.equal(simulationLink(app).hidden, true);
+  await pressNext(app);
+  assert.equal(simulationLink(app).hidden, true);
+});
+
+test('#69 AIs without an AI CLI ready: Next is disabled and says why; "Continue with simulations only" goes on', async () => {
+  const app = await booted({ tools: [{ id: 'claude', name: 'Claude Code', path: null, connected: false }, TOOLS[1]] });
+  const next = app.el('#setup-modal #btn-setup-next');
+  assert.equal(next.disabled, true);
+  assert.equal(next.title, 'Connect at least one AI to go on');
+  assert.equal(simulationLink(app).hidden, false);
+  await app.click('#setup-modal #btn-setup-simulation');
+  await app.settle(10);
+  assert.equal(title(app), TITLES.versioning);
+  assert.equal(next.disabled, false, 'Git is ready');
+  assert.equal(next.title, '');
+});
+
+test('#69 Version control without Git: Next is disabled and says why; "Continue with simulations only" goes on', async () => {
+  const app = await booted({ tools: [TOOLS[0]] });
+  await pressNext(app);
+  const next = app.el('#setup-modal #btn-setup-next');
+  assert.equal(title(app), TITLES.versioning);
+  assert.equal(next.disabled, true);
+  assert.equal(next.title, 'Install Git to go on');
+  assert.equal(simulationLink(app).hidden, false);
+  await app.click('#setup-modal #btn-setup-simulation');
+  await app.settle(10);
+  assert.equal(title(app), TITLES.project);
+  assert.equal(next.disabled, false);
+});
+
+test('#69 a first run with no CLI at all that goes on with "Continue with simulations only" leaves developerMode off', async () => {
+  const app = await booted({ tools: [] });
+  await app.click('#setup-modal #btn-setup-simulation');
+  await app.settle(10);
+  await app.click('#setup-modal #btn-setup-simulation');
+  await app.settle(10);
+  assert.equal(title(app), TITLES.project);
+  await finish(app);
+  assert.equal(turnedOn(app), 0, 'no settings write turns developerMode on');
+  assert.equal(!!app.state().settings.developerMode, false);
+});
+
 for (const step of ['try-it-safely', 'workflows']) {
-  test(`#69 the Setup opened on the step "${step}" of an older version opens on Agents`, async () => {
+  test(`#69 the Setup opened on the step "${step}" of an older version opens on AIs`, async () => {
     const app = await booted({ settings: { setupDone: true } });
     await app.run(`window.Setup.open(${JSON.stringify(step)})`);
     await app.settle(10);
