@@ -56,15 +56,15 @@
 
   // #12 the item's issue from its documents' `issue:` field (DocModel.issueRef), null without one
   const issueOf = (it) => (it.issue ? window.DocModel?.issueRef?.(it.issue) || null : null);
-  // #12 a ref's page: its URL when the `issue:` gave one, owner/repo#N on the project's host (github.com
-  // without one), #N in the project's repository
+  // #12 a ref's page: its URL when the `issue:` gave one, owner/repo#N on the project's host (the default
+  // platform's without one), #N in the project's repository
   function issueHref(ref, project) {
     if (ref.url) return ref.url;
     const P = window.Platforms;
     const repo = P?.parseRepoUrl?.(project?.repo);
     const path = ref.repo || repo?.path;
     if (!P || !path) return '';
-    const platform = (repo && P.projectPlatform?.(project)) || P.findPlatform?.('github');
+    const platform = (repo && P.projectPlatform?.(project)) || P.platformOrDefault?.();
     return platform?.issueUrl?.(`https://${repo?.host || platform.host}/${path}`, ref.number) || '';
   }
   // #12 the row's link to its issue, "Epic owner/repo#628 · #629" for an epic's phase, opening the epic
