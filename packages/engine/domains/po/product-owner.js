@@ -38,6 +38,8 @@
 // the prompt names the project's `runDefaults`. Mode 'auto' (the drawer): the answer's `intent` says plan or register.
 // #791 (po-kinds.js): each issue of a plan gets a kind; a group holds one kind, on that kind's workflow
 // and inputs from the project (`workflowKinds`), and Economy never packs two kinds into one run.
+// #90 (po-outside.js): issue text is untrusted data in the report; the answer's `reviews` judge each outside issue
+// (well written, injection suspected, the lines), recorded with the backlog; a suspected one is in no group.
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
 // issue-writing, the code analyzer's cheaper model: ISSUE_AGENT); the draft carries its clarity score
@@ -92,6 +94,8 @@ const RoadmapModel = require('@craftorio/shared/roadmap-model');
 const poSplit = require('./po-split');
 const poMockups = require('./po-mockups');
 const poChosen = require('./po-chosen-inputs');
+const poOutside = require('./po-outside');
+const { mockEpics } = require('./po-mock-epics');
 const {
   kindGroups,
   kindOf,
@@ -245,6 +249,7 @@ const ANSWER_SCHEMA = {
         issues: { type: 'array', items: { type: 'object', required: ['title', 'body'], properties: { title: { type: 'string' }, body: { type: 'string' } } } },
       },
     },
+    reviews: poOutside.REVIEWS_SCHEMA, // #90: one per outside issue (well written, injection suspected, reasons, lines)
   },
 };
 
@@ -258,7 +263,7 @@ const RULES = [
   'Conflict map (the report\'s conflict-map section, when it has one): two groups expected to touch the same hot file or hot line go to different stages, or into one group when they belong together; every conflict you report names the hot file that causes it in `files`. List each hot spot (marked "hot") in `decongest` with a fix in the repository\'s terms (one item per line, sorted; a per-feature file plus a generated aggregate; a split by screen or module) and its `runs` and `of`.',
   'Shared test files count too: two groups of one stage that add scenarios to the same `.feature` file (or tests to the same test file) conflict in it at the merge, like a shared source file: put them in different stages or one group, and name that file in the conflict\'s `files`.',
   'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
-  'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
+  'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.', poOutside.OUTSIDE_RULES,
   'Write in the AI agents language the Language line names. The summary is Markdown, short, and answers the question.',
 ].join('\n');
 
@@ -376,7 +381,9 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
   const chosen = workflow && files.includes(workflow) ? workflow : null;
   const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) ? inputs : {};
   const inputsOf = (file) => (workflows || []).find((w) => w.file === file)?.inputs;
-  const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
+  // #90: the reviews of outside issues; a suspected one, or one with no review, is in no group (po-outside.js)
+  const { reviews, quarantined } = poOutside.normalizeReviews(answer.reviews, byNumber);
+  const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n) && poOutside.plannableOutside(byNumber.get(n), reviews)))];
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
   const closed = [...attached].filter((n) => !isOpen(n));
@@ -397,8 +404,9 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
     decongest: normalizeDecongest(answer.decongest),
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_GUIDE })),
-    splits: normalizeSplits(answer.splits, byNumber, history),
+    splits: normalizeSplits(answer.splits, byNumber, history).filter((s) => poOutside.plannableOutside(byNumber.get(s.issue), reviews)),
     epics: normalizeEpics(answer.epics, byNumber, epicList),
+    ...(reviews.length ? { reviews, quarantined } : {}),
     // #670: a spec's proposal with its mockup coverage (po-mockups.js specProposal)
     ...(spec ? { spec } : {}),
   };
@@ -657,12 +665,13 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     // #124: an issue too big for one run gets its signals and its numbered tasks (a split names them by number)
     const signals = plannable(i) ? poSplit.splitSignals(i, { complexity: complexityOf(i), history }) : [];
     const tasks = signals.length ? poSplit.parentTasks(i.body).slice(0, 60) : [];
-    return [
+    // #90: an issue's text is untrusted data (po-outside.js): inside a block it cannot close
+    return poOutside.untrustedBlock(i, [
       `### #${i.number} ${i.title}${i.isEpic ? ' (epic)' : ''}${i.state === 'open' ? '' : ' (closed: leave it out)'}`,
       `column: ${i.column || 'todo'}${labels ? ` · labels: ${labels}` : ''}${i.epic ? ` · epic ${i.epic}` : ''}${i.tasks?.total ? ` · ${i.tasks.total} tasks` : ''}${prs ? ` · open PRs: ${prs}` : ''}${i.queued ? ' · queued' : ''}${i.roadmap ? ` · roadmap stage ${i.roadmap.stage} (${i.roadmap.status})` : ''}${runs ? ` · runs: ${runs}` : ''}`,
       (whole ? String(i.body ?? '').trim() : clip(i.body, named.has(i.number) ? BODY_NAMED : BODY_CLIP)) || '(no description)',
       ...(signals.length ? [`Split signals: ${signals.join(' ')}`, `Tasks:\n${tasks.map((t) => `${t.n}. ${clip(t.text, 160)}`).join('\n')}`] : []),
-    ].join('\n');
+    ].join('\n'));
   };
   const epicList = data?.epics || [];
   const local = data?.local;
@@ -713,7 +722,7 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
 function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL, cost = null, conflictMap = null }) {
   const costStep = cost == null ? null : poCalibration.cost.step(cost);
   const step = { ...poCalibration.step(calibration), ...(costStep ? { maxComplexity: poCalibration.groupCap(calibration, cost) } : {}) };
-  const backlogTodo = (data?.issues || []).filter(plannable);
+  const backlogTodo = (data?.issues || []).filter((i) => plannable(i) && poOutside.plannableOutside(i, poOutside.mockReviews([i]))); // #90: no suspected issue
   const attached = new Set(selection.map(Number));
   const todo = attached.size ? backlogTodo.filter((i) => attached.has(i.number)) : backlogTodo;
   // issues of one epic group first (#138), then a shared label
@@ -770,6 +779,8 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     splits,
     epics: epicPlan,
     groups: planned,
+    // #90: the outside issues reviewed by rule; normalizeAnswer keeps a suspected one out of every group
+    reviews: poOutside.mockReviews(data?.issues),
     conflicts: [
       ...refactor.flatMap((r) => others.slice(0, 2).map((o) => ({ issues: [r.number, o.number], reason: `#${r.number} looks like a repo-wide change: run it alone, with no other run open.`, files: [] }))),
       ...hotConflicts,
@@ -777,35 +788,6 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
     decongest: spots.map((s) => ({ file: s.file, ...(s.kind === 'line' ? { line: s.line } : {}), fix: s.fix, runs: s.runs, of: s.of })),
     enrich: todo.filter((i) => String(i.body || '').trim().length < 120).map((i) => ({ issue: i.number, reason: 'The description is too short to implement without guessing.' })),
   };
-}
-
-// The simulated epics section: an open issue without an epic joins the epic whose members share its
-// theme (its `area:` label, else its first topic label); themes of two or more issues without an epic become new epics.
-function mockEpics(data) {
-  const issues = (data?.issues || []).filter((i) => i.state === 'open' && !i.isEpic);
-  const theme = (i) => {
-    const names = (i.labels || []).map((l) => l.name).filter((n) => !/^(complexity|impact|epic)\b/i.test(n) && !/^(bug|enhancement|feature|documentation)$/i.test(n));
-    return names.find((n) => /^area[:/]/i.test(n)) || names[0] || null;
-  };
-  const place = [];
-  const loose = issues.filter((i) => !i.epic);
-  for (const e of data?.epics || []) {
-    const themes = new Set(issues.filter((i) => i.epic === e.id).map(theme).filter(Boolean));
-    for (const i of loose) {
-      if (theme(i) && themes.has(theme(i)) && !place.some((p) => p.issue === i.number)) place.push({ issue: i.number, epic: e.id, reason: `Shares the theme ${theme(i)} with the epic's members (simulated).` });
-    }
-  }
-  const byTheme = new Map();
-  for (const i of loose.filter((x) => !place.some((p) => p.issue === x.number))) {
-    const t = theme(i);
-    if (!t) continue;
-    if (!byTheme.has(t)) byTheme.set(t, []);
-    byTheme.get(t).push(i.number);
-  }
-  const title = (t) => { const s = t.replace(/^area[:/]\s*/i, '').replace(/[-_]+/g, ' ').trim(); return s.charAt(0).toUpperCase() + s.slice(1); };
-  const create = [...byTheme].filter(([, ns]) => ns.length >= 2)
-    .map(([t, ns]) => ({ title: title(t), goal: `The open issues about ${title(t).toLowerCase()} (label ${t}), tracked together (simulated).`, issues: ns }));
-  return { place, create, merge: [], split: [] };
 }
 
 // ---- the conversation ---------------------------------------------------------------------------
@@ -1522,6 +1504,7 @@ async function ask(/** @type {Record<string, any>} */ { backlogDir, projectId, r
     // #670: a question naming a spec: its issues (the model's, or one per phase when simulated) and their mockup coverage
     const spec = poMockups.specProposal({ folder, question: q, issues: raw?.spec?.issues, mock: !!mock });
     const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs, spec, runDefaults, workflowKinds });
+    backlog.recordReviews(backlogDir, projectId, answer.reviews); // #90: the verdicts the Backlog shows
     message = appendMessage(backlogDir, projectId, {
       role: 'po', ...tag, text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });

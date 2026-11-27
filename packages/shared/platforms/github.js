@@ -143,11 +143,27 @@
       labels: (i.labels || []).map((l) => ({ name: l.name, color: l.color ? `#${l.color}` : null })),
       url: i.url,
       author: i.author?.login || null,
+      // #90: OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, NONE… (GraphQL's authorAssociation, REST's author_association)
+      authorAssociation: String(i.authorAssociation ?? i.author_association ?? '').toUpperCase() || null,
       assignees: (i.assignees || []).map((a) => a.login),
       body: i.body || '',
       createdAt: i.createdAt,
       updatedAt: i.updatedAt,
     }),
+    // #90: `gh issue list --json` has no authorAssociation: one GraphQL call reads it for the listed issues
+    // (an alias per number) → [{ number, authorAssociation }]; null when there is nothing to read
+    issueAuthorsCommand: ({ host, path }, numbers) => {
+      const [owner, name] = path.split('/');
+      const list = (numbers || []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      if (!list.length) return null;
+      const query = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){${list.map((n) => `i${n}:issue(number:${n}){number authorAssociation}`).join(' ')}}}`;
+      return cmd(['api', 'graphql', ...github.apiHostArgs({ host }), '-f', `query=${query}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '--jq', '[.data.repository[] | select(. != null)]']);
+    },
+    parseIssueAuthors: (out) => {
+      const list = JSON.parse(out || '[]');
+      return (Array.isArray(list) ? list : []).filter((x) => x && x.number != null)
+        .map((x) => ({ number: Number(x.number), authorAssociation: String(x.authorAssociation ?? x.author_association ?? '').toUpperCase() || null }));
+    },
 
     // ---- labels
     labelListCommand: (target) => cmd(['label', 'list', '--repo', target, '--limit', '500', '--json', 'name']),

@@ -123,6 +123,8 @@
       labels: (i.labels || []).map((name) => ({ name: typeof name === 'string' ? name : name.name, color: name.color || null })),
       url: i.web_url,
       author: i.author?.username || null,
+      // #90: GitLab's issue has no association: fetchIssues maps the author through the members (issueAuthorsCommand)
+      authorAssociation: null,
       assignees: (i.assignees || []).map((a) => a.username),
       body: i.description || '',
       createdAt: i.created_at,
@@ -130,6 +132,13 @@
       // a group epic (GitLab paid tiers): read by packages/engine/domains/backlog/epics.js, not kept in the cache
       ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
     }),
+    // #90: the project's members (inherited ones too) → [{ login, accessLevel }]: an issue's author is mapped
+    // through them (packages/engine/domains/backlog/issue-author.js gitlabAssociation, WRITE_LEVEL)
+    issueAuthorsCommand: ({ host, path }) => cmd(['api', ...gitlab.apiHostArgs({ host }), `projects/${encodeURIComponent(path)}/members/all?per_page=100`]),
+    parseIssueAuthors: (out) => {
+      const list = JSON.parse(out || '[]');
+      return (Array.isArray(list) ? list : []).filter((m) => m && m.username).map((m) => ({ login: m.username, accessLevel: Number(m.access_level) || 0 }));
+    },
 
     // ---- labels: GitLab creates a missing label itself, so none is read or created first
     labelListCommand: () => null,

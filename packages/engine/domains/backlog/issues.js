@@ -4,6 +4,7 @@
 // - execCli: runs a platform CLI; fetchIssues / fetchIssue: the issues, normalized (taskProgress); a repository
 //   with Issues turned off rejects with `issuesDisabled: true` on the error (#845, the adapter's issuesDisabled);
 // - issueCreateCommand, repoLabels: filing an issue (the Product Owner's Create, the epics);
+//   #90: each synced issue carries its author's association and `outside` (issue-author.js withAuthors);
 // - issueFields, itemIssues, withSyncedText: the read-only copies queue and roadmap items keep (#168);
 // - ARCHIVED_COLOR, sameLabel: the `archived` label of the synced and the local archive (#238, #35).
 // The commands and JSON of each platform come from its adapter (packages/shared/platforms/, #351):
@@ -13,6 +14,7 @@
 const { resolveCommand } = require('../../engine/providers');
 const { execShim } = require('../machine/shell');
 const Platforms = require('@craftorio/shared/platforms');
+const { trustFields, withAuthors } = require('./issue-author');
 
 // the backlog's platforms: the adapters, and Bitbucket (no sync yet)
 const PLATFORMS = {
@@ -98,6 +100,13 @@ async function readIssueSteps(p, parsed, exec, onProgress) {
   return raw;
 }
 
+// #90: who wrote the listed issues (the adapter's authors read), [] when it fails: an issue whose author stays
+// unknown is outside (issue-author.js, fail closed)
+async function readAuthors(p, parsed, list, exec) {
+  const c = p.issueAuthorsCommand(parsed, list.map((i) => i.number));
+  try { return c ? p.parseIssueAuthors(await runCommand(exec, c)) : []; } catch { return []; }
+}
+
 /**
  * Fetches every issue (open and closed, newest first, up to MAX_ISSUES) of a repository.
  * #781: with onProgress the list is read in steps, for a count that grows on screen; the steps read more, so only a
@@ -114,9 +123,9 @@ async function fetchIssues({ platform, repo, exec = execCli, onProgress }) {
   if (owner && owner !== p.id) throw new Error(`The project's repository is on ${parsed.host}; pick ${PLATFORMS[owner].label} to sync it.`);
 
   try {
-    if (onProgress) return normalize(p, await readIssueSteps(p, parsed, exec, onProgress));
-    const out = await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES));
-    return normalize(p, JSON.parse(out || '[]'));
+    const list = onProgress ? normalize(p, await readIssueSteps(p, parsed, exec, onProgress))
+      : normalize(p, JSON.parse((await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES))) || '[]'));
+    return withAuthors(list, await readAuthors(p, parsed, list, exec));
   } catch (e) {
     // #845: Issues turned off is a setting of the repository: the error says so (issuesDisabled), with its message
     if (p.issuesDisabled(e.message)) e.issuesDisabled = true;
@@ -175,6 +184,8 @@ async function fetchIssue({ platform, repo, number, exec = execCli }) {
 const issueFields = (i) => ({
   number: i.number, url: i.url, title: i.title, body: i.body || '', labels: i.labels || [], updatedAt: i.updatedAt || null,
   knownPullRequests: i.knownPullRequests || [],
+  // #90: who wrote it, whether it came from outside and the owner's approval
+  ...trustFields(i),
 });
 /** The issues of a queue item: its `issues` (a group), or the item itself. */
 const itemIssues = (item) => (Array.isArray(item.issues) && item.issues.length ? item.issues : [issueFields(item)]);
@@ -182,7 +193,7 @@ const itemIssues = (item) => (Array.isArray(item.issues) && item.issues.length ?
 /** A copy of an issue with the text of `synced` (title, body, labels, updatedAt), or the copy when there is none. */
 function withSyncedText(copy, synced) {
   if (!synced) return copy;
-  return { ...copy, url: synced.url || copy.url, title: synced.title, body: synced.body || '', labels: synced.labels || [], updatedAt: synced.updatedAt || null };
+  return { ...copy, url: synced.url || copy.url, title: synced.title, body: synced.body || '', labels: synced.labels || [], updatedAt: synced.updatedAt || null, ...trustFields(synced) };
 }
 
 module.exports = {
