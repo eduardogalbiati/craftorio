@@ -8,20 +8,18 @@
 //   over IPC / HTTP as data) to a state { status: 'failed', code, reason } where `code` names the cause:
 //     'repo-not-found'  the URL names no repository (git: "remote: Repository not found." / "... not found");
 //     'repo-no-access'  a private repository the owner cannot read (git: "Authentication failed", HTTP 403);
-//     'not-a-git-repo'  a folder on this computer that is not a git repository (real git: "does not appear to be
-//                       a git repository");
 //   and no project id is kept (`projectId` absent or null): nothing was created.
 // - after such a failure the project list (projects.listProjects(<workspace>/projects)) holds no project and
 //   <workspace>/repos/ holds no folder (missing or empty); git clone was never run.
 // - the wizard words each code in the interface language (i18n keys in project-wizard-import-failure-107.test.js).
-// The remote cases use a fake git (the system boundary, as project-onboarding.test.js): no network. The folder case
-// runs the real git on a real folder in os.tmpdir() (local only).
+// The remote cases use a fake git (the system boundary, as project-onboarding.test.js): no network.
+// #98 retired the 'not-a-git-repo' folder case: a plain folder now imports as a new repository made from its files
+// (project-onboarding-local-folder-98.test.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { pathToFileURL } = require('url');
 
 const loadArea = () => require('../../service/areas/project-onboarding');
 const projects = require('../../domains/project/projects');
@@ -82,14 +80,6 @@ async function started(ob, data) {
 const entries = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
 const projectNames = (dir) => projects.listProjects(dir).map((p) => `${p.id} (${p.name})`);
 
-// the person's folder: a real folder with a file and no .git
-function plainFolder(t) {
-  const folder = path.join(tmp(t, 'import-failure-107-folder-'), 'notes');
-  fs.mkdirSync(folder);
-  fs.writeFileSync(path.join(folder, 'README.md'), '# notes\n');
-  return folder;
-}
-
 const CASES = [
   {
     title: 'a URL that does not exist',
@@ -124,20 +114,3 @@ for (const c of CASES) {
     assert.equal(clones(), 0, 'git clone never ran');
   });
 }
-
-test('#107 a folder that is not a git repository: start answers failed with code not-a-git-repo', { timeout: 30000 }, async (t) => {
-  const { ob } = setup(t, null); // the real git, on a local folder only
-  const s = await started(ob, { name: 'Notes', repo: pathToFileURL(plainFolder(t)).href });
-  assert.equal(s?.status, 'failed', `the state: ${JSON.stringify(s)}`);
-  assert.equal(s.code, 'not-a-git-repo', `the cause (never "no access"): ${JSON.stringify(s)}`);
-  assert.equal(s.projectId ?? null, null, 'no project id: nothing was created');
-});
-
-test('#107 a folder that is not a git repository: no project in the list, no folder in repos/', { timeout: 30000 }, async (t) => {
-  const { ob, projectsDir, reposDir } = setup(t, null);
-  const folder = plainFolder(t);
-  await started(ob, { name: 'Notes', repo: pathToFileURL(folder).href });
-  assert.deepEqual(projectNames(projectsDir), [], 'the project list after the failed import');
-  assert.deepEqual(entries(reposDir), [], '<workspace>/repos/ after the failed import');
-  assert.deepEqual(entries(folder), ['README.md'], 'the person\'s folder is left as it was');
-});

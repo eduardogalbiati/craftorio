@@ -1,7 +1,7 @@
 Feature: The project wizard's step 2 says why an import failed, and where a new project will really go
   On step 2 of the project wizard, "Import a repository" ("Importar um repositório") that fails says why in the
   interface's language, naming its real cause: a repository that does not exist, a private repository the owner has
-  no access to, a local folder that is not a git repository; never "credentials" for a cause that is not one. A
+  no access to; never "credentials" for a cause that is not one. A
   failed import leaves no project in the Projects list (#107). "Create new project" ("Criar novo projeto") says under
   the name that a name is required when it is empty, and shows the folder the project will really get before Next:
   the name made a folder name, and with a number after it when a project already has that folder (#108).
@@ -39,21 +39,8 @@ Feature: The project wizard's step 2 says why an import failed, and where a new 
     And I open "Projects" in the sidebar
     Then the Projects screen does not list the project "segredo-107"
 
-  # A real folder under the scenario's scratch folder, with files and no .git
-  @issue-107
-  Scenario: Importing a local folder that is not a git repository says so, not "credentials", and leaves no project
-    Given the app is open
-    And a local folder that is not a git repository is ready to import
-    When I open the project wizard
-    And I choose to import a repository in the wizard
-    And I enter the local repository and the project name "pasta-107"
-    And I go to the next step of the wizard
-    Then the wizard says the import failed because "the folder is not a git repository"
-    And the wizard's import error reads "not a git repository"
-    And the wizard's import error does not read "credentials"
-    When I close the project wizard
-    And I open "Projects" in the sidebar
-    Then the Projects screen does not list the project "pasta-107"
+  # #98 retired the scenario of a local folder that is not a git repository: such a folder now becomes a project
+  # (a new repository from its files), see 98-local-folder-any-folder.feature.
 
   @issue-108
   Scenario: Creating a new project with an empty name says under the name that it is required
