@@ -12,6 +12,8 @@
 // (`kindInputs`, the project's) instead of the PO's.
 // valueChanged keeps what the form changed; workflowTitle and filesHtml: how the card names a workflow and
 // its files.
+// #95: the summary, "Mais" and the form read the localized workflow (WorkflowInputs.localized, as the Roadmap
+// does); withEdits and valueChanged keep the workflow's own inputs, so the roadmap gets the option's value.
 // "Show more options" (wf-more-toggle) in the form is the viewer's choice (localStorage, not per project).
 /* global esc, t */
 (() => {
@@ -77,8 +79,9 @@
   function decisionsHtml({ g, key, edit = {}, wf, workflows, title, runDefaults, done }) {
     const WI = window.WorkflowInputs;
     const shown = withEdits(g, edit, wf, runDefaults);
-    // an input the workflow does not declare (or a workflow no longer installed) still shows what was saved
-    const defs = { ...Object.fromEntries(Object.keys(shown.inputs || {}).map((k) => [k, {}])), ...optionDefs(wf) };
+    // an input the workflow does not declare (or a workflow no longer installed) still shows what was saved;
+    // #95: the texts come from the localized workflow, as on the Roadmap (the values stay the options' own)
+    const defs = { ...Object.fromEntries(Object.keys(shown.inputs || {}).map((k) => [k, {}])), ...optionDefs(WI.localized(wf)) };
     const { values, sources } = WI.resolved(defs, shown.inputs, runDefaults);
     const changed = (k) => Object.prototype.hasOwnProperty.call(edit.values || {}, k);
     const line = (k) => {

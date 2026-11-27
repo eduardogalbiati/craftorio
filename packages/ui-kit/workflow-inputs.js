@@ -91,6 +91,9 @@
     if (isBoolean(def)) return 'switch';
     if (Array.isArray(def.enum) && def.multiple) return 'multi';
     if (Array.isArray(def.enum)) {
+      // #95: a localized input keeps the control its own texts get (localized's `control`): a language never
+      // turns the pills into a select
+      if (def.control === 'pills' || def.control === 'select') return def.control;
       const short = def.enum.length <= MAX_PILLS && def.enum.every((v) => optionLabel(def, v).length <= MAX_PILL_LABEL);
       return short ? 'pills' : 'select';
     }
@@ -349,6 +352,7 @@
         label: tr(label(key, def), def.label_key, `${key}_label`),
         ...(def.description ? { description: tr(def.description, def.help_key, `${key}_desc`) } : {}),
         ...(def.enum || def.options ? { options: options(key, def) } : {}),
+        ...(Array.isArray(def.enum) && !def.multiple && !isBoolean(def) ? { control: kind(key, def) } : {}),
       }])),
     };
   }
