@@ -36,6 +36,7 @@ const { projectListing } = require('../seed-runs');
 const simulation = require('../../engine/simulation');
 const depsCache = require('../../engine/deps-cache');
 const {
+  cargoNoFailFast,
   detectTestCommand,
   FILE_TIMEOUT_MS,
   filteredCommand,
@@ -151,9 +152,12 @@ module.exports = (ctx) => {
     }
     const depsError = await depsFor(project, { cwd, env, logFile });
     if (depsError) return { failures: [], log: '', error: depsError };
-    fs.appendFileSync(logFile, `$ ${command}\n`);
+    // #109: cargo test runs every test binary (--no-fail-fast), as the run's rounds do, so each
+    // failure red on the base is confirmed; the durations key stays the detected command
+    const runs = cargoNoFailFast(command);
+    fs.appendFileSync(logFile, `$ ${runs}\n`);
     const timeoutMs = suiteTimeout(suiteDurations({ file: path.join(ctx.ws.cache, 'suite-durations.json'), key: `${project.folder}\n${command}` }));
-    const r = await runCommand({ command, cwd, env, timeoutMs, logFile });
+    const r = await runCommand({ command: runs, cwd, env, timeoutMs, logFile });
     let log = '';
     try { log = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
     const { failures, cutShort } = redOf(log, cwd, 'the suite');

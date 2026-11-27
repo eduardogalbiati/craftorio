@@ -208,9 +208,11 @@ function suiteEnv(env = {}, { locksDir, testWorkers, tmpDir, passthrough = [] } 
 // The suite's command with the run's test workers (#367) when it calls a runner that takes them
 // directly and does not set them already: `playwright test` → --workers, `jest` → --maxWorkers.
 // Anything else (npm test, pytest, go test…) gets them through the environment only.
+// A compound command (`a && b`, `a || b`, `a; b`, `a | b`) is left as it is by the options added below.
+const COMPOUND_COMMAND = /\s&&\s|\|\||[;|]/;
 function withWorkers(command, testWorkers) {
   const cmd = String(command || '');
-  if (!testWorkers || /\s&&\s|\|\||[;|]/.test(cmd)) return cmd;
+  if (!testWorkers || COMPOUND_COMMAND.test(cmd)) return cmd;
   if (/\bplaywright\s+test\b/.test(cmd) && !/\s(--workers|-j)\b/.test(cmd)) return `${cmd} --workers=${testWorkers}`;
   if (/(^|[\s/\\])jest(\.js)?(\s|$)/.test(cmd) && !/\s(--maxWorkers|-w|--runInBand|-i)\b/.test(cmd)) return `${cmd} --maxWorkers=${testWorkers}`;
   return cmd;
@@ -221,7 +223,7 @@ function withWorkers(command, testWorkers) {
 // that already has it, or that is not a plain `cargo test`, unchanged.
 function cargoNoFailFast(command) {
   const cmd = String(command || '');
-  if (!/^\s*cargo\s+test\b/.test(cmd) || /\s--no-fail-fast\b/.test(cmd) || /\s&&\s|\|\||[;|]/.test(cmd)) return cmd;
+  if (!/^\s*cargo\s+test\b/.test(cmd) || /\s--no-fail-fast\b/.test(cmd) || COMPOUND_COMMAND.test(cmd)) return cmd;
   return cmd.replace(/^(\s*cargo\s+test)\b/, '$1 --no-fail-fast');
 }
 
@@ -928,6 +930,7 @@ function redCheck(output, files, { mock, mockResult } = {}) {
 }
 
 module.exports = {
+  cargoNoFailFast,
   checkOnBase,
   coverageCommand,
   detectTestCommand,

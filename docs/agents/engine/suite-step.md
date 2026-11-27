@@ -24,7 +24,7 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   get it too), cached per base commit + file in `cache/base-tests/`. cargo test (#109) names tests,
   not files: they run by name (`cargo test --no-fail-fast -- <names>`; the whole `cargo test
   --no-fail-fast` for a doctest or a line too long), cached per commit + `cargo:<bin>::<name>`; every
-  cargo round runs with `--no-fail-fast`, so a binary red on the base never hides the others. Those failing there too become
+  cargo round (and the service's base check, `cargoNoFailFast`) runs with `--no-fail-fast`, so a binary red on the base never hides the others. Those failing there too become
   `preexisting_failures` (the run's list, the summary, the project's base-health store below).
   **Main stays green (#405, `packages/engine/domains/project/base-health.js`, wired in `packages/engine/service/areas/base-health.js`)**: a
   real run's `preexisting_failures` are recorded per project in `backlog/base-health/<project>.json`

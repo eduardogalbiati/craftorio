@@ -64,6 +64,16 @@ test('#109 every cargo round runs with --no-fail-fast, once', async (t) => {
   assert.deepEqual(calls, ['cargo test --no-fail-fast', 'cargo test --no-fail-fast --workspace']);
 });
 
+test('#109 cargoNoFailFast (the service base check uses it too): plain cargo test only', () => {
+  const { cargoNoFailFast } = require('../engine/suite-step');
+  assert.equal(cargoNoFailFast('cargo test'), 'cargo test --no-fail-fast');
+  assert.equal(cargoNoFailFast('cargo test --workspace'), 'cargo test --no-fail-fast --workspace');
+  assert.equal(cargoNoFailFast('cargo test --no-fail-fast'), 'cargo test --no-fail-fast');
+  assert.equal(cargoNoFailFast('cargo build && cargo test'), 'cargo build && cargo test');
+  assert.equal(cargoNoFailFast('cargo test | tee out.log'), 'cargo test | tee out.log');
+  assert.equal(cargoNoFailFast('npm test'), 'npm test');
+});
+
 test('#109 the same test name in two binaries: one red on the base, the other the change\'s', async (t) => {
   const { parseFailures } = require('../engine/suite-step');
   const block = (name) => `running 1 test\ntest ${name} ... FAILED\n\nfailures:\n\n---- ${name} stdout ----\nthread panicked\n\nfailures:\n    ${name}\n\ntest result: FAILED. 0 passed; 1 failed\n`;
