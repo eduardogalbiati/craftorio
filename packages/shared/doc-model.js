@@ -408,7 +408,8 @@
 
   // #12 an `issue:` front matter value: its first `[owner/repo]#N` or issue URL and the epic it names
   // (`epic owner/repo#N`, `epic <issue URL>`); a URL's ref keeps its `url`
-  const ISSUE_REF = /^(?:([\w.-]+(?:\/[\w.-]+)+))?#(\d+)$/;
+  // a range or a pair glued to the first ref ("#835–#837", "#628/#629") reads as its first ref
+  const ISSUE_REF = /^(?:([\w.-]+(?:\/[\w.-]+)+))?#(\d+)(?:[–—\/-].*)?$/;
   // the platform adapters' parseIssueUrl (platforms/index.js), read when called: the browser loads it later
   const platforms = () => (typeof module === 'object' && module.exports ? require('./platforms') : root.Platforms);
   function wordRef(word) {

@@ -72,7 +72,9 @@
     const ref = issueOf(it);
     if (!ref) return '';
     const name = (r) => `${r.repo || ''}#${r.number}`;
-    const label = ref.epic ? `${t('docs.item_epic', { ref: name(ref.epic) })} · ${name(ref)}` : t('docs.item_issue', { ref: name(ref) }); // i18n-ignore
+    // "epic #628" alone: the epic is the item's own ref, named once
+    const own = ref.epic && name(ref.epic) === name(ref) ? '' : ` · ${name(ref)}`;
+    const label = ref.epic ? `${t('docs.item_epic', { ref: name(ref.epic) })}${own}` : t('docs.item_issue', { ref: name(ref) }); // i18n-ignore
     const href = ref.epic ? issueHref(ref.epic, project) : issueHref(ref, project);
     return `<a class="docs-item-issue small" data-testid="docs-item-issue-link"${href ? ` href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(ref.text)}">${esc(label)}</a>`;
   }
