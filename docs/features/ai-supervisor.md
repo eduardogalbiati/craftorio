@@ -30,7 +30,10 @@ orchestrator:
   It shows up as a `supervisor` session, and its decisions in the orchestrator log
   (`supervisor.decision` events). A gate the supervisor on call answered itself (#71) says so on the
   Run screen and in the run's chat, with the answer; it knows the gate's own recommendation and says
-  why when it advises another answer.
+  why when it advises another answer. It takes an answer alone only when it is the gate's recommended
+  one or merges and pushes nothing (retry, stop), or when the engine confirmed every failure on the
+  base (#211); any other answer opens the gate for the owner with the supervisor's answer and reason
+  on it (#124).
 - **When a transition's action fails** (a merge, a deploy command, or the engine's check right
   before a merge), on a transition with `on_error` and `recover: [steps]`: the supervisor gets the
   error and the PR/MR state and either sends the run back to one of those steps with an instruction

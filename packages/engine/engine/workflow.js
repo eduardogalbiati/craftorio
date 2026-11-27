@@ -74,7 +74,7 @@ const { methods: accountsMethods } = require('./run/accounts');
 const { runCost } = require('@craftorio/shared/session-cost');
 const { childRunCost, childRunTotal, methods: costsMethods } = require('./run/costs');
 const { methods: gatesMethods } = require('./run/gates');
-const { methods: supervisionMethods } = require('./run/supervision');
+const { gateScope, methods: supervisionMethods } = require('./run/supervision');
 const { methods: checkoutMethods } = require('./run/checkout');
 const { methods: machineStepsMethods } = require('./run/machine-steps');
 const { methods: projectMapStepsMethods } = require('./run/project-map-steps');
@@ -603,28 +603,20 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     if (step.type === 'pr_monitor') return this.runPrMonitor(step, st, t0);
     let output, scope;
     if (GATE.includes(step.type)) {
-      // `kind: escalation`, or any gate an exhausted loop leads to: the supervisor on call tries to
-      // solve the problem before the person is asked; when it cannot, the gate opens with its
-      // diagnosis, or with the answer it may not take alone (#124). A decision gate stays the person's:
-      // the supervisor may only send the run back. A human_edit gate (#647) is the person's alone.
+      // `kind: escalation`, or a gate an exhausted loop leads to: the supervisor on call tries first; else the gate opens with its diagnosis or
+      // the answer it may not take alone (#124). A decision gate: it may only send the run back. A human_edit gate (#647) is the person's.
       const oc = supervisedGate(step, exhausted) ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
       if (oc?.goto) { exhausted?.refund(); return oc.goto; }
       const routed = oc?.route !== undefined;
       const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);
       if (gate.recover) return gate.recover;
       const { answer, feedback } = gate;
-      const by = routed ? { by: 'supervisor', ...(oc.reason ? { reason: oc.reason } : {}), ...(oc.label_key ? { label_key: oc.label_key } : {}) } : {};
       // who answered (#260): a `ship:` transition only follows the owner's own answer
       st.answeredBy = routed ? 'supervisor' : gate.by || 'unknown';
-      if (step.choices) {
-        output = { choice: answer, feedback, ...by };
-        scope = { ...this.ctx, output, choice: answer, feedback };
-        const picked = step.choices.find((c) => c.id === answer);
-        if (picked?.then !== undefined) this.thenFromChoice(step, picked);
-      } else {
-        output = { approved: answer, feedback, ...by };
-        scope = { ...this.ctx, output, approved: answer, rejected: !answer, feedback };
-      }
+      // #124: a gate the supervisor answered alone says who, why and the answer's label
+      ({ output, scope } = gateScope(this.ctx, step, answer, feedback, routed ? oc.answer : {}));
+      const picked = (step.choices || []).find((c) => c.id === answer);
+      if (picked?.then !== undefined) this.thenFromChoice(step, picked);
       st.output = output;
     } else if (step.type === 'screenshots') {
       // no agent, no supervisor: whatever fails is in the output, for the gate that follows (#144)

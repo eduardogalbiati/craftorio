@@ -287,11 +287,7 @@
         <span>${t('nightwatch.blocked_outside_permissions')} <b>${s.blockedOutsidePermissions}</b></span>
         <span>${t('nightwatch.content_instructions_refused')} <b>${s.contentRefused}</b></span>
       </div>
-      <div class="nw-morning muted small"><b>${t('nightwatch.morning_summary')}</b> ${m.summary.selfHealing ? `${esc(m.summary.selfHealing)} ` : ''}${esc(m.summary.ran)} ${esc(m.summary.did)} ${esc(m.summary.waits)}${(m.summary.supervisorGates || []).map((line, i) => {
-    // #124: a gate the supervisor on call answered alone, with its answer and reason
-    const g = (m.summary.supervisorGateRuns || [])[i] || {};
-    return `<div class="nw-morning-gate" data-testid="morning-supervisor-gate" data-step="${esc(g.step || '')}" data-run="${esc(g.runId || '')}" title="${esc(line)}">${esc(line)}</div>`;
-  }).join('')}</div>
+      <div class="nw-morning muted small"><b>${t('nightwatch.morning_summary')}</b> ${m.summary.selfHealing ? `${esc(m.summary.selfHealing)} ` : ''}${esc(m.summary.ran)} ${esc(m.summary.did)} ${esc(m.summary.waits)}${supervisorGateLines(m.summary)}</div>
     </div>`;
   }
 
@@ -467,7 +463,7 @@
     const s = m.summary;
     // #278: a Self-healing day leads with its line (detected, repaired alone, waiting, cost with tokens)
     box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? t('nightwatch.self_healing') : t('nightwatch.night_watch')} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ` <span class="pill pill-failed">${t('nightwatch.safety_alarm_2')}</span>` : ''}</div>
-      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}${limitLines(s)}</div>
+      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}${limitLines(s)}${supervisorGateLines(s)}</div>
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">${t('nightwatch.open_night_watch')}</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
     box.querySelectorAll('[data-testid="nw-regression-run"]').forEach((b) => { b.onclick = () => window.showRun(b.dataset.run); });
@@ -487,6 +483,14 @@
   function limitLines(s) {
     if (!s.limits?.length) return '';
     return `${s.limits.map((line) => `<div class="nw-past-limit" data-testid="nw-past-limit">${esc(line)} <span class="badge warn">${t('nightwatch.past_a_day_limit')}</span></div>`).join('')}${s.overDayUsd ? `<div class="muted" data-testid="nw-over-day">${esc(t('nightwatch.spent_above_the_day_limits_overdayusd', { overDayUsd: dollars(s.overDayUsd) }))}</div>` : ''}`;
+  }
+  // #124: one line per escalation gate the supervisor on call answered alone during the night (the
+  // step, the answer and why, already in the interface language), on Home and on the night's card
+  function supervisorGateLines(s) {
+    return (s.supervisorGates || []).map((line, i) => {
+      const g = s.supervisorGateRuns?.[i] || {};
+      return `<div class="nw-morning-gate" data-testid="morning-supervisor-gate" data-step="${esc(g.step || '')}" data-run="${esc(g.runId || '')}" title="${esc(line)}">${esc(line)}</div>`;
+    }).join('');
   }
   // opens the view on the night that started at `startedAt` (ISO)
   function openNight(startedAt) {

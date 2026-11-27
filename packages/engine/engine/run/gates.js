@@ -100,7 +100,7 @@ const methods = {
     const report = this.gateText(step, step.report);
     if (report) message = `${report}\n\n${message}`;
     const choices = step.choices ? step.choices.map((c) => {
-      const label = render(c.label, this.ctx);
+      const { label, label_key: labelKey } = this.gateAnswerLabel(step, c.id);
       const help = c.help ? this.gateText(step, c.help) : '';
       // #70: a help_key may be a template too (the help of one choice depends on what happened)
       const helpKey = c.help_key ? render(c.help_key, this.ctx).trim() : '';
@@ -109,8 +109,8 @@ const methods = {
         // #30: the catalog key the screens translate the label with (the YAML label stays the English fallback);
         // #70: the record already reads in the interface language, for what does not know the keys (the
         // recommendation's label, the phone)
-        label: c.label_key ? I18n.translated(String(c.label_key), label) : label,
-        ...(c.label_key ? { label_key: String(c.label_key) } : {}),
+        label: labelKey ? I18n.translated(labelKey, label) : label,
+        ...(labelKey ? { label_key: labelKey } : {}),
         ...(helpKey ? { help_key: helpKey } : {}), // #36: the help's key, as label_key
         ...(c.feedback_required ? { feedback_required: true } : {}),
         ...(c.help ? { help: helpKey ? I18n.translated(helpKey, help) : help } : {}),
@@ -241,6 +241,18 @@ const methods = {
       this.emitEvent('log', { level: 'warn', message: `Gate ${step.id}: its summary could not be rendered (${e.message}); the gate shows its message.` });
       return '';
     }
+  },
+
+  // #124: an answer's label as the gate's button names it: { label } (the workflow's own text, English for
+  // the bundled ones) and { label_key } when a catalog key translates it; a choice id, or approve / reject.
+  /** @returns {{ label: string, label_key?: string }} */
+  gateAnswerLabel(step, answer) {
+    const c = (step.choices || []).find((x) => x.id === answer);
+    if (c) return { label: render(c.label, this.ctx), ...(c.label_key ? { label_key: String(c.label_key) } : {}) };
+    const yes = answer === 'approve';
+    const own = this.gateText(step, yes ? step.approve_label : step.reject_label);
+    const key = yes ? 'common.approve' : 'gate_panel.reject';
+    return own ? { label: own } : { label: I18n.t(key, undefined, 'en'), label_key: key };
   },
 
   // The gates this run waits at, as the approval.requested events described them (plus requested_at).

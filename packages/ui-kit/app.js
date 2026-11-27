@@ -658,7 +658,8 @@ const RUN_EVENT_REDUCERS = {
   },
   'step.finished': (v, ev) => {
     const s = v.steps.get(ev.step_id);
-    if (s) Object.assign(s, { status: 'done' }, ev.output?.by === 'supervisor' ? { supervisor: ev.output } : {}); // #124: who answered a gate
+    // #124: who answered a gate, at each visit (the owner's answer clears an earlier visit's supervisor answer)
+    if (s) Object.assign(s, { status: 'done', supervisor: ev.output?.by === 'supervisor' ? ev.output : null });
   },
   'step.waiting': (v, ev) => {
     const s = v.steps.get(ev.step_id);

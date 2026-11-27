@@ -484,15 +484,14 @@ function selfHealingSummary(d) {
 /** #124: the escalation gates the supervisor on call answered alone, from a run's events: { step, answer, reason, at }[]. */
 function supervisorGatesOf(events) {
   return events.filter((e) => e.type === 'supervisor.decision' && e.kind === 'escalation' && e.action === 'route')
-    .map((e) => ({ step: e.step_id, answer: e.route, labelKey: e.label_key || null, reason: e.explanation || '', at: ms(e.ts) }));
+    .map((e) => ({ step: e.step_id, answer: e.route, label: e.label || null, labelKey: e.label_key || null, reason: e.explanation || '', at: ms(e.ts) }));
 }
 
-/** #124: a gate answer's label in the interface language: its choice's label_key, else the bundled gates'
- * `engine.<step>_<answer>` key, else the answer's id. */
-function gateAnswerLabel({ step, answer, labelKey }) {
-  const key = labelKey || `engine.${step}_${answer}`;
-  const text = I18n.t(key);
-  return text && text !== key ? text : String(answer);
+/** #124: a gate answer's label in the interface language, from what the engine recorded (label, label_key),
+ * as the Run screen names it (packages/ui-kit/gate-panel.js gateAnswerText): an older event tries the
+ * bundled gates' `engine.<step>_<answer>` key, else the answer's id. */
+function gateAnswerLabel({ step, answer, label, labelKey }) {
+  return I18n.translated(labelKey || `engine.${step}_${answer}`, label || '') || String(answer);
 }
 
 /** A run's facts from its events:{ runId, projectId, start, end, status, cost, issues, progress, gates }. */
@@ -649,7 +648,7 @@ function nightMetrics(/** @type {{ night: any, log?: any[], runs?: any[], usage?
   const gates = facts.flatMap((f) => f.gates.filter((g) => inW(g.requested)).map((g) => ({ ...g, runId: f.runId })));
   const gateWait = gates.reduce((s, g) => s + ((g.resolved ?? w1) - g.requested), 0);
   // #124: escalation gates the supervisor on call answered alone in W (who, which answer, why)
-  const supervisorGates = facts.flatMap((f) => (f.supervisorGates || []).filter((g) => inW(g.at)).map((g) => ({ step: g.step, answer: g.answer, labelKey: g.labelKey, reason: g.reason, at: new Date(g.at).toISOString(), runId: f.runId, label: f.label })));
+  const supervisorGates = facts.flatMap((f) => (f.supervisorGates || []).filter((g) => inW(g.at)).map((g) => ({ step: g.step, answer: g.answer, answerLabel: g.label, labelKey: g.labelKey, reason: g.reason, at: new Date(g.at).toISOString(), runId: f.runId, label: f.label })));
 
   // loops: more than `loopCap` watch actions on one target
   const perTarget = new Map();
@@ -747,7 +746,7 @@ function morningSummary(m, /** @type {{ proposed?: number, regressions?: any[], 
     limits: [...(limits?.lines || [])],
     overDayUsd: limits?.overDayUsd || 0,
     // #124: one line per gate the supervisor on call answered alone, in the interface language
-    supervisorGates: (m.supervisorGates || []).map((g) => I18n.t('nightwatch.supervisor_answered_gate', { step: g.step, answer: gateAnswerLabel(g), reason: g.reason, run: g.label })),
+    supervisorGates: (m.supervisorGates || []).map((g) => I18n.t('nightwatch.supervisor_answered_gate', { step: g.step, answer: gateAnswerLabel({ ...g, label: g.answerLabel }), reason: g.reason, run: g.label })),
     supervisorGateRuns: (m.supervisorGates || []).map((g) => ({ step: g.step, runId: g.runId })),
   };
 }

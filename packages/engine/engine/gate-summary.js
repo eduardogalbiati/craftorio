@@ -94,7 +94,9 @@ function gateBrief({ message = '', summary = '', recommend = '', diagnosis = nul
   const body = rest.slice(0, BODY_LINES).join('\n');
   const ids = answers.map((a) => String(a.id));
   let recommendation = null;
-  if (diagnosis && (diagnosis.recommend || diagnosis.recommendation)) {
+  // #124: an answer the supervisor held back for the owner (answered: false) keeps the workflow's
+  // recommendation on the card; the screens show the held answer under it
+  if (diagnosis && diagnosis.answered !== false && (diagnosis.recommend || diagnosis.recommendation)) {
     const id = offeredAnswer(diagnosis.recommend, ids);
     // #117: a supervisor advising an answer the gate does not offer: no recommendation on the card
     if (!(diagnosis.recommend && ids.length && !id)) recommendation = { answer: id, reason: clip(plain(diagnosis.recommendation || ''), REASON_MAX), source: 'supervisor' };

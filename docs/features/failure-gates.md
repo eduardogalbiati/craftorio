@@ -42,3 +42,7 @@ reported as **Not tested: no test command** (`tested: "no test command"`); test 
 known command go on the same way. If the project does have a runner Craftorio does not know, set
 `test_command`. When the supervisor on call answers a gate itself, the Run screen and the
 chat say so, with the answer; it is told the gate's own recommendation and says why when it differs.
+It answers alone only with the gate's recommended answer or one that merges and pushes nothing
+(retry, stop); "the failures are pre-existing" counts only when the engine confirmed every failure on
+the base (#211). Any other answer opens the gate for you, with the supervisor's answer and reason
+under the workflow's recommendation (#124); the morning summary lists the gates it answered alone.
