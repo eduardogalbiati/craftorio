@@ -163,6 +163,7 @@ actions, or any code that deletes or checks out branches.
   heartbeat) is taken over. Each run in progress has `runs/<id>/owner.json` with a heartbeat
   (`claimRun`): another process lists it as `running` (`runningElsewhere`), never `interrupted`,
   and the roadmap, Retry, Resume and a new run for the same issues leave it alone.
+  #7: terminal runs too; resume never reuses a live run's worktree (`refuseLiveWorktree`, engine/resume.md).
 
 ## Gotchas
 

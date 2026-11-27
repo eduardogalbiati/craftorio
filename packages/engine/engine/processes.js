@@ -13,7 +13,8 @@
 // orphaned when its suite ended, held a worktree for 21 hours) or, on Linux/macOS, whose working
 // directory is (Windows does not expose another process's working directory cheaply), with their
 // whole process tree. Never touched: this process, its ancestors and its descendants (e.g. the
-// app's embedded terminals), and, for the command-line and working-directory matches, processes
+// app's embedded terminals), the owners of other live runs with their trees (#7: a terminal run
+// working in the same folder), and, for the command-line and working-directory matches, processes
 // with a terminal (a shell the user opened there). Nothing outside the folder is matched, so the
 // user's app and other runs are safe; the folder itself on a command line (an editor opened on
 // it) is not a match either, only a path inside it, and only for a runtime, runner or shell
@@ -122,10 +123,11 @@ const isRunner = (p) => RUNNERS.test(programOf(p));
  * @param {string} dir      the worktree
  * @param {object} [o]
  * @param {number} [o.self] pid to protect with its ancestors and descendants (default: this process)
+ * @param {number[]} [o.spare] #7: pids of other live runs' owners, spared with their descendants
  * @param {boolean} [o.caseInsensitive]
  * @returns {object[]} [{ pid, ppid, exe, cmd, cwd, reason: 'executable' | 'cwd' | 'command' | 'child' }], roots first
  */
-function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CASE_INSENSITIVE } = {}) {
+function selectProcesses(procs, dir, { self = process.pid, spare = [], caseInsensitive = CASE_INSENSITIVE } = {}) {
   const norm = (p) => (caseInsensitive ? p.toLowerCase() : p);
   const root = norm(canonicalPath(dir));
   const name = norm(path.basename(root));
@@ -146,6 +148,7 @@ function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CAS
   };
   const spared = new Set([self, ...tree(self)]);
   for (let p = byPid.get(self), n = 0; p && n < 64; p = byPid.get(p.ppid), n++) spared.add(p.ppid);
+  for (const pid of spare) for (const s of [pid, ...tree(pid)]) spared.add(s);
 
   const out = new Map();
   for (const p of procs) {
@@ -160,11 +163,13 @@ function selectProcesses(procs, dir, { self = process.pid, caseInsensitive = CAS
 
 /**
  * Stops the processes running from `dir` (see selectProcesses) with their process trees.
+ * @param {string} dir
+ * @param {{ self?: number, spare?: number[] }} [o] see selectProcesses
  * @returns {Promise<object[]>} what was found: [{ pid, exe, cwd, reason, stopped, error? }]
  */
-async function stopProcessesIn(dir, { self = process.pid } = {}) {
+async function stopProcessesIn(dir, { self = process.pid, spare = [] } = {}) {
   if (!dir || !fs.existsSync(dir)) return [];
-  const found = selectProcesses(await listProcesses(), dir, { self });
+  const found = selectProcesses(await listProcesses(), dir, { self, spare });
   for (const p of found) {
     try {
       process.kill(p.pid, 'SIGKILL');

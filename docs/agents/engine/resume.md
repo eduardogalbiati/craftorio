@@ -77,7 +77,10 @@ Resuming a run from a step: what the new run keeps, the service channels behind 
   account that opened it (#312); an account gone since leaves it behind and the agent starts from its
   handoff note. A run that cannot start again (a busy slot, low
   memory, the budget) gives `owner.json` back, stays `interrupted` and is reported at once. Never a second copy: a run another live
-  process owns is left (#112); the process claims `owner.json` in the same tick as the check, so a
+  process owns is left (#112; #7: a terminal run, `scripts/run.js`, owns its folder too; the engine's
+  `refuseLiveWorktree`, `packages/engine/engine/run/checkout.js`, never reuses a resumed run's worktree
+  while its owner is alive or, with no owner file at all, while live processes run there: listed, never
+  stopped; the processes stopped after a step spare other live runs' owners and their trees); the process claims `owner.json` in the same tick as the check, so a
   second service started next sees it alive. Not recovered: real runs under
   `CRAFTORIO_SIMULATION_ONLY=1`, child runs (their parent's step runs them again), finished runs;
   they stay `interrupted` and are reported. Known gaps: `max_visits` counters and the step timing

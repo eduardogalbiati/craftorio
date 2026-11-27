@@ -18,6 +18,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const I18n = require('@craftorio/shared/i18n');
@@ -46,6 +47,30 @@ const {
   isGitUrl,
   safeUrl,
 } = require('../push-access');
+const {
+  listProcesses,
+  selectProcesses,
+} = require('../processes');
+const {
+  ownerAlive,
+  readOwner,
+  runOwnedElsewhere,
+} = require('../../domains/run/run-owner');
+
+// #7: the pids on this machine that own another live run of `runsDir` (not `ownRunDir`, not this
+// process): their processes, and their trees, are never stopped in a worktree
+function otherRunOwners(runsDir, ownRunDir) {
+  let ids;
+  try { ids = fs.readdirSync(runsDir); } catch { return []; }
+  const pids = [];
+  for (const id of ids) {
+    const runDir = path.join(runsDir, id);
+    if (runDir === ownRunDir) continue;
+    const owner = readOwner(runDir);
+    if (owner && owner.host === os.hostname() && owner.pid !== process.pid && ownerAlive(owner)) pids.push(owner.pid);
+  }
+  return pids;
+}
 
 // The `dependencies (<which>, <lockfile>): …` line of a deps-cache result (#198)
 function depsLine(which, r) {
@@ -96,6 +121,7 @@ const methods = {
     }
     // #607: a recovered run continues in its own worktree (same id, same folder and branch)
     const prev = this.resume?.worktree || this.recovered?.worktree || again;
+    if (this.resume?.worktree && !this.recovered && !again) await methods.refuseLiveWorktree.call(this, this.resume.worktree.dir);
     const dir = prev?.dir || path.join(this.worktreesDir, this.runId);
     const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote, fork, parentBranch });
     if (!info) {
@@ -121,6 +147,31 @@ const methods = {
     this.logRepoCommands(info.workDir);
     await this.prepareDeps('worktree', info.workDir, 'worktree ready');
     if (!again) await methods.checkPush.call(this);
+  },
+
+  // #7: a resume never takes over the worktree of a run that is still running (two runs in one
+  // folder, the second stopping the first's processes): refused while the resumed run's owner is
+  // alive (a live pid on this host or a fresh heartbeat). With no owner file at all (a runner that
+  // wrote none), live processes in the folder say it: listed, never stopped. A dead owner's leftovers
+  // are stopped as before (#406).
+  async refuseLiveWorktree(dir) {
+    const fromId = this.resume.runId;
+    const fromDir = path.join(path.dirname(this.runDir), String(fromId || ''));
+    if (fromId && runOwnedElsewhere(fromDir)) {
+      throw new Error(`Run ${fromId} is still running (its owner, pid ${readOwner(fromDir).pid}, is alive): its worktree ${dir} is not reused; resume it once it has stopped`);
+    }
+    if (!this.stopProcesses || !dir || !fs.existsSync(dir) || (fromId && readOwner(fromDir))) return;
+    let live;
+    try {
+      live = selectProcesses(await listProcesses(), dir);
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `worktree: could not check ${dir} for live processes before reusing it: ${e.message}` });
+      return;
+    }
+    if (live.length) {
+      const pids = live.map((p) => p.pid).join(', ');
+      throw new Error(`Run ${fromId} may still be running: ${live.length} process(es) are live in its worktree ${dir} (pid ${pids}) and it has no owner file; the worktree is not reused and they are left running`);
+    }
   },
 
   // #79: a Remote or Fork + PR run checks it can push its branch (workspace.js checkPushAccess, git as the agents
@@ -372,6 +423,7 @@ const methods = {
   // Programs an agent started from the worktree and left running (a UI check's electron.exe, a
   // dev server) hold its files: every later `npm ci` fails with EBUSY and no agent may stop them.
   // Stopped after each agent turn and at the end of the run; see packages/engine/engine/processes.js.
+  // #7: the owner of another live run (owner.json) and its processes are never stopped.
   async stopWorktreeProcesses(after) {
     if (this.baseWorktree?.dir) await this.stopProcessesIn(this.baseWorktree.dir, after);
     await this.stopProcessesIn(this.worktree?.dir, after);
@@ -381,7 +433,7 @@ const methods = {
     if (!dir || !this.stopProcesses) return;
     let found;
     try {
-      found = await this.stopProcesses(dir);
+      found = await this.stopProcesses(dir, { spare: otherRunOwners(path.dirname(this.runDir), this.runDir) });
     } catch (e) {
       this.emitEvent('log', { level: 'warn', message: `worktree: could not check for processes left in ${dir}: ${e.message}` });
       return;

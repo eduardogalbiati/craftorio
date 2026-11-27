@@ -13,6 +13,8 @@
 // its run defaults (packages/engine/domains/project/project-run-defaults.js) fill the inputs not given.
 // Settings apply like in an app run (#862): memory guard, idle warning, models, fallbacks, accounts,
 // language and test workers come from packages/engine/engine/run-settings.js, shared with the app.
+// #7: the run owns its folder like an app run: runs/<id>/owner.json (pid, host, heartbeat), removed
+// when it ends, so the app sees it as running and never resumes it (nor reuses its worktree) meanwhile.
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 require('@craftorio/engine/domains/workspace/legacy-env'); // MULTIAGENT_* → CRAFTORIO_* for scripts and shells written before the rename (T2b)
@@ -21,6 +23,7 @@ const { aliasInputs } = require('@craftorio/shared/default-workflow');
 const { WorkflowRun } = require('@craftorio/engine/engine/workflow');
 const { Recorder } = require('@craftorio/engine/engine/recorder');
 const { runOptionsFromSettings } = require('@craftorio/engine/engine/run-settings');
+const runOwner = require('@craftorio/engine/domains/run/run-owner');
 const {
   readSettings,
   resolveWorkspace,
@@ -129,6 +132,9 @@ if (!args.mock) {
   if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
 }
 const rec = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
+// #7: owner.json and its heartbeat, as the app's service/areas/runs.js claims a run; child runs are
+// followed through the parent, like in the app
+const owner = runOwner.claimRun(run.runDir);
 
 const t = () => new Date().toLocaleTimeString('en-US');
 const short = (s, n = 160) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n);
@@ -173,6 +179,7 @@ run.on('event', (ev) => {
       console.log(`  duration: ${Math.round(ev.summary.duration_ms / 1000)}s · tokens: ${JSON.stringify(ev.summary.tokens)} · cost: US$ ${ev.summary.cost_usd}`);
       console.log(`  run saved to ${run.runDir}`);
       process.exitCode = ev.status === 'success' ? 0 : 1;
+      owner.release();
       break;
   }
 });

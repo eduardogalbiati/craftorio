@@ -293,7 +293,7 @@ module.exports = (ctx) => {
   function resumeRun({ runId, step, instruction, mock, confirmGate = null, images = [], inputs = null }, child = null) {
     const runDir = ctx.runFolder(runId);
     if (ctx.runIsLive(path.basename(runDir))) throw new Error('The run is still active: wait for it to end (or stop it) before resuming it.');
-    if (ctx.runAlive(path.basename(runDir))) throw new Error(`Run ${path.basename(runDir)} is still running in another app window: resume it there, or stop it first.`);
+    if (ctx.runAlive(path.basename(runDir))) throw new Error(`Run ${path.basename(runDir)} is still running in another process (an app window or a terminal, #7): resume it once it has stopped, or stop it first.`);
     const spec = supervisor.resumeSpec(runDir, step);
     if (!spec.file) throw new Error('The run does not record its workflow file.');
     const wf = loadWorkflow(ctx.projectWorkflowFile(spec.projectId, spec.file));
