@@ -191,3 +191,54 @@ test('#10 a gate withdrawn before the recovery stops counting at its withdrawal'
   work(t, 2 * H - M);
   assert.throws(() => run.checkLimits(), /Maximum duration exceeded/);
 });
+
+// the review's follow-ups: later visits and a second recovery
+
+test('#10 a later visit to the gate after the recovery is a new wait: it does not inherit the time the gate was first asked', (t) => {
+  const { run, emitted } = recovered(t, OPEN_GATE_AFTER_2H(), 14 * H);
+  answerAskedAgain(run, emitted); // the recovered visit: 12h
+  work(t, H);
+  run.requestApproval({ id: 'test_failed', type: 'human_approval', message: 'The tests failed. Continue?' }).catch(() => {});
+  const again = emitted.filter((e) => e.type === 'approval.requested').at(-1);
+  t.mock.timers.tick(H);
+  assert.equal(run.resolveApproval(again.approval_id, true, 'owner'), true);
+  const resolved = emitted.filter((e) => e.type === 'approval.resolved');
+  assert.deepEqual(resolved.map((e) => e.wait_ms), [12 * H, H], 'the second answer waited 1h, not 14h');
+  assert.deepEqual(run.timingSummary().gates.test_failed, { waits: 2, wait_ms: 13 * H });
+  assert.doesNotThrow(() => run.checkLimits(), 'worked 3h, 13h at the gate');
+});
+
+// the log of a run already recovered once at its open gate (2h of work, 12h at the gate), as the
+// engine writes it: run.recovered, the gate asked again (a2) and answered a minute later with its
+// whole wait, then develop again
+const RECOVERED_ONCE = () => [
+  started(), stepStarted(0, 'develop'), stepFinished(2 * H, 'develop'), stepStarted(2 * H, 'test_failed'), asked(2 * H, 'a1'),
+  [14 * H, 'run.recovered', { step_id: 'test_failed', after_seq: 5, gate: true, lost_turns: [] }],
+  stepStarted(14 * H, 'test_failed'), asked(14 * H, 'a2'), answered(14 * H + M, 'a2', 12 * H + M), stepFinished(14 * H + M, 'test_failed'),
+  stepStarted(14 * H + M, 'develop', 2),
+];
+
+test('#10 a second recovery replays the first one\'s gate time once: the work past the limit stops the run with the same gate time', (t) => {
+  const { run, emitted } = recovered(t, log(RECOVERED_ONCE()), 19 * H + M);
+  assert.doesNotThrow(() => run.checkLimits(), 'worked 7h, 12h01 at the gate');
+  assert.deepEqual(run.timingSummary().gates.test_failed, { waits: 1, wait_ms: 12 * H + M });
+  work(t, 2 * H);
+  assert.throws(() => run.checkLimits(), /Maximum duration exceeded \(worked 9h of 8h\)/);
+  const ev = exceeded(emitted);
+  assert.equal(ev?.worked_ms, 9 * H);
+  assert.equal(ev?.gate_wait_ms, 12 * H + M);
+});
+
+test('#10 a second recovery at a gate asked in a later visit counts that gate from its own request, not from the first recovery\'s', (t) => {
+  // after the first recovery: 1h of develop, then test_failed asked again (a3) and left open 2h when the app died again
+  const events = log([...RECOVERED_ONCE(), stepFinished(15 * H + M, 'develop', 2), stepStarted(15 * H + M, 'test_failed', 2), asked(15 * H + M, 'a3')]);
+  const { run, emitted } = recovered(t, events, 17 * H + M);
+  assert.doesNotThrow(() => run.checkLimits(), 'worked 3h, 14h01 at gates');
+  answerAskedAgain(run, emitted);
+  const resolved = emitted.filter((e) => e.type === 'approval.resolved').at(-1);
+  assert.equal(resolved?.wait_ms, 2 * H, 'the gate asked in the later visit waited 2h');
+  assert.equal(run.timingSummary().gate_wait_ms, 14 * H + M);
+  work(t, 6 * H);
+  assert.throws(() => run.checkLimits(), /Maximum duration exceeded \(worked 9h of 8h\)/);
+  assert.equal(exceeded(emitted)?.gate_wait_ms, 14 * H + M);
+});

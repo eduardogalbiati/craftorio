@@ -75,7 +75,14 @@ async function recoverAndAnswer(t, { file, events, now, inputs = {}, answers = {
 
 test('#10 a run recovered after 2h of work and 12h at its gate goes on to the next step when the owner answers', { timeout: 60000 }, async (t) => {
   const { file } = tempWorkflow(t, YAML);
-  const { emitted, finished } = await recoverAndAnswer(t, { file, events: logAtGate(2 * H), now: 2 * H + NIGHT });
+  const events = logAtGate(2 * H);
+  const { emitted, finished } = await recoverAndAnswer(t, { file, events, now: 2 * H + NIGHT });
+  // the log the run leaves, replayed (a later recovery), gives the same gate time as the live run
+  const { gateClockFromEvents } = require('../../engine/run/resume');
+  const replay = gateClockFromEvents([...events, ...emitted]);
+  assert.equal(replay.since, null, 'no gate left open in the finished run\'s log');
+  assert.equal(replay.total, NIGHT, 'replayed gate time');
+  assert.deepEqual(replay.gateWaits, finished?.summary?.timing?.gates, 'replayed waits per gate = the summary\'s');
   assert.equal(emitted.some((e) => e.type === 'run.recovered' && e.step_id === 'test_failed'), true, 'recovered at the gate');
   assert.equal(emitted.some((e) => e.type === 'limit.exceeded'), false, 'no limit.exceeded after the answer');
   assert.equal(emitted.some((e) => e.type === 'step.started' && e.step_id === 'build'), true, 'build ran after the gate');

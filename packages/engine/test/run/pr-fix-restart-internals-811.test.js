@@ -29,6 +29,7 @@ function recoveredRun(prFixInterrupted) {
     recovered: { nextStep: 'pr_monitor', lostTurns: [], from: 7 },
     prFixInterrupted,
     emitEvent: (type, data) => events.push({ type, ...data }),
+    syncGateClock: () => {}, // #10: startRecovered closes the gate clock restored from the log (costs.js)
   };
   return { run, events };
 }
