@@ -2811,6 +2811,8 @@
   "engine.check_environment_summary": "As verificações de regras do projeto não podem rodar: {cause}",
   "engine.ci_failed_no_pr": "O CI falhou: nenhum PR foi aberto: {reason}",
   "engine.ci_failed_no_pr_choices": "Aprove para tentar de novo (depois de corrigir o que a impediu, por exemplo as credenciais do git: `gh auth setup-git` no GitHub); rejeite para encerrar\na execução como falha (o branch da execução guarda o trabalho).",
+  "engine.ci_failed_no_reason": "(nenhum motivo informado)",
+  "engine.ci_failed_none_reported": "(nenhum informado)",
   "engine.ci_failed_pr": "O CI em {url} não passou (status: {status}).\nÚltimo erro: {error}",
   "engine.ci_failed_pr_choices": "Aprove para conferir o CI de novo (depois de uma nova execução ou de uma correção sua); rejeite para encerrar a execução como falha\n(o branch e o PR/MR guardam o trabalho).",
   "engine.memory_killed": "A guarda de memória parou `{command}` (pid {pid}) em {used} GB: acima do limite de {limit} GB por processo{again}.",

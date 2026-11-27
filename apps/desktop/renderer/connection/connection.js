@@ -9,7 +9,7 @@
 // warning every time it is checked (#480). Its texts are connection.* keys of the catalog (#329, window.I18n): the language
 // the engine's page asked for (?lang=, remembered for the next time), else the one this computer's
 // app last showed, else the computer's; the main process's messages (failures) stay English, like the
-// engine's errors; #110: a test result that names its catalog key (messageKey, params) shows that text.
+// engine's errors; #110: a test result or a failure that names its catalog key (messageKey, params) shows that text.
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const api = window.connection;
@@ -98,7 +98,7 @@
     view = v;
     const failed = !!v.failure;
     $('.cn-failure').classList.toggle('hidden', !failed);
-    $('#cn-failure-text').textContent = failed ? v.failure.message : '';
+    $('#cn-failure-text').textContent = failed ? resultText(v.failure) : '';
     $('#cn-now').textContent = nowText(v);
     // data-close: what the button does, whatever the language
     $('#cn-cancel').dataset.close = v.alone ? 'quit' : 'cancel';
@@ -171,7 +171,7 @@
     setResult(t('connection.connecting'), 'busy');
     const r = await api.retry();
     if (!r.ok && r.failure) {
-      $('#cn-failure-text').textContent = r.failure.message;
+      $('#cn-failure-text').textContent = resultText(r.failure);
       setResult('');
     }
   });

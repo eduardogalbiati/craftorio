@@ -48,7 +48,7 @@ function createEngineConnection({
 }) {
   let remoteWin = null;
   let page = null;
-  let failure = null; // why the remote engine's window is not shown: { reason, message, url }
+  let failure = null; // why the remote engine's window is not shown: { reason, message, url, messageKey?, params? }
   let sessionReady = false;
   const live = (w) => (w && !w.isDestroyed() ? w : null);
   const test = (address, token) => conn.testConnection({ address, token, fetch: fetchImpl, localContract: version.contract });
@@ -190,7 +190,8 @@ function createEngineConnection({
     });
     w.webContents.on('did-navigate', (_e, _url, status) => {
       if (status >= 400 && remoteWin === w) {
-        fail({ reason: status === 401 ? 'token' : 'http', url: d.url, status, message: status === 401 ? `${d.host} refused the token: copy CRAFTORIO_SERVER_TOKEN from the engine's computer again.` : `${d.host} answered HTTP ${status}.` });
+        fail({ reason: status === 401 ? 'token' : 'http', url: d.url, status, message: status === 401 ? `${d.host} refused the token: copy CRAFTORIO_SERVER_TOKEN from the engine's computer again.` : `${d.host} answered HTTP ${status}.`,
+          ...(status === 401 ? { messageKey: 'connection.result_bad_token', params: { host: d.host } } : {}) });
       }
     });
     w.on('closed', () => { if (remoteWin === w) remoteWin = null; });
@@ -202,7 +203,7 @@ function createEngineConnection({
   async function startRemote(decision) {
     if (decision.error) return fail({ reason: 'setting', url: decision.url || null, message: decision.error });
     const t = await test(decision.url, decision.token);
-    if (!t.ok) return fail({ reason: t.reason, url: decision.url, message: t.message });
+    if (!t.ok) return fail({ reason: t.reason, url: decision.url, message: t.message, messageKey: t.messageKey, params: t.params });
     return openRemoteWindow(decision);
   }
 
@@ -282,7 +283,9 @@ function createEngineConnection({
     if (decision.mode !== 'remote') { relaunch(); return { ok: true }; }
     const t = decision.error ? null : await test(decision.url, decision.token);
     if (decision.error || !t.ok) {
-      failure = { reason: decision.error ? 'setting' : t.reason, url: decision.url || null, message: decision.error || t.message };
+      // #110: a failed test names its catalog key (messageKey, params) for the page's language; a setting error stays English
+      failure = decision.error ? { reason: 'setting', url: decision.url || null, message: decision.error }
+        : { reason: t.reason, url: decision.url || null, message: t.message, messageKey: t.messageKey, params: t.params };
       return { ok: false, failure };
     }
     openRemoteWindow(decision);

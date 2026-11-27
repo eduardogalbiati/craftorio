@@ -83,7 +83,10 @@
         .map(([agent, r]) => `${agent}: ${String(r.verdict).replace(/_/g, ' ')}, ${(r.findings || []).length} finding(s)`).join('; ');
     }
     if (o.error) return String(o.error);
-    const message = o.message && o.message_key ? translated(o.message_key, o.message, o.message_params) : o.message;
+    // a parameter named in message_param_keys (e.g. an install hint's prose) is itself translated by its key
+    const params = Object.fromEntries(Object.entries(o.message_params || {})
+      .map(([k, v]) => [k, o.message_param_keys?.[k] ? translated(o.message_param_keys[k], v) || v : v]));
+    const message = o.message && o.message_key ? translated(o.message_key, o.message, params) : o.message;
     return o.summary || message || o.claim || Object.values(o).find((v) => typeof v === 'string') || '';
   }
 

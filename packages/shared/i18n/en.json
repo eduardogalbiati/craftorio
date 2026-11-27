@@ -2811,6 +2811,8 @@
   "engine.check_environment_summary": "The project's rule checks cannot run: {cause}",
   "engine.ci_failed_no_pr": "CI failed: no PR was opened: {reason}",
   "engine.ci_failed_no_pr_choices": "Approve to try again (after fixing what stopped it, e.g. git's credentials: `gh auth setup-git` on GitHub); reject to stop\nthe run as failed (the run's branch keeps the work).",
+  "engine.ci_failed_no_reason": "(no reason reported)",
+  "engine.ci_failed_none_reported": "(none reported)",
   "engine.ci_failed_pr": "CI on {url} did not pass (status: {status}).\nLast error: {error}",
   "engine.ci_failed_pr_choices": "Approve to check CI again (after a re-run or a fix of yours); reject to stop the run as failed\n(the branch and the PR/MR keep the work).",
   "engine.memory_killed": "The memory guard stopped `{command}` (pid {pid}) at {used} GB: over the limit of {limit} GB per process{again}.",

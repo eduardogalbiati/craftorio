@@ -15,7 +15,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execShim } = require('../domains/machine/shell');
-const { installHint } = require('../domains/machine/install-commands');
+const {
+  installHint,
+  installHintKey,
+} = require('../domains/machine/install-commands');
 const { redactBaseline } = require('./redact-baseline');
 const { resolveCommandAsync } = require('./providers');
 const { missingIds } = require('./simulation');
@@ -46,11 +49,15 @@ function notInstalledMessage() {
   return `${NOT_SCANNED}: gitleaks is not installed${hint ? ` (${hint})` : ''}.`;
 }
 
-/** #110: the catalog key of notInstalledMessage(), the install hint as a parameter when there is one. */
+/**
+ * #110: the catalog key of notInstalledMessage(), the install hint as a parameter when there is one; a prose hint
+ * names its own key in message_param_keys (installHintKey), which the screens translate before filling it in.
+ */
 function notInstalledKey() {
   const hint = installHint('gitleaks');
-  return hint ? { message_key: 'engine.secret_scan_not_installed_hint', message_params: { hint } }
-    : { message_key: 'engine.secret_scan_not_installed', message_params: {} };
+  if (!hint) return { message_key: 'engine.secret_scan_not_installed', message_params: {} };
+  const hintKey = installHintKey('gitleaks');
+  return { message_key: 'engine.secret_scan_not_installed_hint', message_params: { hint }, ...(hintKey ? { message_param_keys: { hint: hintKey } } : {}) };
 }
 
 /**

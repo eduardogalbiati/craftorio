@@ -101,9 +101,12 @@
   const machineFailures = (o) => (Array.isArray(o.failures) ? o.failures : []).slice(0, MAX_FAILURES)
     .map((f) => ({ test: clip(String(f?.test || f?.name || f || ''), 300), file: f?.file ? String(f.file) : null }));
   // #110: a machine step's message as the catalog's text for its message_key (interface language), else its first line
+  // a parameter named in message_param_keys (e.g. an install hint's prose) is itself translated by its key
+  const machineParams = (o) => Object.fromEntries(Object.entries(o.message_params || {})
+    .map(([k, v]) => [k, o.message_param_keys?.[k] ? i18n()?.translated(o.message_param_keys[k], v) || v : v]));
   const machineSummary = (o, step) => {
     const english = firstLine(o.message, step);
-    return (o.message_key && i18n()?.translated(o.message_key, english, o.message_params || {})) || english;
+    return (o.message_key && i18n()?.translated(o.message_key, english, machineParams(o))) || english;
   };
   function machineOutcome(it, ev) {
     const o = ev.output || {};
