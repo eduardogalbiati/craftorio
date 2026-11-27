@@ -244,7 +244,7 @@ function createEngineConnection({
   handle('engine-connection:test', ({ address, token, insecure }) => {
     const parsed = conn.parseAddress(address);
     const unencrypted = conn.insecureAddress(parsed);
-    if (unencrypted && insecure !== true) return { ok: false, reason: 'insecure', url: parsed.url, host: parsed.host, message: unencrypted };
+    if (unencrypted && insecure !== true) return conn.insecureRefusal(parsed, unencrypted);
     return test(address, String(token || '').trim() || store.read().token);
   });
 
@@ -264,7 +264,7 @@ function createEngineConnection({
     const parsed = conn.parseAddress(address);
     // an unencrypted address needs the explicit opt-in, before the engine is even contacted (#480)
     const unencrypted = conn.insecureAddress(parsed);
-    if (unencrypted && insecure !== true) return { saved: false, test: { ok: false, reason: 'insecure', url: parsed.url, host: parsed.host, message: unencrypted } };
+    if (unencrypted && insecure !== true) return { saved: false, test: conn.insecureRefusal(parsed, unencrypted) };
     const tok = String(token || parsed.token || '').trim() || saved.token;
     const t = await test(address, tok);
     if (!t.ok) return { saved: false, test: t };

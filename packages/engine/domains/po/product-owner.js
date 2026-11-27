@@ -1472,7 +1472,7 @@ async function ask(/** @type {Record<string, any>} */ { backlogDir, projectId, r
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
           // #150: the saved conflict map only (a simulated question builds nothing)
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous, headings: Language.issueHeadings(language?.issues) }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel, conflictMap: readConflictMap(backlogDir, projectId) });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous, headings: Language.issueHeadings(Language.issuesLanguage({ language })) }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel, conflictMap: readConflictMap(backlogDir, projectId) });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }

@@ -10,6 +10,7 @@
 //   insecureAddress(parsed)     why a parsed address is not encrypted (plain http to a host that is neither
 //                               loopback nor Tailscale), or null: such an address needs the explicit
 //                               `insecure: true` opt-in, which the connection page shows every time (#480)
+//   insecureRefusal(parsed, msg) the test's / Save's answer for such an address without the opt-in (#110: its key)
 //   readConnection(file, opts) / writeConnection(file, connection, opts)
 //                               the setting in the app's user data folder (never the workspace): mode,
 //                               address, the insecure opt-in and the token, encrypted by the caller's
@@ -51,23 +52,26 @@ const hasPort = (raw) => /:\d+$/.test(raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ''
  * The engine's address as typed → { url, host, hostname, port, secure, token? } or { error }.
  * `url` is the origin (`http://host:7300`), the form the setting keeps.
  */
+// #110: an address refusal: its English text and its catalog key (connection.address_*) with the key's params
+const refused = (errorKey, errorParams, error) => ({ error, errorKey, errorParams });
+
 function parseAddress(text) {
   const raw = String(text ?? '').trim();
-  if (!raw) return { error: 'Type the engine\'s address: its host name or IP address, with :port when it is not 7300.' };
+  if (!raw) return refused('connection.address_empty', {}, 'Type the engine\'s address: its host name or IP address, with :port when it is not 7300.');
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(raw);
-  if (scheme && !/^https?$/i.test(scheme[1])) return { error: `Use http:// or https://, not ${scheme[1]}://.` };
+  if (scheme && !/^https?$/i.test(scheme[1])) return refused('connection.address_scheme', { scheme: scheme[1] }, `Use http:// or https://, not ${scheme[1]}://.`);
   let u;
   try {
     u = new URL(scheme ? raw : `http://${raw}`);
   } catch {
-    return { error: /^[0-9a-f:]+$/i.test(raw) && raw.includes(':') ? 'Put an IPv6 address in brackets, e.g. [fd7a::1]:7300.' : `Not an address: ${raw}` };
+    return /^[0-9a-f:]+$/i.test(raw) && raw.includes(':') ? refused('connection.address_ipv6', {}, 'Put an IPv6 address in brackets, e.g. [fd7a::1]:7300.') : refused('connection.address_invalid', { raw }, `Not an address: ${raw}`);
   }
-  if (!u.hostname) return { error: `Not an address: ${raw}` };
-  if (u.username || u.password) return { error: 'Leave the user name and password out of the address: the token goes in its own field.' };
+  if (!u.hostname) return refused('connection.address_invalid', { raw }, `Not an address: ${raw}`);
+  if (u.username || u.password) return refused('connection.address_credentials', {}, 'Leave the user name and password out of the address: the token goes in its own field.');
   const token = u.searchParams.get('token');
   const onlyToken = [...u.searchParams.keys()].every((k) => k === 'token');
   if ((u.pathname !== '/' && u.pathname !== '') || !onlyToken || u.hash) {
-    return { error: 'Type only the address (host and port), without a path: the engine serves the app at its root.' };
+    return refused('connection.address_path', {}, 'Type only the address (host and port), without a path: the engine serves the app at its root.');
   }
   // no port typed: the engine's (7300) over http; https keeps 443 (e.g. behind `tailscale serve`)
   const secure = u.protocol === 'https:';
@@ -90,6 +94,11 @@ function insecureAddress(parsed) {
   const host = String(parsed.hostname || '').toLowerCase();
   if (isLoopback(host) || isTailscaleIp(host) || /\.ts\.net$/.test(host)) return null;
   return `${parsed.host} is plain http outside this computer and Tailscale: the connection is not encrypted, so the token and every page can be read on the network. Use https (tailscale serve) or a Tailscale address, or check "Allow an insecure connection".`;
+}
+
+// #110: the test's and Save's refusal of an unencrypted address without the opt-in, with its catalog key
+function insecureRefusal(parsed, message) {
+  return { ok: false, reason: 'insecure', url: parsed.url, host: parsed.host, messageKey: 'connection.address_insecure', params: { host: parsed.host }, message };
 }
 
 // ---- the setting --------------------------------------------------------------------------
@@ -213,14 +222,15 @@ function unreachableMessage(e, parsed, timeoutMs) {
  * Asks the engine at `address` for GET /api/version with the token →
  *   { ok: true, url, host, app, contract, sameContract, message }
  *   { ok: false, reason: 'address' | 'token' | 'unreachable' | 'not-engine' | 'http', message, url?, status? }
- * #110: `message` stays English; every answer but an address refusal also carries `messageKey` and `params`
- * (connection.result_* in packages/shared/i18n), the text the connection page shows in its language.
+ * #110: `message` stays English; every answer also carries `messageKey` and `params` (connection.result_* and,
+ * for an address refusal, connection.address_* in packages/shared/i18n), the text the connection page shows in
+ * its language.
  * `localContract`: this app's own contract; another one is a warning, not a failure (the remote
  * window shows the engine's own interface).
  */
 async function testConnection({ address, token, fetch: fetchImpl = globalThis.fetch, timeoutMs = TEST_TIMEOUT_MS, localContract = null }) {
   const parsed = parseAddress(address);
-  if (parsed.error) return { ok: false, reason: 'address', message: parsed.error };
+  if (parsed.error) return { ok: false, reason: 'address', messageKey: parsed.errorKey, params: parsed.errorParams, message: parsed.error };
   const tok = String(token || parsed.token || '').trim();
   const where = { url: parsed.url, host: parsed.host };
   if (!tok) return { ok: false, reason: 'token', ...where, messageKey: 'connection.result_no_token', params: {}, message: 'Type the engine\'s token: CRAFTORIO_SERVER_TOKEN on the engine\'s computer, or the token= part of the URL it printed.' };
@@ -313,6 +323,7 @@ module.exports = {
   DEFAULT_PORT,
   FILE,
   insecureAddress,
+  insecureRefusal,
   isLoopback,
   isTailscaleIp,
   lanAddresses,

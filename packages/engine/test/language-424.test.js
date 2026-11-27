@@ -44,7 +44,8 @@ test('#424 interface unset, computer in pt-BR: the [Language] line is the Portug
   onComputer('pt-BR');
   const { languageLine } = load();
   const line = languageLine({});
-  assert.equal(line, languageLine({ language: { agents: 'pt-BR', issues: 'en' } }));
+  // #110: the issues follow the interface too
+  assert.equal(line, languageLine({ language: { agents: 'pt-BR', issues: 'pt-BR' } }));
   assert.ok(line.includes('Português (Brasil)'), line);
   assert.notEqual(line, ENGLISH_LINE);
   assert.equal(languageLine({ language: { agents: 'interface' } }), line);
@@ -63,7 +64,8 @@ test('#424 an explicit agents language is kept whatever the computer\'s language
   const { agentsLanguage } = load();
   assert.equal(agentsLanguage({ language: { agents: 'es' } }), 'es');
   assert.equal(agentsLanguage({ language: { agents: 'en' } }), 'en');
-  assert.equal(load().languageLine({ language: { agents: 'en' } }), ENGLISH_LINE);
+  // #110: the issues' own default follows the interface, so English everywhere needs both set
+  assert.equal(load().languageLine({ language: { agents: 'en', issues: 'en' } }), ENGLISH_LINE);
 });
 
 test('#424 an explicit interface language wins over the computer\'s language', () => {

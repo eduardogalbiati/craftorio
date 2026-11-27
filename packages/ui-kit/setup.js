@@ -222,12 +222,14 @@
     // its console under the rows; the CLIs are checked again when it ends
     // a CLI without an install command (data-install-hint): its instructions, on every platform
     if ((api.platform === 'browser' || btn.dataset.installHint) && window.SettingsClis) {
-      // #110: its console shows on the step that started it only
-      setup.jobStep = STEPS[setup.step].id;
+      // #110: its console shows on the step that started it only (kept with the job itself: a cancelled
+      // or refused click, or a later update of an earlier job, never moves another job's console)
+      const step = STEPS[setup.step].id;
       await window.SettingsClis.run(btn.dataset.cliId, btn.dataset.cliAction, {
         hint: btn.dataset.installHint,
         onChange: (job) => {
           setup.job = job;
+          setup.jobStep = step;
           if (setup.open && onTools()) render();
           if (job.status !== 'running' && job.status !== 'manual' && setup.open) checkAgents();
         },

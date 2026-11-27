@@ -41,5 +41,6 @@ test('pinning the interface language keeps the demo workspace\'s other language 
   const settings = await seeded(t);
   // settings are merged one level deep: a language patch with only `interface` would drop these
   assert.equal(settings.language?.agents, 'interface');
-  assert.equal(settings.language?.issues, 'en');
+  // #110: the issues follow the interface by default, as the agents do
+  assert.equal(settings.language?.issues, 'interface');
 });

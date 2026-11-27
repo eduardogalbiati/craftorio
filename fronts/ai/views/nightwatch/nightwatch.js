@@ -310,7 +310,7 @@
       <div class="nw-tl">
         ${lanes.map((l) => `<div class="nw-tl-lane">${l.items.join('')}</div>`).join('') || `<div class="nw-tl-lane muted small">${t('nightwatch.no_run_in_this_window')}</div>`}
         <div class="nw-tl-lane nw-tl-marks">${marks(m.timeline.incidents, 'inc', (e) => `${kindLabel(e.kind)}: ${e.target}${e.resolved ? ` (${t('nightwatch.resolved').toLowerCase()})` : ''}`)}</div>
-        <div class="nw-tl-lane nw-tl-marks">${marks(m.timeline.actions, 'act', (e) => `${e.title}${e.auto ? '' : ' (your click)'}`)}</div>
+        <div class="nw-tl-lane nw-tl-marks">${marks(m.timeline.actions, 'act', (e) => `${e.title}${e.auto ? '' : ` (${t('nightwatch.your_click')})`}`)}</div>
       </div>
       <div class="row nw-tl-axis muted small"><span>${esc(hm(m.window.from))}</span><span>${esc(hm(new Date(a + span / 2).toISOString()))}</span><span>${esc(hm(m.window.to))}</span></div>
     </div>`;
@@ -393,7 +393,7 @@
       $('#nw-form').onsubmit = async (e) => {
         e.preventDefault();
         const until = nw.form.until ? new Date(TimeZone.parseInput(nw.form.until, TimeZone.current())) : null;
-        if (!until || !(until > new Date())) { nw.form = { ...nw.form, error: 'Pick an end time in the future.' }; render(); return; }
+        if (!until || !(until > new Date())) { nw.form = { ...nw.form, error: t('nightwatch.pick_an_end_time_in_the_future') }; render(); return; }
         nw.form = { ...nw.form, saving: true, error: null };
         render();
         const l = nw.form.limits;

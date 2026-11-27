@@ -178,14 +178,15 @@ Feature: Settings
     Then the "AI agents" language is "Português (Brasil)"
 
   # The same group gets an "Issues" select (aria-label "Issues", saved as language.issues), its help
-  # text tied to it with aria-describedby (#328)
+  # text tied to it with aria-describedby (#328). Since #110 its default is the interface's too:
+  # "Same as the interface (English)" in E2E.
   @issue-328
-  Scenario: The Issues language is English by default, and its help names issues, PR descriptions and commit messages
+  Scenario: The Issues language is the interface's by default, and its help names issues, PR descriptions and commit messages
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "General" settings tab
-    Then the "Issues" language is "English"
-    And the "Issues" language list offers "English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어"
+    Then the "Issues" language is "Same as the interface (English)"
+    And the "Issues" language list offers "Same as the interface (English), English, Português (Brasil), Español, Français, Deutsch, Italiano, 日本語, 中文, 한국어"
     And the "Issues" language's help names issues, PR/MR descriptions and commit messages
 
   @issue-328

@@ -836,7 +836,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   }
 
   // #79: whether the clone can push (workspace.js checkPushAccess), once it is ready: pushCheck: { status: checking |
-  // ok | failed | fixing, ok?, reason?, fix?, setupGit? }. Not checked without push permission until a fork is
+  // ok | failed | fixing, ok?, reason?, fix?, fixKey?, fixParams?, setupGit? } (#110: fixKey/fixParams, the fix line's
+  // catalog key, so the wizard shows it in the interface language). Not checked without push permission until a fork is
   // made (the fork notice says it) nor for a local path; a simulated run checks only under its E2E hook
   // (CRAFTORIO_E2E_GIT_PUSH). Never fails the import.
   async function checkPush(id) {
@@ -846,9 +847,9 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     // #105: a folder's clone pushes to the folder (its source), never to its remote
     if (simulation.e2eGitPush() === null && (simulation.simulationOnly() || !isGitUrl(p.repo) || p.source)) return;
     change(id, { pushCheck: { status: 'checking' } });
-    /** @type {{ ok: boolean, reason?: string, fix?: string, setupGit?: { platform: string, command: string } }} */
+    /** @type {{ ok: boolean, reason?: string, fix?: string, fixKey?: string, fixParams?: object, setupGit?: { platform: string, command: string } }} */
     const r = await Promise.resolve().then(() => pushCheck(p.folder)).catch((e) => ({ ok: false, reason: String(e?.message || e) }));
-    change(id, { pushCheck: r.ok ? { status: 'ok', ok: true } : { status: 'failed', ok: false, reason: oneLine(String(r.reason || ''), 300), fix: r.fix || null, ...(r.setupGit ? { setupGit: r.setupGit } : {}) } });
+    change(id, { pushCheck: r.ok ? { status: 'ok', ok: true } : { status: 'failed', ok: false, reason: oneLine(String(r.reason || ''), 300), fix: r.fix || null, ...(r.fixKey ? { fixKey: r.fixKey, fixParams: r.fixParams || {} } : {}), ...(r.setupGit ? { setupGit: r.setupGit } : {}) } });
   }
 
   /** #79: the push warning's button: runs the platform CLI's setup-git (when the check named it), then checks again. */
