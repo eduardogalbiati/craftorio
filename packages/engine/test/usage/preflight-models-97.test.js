@@ -37,15 +37,8 @@ const CODEX_WF = {
 };
 const installed = () => ({ file: '/usr/bin/codex' });
 
-test('#97 preflight reports the Codex models the account does not offer (gpt-6.2-astra, gpt-6.2-sol, gpt-6.1-terra)', (t) => {
-  const home = fakeHome(t, ['gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna']);
-  const problems = usage.preflight(CODEX_WF, {}, installed, {}, { home });
-  const text = problems.join('\n');
-  for (const model of ['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6.1-terra']) {
-    assert.ok(text.includes(model), `${model} is reported as unavailable in: ${text}`);
-  }
-  assert.equal(text.includes('gpt-6-luna'), false, `gpt-6-luna is offered, not reported: ${text}`);
-});
+// #111: a model the account lacks but with an offered fallback is no longer a problem (the test that reported
+// gpt-6.2-astra/sol/terra on an account offering gpt-6-luna moved to preflight-models-fallback-111.test.js, inverted)
 
 test('#97 preflight reports no model problem when every agent model is in the Codex cache, or there is no cache', (t) => {
   const offered = fakeHome(t, ['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6.1-terra', 'gpt-6-luna']);

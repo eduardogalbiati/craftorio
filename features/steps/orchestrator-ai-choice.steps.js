@@ -144,6 +144,73 @@ When('I choose {string} as the orchestrator in Agents & CLIs', async ({ e2e }, n
   await radio.check();
 });
 
+// ---- #111: a Codex account without Codex's mapped models ------------------------------------------------
+// Steps of features/111-codex-model-fallback.feature. The Codex account's model list is the CLI's own
+// cache, <CODEX_HOME>/models_cache.json ({"models":[{slug, display_name, visibility: "list", priority}]},
+// packages/shared/providers/codex.js modelsCache); the app launches with CODEX_HOME at a folder of this
+// scenario's output holding that file (appEnv's extra, features/support/app.js: no fixture change). Without
+// the variable the scratch home has no ~/.codex/models_cache.json: no list, no warning (#97's scenarios).
+// What the screens expose (NEW, the developer adds them): the engine's envDetails entry for codex gets
+// `models: string[]` (the cache's slugs; absent without a cache), and
+//   setup-codex-models-warning     in the Setup's Codex card (setup-cli-codex): the account lacks the mapped
+//                                  models (gpt-6.2-astra, gpt-6.2-sol, gpt-6.1-terra, gpt-6-luna) and which
+//                                  offered one it uses instead; with none usable, that Codex cannot run the
+//                                  orchestrator (its radio disabled, like a CLI not ready)
+//   settings-codex-models-warning  the same warning in Settings › Agents & CLIs (settings-clis)
+// Both in the interface language.
+
+const fs = require('fs');
+const path = require('path');
+
+// the account's offered models, "a, b, c" → the CLI's cache file in a fresh CODEX_HOME
+function codexHomeOffering(testInfo, list) {
+  const slugs = list.split(',').map((s) => s.trim()).filter(Boolean);
+  const dir = testInfo.outputPath('codex-home');
+  fs.mkdirSync(dir, { recursive: true });
+  const models = slugs.map((slug, i) => ({ slug, display_name: slug, visibility: 'list', priority: i + 1 }));
+  fs.writeFileSync(path.join(dir, 'models_cache.json'), JSON.stringify({ models }, null, 2));
+  return dir;
+}
+
+Given('the app is open on a machine where {string} and {string} are ready and the Codex account offers only {string}',
+  async ({ e2e, $testInfo }, first, second, list) => {
+    if (![first, second].includes('Codex CLI')) throw new Error('this step makes the Codex CLI one of the ready CLIs');
+    await e2e.open({ env: { CRAFTORIO_E2E_CLI_READY: `${aiId(first)},${aiId(second)}`, CODEX_HOME: codexHomeOffering($testInfo, list) } });
+  });
+
+const setupCodexWarning = (page) => setupCard(page, 'Codex CLI').getByTestId('setup-codex-models-warning');
+const settingsCodexWarning = (page) => settingsSection(page).getByTestId('settings-codex-models-warning');
+
+// English words a Portuguese warning would not hold (word boundaries: "modelos" is not "models")
+const ENGLISH_WORDS = /\b(the|this|account|instead|will|offers?|models|available|doesn't|cannot|can't)\b/i;
+const LANGUAGES = ['English', 'Português (Brasil)'];
+
+async function expectFallbackWarning(warning, model, language) {
+  if (!LANGUAGES.includes(language)) throw new Error(`unknown language "${language}" (one of ${LANGUAGES.join(', ')})`);
+  await expect(warning, 'the Codex models warning').toBeVisible({ timeout: CHECK_TIMEOUT });
+  await expect(warning).toContainText(model);
+  if (language !== 'English') {
+    const text = (await warning.innerText()).replace(/\bgpt-[\w.-]+/g, '');
+    expect(text, `the Codex models warning reads in ${language}`).not.toMatch(ENGLISH_WORDS);
+  }
+}
+
+Then("the Setup's Codex card warns that the account lacks Codex's models and will use {string} instead", async ({ e2e }, model) => {
+  await expectFallbackWarning(setupCodexWarning(e2e.window), model, 'English');
+});
+
+// no model of the account can run the orchestrator: the warning says Codex cannot be the orchestrator
+Then("the Setup's Codex card warns that the account offers no model the orchestrator can run on", async ({ e2e }) => {
+  const warning = setupCodexWarning(e2e.window);
+  await expect(warning, 'the Codex models warning').toBeVisible({ timeout: CHECK_TIMEOUT });
+  await expect(warning).toContainText(/orchestrator/i);
+});
+
+Then("Agents & CLIs warns that the Codex account lacks Codex's models and will use {string} instead, in {string}", async ({ e2e }, model, language) => {
+  await expect(settingsSection(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expectFallbackWarning(settingsCodexWarning(e2e.window), model, language);
+});
+
 // ---- the Run screen's sessions ---------------------------------------------------------------------------
 
 // "Orchestrator" is the orchestrator's card (data-id="orchestrator"); any other name an agent's
