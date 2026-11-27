@@ -30,7 +30,8 @@
 //   the one rule of repoNameFromUrl and the engine's (engine/push-access.js, domains/workspace/workspace.js);
 // - #632 "Create new project" (source 'new'): its repository step needs only the name; CREATE_ANSWERS
 //   (mode / ci / release, #57: kind, each field's values) and CREATE_DEFAULTS are its questions, slugify(name)
-//   the new project's id and folder name (<workspace>/projects/<slug>).
+//   the new project's id and folder name (<workspace>/projects/<slug>). #108: newProjectFolderName(name, taken)
+//   the folder it really gets (<slug>-2… when taken), nameRequired(state) the key of the "name required" line.
 // - #738 forkSuggestion({ repo, push }): the "no push access" notice (Create a fork / Work locally), null
 //   unless push === false.
 // - #633 WORK_MODELS (light / standard / full, spec R9) and DEFAULT_WORK_MODEL ('light', #851): how work on
@@ -294,6 +295,21 @@
     return s || 'project';
   }
 
+  // #108: the folder (and id) a new project named `name` gets, given the existing projects' ids: its slug, or the
+  // first free <slug>-2, -3… (createProject's rule in packages/engine/domains/project/projects.js)
+  function newProjectFolderName(name, taken = []) {
+    const used = new Set(taken || []);
+    const slug = slugify(name);
+    let id = slug;
+    for (let i = 2; used.has(id); i++) id = `${slug}-${i}`;
+    return id;
+  }
+
+  // #108: the line under a new project's name while it is empty (an i18n key), null once a name is typed
+  function nameRequired(s) {
+    return s?.source === 'new' && s?.step === 'repository' && !filled(s?.name) ? 'onboarding.name_required' : null;
+  }
+
   const api = {
     CREATE_ANSWERS,
     CREATE_DEFAULTS,
@@ -315,6 +331,8 @@
     forkSuggestion,
     initialState,
     isGitUrl,
+    nameRequired,
+    newProjectFolderName,
     next,
     profileLine,
     repoNameFromUrl,

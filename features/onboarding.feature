@@ -6,16 +6,17 @@ Feature: Bring a project in with a guided wizard
   (#724); once the wizard closes the tray follows the imports still running or failed.
 
   # Temporary until onboarding step 6: the wizard is opened through window.ProjectWizard.open()
-  # (Projects › New project still opens the old dialog). The URL below fails the access check both
-  # offline (no network) and online (no such repository): both read "could not be reached".
+  # (Projects › New project still opens the old dialog). GitHub's answer for the URL is simulated (an
+  # E2E hook): #107, a refused import creates no project, so the wizard offers to edit the URL.
   @issue-641
-  Scenario: Importing a repository I cannot reach says so and offers to retry
-    Given the app is open
+  Scenario: Importing a repository I cannot reach says why and offers to edit the URL
+    Given the app is open where GitHub says the repository I import does not exist
     When I open the project wizard
     And I choose to import a repository in the wizard
     And I enter the repository "https://github.com/craftorio-e2e/does-not-exist-641" and the project name "missing-641"
     And I go to the next step of the wizard
-    Then the wizard says the repository could not be reached and offers to retry
+    Then the wizard says the import failed because "the repository does not exist"
+    And the wizard offers to edit the repository
     # #724: the tray never covers the wizard; the failure shows in the wizard
     And the progress tray is not shown
 
@@ -153,10 +154,10 @@ Feature: Bring a project in with a guided wizard
     And the project page of "sample-644" is open
     And the project page shows the Next steps card
 
-  # The no-access path from the empty Home: the URL below fails the access check offline and online (no
-  # such repository). Edit the URL opens the fields again for a new import; the failed one stays in the tray.
+  # The refused import from the empty Home: the URL below fails the access check offline (no network) and
+  # online (no such repository). #107: nothing is created; Edit the URL opens the fields for a new import.
   @issue-644
-  Scenario: From the empty Home, a repository the app cannot reach shows the access error, and editing the URL imports a reachable one
+  Scenario: From the empty Home, a repository the app cannot reach shows why, and editing the URL imports a reachable one
     Given the app is open on a new workspace
     And a local git repository is ready to import
     When I skip the Setup and confirm
@@ -164,8 +165,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the repository "https://github.com/craftorio-e2e/does-not-exist-644" and the project name "missing-644"
     And I go to the next step of the wizard
-    Then the wizard says the repository could not be reached and offers to retry
-    And the wizard offers to edit the repository
+    Then the wizard offers to edit the repository
     When I edit the repository in the wizard
     And I enter the local repository and the project name "sample-644"
     And I go to the next step of the wizard

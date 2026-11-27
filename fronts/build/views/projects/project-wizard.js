@@ -45,14 +45,17 @@
 // - #632 Create new project (mock-3, spec R4): its repository step is two columns: the name wizard-new-name,
 //   the radios wizard-new-starts value="readme" (default) | "empty", the box wizard-new-remote (unchecked,
 //   disabled while api.onboardingAccounts reports no gh / glab signed in) with its platform wizard-new-remote-provider and the hint wizard-new-remote-hint (<account>/<slug>), #25/#35 wizard-no-remote-hint (without a repository the issues live in a local backlog), the folder line
-//   wizard-new-folder (<workspace>/projects/<slug>, OnboardingModel.slugify); then the questions
+//   wizard-new-folder (<workspace>/projects/<slug>, #108: OnboardingModel.newProjectFolderName, <slug>-2… when a
+//   project holds it), #108 wizard-name-required (the line under an empty name, the field's aria-describedby); then the questions
 //   wizard-question data-question="mode" | "ci" | "release" | "kind" (#57: frontend / full-stack / backend,
 //   saved as the project's kind) with their wizard-chip buttons (aria-pressed on the
 //   pick, OnboardingModel.CREATE_ANSWERS / CREATE_DEFAULTS). Next (api.createOnboarding) creates it, ready at
 //   once: step 3 ("Workflows") without the clone; a private repository not made shows wizard-remote-warning.
 // - errors: wizard-error data-error="no-access" | "clone-failed" with the engine's reason and Retry
 //   (api.retryOnboarding); no-access also offers Edit the URL (wizard-edit-repo: the fields open again for a new
-//   import, the failed one stays in the tray); the gh / glab warning wizard-cli-warning data-error="cli-missing" |
+//   import, the failed one stays in the tray); #107: an import refused before anything was made (no projectId)
+//   shows its cause (repo-not-found | repo-no-access | not-a-git-repo) on the repository step, Edit the URL and Retry
+//   start it again, typing clears it; the gh / glab warning wizard-cli-warning data-error="cli-missing" |
 //   "cli-signed-out" (the import goes on) with Open Setup, on the repository and the analysis steps. #740: Open
 //   Setup and Sign in open Settings › Agents & CLIs, the wizard hidden meanwhile (project-wizard-cli.js).
 // - the provider (its label, its CLI) is the adapter of window.Platforms.platformOfRepoUrl, the engine's rule too;
@@ -363,7 +366,14 @@
   const signedIn = () => (cur.accounts || []).filter((a) => a.signedIn && providers().includes(a.provider));
   const remoteProvider = () => cur.remoteProvider || signedIn()[0]?.provider || providers()[0];
   const newSlug = () => M.slugify(cur.model.name);
-  const newFolder = () => `<workspace>/projects/${newSlug()}`; // i18n-ignore
+  // #108: the folder it really gets, <slug>-2… when a project (cur.taken, api.listProjects at open) holds the slug
+  const newFolder = () => `<workspace>/projects/${M.newProjectFolderName(cur.model.name, cur.taken)}`; // i18n-ignore
+  async function loadTaken() {
+    const list = await Promise.resolve(api.listProjects?.()).catch(() => null);
+    if (!cur || !Array.isArray(list)) return;
+    cur.taken = list.map((p) => p.id);
+    if (cur.model.source === 'new' && cur.model.step === 'repository') refreshCreate();
+  }
   // the answer's i18n key: pr+release → onboarding.new_ci_pr_release
   // #57: the kind's chips read the kinds' own labels (KIND_LABELS)
   const answerLabel = (q, v) => t(q === 'kind' && M.KIND_LABELS?.[v] ? M.KIND_LABELS[v] : `onboarding.new_${q}_${String(v).replace(/[^a-z0-9]+/gi, '_')}`);
@@ -414,13 +424,15 @@
   function createStep() {
     // once created (Back from step 3), the step shows what was sent
     const locked = cur.projectId ? ' disabled' : '';
+    const required = !cur.projectId && M.nameRequired(cur.model); // #108: the line under an empty name
     const starts = (v) => `<label class="wizard-choice"><input type="radio" name="wizard-new-starts" data-testid="wizard-new-starts" value="${v}"${cur.starts === v ? ' checked' : ''}${locked}>
           <span><strong>${esc(t(`onboarding.new_${v}`))}</strong><span class="muted small">${esc(t(`onboarding.new_${v}_text`))}</span></span></label>`;
     return `<div class="wizard-columns">
         <div class="wizard-column">
           <h2 id="project-wizard-title">${esc(t('onboarding.new_title'))}</h2>
           <label class="wizard-field wizard-name-lead"><span>${esc(t('onboarding.name_label'))}</span>
-            <input id="wizard-new-name" data-testid="wizard-new-name" type="text" value="${esc(cur.model.name)}"${cur.projectId ? ' readonly' : ''}></label>
+            <input id="wizard-new-name" data-testid="wizard-new-name" type="text" value="${esc(cur.model.name)}" aria-describedby="wizard-name-required"${cur.projectId ? ' readonly' : ''}></label>
+          <p class="error small" id="wizard-name-required" data-testid="wizard-name-required"${required ? '' : ' hidden'}>${esc(required ? t(required) : '')}</p>
           <div class="wizard-field"><span>${esc(t('onboarding.new_folder_label'))}</span>
             <p class="mono wizard-work-model-path" id="wizard-new-folder" data-testid="wizard-new-folder" title="${esc(newFolder())}">${esc(newFolder())}</p></div>
           <fieldset class="wizard-starts"><legend>${esc(t('onboarding.new_starts'))}</legend>${['readme', 'empty'].map(starts).join('')}</fieldset>
@@ -459,7 +471,10 @@
     const hint = document.getElementById('wizard-new-remote-hint');
     if (hint) hint.textContent = remoteHint();
     const folder = document.getElementById('wizard-new-folder');
-    if (folder) folder.textContent = newFolder();
+    if (folder) { folder.textContent = newFolder(); folder.setAttribute?.('title', newFolder()); }
+    const line = document.getElementById('wizard-name-required');
+    const required = !cur.projectId && M.nameRequired(cur.model);
+    if (line) { line.hidden = !required; line.textContent = required ? t(required) : ''; }
   }
 
   function analysisStep() {
@@ -537,6 +552,9 @@
         <section class="wizard-body">${cur.exists ? resume.existsBody() : BODY[step]()}</section>
         <footer class="wizard-foot" data-testid="wizard-footer">${cur.exists ? back : foot}</footer>
       </div>`;
+    // #108: the live button too (typing updates it in place, so it never keeps a disabled state from another step)
+    const nextBtn = /** @type {HTMLButtonElement | null} */ (showNext ? document.getElementById('wizard-next') : null);
+    if (nextBtn) nextBtn.disabled = !(canNext() && !cur.busy);
     resume.save();
   }
 
@@ -680,8 +698,10 @@
       render();
       try {
         const state = await begin();
+        // #107: an import refused before anything was made (no projectId): its cause shows on this step
+        if (state?.status === 'failed' && !state.projectId) cur.onboarding = state;
         // #741: a finished project of this repository: say it exists; an unfinished one resumes at its step
-        if (state?.exists) cur.exists = state.projectId;
+        else if (state?.exists) cur.exists = state.projectId;
         else resume.at(state, name);
       } catch (e) {
         showToast(t(creating ? 'onboarding.new_create_failed' : 'onboarding.start_failed'), errMsg(e));
@@ -703,6 +723,7 @@
   // step 1's other sources: step 2 with the URL field ready to type in, filled from a picked folder
   function toRepository(fields = {}) {
     cur.model = { ...cur.model, ...fields, source: 'import', step: 'repository' };
+    if (!cur.projectId) cur.onboarding = null; // #107: another folder picked after a refused import
     render();
     // a local folder has no URL field to type in: its name takes the focus
     document.getElementById(pickedFolder() ? 'wizard-name' : 'wizard-repo')?.focus?.();
@@ -810,19 +831,27 @@
     }
     else if (act === 'next') await next();
     else if (act === 'back') { cur.model = M.back(cur.model); render(); }
-    else if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
+    else if (await onFailureClick(act)) return;
     // #738: the fork suggestion's two choices; the answer (cloned, the fork chosen) moves on to analysis
     else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));
     // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part too; #20: an earlier Skip no longer holds), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
     else if (act === 'workflows-analyze' && cur.projectId) await analyze();
+    else if (act === 'setup') openSetup();
+  }
+
+  // a failed import's Retry and Edit the URL; true when the click was one of them
+  async function onFailureClick(act) {
+    if (act === 'retry' && cur.projectId) await call(() => api.retryOnboarding(cur.projectId));
+    else if (act === 'retry') { cur.onboarding = null; await next(); } // #107: a refused import, started again
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
       cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, repoWorkflows: undefined, ...freshReview() };
       render();
       document.getElementById('wizard-repo')?.focus?.();
     }
-    else if (act === 'setup') openSetup();
+    else return false;
+    return true;
   }
 
   // typing updates the model and the parts that depend on it, never the whole markup (the caret stays)
@@ -847,6 +876,11 @@
       if (nameField) nameField.value = cur.model.name;
     }
     if (id === 'wizard-repo') repoSlot(); // the list marks the repository the typed URL names
+    afterRepoInput();
+  }
+
+  // what follows the URL or the name typed, in place
+  function afterRepoInput() {
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)
     const on = pickedProvider();
     for (const id of providers()) {
@@ -856,6 +890,8 @@
     }
     const into = document.getElementById('wizard-clone-into');
     if (into) into.textContent = cloneInto();
+    // #107: a refused import's error goes once the URL or the name changes (Next works again)
+    if (!cur.projectId && cur.onboarding?.status === 'failed') { cur.onboarding = null; root.querySelector?.('[data-testid="wizard-error"]')?.remove?.(); }
     const nextBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById('wizard-next'));
     if (nextBtn) nextBtn.disabled = !canNext();
   }
@@ -900,6 +936,7 @@
     tray.refresh(); // #724: hidden while the wizard is open
     root.querySelector('.wizard-panel')?.focus?.();
     loadAccounts();
+    loadTaken();
     if (projectId) resume.load(projectId);
   }
 

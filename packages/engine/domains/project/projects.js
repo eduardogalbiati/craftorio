@@ -13,7 +13,8 @@
 // withManifest(project): the record the screens get, with its manifest's `default` and `kinds`.
 // #639: the clone is a background job: a project has a `status` (`cloning | ready | failed`, none = ready),
 // `cloneError` the reason of a failed clone; a `cloning` record no job of this process runs (the app closed
-// during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`.
+// during the clone) reads `failed`; retryClone clones a failed one again; checkAccess runs `git ls-remote`
+// (#107: a refused access names its cause, repo-not-found | repo-no-access | not-a-git-repo).
 // #640: cloneJob lets the onboarding (packages/engine/service/areas/project-onboarding.js) wait for a clone.
 // #745: `platform` (github / gitlab) for a host its URL does not name (shared/platforms projectPlatform);
 // #735: `kind` (backend / frontend / full-stack) and `runDefaults` the owner set (project-run-defaults.js).
@@ -222,7 +223,9 @@ async function retryClone(dir, id, { git = execGit } = {}) {
 
 /**
  * #639: whether `repo` can be cloned, from `git ls-remote` (never clones); 'no-git' when git is not installed.
- * @returns {Promise<{ status: 'reachable' | 'no-access' | 'no-network' | 'no-git', message?: string }>}
+ * #107: a refused one says its `cause`: 'not-a-git-repo' (a folder without git), 'repo-not-found' (no repository at
+ * the URL), else 'repo-no-access' (a private repository the credentials cannot read).
+ * @returns {Promise<{ status: 'reachable' | 'no-access' | 'no-network' | 'no-git', cause?: 'not-a-git-repo' | 'repo-not-found' | 'repo-no-access', message?: string }>}
  */
 async function checkAccess(repo, { git = lsRemote } = {}) {
   try {
@@ -233,7 +236,9 @@ async function checkAccess(repo, { git = lsRemote } = {}) {
     if (e?.code === 'ENOENT') return { status: 'no-git', message };
     // the network first: an SSH host that cannot be resolved also says "Could not read from remote repository"
     if (e?.code === 'ETIMEDOUT' || /Could not resolve host|Failed to connect|Couldn't connect|Connection (timed out|refused)|timed out|Network is unreachable|No such host/i.test(message)) return { status: 'no-network', message };
-    return { status: 'no-access', message };
+    const cause = /does not appear to be a git repository|not a git repository/i.test(message) ? 'not-a-git-repo'
+      : /not found/i.test(message) ? 'repo-not-found' : 'repo-no-access';
+    return { status: 'no-access', cause, message };
   }
 }
 

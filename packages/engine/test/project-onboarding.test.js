@@ -268,18 +268,19 @@ test('#640 each change of state is pushed as onboarding:changed, and status retu
 
 // ---- error paths and Retry ---------------------------------------------------------------------
 
-test('#640 no access: the project ends failed with a readable reason, nothing is cloned, and Retry clones it', async (t) => {
+test('#640 #107 no access: start answers failed with its cause and a readable reason, creates no project and clones nothing; importing again after signing in clones it', async (t) => {
   const access = { lsRemote: new Error("remote: Repository not found.\nfatal: repository 'https://github.com/acme/widgets.git/' not found") };
   const { ob, clones } = setup(t, { access });
-  const s = await ob.start({ name: 'Widgets', repo: GITHUB });
-  const failed = await until(ob, s.projectId, (x) => x.status === 'failed' && idle(x), 'the access check ends failed');
-  assert.equal(failed.code, 'no-access');
+  const failed = await ob.start({ name: 'Widgets', repo: GITHUB });
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.code, 'repo-not-found');
+  assert.equal(failed.projectId, undefined, 'no project for a refused import');
   assert.equal(typeof failed.reason, 'string');
   assert.ok(failed.reason.trim().length > 0, 'a reason the wizard can show');
   assert.equal(clones(), 0, 'no clone without access');
   delete access.lsRemote; // the owner signed in
-  await soon(ob.retry(s.projectId), 'onboarding retry');
-  await until(ob, s.projectId, (x) => x.status === 'ready' && idle(x), 'the retry ends ready');
+  const s = await soon(ob.start({ name: 'Widgets', repo: GITHUB }), 'onboarding start again');
+  await until(ob, s.projectId, (x) => x.status === 'ready' && idle(x), 'the new import ends ready');
   assert.equal(clones(), 1);
 });
 

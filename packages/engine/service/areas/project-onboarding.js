@@ -27,7 +27,9 @@
 // it is ready at once, nothing is cloned, and the three answers are its profile (jobs.profile.profile); its
 // state also has the project's `name`, so the wizard follows it (remote: creating) before create() answers.
 // and every change is pushed as `onboarding:changed` (channels/onboarding.js). A refused access check or
-// a failed clone ends `failed` with a readable reason; onboardingRetry runs again what failed (the
+// a failed clone ends `failed` with a readable reason (#107: a refused access check creates no project at all:
+// start answers { status: 'failed', code: repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git,
+// reason } with no projectId; CRAFTORIO_E2E_REPO_ACCESS stands for git's answer in a simulated run); onboardingRetry runs again what failed (the
 // access check and the clone, a failed job) and always checks gh / glab again. A project removed while
 // its jobs run loses its state; no error of a job escapes the chain.
 // #741: the wizard's own state is saved with the project's record, `onboarding: { step, picks, finished }`
@@ -60,6 +62,7 @@ const simulation = require('../../engine/simulation');
 const slots = require('../../engine/machine-slot');
 const {
   checkPushAccess,
+  cloneFolder,
   execGit,
   isGitUrl,
   isSshUrl,
@@ -77,13 +80,40 @@ const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const PAID = ['projectMap'];
 
-// a readable reason for an access check that did not reach the repository
+// a readable reason for an access check that did not reach the repository; #107: by its cause (never
+// "credentials" for a repository that does not exist or a folder without git)
+const ACCESS_LEADS = {
+  'no-git': 'Git is not installed, so the repository cannot be cloned. Install git and retry.',
+  'no-network': 'The repository could not be reached: check the network connection and retry.',
+  'not-a-git-repo': 'The folder is not a git repository: pick a folder with git in it, or import its URL.',
+  'repo-not-found': 'No repository was found at this URL: check the owner and the name, then import again.',
+};
 function accessReason(access) {
   const detail = String(access.message || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-1)[0] || '';
-  const lead = access.status === 'no-git' ? 'Git is not installed, so the repository cannot be cloned. Install git and retry.'
-    : access.status === 'no-network' ? 'The repository could not be reached: check the network connection and retry.'
-      : 'The repository could not be reached with your credentials: check the URL, or sign in with access to it, and retry.';
+  const lead = ACCESS_LEADS[access.status] || ACCESS_LEADS[access.cause]
+    || 'The repository could not be reached with your credentials: check the URL, or sign in with access to it, and retry.';
   return detail ? `${lead} (${detail})` : lead;
+}
+
+// #107: the answer to an import refused before anything is created (no project, no folder in repos/): no
+// projectId, its cause as the code (repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git)
+const refusedImport = (access) => ({
+  status: 'failed',
+  code: access.cause || access.status,
+  reason: accessReason(access),
+  jobs: { ...Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), clone: { status: 'skipped' } },
+  cli: null,
+});
+
+// #107: the E2E hook of a simulated run (features/steps/onboarding.steps.js): CRAFTORIO_E2E_REPO_ACCESS=not-found |
+// no-access stands for git ls-remote on an http(s) URL, in git's own words (checkAccess names the cause from them)
+const E2E_ACCESS = {
+  'no-access': "remote: Invalid username or password.\nfatal: Authentication failed (The requested URL returned error: 403)",
+  'not-found': 'remote: Repository not found.\nfatal: repository not found',
+};
+function e2eAccessGit(repo) {
+  const answer = simulation.simulationOnly() && /^https?:\/\//i.test(repo) ? E2E_ACCESS[process.env.CRAFTORIO_E2E_REPO_ACCESS || ''] : null;
+  return answer ? async () => { throw new Error(`git ls-remote failed: ${answer}`); } : null;
 }
 
 // #725: a failed job's { code, reason, cli? } from its error: the known failures (refactor-priority.js's CLI
@@ -528,17 +558,17 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       if (!existing.onboarding || existing.onboarding.finished) return { exists: true, finished: true, projectId: existing.id };
       return status(existing.id);
     }
-    const access = await projects.checkAccess(repo, { git });
-    const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir, ...(access.status === 'reachable' ? {} : { cloneError: accessReason(access) }) });
+    const access = await projects.checkAccess(repo, { git: e2eAccessGit(repo) || git });
+    // #107: a repository that cannot be imported creates nothing; the wizard words the cause. #640: a
+    // folder of repos/ that already is its clone still imports (offline too)
+    if (access.status !== 'reachable' && !cloneFolder(repo, reposDir).existing) return refusedImport(access);
+    const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir });
     projects.updateProject(projectsDir, p.id, { onboarding: { step: 'repository', picks: {}, finished: false } });
-    // a folder of repos/ that already is a clone (a removed project imported again) needs no access
-    const reachable = access.status === 'reachable' || p.status === 'ready';
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
-    if (!reachable) noAccess(p.id, access);
     // #738: read before the profile job, so its mode already says fork; #105: a folder's runs push to the folder
-    else if (!p.source) await readPush(p.id, p.repo);
+    if (!p.source) await readPush(p.id, p.repo);
     checkCli(p.id, p.repo);
-    if (reachable) cloning(p.id);
+    cloning(p.id);
     return status(p.id);
   }
 

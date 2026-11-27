@@ -37,7 +37,8 @@ When('I choose to create a project from Home', async ({ e2e }) => {
 
 Then('the wizard offers to edit the repository', async ({ e2e }) => {
   const error = wizard(e2e.window).getByTestId('wizard-error');
-  await expect(error).toHaveAttribute('data-error', 'no-access', { timeout: IMPORT_TIMEOUT });
+  // #107: a refused import names its cause (no network offline, no such repository online)
+  await expect(error).toHaveAttribute('data-error', /^(repo-not-found|repo-no-access|no-network)$/, { timeout: IMPORT_TIMEOUT });
   await expect(error.getByTestId('wizard-edit-repo')).toBeVisible();
 });
 

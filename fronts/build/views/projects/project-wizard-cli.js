@@ -4,6 +4,8 @@
 // `root()`):
 // - errorBlock(o): wizard-error data-error="no-access" | "clone-failed" | "failed" with the engine's reason,
 //   Retry, Sign in (no-access with a known provider) and Edit the URL (no-access on the repository step);
+//   #107: "repo-not-found" | "repo-no-access" | "not-a-git-repo" (an import that made no project, Edit the URL
+//   too) each titled by its own message in the interface language;
 //   (the CLI warning, wizard-cli-warning, is the column module's cliWarning: project-wizard-workflows.js);
 // - openSetup(): Open Setup and Sign in open Settings › Agents & CLIs (window.Settings.open, settings-clis.js)
 //   with the warned CLI highlighted, never the first-run Setup. The wizard is only hidden (its state kept) and
@@ -15,17 +17,28 @@
     const platformOfRepo = (url) => window.Platforms?.platformOfRepoUrl?.(url) || null;
     const platformById = (id) => window.Platforms?.findPlatform?.(id) || null;
 
+    // the title of each code (#107: an import refused before anything was made names its cause), 'onboarding.failed' else
+    const TITLES = {
+      'clone-failed': 'onboarding.clone_failed',
+      'no-access': 'onboarding.no_access',
+      'not-a-git-repo': 'onboarding.import_not_a_git_repo',
+      'repo-no-access': 'onboarding.import_repo_no_access',
+      'repo-not-found': 'onboarding.import_repo_not_found',
+    };
+    const NO_ACCESS = ['no-access', 'repo-no-access'];
+
     function errorBlock(o) {
       const code = o.code || 'failed';
       const provider = (platformById(o.cli?.provider) || platformOfRepo(cur().model.repository))?.label || '';
-      const signIn = code === 'no-access' && provider
+      const signIn = NO_ACCESS.includes(code) && provider
         ? `<button type="button" class="btn" data-act="setup">${esc(t('onboarding.sign_in', { provider }))}</button>` : '';
-      const edit = code === 'no-access' && cur().model.step === 'repository'
+      // #107: an import that made no project (no projectId) is edited and started again
+      const edit = (code === 'no-access' || !cur().projectId) && cur().model.step === 'repository'
         ? `<button type="button" class="btn ghost" data-act="edit-repo" data-testid="wizard-edit-repo">${esc(t('onboarding.edit_repo'))}</button>` : '';
       return `<div class="wizard-alert error" role="alert" data-testid="wizard-error" data-error="${esc(code)}">
-          <strong>${esc(t(code === 'no-access' ? 'onboarding.no_access' : code === 'clone-failed' ? 'onboarding.clone_failed' : 'onboarding.failed'))}</strong>
+          <strong>${esc(t(TITLES[code] || 'onboarding.failed'))}</strong>
           <p>${esc(o.reason || t('onboarding.no_reason'))}</p>
-          <p class="muted small">${esc(t(code === 'no-access' ? 'onboarding.no_access_hint' : 'onboarding.failed_hint'))}</p>
+          <p class="muted small">${esc(t(NO_ACCESS.includes(code) ? 'onboarding.no_access_hint' : 'onboarding.failed_hint'))}</p>
           <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry">${esc(t('onboarding.retry'))}</button>${signIn}${edit}</div>
         </div>`;
     }
