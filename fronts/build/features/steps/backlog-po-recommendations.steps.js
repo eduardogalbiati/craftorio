@@ -1,6 +1,8 @@
 // Steps of fronts/build/features/product-owner.feature's #785 scenarios: the Product Owner's simpler drawer
 // (three suggestions, the others behind "+ opções", no toggle, no options before the answer) and its
 // recommendations (grouped decisions, editable in place) whose roadmap item keeps only what was chosen.
+// #95: in pt-BR the drawer's decisions and its "Editar" form show the inputs' labels and values translated, as
+// the Roadmap item editor does ("Testes E2E", "Desligado", "Escrever"); the roadmap keeps `off` / `write`.
 // Reuses backlog.steps.js ("I open the Product Owner", "I click the suggested question {string}", "the
 // Product Owner answers", "I open the Roadmap"), run.steps.js ("I pick {string} for {string}", "{string} is
 // selected for {string}") and roadmap-item-inputs.steps.js ("I edit the inputs of the roadmap item {string}").
@@ -27,14 +29,21 @@ const decisions = (page) => poDrawer(page).getByTestId('po-recommendation-decisi
 const decision = (page, name) => poDrawer(page).getByTestId(`po-decision-${inputKey(name)}`);
 const itemEditor = (page) => page.getByTestId('roadmap-item').getByRole('group', { name: 'Editar as entradas deste item', exact: true });
 
-// the inputs of feature.yaml the scenarios name, by their label
+// the inputs of feature.yaml the scenarios name, by their label: English, or pt-BR as the Roadmap and the drawer
+// show them (#95: WorkflowInputs.localized, workflow_texts.feature_<key>_label)
 const INPUT_KEYS = {
+  'Capturas de tela': 'screenshots',
+  'Comando de testes': 'test_command',
   'Developer model': 'developer_model',
   'E2E tests': 'e2e_tests',
   Mode: 'mode',
+  'Modelo do desenvolvedor': 'developer_model',
+  Modo: 'mode',
+  'Ordem dos testes': 'test_order',
   Screenshots: 'screenshots',
   'Test command': 'test_command',
   'Test order': 'test_order',
+  'Testes E2E': 'e2e_tests',
 };
 const GROUPS = { Agents: 'agents', 'How it runs': 'run', Tests: 'tests' };
 const CONTROLS = { Editar: 'po-decisions-edit', Mais: 'po-decisions-more' };

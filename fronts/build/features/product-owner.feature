@@ -157,12 +157,12 @@ Feature: Backlog Product Owner
   # #431's scenarios went with them); a recommendation shows its workflow and inputs as grouped decisions,
   # each with where its value comes from, and "Editar" changes them before "Colocar no roadmap". An item
   # keeps only the inputs chosen, so the project's configuration reaches the run. The scenarios read the
-  # sources as the issue words them, so the interface is in Portuguese; the inputs' labels
-  # ("E2E tests", "Mode") are the workflow's own, the same in both languages; the Roadmap item editor shows the
-  # values translated (#83: "Desligado", "Escrever", "Código primeiro"). The project is the
-  # issue's: kind backend, variant fork-code, a Cargo.toml (test command "cargo test"), one open issue,
-  # so the simulated plan has one recommendation.
-  @issue-785 @issue-806
+  # sources as the issue words them, so the interface is in Portuguese; the Roadmap item editor shows the
+  # inputs' labels and values translated (#83: "Testes E2E", "Desligado", "Escrever", "Código primeiro"), and
+  # #95: the drawer's decisions and its "Editar" form show the same texts (the roadmap keeps `off` / `write`).
+  # The project is the issue's: kind backend, variant fork-code, a Cargo.toml (test command "cargo test"), one
+  # open issue, so the simulated plan has one recommendation.
+  @issue-785 @issue-806 @issue-95
   Scenario: A backend fork project's plan goes to the roadmap with the project's values, marked "do projeto"
     Given the app is open
     And the workspace has a backend fork project "ai-memory" whose backlog has the open issue "Expor as métricas do cache"
@@ -178,11 +178,11 @@ Feature: Backlog Product Owner
     And I close the Product Owner
     And I open the Roadmap
     And I edit the inputs of the roadmap item "Expor as métricas do cache"
-    Then the item editor shows "Fork + PR" for "Mode", marked "do projeto"
-    And the item editor shows "Desligado" for "E2E tests", marked "do projeto"
-    And the item editor shows "Código primeiro" for "Test order", marked "do projeto"
-    And the item editor shows "Desligado" for "Screenshots", marked "do projeto"
-    And the item editor shows "cargo test" for "Test command", marked "do projeto"
+    Then the item editor shows "Fork + PR" for "Modo", marked "do projeto"
+    And the item editor shows "Desligado" for "Testes E2E", marked "do projeto"
+    And the item editor shows "Código primeiro" for "Ordem dos testes", marked "do projeto"
+    And the item editor shows "Desligado" for "Capturas de tela", marked "do projeto"
+    And the item editor shows "cargo test" for "Comando de testes", marked "do projeto"
 
   @issue-785
   Scenario: The drawer offers three translated suggestions and "+ opções", with no toggle and no options before the answer
@@ -204,7 +204,7 @@ Feature: Backlog Product Owner
       | Quais issues são grandes demais para um run? |
       | Organizar as issues abertas em épicos        |
 
-  @issue-785 @issue-806
+  @issue-785 @issue-806 @issue-95
   Scenario: A recommendation shows its decisions grouped, and Editar changes E2E tests before it goes on the roadmap, saving only that value
     Given the app is open
     And the workspace has a backend fork project "ai-memory" whose backlog has the open issue "Expor as métricas do cache"
@@ -218,24 +218,24 @@ Feature: Backlog Product Owner
     Then the Product Owner answers
     And the recommendation names the workflow "Feature"
     And the recommendation shows these decisions, with no input chips
-      | group       | decision        | value     | source      |
-      | How it runs | Mode            | Fork + PR | do projeto  |
-      | Tests       | E2E tests       | Off       | do projeto  |
-      | Tests       | Screenshots     | Off       | do projeto  |
-      | Agents      | Developer model | Opus 5.5  | do workflow |
-    And the recommendation does not show the decision "Test command"
+      | group       | decision                | value     | source      |
+      | How it runs | Modo                    | Fork + PR | do projeto  |
+      | Tests       | Testes E2E              | Desligado | do projeto  |
+      | Tests       | Capturas de tela        | Desligado | do projeto  |
+      | Agents      | Modelo do desenvolvedor | Opus 5.5  | do workflow |
+    And the recommendation does not show the decision "Comando de testes"
     When I open "Mais" on the recommendation
-    Then the recommendation's decision "Test command" shows "cargo test", marked "do projeto"
+    Then the recommendation's decision "Comando de testes" shows "cargo test", marked "do projeto"
     When I open "Editar" on the recommendation
-    Then "Off" is selected for "E2E tests"
-    When I pick "Write" for "E2E tests"
+    Then "Desligado" is selected for "Testes E2E"
+    When I pick "Escrever" for "Testes E2E"
     And I put the recommendation on the roadmap with "Colocar no roadmap"
     And I close the Product Owner
     And I open the Roadmap
     And I edit the inputs of the roadmap item "Expor as métricas do cache"
-    Then the item editor shows "Escrever" for "E2E tests", marked "neste item"
-    And the item editor shows "Fork + PR" for "Mode", marked "do projeto"
-    And the item editor shows "Desligado" for "Screenshots", marked "do projeto"
+    Then the item editor shows "Escrever" for "Testes E2E", marked "neste item"
+    And the item editor shows "Fork + PR" for "Modo", marked "do projeto"
+    And the item editor shows "Desligado" for "Capturas de tela", marked "do projeto"
 
   # #26: the question box belongs to the project's conversation. Text typed in the demo project's box
   # and not sent is not shown in another project's box, so it is never glued in front of that
