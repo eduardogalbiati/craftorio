@@ -1,6 +1,7 @@
 // #781: the wizard's step 4 says what it reads and what it found (fronts/build/views/projects/project-wizard.js,
 // project-wizard-workflows.js kindField). Acceptance tests, written before the code, on the real page, driven as
-// project-wizard-review-642.test.js.
+// project-wizard-review-642.test.js (#100: the analysed review is reached with step 3's card Analyze with AI, then Next;
+// a done profile job carries its profile, without it the workflows are not defined and Next stays disabled).
 //
 // The contract these tests assume:
 // Backlog card (wizard-review-backlog):
@@ -23,6 +24,9 @@
 // - the owner changes it: their value wins and stays through re-renders; wizard-kind-detected goes.
 // - Finish with the owner's change sends it (`kind`); Finish with no change sends no kind, as today (#735: the
 //   engine reads the kind itself).
+// - the visual layout's tiles: the select stays (not shown) and each kind is a wizard-kind-tile button (data-act="pick-kind"
+//   data-value, aria-pressed on the picked one, the same value as the select); a click sets the kind as the select's
+//   change does (Finish sends it); the empty-value tile "Detect from the files" only while no kind is known.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -44,7 +48,8 @@ const analyzed = (profile) => ({
   projectId: PID, status: 'analyzed', cli: CLI_OK,
   jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', ...(profile ? { profile } : {}) }, projectMap: { status: 'done' } }),
 });
-const ANALYZED = analyzed(null);
+// analysed, no kind found: the profile says how the project is worked on, not what it is
+const ANALYZED = analyzed({ mode: 'remote', ci: 'release', tests: 'unit' });
 const DETECTED = analyzed({ mode: 'remote', ci: 'release', tests: 'unit', kind: 'backend' });
 
 // lines: 1000 in all, so the shares read at once; YAML and TOML (0.3% together) fold into Other
@@ -166,6 +171,7 @@ async function atReview(opts = {}) {
   await emit(app, CLONING);
   await emit(app, READY);
   assert.equal(currentStep(app), 'analysis', 'the wizard went on to the analysis once the clone was ready');
+  await press(app, 'wizard-workflows-choice-analyze'); // #100: the analysis is asked for by its card, Next waits for the workflows
   await emit(app, opts.state || ANALYZED);
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');
@@ -328,4 +334,68 @@ test('#781 Finish with no change sends no kind: the engine reads it itself (#735
   const saved = app.callsTo('updateProject');
   assert.equal(saved.length, 1, 'the project saved');
   assert.equal(saved[0][1]?.kind == null, true, `the kind sent: ${saved[0][1]?.kind}`);
+});
+
+// ---- the project type as tiles (visual layout) ----------------------------------------------------------
+
+const KINDS = ['backend', 'frontend', 'full-stack', 'docs'];
+const kindTiles = (app) => allByTestId(wizardMarkup(app), 'wizard-kind-tile');
+const pressedKinds = (app) => kindTiles(app).filter((b) => b.attrs['aria-pressed'] === 'true').map((b) => b.attrs['data-value']);
+const kindTile = (app, value) => kindTiles(app).find((b) => b.attrs['data-value'] === value);
+
+async function pressKind(app, value) {
+  const tile = kindTile(app, value);
+  assert.ok(tile, `the tile of "${value}"`);
+  await clickRendered(app, tile, ['#project-wizard']);
+  await app.settle(10);
+}
+
+test('visual layout: one wizard-kind-tile per kind in the project block, the detected one pressed, the select kept with the same value', { timeout: 20000 }, async () => {
+  const app = await atReview({ state: DETECTED });
+  const inCard = allByTestId(projectCard(app)?.outer || '', 'wizard-kind-tile');
+  assert.deepEqual(inCard.map((b) => b.attrs['data-value']).sort(), [...KINDS].sort(), 'one tile per kind, no "Detect from the files" once a kind is known');
+  for (const b of inCard) {
+    assert.equal(b.name, 'button');
+    assert.equal(b.attrs['data-act'], 'pick-kind');
+    assert.equal(textOf(b).length > 0, true, 'a tile says its kind');
+  }
+  assert.deepEqual(pressedKinds(app), ['backend'], 'only the detected kind is pressed');
+  assert.match(textOf(kindTile(app, 'backend')), /Backend/);
+  assert.equal(kindSelect(app) === null, false, 'wizard-kind-select is still there');
+  assert.equal(pickedKind(app), 'backend', 'the select holds the same value');
+  assert.deepEqual(kindOptions(app).map((o) => o.attrs.value).sort(), [...KINDS].sort(), 'the select offers the same kinds');
+});
+
+test('visual layout: while no kind is known, the tile "Detect from the files" shows, pressed, with the kinds', { timeout: 20000 }, async () => {
+  const app = await atReview({ state: ANALYZED });
+  assert.deepEqual(kindTiles(app).map((b) => b.attrs['data-value']).sort(), ['', ...KINDS].sort());
+  assert.equal(textOf(kindTile(app, '')), 'Detect from the files');
+  assert.deepEqual(pressedKinds(app), [''], 'nothing picked: detect is the pressed one');
+  assert.equal(pickedKind(app) || '', '', 'the select is on "Detect from the files" too');
+});
+
+test('visual layout: a click on a kind tile picks it: pressed, the select follows, "Detected" goes, and it stays through a re-render', { timeout: 20000 }, async () => {
+  const app = await atReview({ state: DETECTED });
+  await pressKind(app, 'frontend');
+  assert.deepEqual(pressedKinds(app), ['frontend']);
+  assert.equal(pickedKind(app), 'frontend', 'the select holds the picked kind');
+  assert.equal(section(app, 'wizard-kind-detected'), null);
+  await emit(app, DETECTED);
+  assert.deepEqual(pressedKinds(app), ['frontend'], 'the pick stays');
+});
+
+test('visual layout: Finish sends the kind picked on a tile', { timeout: 20000 }, async () => {
+  const app = await atReview({ state: DETECTED });
+  await pressKind(app, 'full-stack');
+  await finish(app);
+  assert.equal(app.callsTo('updateProject')[0]?.[1]?.kind, 'full-stack');
+});
+
+test('visual layout: with no kind known, a picked tile is sent at Finish, and "Detect from the files" stays on offer', { timeout: 20000 }, async () => {
+  const app = await atReview({ state: ANALYZED });
+  await pressKind(app, 'docs');
+  assert.deepEqual(pressedKinds(app), ['docs']);
+  assert.ok(kindTile(app, ''), 'the analysis found no kind: detect stays as a way back');
+  await finish(app);
+  assert.equal(app.callsTo('updateProject')[0]?.[1]?.kind, 'docs');
 });

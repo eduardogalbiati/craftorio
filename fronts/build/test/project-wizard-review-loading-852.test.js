@@ -1,6 +1,7 @@
 // #852 acceptance, written before the code: the Review (step 4) says the same thing the same way while the project
 // map runs, and its languages block says it is loading. On the real page (packages/ui-kit/test/renderer-app-harness.js),
 // driven as project-wizard-review-781.test.js.
+// #100: the analysed review is reached with step 3's card Analyze with AI, then Next (a done profile job carries its profile).
 //
 // The contract assumed here:
 // - while the projectMap job runs, the City card (wizard-review-city) and the Findings card (wizard-review-findings)
@@ -31,7 +32,7 @@ const PROJECT = { id: W.PID, name: W.NAME, repo: W.REPO, folder: 'C:/ws/repos/ne
 const MAP_ERROR = 'project-map stopped: disk full';
 const stateWith = (status, projectMap) => ({
   projectId: W.PID, status, cli: W.CLI_OK,
-  jobs: W.jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap }),
+  jobs: W.jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } }, projectMap }),
 });
 const MAP_RUNNING = stateWith('analyzing', { status: 'running' });
 const MAP_DONE = stateWith('analyzed', { status: 'done' });
@@ -75,9 +76,9 @@ async function atReview(state, api) {
   await W.emit(app, W.CLONING);
   await W.emit(app, W.READY);
   assert.equal(W.currentStep(app), 'analysis', 'the analysis step once the clone was ready');
+  await W.defineWorkflows(app, 'analyze');
   await W.emit(app, state);
-  await W.press(app, 'wizard-next');
-  assert.equal(W.currentStep(app), 'review', 'the review');
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   return app;
 }

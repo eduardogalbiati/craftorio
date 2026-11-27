@@ -15,6 +15,10 @@
 //   cur.workflows.default is the project's default at Finish).
 //   #738: above the rows (analyzed and manual), wizard-way-of-working: Local / Remote / Fork + PR, from the
 //   fork choice of a repository the owner can't push to, else the profile's mode.
+//   Each row's choices are also tiles (wizard-workflow-tile data-kind data-value, the picked one aria-pressed, a click
+//   is the wizard's workflow-pick); the select is kept, not shown, but for the Default row, which carries the
+//   acceptance notice (#40) in its hint's place. #100 defined(): whether the rows show (the wizard's Next waits
+//   for it); state(): the column's state.
 // - cliWarning(cli), forkNotice(onboarding), forkPending(onboarding): the repository step's notices (the
 //   CLI missing or signed out; #738 no push access: Create a fork / Work locally).
 // - #79 pushNotice(onboarding): the clone can't push (git's credentials), with the setup-git button.
@@ -297,8 +301,18 @@
       const kinds = [...(detected ? [] : [['', t('onboarding.kind_detect')]]), ...Object.entries(labels).map(([v, key]) => [v, t(key)])];
       const attrs = `data-testid="wizard-kind-select" aria-label="${esc(t('ways_of_working.f_kind'))}"`;
       const control = window.Select.markup(attrs, kinds, value);
+      // the kinds as tiles (an icon, the name, one line), the picked one aria-pressed; the select stays for
+      // assistive tech and the tests, not shown. "Detect from the files" spans the row while no kind is known
+      const KIND_ICON = { '': 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9M10.5 10.5 14 14', docs: 'M4 2.5h8v11H4zM6.5 6h3M6.5 9h3' };
+      const tile = ([v, label]) => {
+        const key = `onboarding.tile_kind_${String(v).replace(/[^a-z0-9]+/gi, '_')}`;
+        return `<button type="button" class="wizard-workflow-tile${v ? '' : ' wide'}" title="${esc(label)}" data-act="pick-kind" data-value="${esc(v)}" data-testid="wizard-kind-tile" aria-pressed="${v === value}">
+          <span class="wizard-tile-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="${KIND_ICON[v] ?? icons?.()?.kind?.[v] ?? ''}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="wizard-tile-title">${esc(v ? t(key) : label)}</span>${v ? `<span class="wizard-tile-text">${esc(t(`${key}_text`))}</span>` : ''}</button>`;
+      };
+      const tiles = `<div class="wizard-kind-tiles" role="group" aria-label="${esc(t('ways_of_working.f_kind'))}">${kinds.map(tile).join('')}</div>`;
       const mark = detected && !cur().kind && cur().model.source !== 'new' ? `<span class="small muted" data-testid="wizard-kind-detected">${esc(t('onboarding.kind_detected', { kind: t(labels[detected]) }))}</span>` : '';
-      return `<div class="field"><span class="small muted">${esc(t('ways_of_working.f_kind'))}</span>${control}${mark}</div>`;
+      return `<div class="field wizard-kind-field"><span class="wizard-question-title">${esc(t('ways_of_working.f_kind'))}${mark ? ' ' : ''}${mark}</span><span class="wizard-kind-select">${control}</span>${tiles}</div>`;
     }
 
     const recordOf = (pid) => (typeof state === 'object' && state?.projects?.find?.((p) => p.id === pid)) || null;

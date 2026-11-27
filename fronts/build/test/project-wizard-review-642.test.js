@@ -14,9 +14,17 @@
 //   - the idea field id="wizard-review-idea" (data-testid="wizard-review-idea"), read from its input / change;
 // - Finish: data-testid="wizard-finish", never disabled, never waits for an analysis still running; it
 //   files no issue and sends nothing to the roadmap (no api.createFindingIssue / addRefactorToRoadmap /
-//   saveRoadmap), nothing started: no startRoadmap / startRun / runPipeline / analyzeOnboarding, keeps a non-blank idea as a local item of the project's backlog (an Inbox idea:
+//   saveRoadmap), nothing started: no startRoadmap / startRun / runPipeline / analyzeOnboarding (#100: the one call is the
+//   card Analyze with AI's, pressed on step 3 to reach an analysed review; Next and Finish make none), keeps a non-blank idea as a local item of the project's backlog (an Inbox idea:
 //   api.createDiscoveryCard(projectId, title, …) with the typed text), closes the wizard and opens the
 //   project's page (state.view 'project', state.pv.id the project).
+// The visual layout (2026-11) added, tested at the end of this file:
+// - the title row: <header class="wizard-review-top"> holding h2#project-wizard-title, the project's name (the
+//   dialog's aria-labelledby), and where it comes from (the repository, the clone's folder); the project block
+//   (wizard-review-project) no longer repeats them;
+// - the idea is a one-line textarea (rows="1") whose help is its placeholder (kept in an sr-only span too);
+// - #40 in the review: one short wizard-default-awaiting-acceptance ("<name> only runs once accepted.") with
+//   wizard-default-review-accept, inside the project block's Workflows well, in place of the long notice above the grid.
 // Harness equivalents as in project-wizard-review-641.test.js (clickRendered, typed values through the
 // field's and the root's listeners).
 const test = require('node:test');
@@ -34,10 +42,12 @@ const jobs = (over = {}) => ({
   projectMap: { status: 'waiting' }, ...over,
 });
 const CLI_OK = { provider: 'github', status: 'ok' };
+// the profile the analysis found: step 3's rows show with it (#100: Next waits for them)
+const PROFILE_JOB = { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } };
 const CLONING = { projectId: PID, status: 'cloning', jobs: jobs(), cli: CLI_OK };
 const READY = { projectId: PID, status: 'ready', jobs: jobs({ clone: { status: 'done' } }), cli: CLI_OK };
-const ANALYZING = { projectId: PID, status: 'analyzing', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'running' } }), cli: CLI_OK };
-const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' } }), cli: CLI_OK };
+const ANALYZING = { projectId: PID, status: 'analyzing', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: PROFILE_JOB, projectMap: { status: 'running' } }), cli: CLI_OK };
+const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: PROFILE_JOB, projectMap: { status: 'done' } }), cli: CLI_OK };
 
 const FINDINGS = [
   { kind: 'hotspot', severity: 'high', title: 'Split checkout.js', files: [{ path: 'src/checkout.js' }], evidence: 'git', status: 'open' },
@@ -169,9 +179,11 @@ async function atAnalysis(opts) {
   return app;
 }
 
-// The review with every analysis done
+// The review with every analysis done: asked for with the card Analyze with AI (#100: Next starts none and
+// waits for the workflows)
 async function reviewDone(opts) {
   const app = await atAnalysis(opts);
+  await press(app, 'wizard-workflows-choice-analyze');
   await emit(app, ANALYZED);
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');
@@ -237,13 +249,16 @@ test('#642 with the analyses still running, the review shows them pending, and F
 
 test('#642 Finish files no issue, sends nothing to the roadmap and starts nothing', { timeout: 20000 }, async () => {
   const app = await reviewDone();
+  // #100: the analysis was asked for once, by the card Analyze with AI; Next started none
+  assert.equal(app.callsTo('analyzeOnboarding').length, 1, 'one analysis, asked by the card; none by Next');
   await finish(app);
   assert.equal(wizardClosed(app), true, 'the wizard closed');
   assert.equal(app.callsTo('createFindingIssue').length, 0, 'no issue filed without a click');
   assert.equal(app.callsTo('addRefactorToRoadmap').length, 0, 'no refactor sent');
   assert.equal(app.callsTo('saveRoadmap').length, 0, 'no roadmap edit');
   assert.equal(runStarts(app), 0, 'no roadmap, run or pipeline started');
-  assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'no analysis started');
+  assert.equal(app.callsTo('analyzeOnboarding').length, 1, 'no analysis started by Finish');
+  assert.equal(app.callsTo('retryOnboarding').length, 0, 'no analysis run again');
 });
 
 // ---- the idea --------------------------------------------------------------------------------------
@@ -293,4 +308,88 @@ test('#642 a backlog already read is not synced again by the review', { timeout:
   const app = await reviewDone({ api: { syncBacklog: async () => clone(BACKLOG) } });
   assert.equal(app.callsTo('syncBacklog').length, 0, 'no sync');
   assert.equal(textOf(section(app, 'wizard-review-backlog')).includes('Login fails on Safari'), true, 'the cached issue');
+});
+
+// ---- the visual layout: the title row, the idea on one line, the short acceptance notice ------------
+
+const classesOf = (e) => String(e.attrs.class || '').split(/\s+/).filter(Boolean);
+const reviewTop = (app) => H.findEl(section(app, 'wizard-review')?.outer || '', (e) => e.name === 'header' && classesOf(e).includes('wizard-review-top'));
+const projectBlock = (app) => section(app, 'wizard-review-project');
+
+test('visual layout: the review\'s title row is the project\'s name (h2#project-wizard-title in wizard-review-top), where it comes from beside it', { timeout: 20000 }, async () => {
+  const app = await reviewDone();
+  const top = reviewTop(app);
+  assert.equal(top === null, false, '<header class="wizard-review-top"> in the review');
+  const titles = H.findAll(wizardMarkup(app), (e) => e.attrs.id === 'project-wizard-title');
+  assert.equal(titles.length, 1, 'one #project-wizard-title in the wizard (the dialog\'s aria-labelledby)');
+  const title = H.findEl(top.outer, (e) => e.attrs.id === 'project-wizard-title');
+  assert.equal(title?.name, 'h2', 'the title is the row\'s h2');
+  assert.equal(textOf(title), NAME, 'the title is the project\'s name, nothing else');
+  const where = H.visibleText(top.inner);
+  assert.equal(where.includes(REPO), true, `the repository beside the name: ${where}`);
+  assert.equal(where.includes(PROJECT.folder), true, `the clone's folder beside the name: ${where}`);
+  // the title row comes first in the review, before the two columns
+  const review = section(app, 'wizard-review').inner;
+  assert.equal(review.indexOf('wizard-review-top') < review.indexOf('wizard-review-grid'), true, 'the title row leads the step');
+});
+
+test('visual layout: the project block no longer repeats the name nor the repository, and still holds its kind and its workflows', { timeout: 20000 }, async () => {
+  const app = await reviewDone();
+  const block = projectBlock(app);
+  assert.equal(block === null, false, 'data-testid="wizard-review-project"');
+  assert.equal(textOf(block).includes(NAME), false, `no name in the project block: ${textOf(block)}`);
+  assert.equal(textOf(block).includes(REPO), false, 'no repository URL in the project block');
+  assert.equal(byTestId(block.outer, 'wizard-kind-select') === null, false, 'the kind\'s select');
+  assert.equal(H.findAll(block.outer, (e) => e.attrs['data-testid'] === 'wizard-kind-tile').length > 0, true, 'the kind\'s tiles');
+  for (const flow of ['feature', 'fix', 'release']) assert.equal(textOf(block).includes(flow), true, `the workflow ${flow}: ${textOf(block)}`);
+});
+
+test('visual layout: the idea is a one-line textarea with its help as placeholder, and keeps what was typed through a re-render', { timeout: 20000 }, async () => {
+  const HELP = 'Kept in the Inbox as an idea when you finish.';
+  const app = await reviewDone();
+  const idea = () => byTestId(wizardMarkup(app), 'wizard-review-idea');
+  assert.equal(idea()?.name, 'textarea', 'the idea is a textarea');
+  assert.equal(idea().attrs.id, 'wizard-review-idea');
+  assert.equal(idea().attrs.rows, '1', 'one line');
+  assert.equal(idea().attrs.placeholder, HELP, 'the help is the placeholder');
+  const label = H.findEl(section(app, 'wizard-review').outer, (e) => e.name === 'label' && classesOf(e).includes('wizard-review-idea'));
+  assert.equal(label === null, false, 'label.wizard-review-idea');
+  assert.equal(byTestId(label.outer, 'wizard-review-idea') === null, false, 'the textarea is in its label');
+  assert.match(H.visibleText(label.inner), /Note an idea/);
+  const help = H.findEl(label.outer, (e) => e.name === 'span' && classesOf(e).includes('sr-only'));
+  assert.equal(textOf(help), HELP, 'the help stays for assistive tech (sr-only)');
+  await typeInto(app, '#wizard-review-idea', 'Save a cart for later');
+  await emit(app, ANALYZED);
+  assert.equal(idea().inner.includes('Save a cart for later'), true, 'the typed idea is drawn again in the textarea');
+});
+
+// #40: a repository whose own default workflow is refused until accepted
+const REPO_WF = 'team-flow';
+const awaiting = (accepted) => ({
+  listProjects: async () => [{ ...clone(PROJECT), defaultWorkflow: REPO_WF }],
+  projectManifest: async () => ({ workflows: [{ name: REPO_WF, file: `workflows/${REPO_WF}.yaml`, category: 'build' }], default: REPO_WF, kinds: {} }),
+  listWorkflows: async (opts = {}) => (opts?.projectId === PID
+    ? [{ file: `${REPO_WF}.yaml`, name: REPO_WF, origin: 'repository', projectId: PID, commit: 'c0ffee1', changedCommit: accepted ? null : 'c0ffee1', accepted, acceptedCommit: accepted ? 'c0ffee1' : null, trusted: accepted, steps: [], inputs: {}, category: 'build' }]
+    : []),
+});
+const notices = (html) => H.findAll(html, (e) => e.attrs['data-testid'] === 'wizard-default-awaiting-acceptance');
+
+test('visual layout: a default awaiting acceptance is said once on the review, short, inside the project block with Review and accept', { timeout: 20000 }, async () => {
+  const app = await reviewDone({ api: awaiting(false) });
+  const all = notices(section(app, 'wizard-review').outer);
+  assert.equal(all.length, 1, 'one wizard-default-awaiting-acceptance on the review');
+  const inBlock = notices(projectBlock(app).outer);
+  assert.equal(inBlock.length, 1, 'inside the project block (wizard-review-project)');
+  assert.equal(textOf(inBlock[0]).includes(`${REPO_WF} only runs once accepted.`), true, `the short sentence: ${textOf(inBlock[0])}`);
+  assert.equal(textOf(inBlock[0]).includes('comes from the repository'), false, 'not the long sentence');
+  const accept = byTestId(inBlock[0].outer, 'wizard-default-review-accept');
+  assert.equal(accept?.name, 'button', 'Review and accept');
+  assert.equal(accept.attrs['data-act'], 'review-accept');
+  assert.equal(accept.attrs['data-file'], `${REPO_WF}.yaml`, 'on the workflow\'s file');
+  assert.equal(textOf(accept), 'Review and accept');
+});
+
+test('visual layout: an accepted default says nothing on the review', { timeout: 20000 }, async () => {
+  const app = await reviewDone({ api: awaiting(true) });
+  assert.equal(notices(section(app, 'wizard-review').outer).length, 0);
 });

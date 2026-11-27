@@ -40,31 +40,25 @@ when unfinished, and for a finished one says it exists with Open the project: ne
 
 ## The work model (#633)
 
-Step 3 ends with the work model section (`wizard-work-model`, mock-5,
-`fronts/build/views/projects/project-wizard-work-model.js`, split out of the wizard for its size cap):
-how work on the project is documented, Light / Standard / Full (radios `wizard-work-model-<model>`,
-`WORK_MODELS` and `DEFAULT_WORK_MODEL` of `packages/shared/onboarding-model.js`), next to where the files
-live (`wizard-work-model-files`: `docs/work/<item>/intent.md · spec.md · plan.md`). The pick is the
-`workModel` of the saved picks (resumed like the others) and Finish writes it on the project
-(`updateProject`'s `workModel`, an unknown value ignored). The mock's `.html` files and its "Written by the
-run" line are left out on purpose (spec D16: Code & Build never writes `docs/work/`, the pre-flow
-write-doc and the post-flow `sdlc-*` workflows do).
+Step 3's workflows screen ends with the work model (`wizard-work-model`,
+`fronts/build/views/projects/project-wizard-work-model.js`, split out of the wizard for its size cap): how work on
+the project is documented, Light / Standard / Full, three tiles over their radios (`wizard-work-model-<model>`,
+`WORK_MODELS` and `DEFAULT_WORK_MODEL` of `packages/shared/onboarding-model.js`). The pick is the `workModel` of
+the saved picks (resumed like the others) and Finish writes it on the project (`updateProject`'s `workModel`, an
+unknown value ignored).
 
-#851 (owner's decision, 2026-11-19): **Light is the default** (`DEFAULT_WORK_MODEL = 'light'`), a resumed
-wizard keeps its saved `workModel` and an untouched step 3 saves `light`. `wizard-work-model-files` shows
-only for Standard or Full (Light writes nothing to `docs/work/`). A **Recommended** badge
-(`wizard-recommended`, `onboarding.recommended`, `recommended()` of `project-wizard-workflows.js`) marks
-only Light and **Analyze the repository** (`wizard-workflows-choice-analyze`, inline form too). Standard is
+#851 (owner's decision, 2026-11-19): **Light is the default** and carries the **Recommended** badge
+(`wizard-recommended`, also on Analyze with AI). Owner's decision, 2026-11-26: **Standard and Full are not ready
+yet**: their tiles are shown disabled with "Coming soon" (`wizard-work-model-soon`), a saved `standard` / `full`
+is read as `light`, and so the "where the files live" block (`wizard-work-model-files`) never shows. Standard is
 Anthropic's [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook) simplified
-(intent → spec → plan → code), Full the whole playbook (+ REVIEW.md and evals); the wizard's texts have no
-links, the playbook is cited here and in `docs/first-project-onboarding-proposal-2026-10/README.md`.
+(intent → spec → plan → code), Full the whole playbook (+ REVIEW.md and evals).
 
 ## A new project's step 3 and review (#850)
 
 A new project (source `new`): `OnboardingModel.next()` from its repository step sets `analyzeLater: true`
-(the one source for step 3 and the review; an import keeps `false`). Step 3 shows the City row unticked
-with `onboarding.job_projectMap_later_new` (`wizard-job-later-projectMap`), no amount, no "Skip"; the
-profile line says "from your answers" (`profileSourceKey()`). The review never says the analyses were
+(the one source for step 3 and the review; an import's is set by its step 3's Continue, #100). Its step 3
+opens on the workflows' rows (from the step 2 answers), with no job list. The review never says the analyses were
 skipped; "How it is worked on" is the step 2 answer (`onboarding.new_mode_<mode>`). The Next steps'
 release CI entry of a project with a `release` workflow says `onboarding.next_steps_release_ci_reason_ready`
 (still disabled).
@@ -119,52 +113,55 @@ the left, the step's action on the right.
    on the project: the review's Project kind opens on it, never on "Detect from the files". Next calls
    `onboarding:create` (`create` in `project-onboarding.js`: the local repository, then the remote only when
    asked and signed in; a failed remote leaves `remote.status = 'failed'` and the local project). The project is ready at once, the stepper's third pill reads "Workflows" and step 3 follows.
-3. **analysis** (mock-4): on the left the jobs from the clone on with their status and the cost before the
-   click (`wizard-cost`, `wizard-cost-total`, one `data-part` per analysis that may cost, `wizard-skip`). #74
-   (`project-wizard-costs.js`, its header): "free" only when no model is called, "Not known yet" without an estimate. A failed
-   job is a state of the analysis, never "not started": its row reads the reason in the error colour
-   (`wizard-job-error-<id>`, the engine's `code` — cli-missing, no-folder, refused,
-   timeout, failed — translated, the full error on hover), "—" as its amount, and Retry
-   (`wizard-job-retry-<id>`, `api.retryOnboarding`, which reruns only what failed or never ran: a done
-   project map is not paid twice). On the right the suggested workflows (`wizard-workflows-column`,
-   #725, `workflowsColumnState` of the model) start with two choices: Analyze the repository
-   (`wizard-workflows-choice-analyze`, starts the analysis) and Define manually
-   (`wizard-workflows-choice-manual`); no row before that. Analyzing dims the rows (`wizard-workflows-rows`
-   `aria-busy`, inert) under the analysis' phases (`wizard-workflows-analyzing`, #781,
-   `fronts/build/views/projects/project-wizard-activity.js`): `wizard-analysis-phases` holds one activity line
-   per phase (`packages/ui-kit/activity-line.js`), `wizard-phase-git` (the commits, merges and tags found),
-   `wizard-phase-files` (the languages, the test command, the CI) and `wizard-phase-oracle` (what it reads and
-   its time as m:ss while it runs; "not needed" when git settled every field: no model call). The wizard reads
-   them from `workflows:interviewState` while the profile job runs, every second and at each
-   `onboarding:changed` (`analysisPhases` of the model maps them), and they stay, ended, over the
-   profile's picks and reasons. A failed profile shows an activity line with its reason and
-   Retry (`wizard-workflows-retry`), and Define manually (`wizard-workflows-failed`). Manual shows the rows
-   editable without a reason, Analyze still offered; a running job's row has a spinner instead of its dot.
-   #738: above the rows (analyzed and manual), `wizard-way-of-working`: the way of working's badge
-   (Local, with "no pull request" / Remote / Fork + PR), from the fork choice when there was one, else the
-   profile's mode. Before this step, a repository the owner can't push to (`fork.status` suggested or
-   failed in the onboarding state) holds the import step on `wizard-fork-notice`: "You can't push to
-   <owner/repo>…", Create a fork (`wizard-create-fork`, `api.forkOnboarding`) and Work locally
-   (`wizard-work-locally`, `api.workLocallyOnboarding`); the answer moves on to analysis.
+3. **analysis** (`fronts/build/views/projects/project-wizard.js` `analysisStep()`): one screen at a time, by the
+   workflows' state (`wizard-analysis` `data-state`, `workflowsColumnState` of the model, #725):
+   - `choose`: the step's title, the question and two big cards, Analyze with AI
+     (`wizard-workflows-choice-analyze`, recommended, with what it may cost, `wizard-workflows-choice-cost`; the
+     only control that starts the analysis, `onboarding:analyze`) and Define manually
+     (`wizard-workflows-choice-manual`, nothing runs). Nothing else: the jobs already done are not listed.
+   - `analyzing` (the profile job runs): the progress (`wizard-cost`: `wizard-progress`, a bar of the jobs ended;
+     the job rows with their status, an "AI" badge `wizard-job-paid` on one that will call a model, the total
+     `wizard-cost-total`) and the analysis' phases (`wizard-workflows-analyzing`, #781,
+     `project-wizard-activity.js`: `wizard-phase-git`, `-files`, `-oracle`, read from `workflows:interviewState`).
+     The rows are in the DOM (`wizard-workflows-rows` `aria-busy`, inert), not shown. A failed job's row reads the
+     reason (`wizard-job-error-<id>`) with Retry (`wizard-job-retry-<id>`, `api.retryOnboarding`); the rows also
+     show in any state while a job failed.
+   - `failed`: the profile's reason with Retry (`wizard-workflows-retry`) and Define manually
+     (`wizard-workflows-failed`), over the job rows.
+   - `analyzed` / `manual`: the workflows on the whole width. Each row (`wizard-workflow` `data-kind`) offers its
+     choices as tiles (`wizard-workflow-tile`, an icon, a title and one line from the choice's label split at
+     " · "; the picked one `aria-pressed`); the row's `wizard-workflow-select` stays in the DOM, not shown. The
+     Default row (a repository whose manifest names a default, #790) keeps its select, and carries the acceptance
+     notice (`wizard-default-awaiting-acceptance`, #40) in its hint's place. Analysed rows say why
+     (`wizard-workflow-reason`); `wizard-way-of-working` (#738) sits on the lead line. While the rest of the
+     analysis still runs, `wizard-progress` stays above the rows. Manual keeps Analyze with AI as a link.
+     Under the rows, the work model (`wizard-work-model`, below).
+   #100 (owner's decision, 2026-11-26): Continue (`wizard-next`) is disabled until the workflows are defined
+   (`choose` and `failed` on an import; a new project's rows show at once) and starts nothing: on an import it goes
+   to the review with `analyzeLater: true` unless the analysis was asked for. There is no "Skip, analyze later".
+   Before this step, a repository the owner can't push to (`fork.status` suggested or failed) holds the import
+   step on `wizard-fork-notice` (Create a fork `wizard-create-fork`, Work locally `wizard-work-locally`).
    The footer: the clone's progress (`wizard-clone-progress`, the clone job's `data-status`, `wizard-spinner`
-   while it runs) on the left, Back and Continue (`wizard-next`, always enabled; the review shows what is
-   pending) on the right. #20: on an import, Continue starts the ticked analysis not started yet (Define
-   manually too; during the clone, when it ends) and stays on step 3 if that fails; only Skip, analyze later skips it.
-4. **review** (`wizard-review`, mock-6): three cards, the project (how it is worked on: #781 the Health tab's
-   language bar in `wizard-review-languages`, the project type opening on the kind the analysis found, marked
-   `wizard-kind-detected`, "Detect from the files" only while no kind is known; its workflows),
-   the city (`wizard-review-city`, Open the city) and the findings (`wizard-review-findings`, #730: the
-   Oracle's report from the project map run), then the backlog (#781: the activity line
-   `wizard-review-backlog-activity` says from where it reads and how far, `backlog:progress`, then the summary or
-   that it is empty; the count grows because this sync, `backlog:sync` with `followed`, reads the list in steps, the adapter's `issueListSteps`: gh has
-   no offset, so it reads again with a higher limit (40, 100, 200, 300), glab reads pages, and `issueCountCommand`
-   gives the total; a sync no screen follows keeps the single read; a read that fails shows its reason with `wizard-review-backlog-retry`, and a project with no platform to read from is an
-   empty backlog), #74 what each analysis cost (`wizard-review-costs`, absent when skipped) and an idea for the Inbox; each section `data-state="ready | pending | failed | skipped | later"`; each finding (`wizard-review-finding`) with
-   its severity and Create issue (`wizard-review-create-issue`) / Create issue and prioritize
-   (`wizard-review-create-issue-prioritize`), both through `architecture:createIssue`; once filed the
-   issue's link (`wizard-review-finding-issue`) replaces the buttons. `wizard-finish` never waits: the
-   project's page opens with the Next steps card and the idea goes to the Inbox; nothing is filed without
-   its own click.
+   while it runs; not shown once done), Back and Continue on the right.
+4. **review** (`wizard-review`, `fronts/build/views/projects/project-wizard-review.js`, split out of the wizard for
+   its size cap): the project's name is the step's title (`#project-wizard-title`, with where it comes from), then
+   two columns. At the left the project (`wizard-review-project`): its code (#781 the Health tab's language bar,
+   `wizard-review-languages`), its kind as tiles (`wizard-kind-tile`, the picked one `aria-pressed`; it opens on the
+   kind the analysis found, marked `wizard-kind-detected`, "Detect from the files" only while no kind is known; the
+   select `wizard-kind-select` stays in the DOM, not shown) and its workflows, with the short acceptance notice
+   when the default awaits it. At the right what the analyses found: the city (`wizard-review-city`, a strip, with
+   Finish and open the city, `wizard-open-city`), the findings (`wizard-review-findings`, #730: the Oracle's report
+   from the project map run, one line each, the list scrolls inside its block), the backlog (#781: the activity
+   line `wizard-review-backlog-activity` says from where it reads and how far, `backlog:progress`, then the
+   summary or that it is empty; this sync, `backlog:sync` with `followed`, reads the list in steps, the adapter's
+   `issueListSteps`; a read that fails shows its reason with `wizard-review-backlog-retry`) and #74 what each
+   analysis cost on one line (`wizard-review-costs`, absent when skipped). Under both, an idea for the Inbox on one
+   line (`wizard-review-idea`). Each section has `data-state="ready | pending | failed | skipped | later"`; each
+   finding (`wizard-review-finding`) has its severity and Create issue (`wizard-review-create-issue`) / Create
+   issue and prioritize (`wizard-review-create-issue-prioritize`), both through `architecture:createIssue`; once
+   filed the issue's link (`wizard-review-finding-issue`) replaces the buttons. `wizard-finish` never waits: the
+   project's page opens with the Next steps card and the idea goes to the Inbox; nothing is filed without its own
+   click. The body does not scroll on either step.
 
 The Next steps card (mock-7) has five entries in a grid of three (`next-step-<id>`): the refactors to file and add, the first
 idea, the refactor cadence ("Turn on" only opens the Health tab, #730: there the findings become issues), and release CI and

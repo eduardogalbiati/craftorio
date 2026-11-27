@@ -531,3 +531,52 @@ p.wizard-cost-total-row [data-testid="wizard-cost-unknown"] { display: block; }
 .wizard-analysis .wizard-workflow p.wizard-default-awaiting { justify-content: flex-start; }
 .wizard-analysis .wizard-workflow-head > strong { display: block; }
 .wizard-analysis .wizard-workflow-head > strong::first-letter { text-transform: uppercase; }
+/* a work model not ready yet: its tile is dimmed and not clickable, with a "Coming soon" mark */
+.wizard-model-tile.disabled { cursor: default; opacity: .55; }
+.wizard-model-tile.disabled:hover { border-color: var(--border); }
+.wizard-model-tile.disabled input { cursor: default; }
+.badge.wizard-soon { margin-left: 8px; font-family: inherit; font-weight: 400; color: var(--muted); vertical-align: middle; }
+.wizard-model-tile.disabled { opacity: .7; }
+.wizard-model-tile input:disabled { opacity: 0; }
+
+/* step 4, the review, with no scrolling body: the project's name as the step's title with where it comes from; two
+   columns (what the project is: its code, its kind as tiles, its workflows; what the analyses found: the city as a
+   strip, the findings one line each in the room left, the backlog, the costs on one line); the idea on one line */
+.wizard-review { flex: 1; min-height: 0; gap: 12px; }
+.wizard-review-top { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.wizard-review-top h2 { flex: none; max-width: 60%; }
+.wizard-review-top span { margin-left: auto; min-width: 0; }
+.wizard-review-grid { flex: 1; min-height: 0; grid-template-columns: 400px minmax(0, 1fr); gap: 16px; }
+.wizard-review-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+.wizard-review-project { gap: 12px; }
+.wizard-review-well, .wizard-review-side > .wizard-review-section { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--bg); }
+.wizard-review .wizard-review-section h4, .wizard-review-side .wizard-review-section h3 { margin: 0; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.wizard-kind-field { display: flex; flex-direction: column; gap: 8px; }
+.wizard-kind-field .wizard-question-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.wizard-kind-field .wizard-question-title .muted { font-weight: 400; margin-left: 6px; }
+.wizard-kind-select { position: absolute; width: 1px; height: 1px; overflow: hidden; visibility: hidden; }
+.wizard-kind-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.wizard-kind-tiles .wizard-workflow-tile.wide { grid-column: 1 / -1; }
+.wizard-review-well [data-testid="wizard-default-awaiting-acceptance"] { flex-direction: row; align-items: center; gap: 8px; padding: 0; border: 0; font-size: 12px; }
+.wizard-review-well [data-testid="wizard-default-awaiting-acceptance"] > span { flex: 1; min-width: 0; color: var(--orange); }
+[data-testid="wizard-review-city"] { display: grid !important; grid-template-columns: 180px minmax(0, 1fr); gap: 2px 12px; align-items: center; }
+.wizard-review .wizard-city-bars { grid-row: 1 / span 2; grid-column: 1; height: 48px; padding: 6px 8px; background: var(--panel-2); }
+[data-testid="wizard-review-city"] > .wizard-review-head { grid-column: 2; }
+[data-testid="wizard-review-city"] > p { grid-column: 2; }
+[data-testid="wizard-review-city"]:not([data-state="ready"]) > p { grid-column: 1 / -1; }
+[data-testid="wizard-review-findings"] { flex: 1; min-height: 76px; }
+[data-testid="wizard-review-findings"] .wizard-review-list { flex: 1; min-height: 0; max-height: none; }
+[data-testid="wizard-review-backlog"] .wizard-review-list { max-height: 48px; }
+.wizard-review-finding { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+[data-testid="wizard-review-costs"] .wizard-review-list { flex-direction: row; flex-wrap: wrap; gap: 4px 20px; max-height: none; }
+[data-testid="wizard-review-costs"] .wizard-review-cost { gap: 8px; }
+[data-testid="wizard-review-costs"] .wizard-review-cost-total { margin-left: auto; padding: 0; border: 0; }
+[data-testid="wizard-review-costs"] .wizard-amount { font-family: inherit; }
+.wizard-review > .wizard-review-idea { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.wizard-review > .wizard-review-idea > span:first-child { font-size: 14px; font-weight: 600; color: var(--text); }
+.wizard-review > .wizard-review-idea textarea { height: 36px; min-height: 36px; resize: none; }
+/* a review block with nothing to show yet (pending, later, failed, skipped) is its title and one sentence */
+[data-testid="wizard-review-city"]:not([data-state="ready"]) { display: flex !important; align-items: stretch; }
+[data-testid="wizard-review-findings"]:not([data-state="ready"]) { flex: none; min-height: 0; }
+/* a notice never shrinks under its content when the body is full (the body scrolls then): its buttons stay inside it */
+.wizard-body > .wizard-alert, .wizard-body > .wizard-columns, .wizard-analysis > .wizard-alert { flex-shrink: 0; }

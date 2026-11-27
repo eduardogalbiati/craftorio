@@ -2,6 +2,7 @@
 // in pt-BR shows no English word: the languages bar's "Other" reads "Outras", a finding's severity "low" is
 // translated ("baixa"), and the City card counts its districts with the City tab's word and a plural:
 // "1 bairro", "2 bairros", never "1 zonas". Driven on the real page as project-wizard-review-loading-852.test.js.
+// #100: the analysed review is reached with step 3's card Analyze with AI, then Next (a done profile job carries its profile).
 //
 // The contract assumed here:
 // - onboarding.review_city is a plural (one / other) in en.json and pt-BR.json, its form picked by the district count;
@@ -16,7 +17,7 @@ const W = require('./project-wizard-helpers');
 const PROJECT = { id: W.PID, name: W.NAME, repo: W.REPO, folder: 'C:/ws/repos/new', exists: true };
 const DONE = {
   projectId: W.PID, status: 'analyzed', cli: W.CLI_OK,
-  jobs: W.jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' } }),
+  jobs: W.jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } }, projectMap: { status: 'done' } }),
 };
 // Shell is under 0.5% of the lines: it goes into the "Other" share
 const LANGUAGES = [{ language: 'Rust', lines: 9990, files: 40 }, { language: 'Shell', lines: 10, files: 1 }];
@@ -58,9 +59,9 @@ async function atReview({ lang = 'pt-BR', city = ONE_DISTRICT } = {}) {
   await W.press(app, 'wizard-next');
   await W.emit(app, W.CLONING);
   await W.emit(app, W.READY);
+  await W.defineWorkflows(app, 'analyze');
   await W.emit(app, DONE);
-  await W.press(app, 'wizard-next');
-  assert.equal(W.currentStep(app), 'review', 'the review');
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   return app;
 }

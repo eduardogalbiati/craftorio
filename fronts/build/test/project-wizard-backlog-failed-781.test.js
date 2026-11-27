@@ -1,5 +1,6 @@
 // #781: the Backlog card when its read fails (the reason with Retry, never "No open issues."), a project with no
 // platform to read from (its empty line), and a wizard resumed on a running analysis following the interview.
+// #100: the analysed review is reached with step 3's card Analyze with AI, then Next (the profile job carries its profile).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -8,10 +9,13 @@ const W = require('./project-wizard-helpers');
 const { PID, byTestId, emit, press, wizardMarkup } = W;
 const NOT_SIGNED_IN = 'gh issue list failed: To get started with GitHub CLI, please run: gh auth login';
 
+const ANALYZED = { ...W.ANALYZED, jobs: { ...W.ANALYZED.jobs, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } } } };
+
 async function atReview(api) {
   const app = await W.atAnalysis({ api: { getBacklog: async () => null, ...api } });
-  await emit(app, W.ANALYZED);
-  await press(app, 'wizard-next');
+  await W.defineWorkflows(app, 'analyze');
+  await emit(app, ANALYZED);
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   return app;
 }

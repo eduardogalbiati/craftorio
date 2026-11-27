@@ -4,6 +4,7 @@
 // "3 issues abertas"); with no open issue (even with closed or archived ones) it keeps "No open issues.".
 // Unchanged: the Issues-turned-off state and the failed read's Retry. Driven on the real page as
 // project-wizard-backlog-failed-781.test.js.
+// #100: the analysed review is reached with step 3's card Analyze with AI, then Next (a done profile job carries its profile).
 //
 // The contract assumed here:
 // - the review reads the backlog through api.getBacklog / api.syncBacklog: { issues: [{ number, title, state, labels, updatedAt }] };
@@ -14,7 +15,10 @@ const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
 const W = require('./project-wizard-helpers');
 
-const { byTestId, emit, press, wizardMarkup } = W;
+const { byTestId, emit, wizardMarkup } = W;
+
+// analysed: the profile job carries the profile it found (step 3's rows, #100)
+const ANALYZED = { ...W.ANALYZED, jobs: { ...W.ANALYZED.jobs, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } } } };
 
 const issue = (number, title, updatedAt, extra = {}) => ({ number, title, state: 'OPEN', labels: [], updatedAt, ...extra });
 // the cache's order is deliberately not the most-recent-first order
@@ -38,8 +42,9 @@ async function atReview(issues, { lang = 'en' } = {}) {
     // called right after the wizard opens, before the steps are drawn
     record: (a) => { if (lang !== 'en') a.sandbox.I18n.setLanguage(lang); },
   });
-  await emit(app, W.ANALYZED);
-  await press(app, 'wizard-next');
+  await W.defineWorkflows(app, 'analyze');
+  await emit(app, ANALYZED);
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   assert.equal(W.currentStep(app), 'review', 'the review');
   return app;
@@ -94,16 +99,18 @@ test('#37 pt-BR: only closed issues keep "Nenhuma issue aberta."', { timeout: 30
 test('#37 unchanged: a repository with Issues turned off keeps its own state', { timeout: 30000 }, async () => {
   const data = { issues: [], issuesDisabled: true, repo: 'https://github.com/o/new' };
   const app = await W.atAnalysis({ api: { getBacklog: async () => data, backlogProgress: async () => null } });
-  await emit(app, W.ANALYZED);
-  await press(app, 'wizard-next');
+  await W.defineWorkflows(app, 'analyze');
+  await emit(app, ANALYZED);
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   assert.equal(byTestId(wizardMarkup(app), 'wizard-review-backlog-issues-disabled') === null, false);
 });
 
 test('#37 unchanged: a failed read keeps its reason and Retry', { timeout: 30000 }, async () => {
   const app = await W.atAnalysis({ api: { getBacklog: async () => null, syncBacklog: async () => { throw new Error('gh auth login needed'); } } });
-  await emit(app, W.ANALYZED);
-  await press(app, 'wizard-next');
+  await W.defineWorkflows(app, 'analyze');
+  await emit(app, ANALYZED);
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   assert.equal(byTestId(wizardMarkup(app), 'wizard-review-backlog-retry') === null, false);
 });

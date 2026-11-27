@@ -2,9 +2,12 @@
 // #74: what the import's analyses cost, split out of project-wizard.js (its size cap). window.ProjectWizardCosts({
 // column, cur, jobOf, jobs, paid, money, renderSoon, retryButton }) gives the wizard, over its own state (`cur()`: the onboarding,
 // estimate and profileEstimate):
-// - costBlock(started): step 3's wizard-cost: one row per job from the clone on (its status, what it reads, its
-//   wizard-amount; data-part on the analyses that may cost: profile, projectMap), then wizard-cost-total with
-//   wizard-skip before the click (hidden once Analyze was asked during the clone, the engine's `wanted`);
+// - costBlock({ rows, running }): step 3's wizard-cost. `running` (the engine analyses): wizard-progress, a bar of
+//   the jobs ended and the one running. `rows` (the workflows wait for the analysis, or it failed; also whenever a
+//   job other than the clone failed): one row per job from the clone on (its status, what it reads, its
+//   wizard-amount; data-part on the analyses that may cost: profile, projectMap; wizard-job-paid, "AI", on one
+//   that will call a model and has not ended), then wizard-cost-total. Neither: '' (nothing before the analysis
+//   is asked for);
 // - an amount: before it ran its estimate ("Not known yet" without one), "free" only when no model is called (the
 //   engine's estimate says so, or the job ended simulated); once done its record's cost (jobs.<id>.costUsd); "—" failed;
 // - estimateText(): the estimate of the analyses still to run beside Analyze the repository ('' when not read yet or free);
@@ -53,6 +56,15 @@
       return loading() ? t('onboarding.estimating') : costText(n);
     }
 
+    // a row's right side: the "AI" badge of a job that will call a model and has not ended, and its amount (only
+    // once there is one: "not known" is said once, in the total under the rows)
+    function side(id) {
+      const charged = COSTED.includes(id) && !later(id) && !isFree(id) && jobOf(id).status !== 'done';
+      const badge = charged ? `<span class="badge warn wizard-job-paid" data-testid="wizard-job-paid">${esc(t('onboarding.job_paid'))}</span>` : '';
+      const sum = amount(id);
+      return { badge, shown: charged && sum === t('onboarding.cost_not_known') ? '' : sum };
+    }
+
     function row(id) {
       const job = jobOf(id);
       const s = job.status || 'waiting';
@@ -66,11 +78,7 @@
       // a paid analysis: its pick stays for assistive tech and the tests (checked, disabled; #850 unchecked when
       // left for later) but is not shown: it can't be changed, so the row says "paid" with a badge instead
       const pick = paid.includes(id) ? `<input type="checkbox" class="sr-only"${later(id) ? '' : ' checked'} disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
-      const charged = COSTED.includes(id) && !later(id) && !isFree(id) && jobOf(id).status !== 'done';
-      const badge = charged ? `<span class="badge warn wizard-job-paid" data-testid="wizard-job-paid">${esc(t('onboarding.job_paid'))}</span>` : '';
-      // the paid row's amount only once there is one: "not known" is said once, in the total under the rows
-      const sum = amount(id);
-      const shown = charged && sum === t('onboarding.cost_not_known') ? '' : sum;
+      const { badge, shown } = side(id);
       // #725: a failed job says why under its title (the full error on hover), with its Retry
       const failed = s === 'failed' && id !== 'clone'
         ? `<span class="small wizard-job-error" data-testid="wizard-job-error-${id}" title="${esc(job.error || job.reason || '')}">${esc(column.jobReason(job))}</span>` : '';

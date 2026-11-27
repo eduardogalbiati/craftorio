@@ -7,7 +7,9 @@
 // driven as project-wizard-review-642.test.js and project-wizard-open-city-731.test.js drive it.
 // The contract assumed here (new seams of #730):
 // - onboarding states carry jobs { clone, facts, profile, projectMap } (no ranking);
-// - the analysis step's job rows (wizard-cost's li data-part="<job>") have no data-part="ranking";
+// - the analysis step's job rows (wizard-cost's li data-part="<job>", shown while the analysis asked for with the card
+//   Analyze with AI runs, #100) have no data-part="ranking";
+// - #100: the analysed review is reached with that card, then Next (a done profile job carries its profile);
 // - the review: data-testid="wizard-review-findings" (data-state="ready" once the report is read), one
 //   data-testid="wizard-review-finding" data-finding="<index>" per finding (its title shown), with buttons
 //   data-testid="wizard-review-create-issue" and "wizard-review-create-issue-prioritize" (data-finding);
@@ -29,7 +31,9 @@ const jobs = (over = {}) => ({ clone: { status: 'running' }, facts: { status: 'w
 const CLI_OK = { provider: 'github', status: 'ok' };
 const CLONING = { projectId: PID, status: 'cloning', jobs: jobs(), cli: CLI_OK };
 const READY = { projectId: PID, status: 'ready', jobs: jobs({ clone: { status: 'done' } }), cli: CLI_OK };
-const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' } }), cli: CLI_OK };
+const PROFILE = { mode: 'remote', ci: 'release', tests: 'unit' };
+const ANALYZING = { projectId: PID, status: 'analyzing', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'running' } }), cli: CLI_OK };
+const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: PROFILE }, projectMap: { status: 'done' } }), cli: CLI_OK };
 
 const FINDINGS = [
   { kind: 'god-file', title: 'Checkout does too much.', severity: 'high', status: 'new', files: [{ path: 'src/checkout.js' }], evidence: 'It changes in every commit.', refactor: 'Split it.', filed: null, proposal: null },
@@ -44,14 +48,15 @@ const CITY = { state: 'ok', model: { grouping: 'folders', districts: [{ id: 'src
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-function page() {
+// analyze: what api.analyzeOnboarding (the card Analyze with AI) answers
+function page(analyze = ANALYZED) {
   let next = 70;
   return loadApp({
     api: {
       listProjects: async () => [clone(PROJECT)],
       startOnboarding: async () => clone(CLONING),
       onboardingStatus: async () => clone(ANALYZED),
-      analyzeOnboarding: async () => clone(ANALYZED),
+      analyzeOnboarding: async () => clone(analyze),
       retryOnboarding: async () => clone(CLONING),
       architectureEstimate: async () => ({ estimate: null }),
       architectureCity: async () => clone(CITY),
@@ -133,8 +138,8 @@ async function emit(app, state) {
   await app.settle(10);
 }
 
-async function atAnalysis() {
-  const app = page();
+async function atAnalysis(analyze) {
+  const app = page(analyze);
   await app.boot();
   app.sandbox.ProjectWizard.open();
   await app.settle(10);
@@ -151,6 +156,7 @@ async function atAnalysis() {
 
 async function reviewDone() {
   const app = await atAnalysis();
+  await press(app, 'wizard-workflows-choice-analyze'); // #100: the analysis is asked for by its card; Next waits for the workflows
   await emit(app, ANALYZED);
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review', 'the wizard is on the review');
@@ -163,10 +169,12 @@ const createCalls = (app) => app.callsTo('createFindingIssue').map((a) => [Strin
 // ---- the analysis ---------------------------------------------------------------------------------
 
 test('#730 the wizard\'s analysis has no ranking row (no "Refactor backlog" job)', { timeout: 20000 }, async () => {
-  const app = await atAnalysis();
+  const app = await atAnalysis(ANALYZING);
+  await press(app, 'wizard-workflows-choice-analyze'); // the job rows show while the analysis asked for runs
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
   assert.equal(cost !== null, true, 'the analysis\'s job list (data-testid="wizard-cost")');
   const parts = H.findAll(cost.outer, (e) => 'data-part' in e.attrs).map((e) => e.attrs['data-part']);
+  assert.deepEqual(parts, ['profile', 'projectMap'], 'the analyses that may cost, no ranking');
   assert.equal(parts.includes('ranking'), false, `job rows: ${parts.join(', ')}`);
   assert.equal(textOf(cost).includes('Refactor backlog'), false, `the job list: ${textOf(cost)}`);
 });
