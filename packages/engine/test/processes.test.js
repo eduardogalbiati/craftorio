@@ -44,6 +44,30 @@ test('selectProcesses: programs run from the worktree and their trees; nothing o
   ]);
 });
 
+test('selectProcesses: spare keeps another live run\'s owner and its tree, and still selects the other leftovers of the folder (#7)', (t) => {
+  const base = tempDir(t);
+  const wt = path.join(base, 'worktrees', 'run-1');
+  fs.mkdirSync(wt, { recursive: true });
+  const procs = [
+    { pid: 1, ppid: 0, exe: '/sbin/init' },
+    { pid: 11, ppid: 1, exe: '/usr/bin/node', cwd: base }, // this process (self)
+    { pid: 60, ppid: 1, exe: '/usr/bin/node', cwd: wt, cmd: '/usr/bin/node scripts/run.js --file feature.yaml' }, // a terminal run's owner
+    { pid: 61, ppid: 60, exe: '/usr/bin/node', cwd: wt, cmd: 'npm test' }, // its suite
+    { pid: 62, ppid: 61, exe: '/usr/bin/node', cwd: path.join(wt, 'web') }, // and a grandchild
+    { pid: 70, ppid: 1, exe: path.join(wt, 'node_modules', '.bin', 'watch') }, // a leftover nobody owns
+    { pid: 71, ppid: 70, exe: '/usr/bin/helper' }, // its child
+    { pid: 80, ppid: 1, exe: '/usr/bin/node', cwd: wt }, // another leftover, by cwd
+  ];
+  const found = selectProcesses(procs, wt, { self: 11, spare: [60] });
+  assert.deepEqual(found.map((p) => [p.pid, p.reason]).sort((a, b) => a[0] - b[0]), [
+    [70, 'executable'], [71, 'child'], [80, 'cwd'],
+  ]);
+  // without spare, the terminal run's processes are selected too (what #7 stopped)
+  assert.deepEqual(selectProcesses(procs, wt, { self: 11 }).map((p) => p.pid).sort((a, b) => a - b), [60, 61, 62, 70, 71, 80]);
+  // a spared pid not in the list changes nothing
+  assert.deepEqual(selectProcesses(procs, wt, { self: 11, spare: [4242] }).map((p) => p.pid).sort((a, b) => a - b), [60, 61, 62, 70, 71, 80]);
+});
+
 test('selectProcesses: case-insensitive paths match on Windows/macOS file systems only', (t) => {
   const base = tempDir(t);
   const wt = path.join(base, 'Run-1');

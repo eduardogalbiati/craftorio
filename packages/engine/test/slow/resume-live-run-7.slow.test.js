@@ -125,6 +125,44 @@ test('with no owner file, a resume checks the worktree for live processes and le
   assert.equal(reused.length, 0, "B did not reuse a worktree with live processes in it");
 });
 
+async function untilDead(pid, ms = 10000) {
+  const end = Date.now() + ms;
+  while (alive(pid) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+  return !alive(pid);
+}
+
+// #406 kept: a resume of a run that is gone (a dead owner, or one that ended) reuses its worktree
+// and stops what it left running there
+for (const [label, leaveRecord] of [
+  ['whose owner is dead', (runDir) => {
+    const dead = spawnSync(process.execPath, ['-e', '0']).pid; // exited: a dead pid on this host
+    fs.writeFileSync(path.join(runDir, 'owner.json'), JSON.stringify(ownerRecord(dead)));
+  }],
+  ['that ended (summary.json, no owner file)', (runDir) => {
+    fs.rmSync(path.join(runDir, 'owner.json'), { force: true });
+    fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ status: 'failed', error: 'stopped' }));
+  }],
+]) test(`a resume of a run ${label} reuses its worktree and stops the processes it left there`, { timeout: 90000 }, async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const a = await runningRunA(t, f, runsDir);
+  const leftover = processIn(t, a.dir);
+  leaveRecord(a.run.runDir);
+
+  const b = startRun({ runsDir, worktreesDir: f.worktrees, inputs: { repo_path: f.repo }, resume: resumeOf(runsDir, a), stopProcesses: stopProcessesIn });
+  await b.done;
+
+  const finished = b.events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished === undefined, false, 'B ended');
+  const ready = b.events.find((e) => e.type === 'worktree.ready');
+  assert.equal(ready !== undefined && samePath(ready.dir, a.dir), true, `B reused A's worktree (B: ${finished.status} ${finished.error || ''})`);
+  assert.equal(ready.reused, true);
+  assert.doesNotMatch(String(finished.error || ''), /may still be running|still running/);
+  assert.equal(await untilDead(leftover), true, 'the leftover process was stopped');
+  const stopped = b.events.filter((e) => e.type === 'worktree.processes_stopped').flatMap((e) => e.processes.filter((p) => p.stopped).map((p) => p.pid));
+  assert.equal(stopped.includes(leftover), true, 'worktree.processes_stopped reports it');
+});
+
 test("the processes stopped after a step never include another live run's process", { timeout: 90000 }, async (t) => {
   const f = fixture(t);
   const runsDir = path.join(f.tmp, 'runs');
