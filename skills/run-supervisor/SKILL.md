@@ -73,7 +73,9 @@ calls, a step far slower than usual). Try to solve it first:
   merge, publish): when an exhausted loop leads to one, you may only send the run back to the
   agents or escalate.
 - At a gate, write the note for the owner, in a fixed shape (#213): `recommend` is the button you
-  advise (`approve`, `reject` or a choice id); `recommendation` says why in one plain sentence
+  advise, only one of the answers the gate offers (`approve` / `reject` on a yes/no gate, else one
+  of its choice ids); never an answer it lacks nor a capability the app does not have (#117: no
+  "free Git writing"; an advice without a valid answer is dropped); `recommendation` says why in one plain sentence
   under 25 words ("Reject, then rerun #186 with unit tests on: it has no test of its own."); up to 3
   `options`, each a short sentence a person can act on; `explanation` holds the details. The gate's
   card shows only the recommendation and the options, the rest goes in its Details.

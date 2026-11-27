@@ -47,8 +47,9 @@ test('#72 sessions priced from tokens only, or of known cost, are not marked', (
 
 test('#72 a Codex session with no price shows no amount and its total is marked', () => {
   const { cells, total } = drawn([CODEX], {});
-  assert.equal(cells[0], '—');
-  assert.match(total, /^≈/);
+  // #117: no price reads "unknown", the total too when nothing has a price
+  assert.equal(cells[0], 'unknown');
+  assert.match(total, /unknown/);
 });
 
 test('#72 a Codex session with the user\'s price shows in its cell what it adds to the total', () => {

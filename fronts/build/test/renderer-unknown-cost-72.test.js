@@ -224,9 +224,10 @@ async function shownCosts(s, prices) {
 
 test('#72 Run screen: a Codex session with no price shows no amount in its card and its detail, and the total is marked', async () => {
   const { card, detail, total } = await shownCosts(noCost('codex'), {});
-  assert.equal(card, '—');
-  assert.equal(detail, '—');
-  assert.match(total, /^≈/);
+  // #117: no price reads "unknown", the total too when nothing has a price
+  assert.equal(card, 'unknown');
+  assert.equal(detail, 'unknown');
+  assert.match(total, /unknown/);
 });
 
 test('#72 Run screen: a Codex session with the user\'s price shows the same unmarked amount in its card, its detail and the total', async () => {

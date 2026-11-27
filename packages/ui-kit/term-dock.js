@@ -22,6 +22,14 @@ function termButtons(kind, title, blocked = '') {
   return `<span class="term-btns"><button class="btn sm ghost" data-term="${kind}" ${dis} title="${esc(t)}">${label}</button><button class="btn sm ghost term-ext" data-term="${kind}" data-ext="1" ${extBlocked ? 'disabled' : ''} title="${esc(extBlocked || I18n.t('term_dock.label_in_an_external_window', { label }))}">↗</button></span>`;
 }
 
+// Why "Open in CLI" is not available for a session right now ('' = available); the Run screen's detail.
+function cliBlocked(s) {
+  if (s.provider === 'mock') return I18n.t('run.cli_blocked_simulated');
+  if (!s.provider_session_id) return I18n.t('run.cli_blocked_first_turn');
+  if (s.status === 'active' || s.status === 'retrying') return I18n.t('run.cli_blocked_mid_turn');
+  return '';
+}
+
 // Runs a terminal button: embedded tab or external window. Returns the inline message.
 async function termAction(btn, { sessionId, runId, label }) {
   const kind = btn.dataset.term;

@@ -117,6 +117,7 @@ function runCardRow(r) {
     StatusPill: require('../status-pill.js'),
     stepName: (id) => String(id || ''), runProgressStrip: () => '',
     fmtDur: () => '1m', fmtTok: () => '10', fmtUsd: () => '$0.10', dateOf: (s) => String(s).slice(0, 10),
+    runCostText: (cost, fmt) => fmt(cost.usd, cost.approx), // #117: the run's cost text (run-list.js)
   };
   sandbox.window = sandbox;
   vm.createContext(withI18n(sandbox));

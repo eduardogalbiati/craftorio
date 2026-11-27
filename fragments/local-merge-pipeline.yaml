@@ -41,13 +41,14 @@ steps:
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     display: Merge blocked
+    # #117: in the interface language (engine.merge_blocked_*); what git and the developer said stays as it came
     message: |
-      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
+      {% filter translated('engine.merge_blocked_message', { branch: steps.develop.output.branch, base: inputs.base_branch }) %}Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:{% endfilter %}
       {{ action_error.message if action_error else '' }}
-      {% if steps.resolve_merge.output %}Developer: {{ steps.resolve_merge.output.summary }}{% endif %}
-      Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is
+      {% if steps.resolve_merge.output %}{{ 'Developer' | translated('engine.merge_blocked_developer') }}: {{ steps.resolve_merge.output.summary }}{% endif %}
+      {% filter translated('engine.merge_blocked_fix_approve', { base: inputs.base_branch }) %}Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is
       checked out), then approve to retry the merge; reject to stop the run as failed (its branch
-      keeps the work).
+      keeps the work).{% endfilter %}
     transitions:
       - when: "approved"
         merge: local

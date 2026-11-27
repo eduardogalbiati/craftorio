@@ -231,8 +231,10 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
   else if (running) intro = `The step "${step.id}" of the workflow "${wf.metadata?.name}" is still running, far longer than its usual duration. You are the supervisor on call: decide whether it keeps running or its turn is stopped, following the run-supervisor skill.`;
   let first = '- continue: nothing is stuck (e.g. the same answer is expected); the run goes on as planned.';
   if (gate) {
+    // #117: the answers with their button labels; only those, never a capability the app does not have
+    const answers = (gate.answers || []).map((a, i) => (gate.labels?.[i] ? `${a} ("${gate.labels[i]}")` : a)).join(', ');
     first = '- escalate: you cannot solve it; the gate opens for the person with your diagnosis.'
-      + `\n\nWrite the diagnosis for the owner, not for an agent (whatever your action, in case the gate opens): \`recommend\` is the button you advise (one of ${(gate.answers || []).join(', ') || 'the gate\'s answers'}); \`recommendation\` says why in plain words, one sentence under 25 words; \`options\` lists up to 3 alternatives, each one short sentence a person can act on; \`explanation\` holds the details (evidence, causes). The gate's card shows only the recommendation and the options; the explanation goes in its Details.`;
+      + `\n\nWrite the diagnosis for the owner, not for an agent (whatever your action, in case the gate opens): \`recommend\` is the button you advise (one of ${answers || 'the gate\'s answers'}: only one of the gate's own answers, never one it does not offer nor a capability the app does not have); \`recommendation\` says why in plain words, one sentence under 25 words; \`options\` lists up to 3 alternatives, each one short sentence a person can act on; \`explanation\` holds the details (evidence, causes). The gate's card shows only the recommendation and the options; the explanation goes in its Details.`;
   }
   else if (running) first = '- wait: the step can plausibly still finish (a long build, a large change); it keeps running and you may be asked again later.';
   return [

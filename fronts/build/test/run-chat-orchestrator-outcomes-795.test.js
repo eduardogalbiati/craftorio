@@ -35,7 +35,7 @@ test('a skipped check is not a failure and says why; a pass has no summary', () 
     { seq: 3, type: 'step.started', step_id: 'suite', visit: 1, step_type: 'suite', agent: null, ts: T(2) },
     { seq: 4, type: 'step.finished', step_id: 'suite', visit: 1, ts: T(3), output: { status: 'pass', message: 'ok' } },
   ]);
-  assert.equal(orch(m, 'baselines')[0].state, 'passed');
+  assert.equal(orch(m, 'baselines')[0].state, 'skipped'); // #117: skipped reads Skipped, not Passed
   assert.equal(orch(m, 'baselines')[0].summary, 'Baseline check skipped: the run names no issue.');
   assert.equal(orch(m, 'suite')[0].summary, null);
 });

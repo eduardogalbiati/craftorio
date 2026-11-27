@@ -437,9 +437,10 @@ steps:
 
   - id: merge_blocked
     type: human_approval
+    # #117: in the interface language (engine.merge_blocked_local_*); what git said stays as it came
     message: |
-      The local merge into {{ inputs.base_branch }} failed: {{ action_error.message if action_error else 'unknown error' }}
-      Approve: try the merge again (after you resolved it, e.g. committed the changes in your checkout of {{ inputs.base_branch }}). Reject: stop the run as failed (the worktree and the branch are kept).
+      {% filter translated('engine.merge_blocked_local_failed', { base: inputs.base_branch }) %}The local merge into {{ inputs.base_branch }} failed:{% endfilter %} {{ action_error.message if action_error else 'unknown error' }}
+      {% filter translated('engine.merge_blocked_local_choices', { base: inputs.base_branch }) %}Approve: try the merge again (after you resolved it, e.g. committed the changes in your checkout of {{ inputs.base_branch }}). Reject: stop the run as failed (the worktree and the branch are kept).{% endfilter %}
     transitions:
       - when: "approved and inputs.document == 'plan'"
         merge: local

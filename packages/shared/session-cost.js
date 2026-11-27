@@ -73,7 +73,7 @@
   function turnCost(ev) {
     const unknown = ev.cost_usd == null && ev.cost_source === 'unknown';
     const none = ev.cost_usd === null && !ev.cost_source && !ev.cost_not_recorded && ev.session?.provider !== 'mock';
-    return { usd: Number(unknown ? ev.cli_cost_usd : ev.cost_usd) || 0, approx: unknown || none, unknown: none };
+    return { usd: Number(unknown ? ev.cli_cost_usd : ev.cost_usd) || 0, approx: unknown || none, ...(none ? { unknown: true } : {}) };
   }
 
   const api = {

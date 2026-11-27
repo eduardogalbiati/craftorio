@@ -2853,19 +2853,20 @@ steps:
   - id: merge_blocked
     type: human_approval
     kind: escalation   # the supervisor on call tries first
+    # #117: in the interface language (engine.merge_blocked_*); what git and the developer said stays as it came
     summary: |
-      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`{% if steps.resolve_merge.output %} and the developer could not resolve it{% endif %}.
+      {% if steps.resolve_merge.output %}{% filter translated('engine.merge_blocked_unresolved', { branch: steps.develop.output.branch, base: inputs.base_branch }) %}Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}` and the developer could not resolve it.{% endfilter %}{% else %}{% filter translated('engine.merge_blocked_summary', { branch: steps.develop.output.branch, base: inputs.base_branch }) %}Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`.{% endfilter %}{% endif %}
       {% if action_error %}- ✖ {{ action_error.message | one_line(120) }}
-      {% endif %}{% if steps.resolve_merge.output %}- Developer: {{ steps.resolve_merge.output.summary | one_line(120) }}{% endif %}
-    recommend: "retry: fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry the merge."
+      {% endif %}{% if steps.resolve_merge.output %}- {{ 'Developer' | translated('engine.merge_blocked_developer') }}: {{ steps.resolve_merge.output.summary | one_line(120) }}{% endif %}
+    recommend: "retry: {% filter translated('engine.merge_blocked_recommend', { base: inputs.base_branch }) %}fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry the merge.{% endfilter %}"
     message: |
-      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
+      {% filter translated('engine.merge_blocked_message', { branch: steps.develop.output.branch, base: inputs.base_branch }) %}Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:{% endfilter %}
       {{ action_error.message if action_error else '' }}
-      {% if steps.resolve_merge.output %}Developer: {{ steps.resolve_merge.output.summary }}{% endif %}
-      Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry.
+      {% if steps.resolve_merge.output %}{{ 'Developer' | translated('engine.merge_blocked_developer') }}: {{ steps.resolve_merge.output.summary }}{% endif %}
+      {% filter translated('engine.merge_blocked_fix', { base: inputs.base_branch }) %}Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry.{% endfilter %}
     choices:
-      - { id: retry, label: "Retry the merge", help: "Tries the merge into the local {{ inputs.base_branch }} again; a conflict goes back to the developer." }
-      - { id: stop,  label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
+      - { id: retry, label: "Retry the merge", label_key: engine.merge_blocked_retry, help: "Tries the merge into the local base branch again; a conflict goes back to the developer.", help_key: engine.merge_blocked_retry_help }
+      - { id: stop,  label: "Stop the run as failed (branch kept to resume)", label_key: engine.merge_blocked_stop, help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it.", help_key: engine.merge_blocked_stop_help }
     transitions:
       - when: "choice == 'retry'"
         merge: local

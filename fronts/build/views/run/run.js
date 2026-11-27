@@ -915,14 +915,6 @@ function reasoningNote(s) {
   return `<p class="muted small" data-testid="session-reasoning-note">${t('run.reasoning_not_shown')}</p>`;
 }
 
-// Why "Open in CLI" is not available for a session right now ('' = available).
-function cliBlocked(s) {
-  if (s.provider === 'mock') return t('run.cli_blocked_simulated');
-  if (!s.provider_session_id) return t('run.cli_blocked_first_turn');
-  if (s.status === 'active' || s.status === 'retrying') return t('run.cli_blocked_mid_turn');
-  return '';
-}
-
 function renderEvents() {
   const box = $('#tab-events');
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;

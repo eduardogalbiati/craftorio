@@ -89,7 +89,8 @@ function gateBrief({ message = '', summary = '', recommend = '', diagnosis = nul
   let recommendation = null;
   if (diagnosis && (diagnosis.recommend || diagnosis.recommendation)) {
     const id = diagnosis.recommend ? ids.find((a) => a.toLowerCase() === String(diagnosis.recommend).toLowerCase()) : null;
-    recommendation = { answer: id || null, reason: clip(plain(diagnosis.recommendation || ''), REASON_MAX), source: 'supervisor' };
+    // #117: a supervisor advising an answer the gate does not offer: no recommendation on the card
+    if (!(diagnosis.recommend && ids.length && !id)) recommendation = { answer: id || null, reason: clip(plain(diagnosis.recommendation || ''), REASON_MAX), source: 'supervisor' };
   } else {
     const p = parseRecommend(recommend, ids);
     if (p) recommendation = { ...p, source: 'workflow' };

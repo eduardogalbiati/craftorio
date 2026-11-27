@@ -35,6 +35,20 @@ const median = (xs) => {
   return s[Math.floor(s.length / 2)];
 };
 
+// The supervisor's diagnosis kept for an escalation gate (#213). #117: a recommendation of an answer the
+// gate does not offer is dropped with its reason (it advised "Approve" with a capability the app lacks
+// at a retry/stop gate).
+function gateDiagnosis(d, answers) {
+  const offered = answers.includes(d.recommend);
+  return {
+    explanation: d.explanation,
+    recommend: offered ? d.recommend : null,
+    recommendation: ((offered || !d.recommend) && d.recommendation) || null,
+    options: Array.isArray(d.options) ? d.options.filter((o) => typeof o === 'string' && o.trim()).slice(0, 3) : null,
+    user_action: d.user_action || null,
+  };
+}
+
 const methods = {
   // ---- stall detection and the supervisor on call (#41) ---------------------------------------
   // Stall signals of an agent step's visit (deterministic, no tokens): the same decision N visits in a
@@ -217,18 +231,14 @@ const methods = {
     const retryStep = steps.includes(prev) ? prev : null;
     // answers: what the supervisor may recommend to the person (#213), the gate's buttons
     const answers = step.choices ? step.choices.map((c) => c.id) : ['approve', 'reject'];
+    // #117: each answer's button label too, so the supervisor advises one of them by name
+    const labels = (step.choices || []).map((c) => this.gateText(step, c.label || ''));
     // recommend (#71): the gate's own advice, so the supervisor agrees with it or says why not
-    const gate = { message: render(step.message, this.ctx).trim(), recommend: this.gateText(step, step.recommend), routes, answers, transitions, decision };
+    const gate = { message: render(step.message, this.ctx).trim(), recommend: this.gateText(step, step.recommend), routes, answers, labels, transitions, decision };
     const actions = decision ? supervisor.ESCALATION_ACTIONS.filter((a) => a !== 'route') : supervisor.ESCALATION_ACTIONS;
     const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions });
     if (!d) return null;
-    st.lastDiagnosis = {
-      explanation: d.explanation,
-      recommend: answers.includes(d.recommend) ? d.recommend : null,
-      recommendation: d.recommendation || null,
-      options: Array.isArray(d.options) ? d.options.filter((o) => typeof o === 'string' && o.trim()).slice(0, 3) : null,
-      user_action: d.user_action || null,
-    };
+    st.lastDiagnosis = gateDiagnosis(d, answers);
     const evidence = gate.message.slice(0, 300);
     if (d.action === 'retry' || d.action === 'resume') {
       const target = d.action === 'retry' ? retryStep : d.step;
