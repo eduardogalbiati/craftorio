@@ -4,13 +4,15 @@
 // to it; demoConflictMap, also on views/project.js), the release run of --release (#291), the Product
 // Owner's conversation, a Backlog Refresh run, the committed cards (views/discovery.js), an issue
 // enriched by Write & Review (demoEnrichRun, also on Artifacts and Duo), the tests known to fail on
-// the base (#405, demoBaseFailures) and the project's package.json. Opens the Backlog, or the Roadmap screen in its roadmap mode (views/roadmap.js).
+// the base (#405, demoBaseFailures), two outside issues with the PO's verdicts (#90, helpers.js
+// demoOutsideIssues) and the project's package.json. Opens the Backlog, or the Roadmap screen in its roadmap mode (views/roadmap.js).
 
 const fs = require('fs');
 const path = require('path');
 const {
   DEMO_ISSUES,
   DEMO_REPO,
+  demoOutsideIssues,
   gitRepo,
   writeDemoPackage,
 } = require('../helpers');
@@ -221,7 +223,9 @@ function demoBaseFailures(ws, projectId) {
   }, null, 2));
 }
 
-function seed({ args, ws, project, projects }) {
+function seed({ args, ws, project, projects, src }) {
+  // #90: the outside issues waiting for the owner's Approve, one quarantined, with the PO's verdicts
+  demoOutsideIssues(ws, project.id, src('domains/backlog/backlog'));
   demoLocalMerge(ws, project.id);
   // #260: the "Released" badge on the issues the history shipped
   demoReleases(ws, project.id);

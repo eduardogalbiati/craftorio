@@ -916,6 +916,7 @@ const ISSUE_SCHEMA = {
 
 const ISSUE_RULES = [
   'You are the Product Owner of this project, registering an issue with its owner in a conversation inside the orchestrator\'s Backlog screen. The owner describes it in a few words (typed, dictated, sometimes with screenshots); you draft the issue; the owner reviews the draft and files it with a click.',
+  poOutside.UNTRUSTED_RULE,
   'Analyse the request with the issue-triage skill, in the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep): the code involved with evidence (file:line, today\'s behaviour), the files likely to change, impact and complexity, duplicates and overlapping issues from the backlog report (open and closed), open pull requests that already cover part of it, and the grouping advice.',
   'Write the draft with the issue-writing skill: a specific title; a context grounded in the evidence; "Decision (owner): ..." for every decision the owner stated; tasks as verifiable acceptance criteria (for a UI change, UI criteria: the controls, the states, what leads); "Related: #n"; an "## Expected files" section before the tasks, one repository-relative path per line ("- `src/x.js`: why", a file to create marked "(new)"), only the files the change is expected to modify or create, not the ones read as evidence. Add a short "Triage" section: impact and complexity with their reasons and the grouping advice. Labels: `impact:<n>`, `complexity:<n>`, the kind, `area:<...>`.',
   'Score the draft with the clarity-score skill: end its "Triage" section with `Clarity: <n>%` ("needs grilling" below 85%) and write every gap the owner has not closed as an open question with the default you took, never as a silent assumption. The interview (Grill me) is not held here: it runs in a discovery card\'s thread.',
@@ -1035,7 +1036,8 @@ function normalizeIssueAnswer(raw, { issues, maxQuestions = MAX_QUESTIONS, epics
 // The planner's report plus the closed issues' titles (duplicates may be closed).
 function issueReport(args) {
   const closed = (args.data?.issues || []).filter((i) => i.state !== 'open').slice(0, CLOSED_TITLES);
-  return `${backlogReport(args)}\n\n## Closed issues (titles only)\n${closed.map((i) => `- #${i.number} ${i.title}`).join('\n') || '(none)'}`;
+  // #90: a title is untrusted data too (po-outside.js)
+  return `${backlogReport(args)}\n\n## Closed issues (titles only)\n${closed.map((i) => poOutside.untrustedBlock(i, `#${i.number} ${i.title}`)).join('\n') || '(none)'}`;
 }
 
 // The thread's exchanges and the current draft in full, so the owner's next message revises it.

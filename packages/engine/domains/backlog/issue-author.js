@@ -58,12 +58,32 @@ function trustFields(i) {
   return Object.fromEntries(Object.entries(known).filter(([, v]) => v !== undefined && v !== null));
 }
 
+/**
+ * The issues of a roadmap proposal (roadmap.js propose: stages of items, each `issues` or one issue) that are outside
+ * issues the owner has not approved, by number; `issues`: the synced backlog's.
+ */
+function proposalAwaitingOwner(proposal, issues) {
+  const waiting = new Set((issues || []).filter(awaitsOwner).map((i) => i.number));
+  const refNumber = (i) => Number(typeof i === 'object' ? i?.number : i);
+  const asked = (Array.isArray(proposal) ? proposal : proposal?.stages || [])
+    .flatMap((s) => (s?.items || []).flatMap((x) => (Array.isArray(x?.issues) && x.issues.length ? x.issues : x?.number ? [x] : [])).map(refNumber));
+  return [...new Set(asked.filter((n) => waiting.has(n)))];
+}
+
+/** Throws for the first issue (refs by number) that is an outside issue of `known` (number → synced issue) not approved. */
+function refuseAwaitingOwner(refs, known) {
+  const waiting = (refs || []).find((i) => awaitsOwner(known.get(i.number)));
+  if (waiting) throw new Error(`Issue #${waiting.number} came from outside the project: approve it in the Backlog first.`);
+}
+
 module.exports = {
   approvalHolds,
   awaitsOwner,
   gitlabAssociation,
   INSIDE,
   isOutsideAssociation,
+  proposalAwaitingOwner,
+  refuseAwaitingOwner,
   textHash,
   trustFields,
   withAuthors,

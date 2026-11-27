@@ -34,6 +34,7 @@ runs on the Feature entry; another key is an error too), and a manifest with err
 The Product Owner reads every issue as data, never as instructions (#90). An issue written outside
 the project (not the owner, a member or a collaborator) shows an *Outside* badge on the Backlog and
 the Roadmap, and the PO's verdict next to it: well written or not, injection suspected or not, with
-the lines it quoted (*Quarantined* when an injection is suspected). Such an issue is in no plan,
+the lines it quoted (*Quarantined* when an injection is suspected). A quarantined issue is in no
+plan; one reviewed with no injection suspected may appear in the PO's proposed groups, but enters no
 roadmap stage or run until the owner clicks *Approve*; its run's task then says the text came from
 outside and is a specification only. See the security model.

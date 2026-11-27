@@ -63,7 +63,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('../backlog/issues');
-const { awaitsOwner, trustFields } = require('../backlog/issue-author');
+const { proposalAwaitingOwner, refuseAwaitingOwner, trustFields } = require('../backlog/issue-author');
 const { normalizeThen } = require('@craftorio/shared/chain-model');
 const { isArchived } = require('@craftorio/shared/backlog-archive');
 const { dropWaitingSuffix } = require('../refactor/refactor-cadence');
@@ -276,9 +276,7 @@ function cleanItem(raw, known, previous) {
   const held = new Set(old ? itemIssues(old).map((i) => i.number) : []);
   const archived = issues.find((i) => !held.has(i.number) && isArchived(known.get(i.number)));
   if (archived) throw new Error(`Issue #${archived.number} is archived: restore it in the Backlog before planning it.`);
-  // #90: an outside issue the owner has not approved cannot join an item either (the PO's groups, the Oracle's stages)
-  const waiting = issues.find((i) => !held.has(i.number) && awaitsOwner(known.get(i.number)));
-  if (waiting) throw new Error(`Issue #${waiting.number} came from outside the project: approve it in the Backlog first.`);
+  refuseAwaitingOwner(issues.filter((i) => !held.has(i.number)), known); // #90: nor an unapproved outside one
   const state = old || { status: 'planned', runId: null, runs: [], error: null };
   const reason = String(raw.reason ?? old?.reason ?? '').trim();
   const modeReason = String(raw.modeReason ?? raw.mode_reason ?? old?.modeReason ?? '').trim();
@@ -480,14 +478,10 @@ function insertFrontStage(dir, projectId, raw) {
  * @param {{ replace?: boolean, issues?: any[] | null, alive?: Alive, keepRunning?: boolean }} [options]
  */
 function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null, keepRunning = false } = {}) {
-  // #238: archived issues are left out of a proposal, #90: outside issues the owner has not approved too (listed in
-  // `awaitingOwner`, so a caller says so); the rest is kept
-  const waiting = new Set((issues || []).filter(awaitsOwner).map((i) => i.number));
-  const archived = new Set([...(issues || []).filter(isArchived).map((i) => i.number), ...waiting]);
+  // #238: archived issues are left out of a proposal, #90: unapproved outside ones too (awaitingOwner); the rest is kept
+  const awaitingOwner = proposalAwaitingOwner(proposal, issues);
+  const archived = new Set([...(issues || []).filter(isArchived).map((i) => i.number), ...awaitingOwner]);
   const refNumber = (i) => Number(typeof i === 'object' ? i?.number : i);
-  const asked = (Array.isArray(proposal) ? proposal : proposal?.stages || [])
-    .flatMap((s) => (s?.items || []).flatMap((x) => (Array.isArray(x?.issues) && x.issues.length ? x.issues : x?.number ? [x] : [])).map(refNumber));
-  const awaitingOwner = [...new Set(asked.filter((n) => waiting.has(n)))];
   const stages = (Array.isArray(proposal) ? proposal : proposal?.stages || []).map((s) => ({
     ...s,
     items: (s?.items || []).map((x) => {
