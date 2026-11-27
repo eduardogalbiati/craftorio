@@ -34,7 +34,7 @@
 (function () {
   const WORKFLOW_KINDS = ['feature', 'fix', 'release', 'ci'];
 
-  window.ProjectWizardColumn = function ({ costHint, cur, jobOf, phasesHtml, renderSoon }) {
+  window.ProjectWizardColumn = function ({ costHint, cur, icons, jobOf, phasesHtml, renderSoon }) {
     const M = window.OnboardingModel;
     const jobReason = (job) => {
       const reason = job?.reason || job?.error || t('onboarding.no_reason');
@@ -162,8 +162,11 @@
       const cost = id === 'analyze' && !inline ? costHint() : '';
       return cost ? `<span class="muted small" data-testid="wizard-workflows-choice-cost">${esc(cost)}</span>` : '';
     };
+    // a card's icon (16px strokes, as the create step's tiles): a magnifier for Analyze, sliders for Define manually
+    const CHOICE_ICON = { analyze: 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9M10.5 10.5 14 14', manual: 'M2.5 4.5h4M10.5 4.5h3M2.5 11.5h3M9.5 11.5h4M8.5 3v3M7.5 10v3' };
+    const choiceIcon = (id) => `<span class="wizard-tile-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="${CHOICE_ICON[id]}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
     const choiceButton = (id, inline = false) => `<button type="button" class="${inline ? 'btn' : 'card wizard-workflows-choice'}" data-act="workflows-${id}" data-testid="wizard-workflows-choice-${id}">
-        <strong>${esc(t(`onboarding.workflows_choice_${id}`))}${id === 'analyze' ? recommended() : ''}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}${choiceCost(id, inline)}</button>`;
+        ${inline ? '' : choiceIcon(id)}<strong>${esc(t(`onboarding.workflows_choice_${id}`))}${id === 'analyze' ? recommended() : ''}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}${choiceCost(id, inline)}</button>`;
 
     // by its state: the two choices first; then the rows, dimmed under a loading notice while the profile
     // job runs, with the profile's reasons once it is done, without reasons when defined by hand; a failed
@@ -177,6 +180,22 @@
         const attrs = `data-testid="wizard-workflow-select" data-workflow-kind="${esc(kind)}" aria-label="${esc(t(`onboarding.workflow_${kind}`))}"${busy ? ' disabled' : ''}`;
         return window.Select.markup(attrs, choices.map((c) => [c.value, textOf(c.label)]), value);
       };
+      // a row's choices as tiles (an icon, the label's first part as the title, the rest as its line), the picked
+      // one aria-pressed; a click picks it (data-act="workflow-pick"). The row's select stays for assistive tech and
+      // the tests, not shown. The icon: what the variant tests first (feature, fix: its title says the mode), else the
+      // value's own (release, CI)
+      const tiles = (kind, choices, value) => {
+        const iconOf = (v) => { const set = icons?.() || {}; return (kind === 'release' || kind === 'ci' ? set[kind]?.[v] : set.tests?.[String(v).endsWith('e2e') ? 'e2e' : 'code']) || ''; };
+        const tile = (c) => {
+          // the label's first part is the title, the rest its line; the whole label is the tooltip
+          const label = textOf(c.label);
+          const [title, ...rest] = label.split(' · ');
+          return `<button type="button" class="wizard-workflow-tile" title="${esc(label)}" data-act="workflow-pick" data-kind="${esc(kind)}" data-value="${esc(c.value)}" data-testid="wizard-workflow-tile" aria-pressed="${c.value === value}"${busy ? ' disabled' : ''}>
+            <span class="wizard-tile-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="${iconOf(c.value)}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="wizard-tile-title">${esc(title)}</span>${rest.length ? `<span class="wizard-tile-text">${esc(rest.join(' · '))}</span>` : ''}</button>`;
+        };
+        return `<div class="wizard-workflow-tiles" role="group" aria-label="${esc(t(`onboarding.workflow_${kind}`))}" data-count="${choices.length}">${choices.map(tile).join('')}</div>`;
+      };
       const row = (kind) => {
         const s = all.find((x) => x.id === kind);
         // #726: "Why:" its own highlighted label, the reason after it in the interface's language
@@ -185,6 +204,7 @@
         return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="${esc(kind)}">
           <label class="wizard-workflow-head"><strong>${esc(t(`onboarding.workflow_${kind}`))}</strong>
             ${select(kind, s.choices, cur().workflows?.[kind] || s.value)}</label>
+          ${tiles(kind, s.choices, cur().workflows?.[kind] || s.value)}
           ${reason}
         </li>`;
       };
@@ -198,13 +218,16 @@
         return `<li class="card wizard-workflow" data-testid="wizard-workflow" data-kind="default">
           <label class="wizard-workflow-head"><strong>${esc(t('onboarding.workflow_default'))}</strong>
             ${window.Select.markup(attrs, names.map((n) => [n, n]), bare(cur().workflows?.default) || bare(manifest.default))}</label>
-          <p class="muted small wizard-workflow-reason">${esc(t('onboarding.workflow_default_hint'))}</p>
+          ${awaitingNotice('row') || `<p class="muted small wizard-workflow-reason">${esc(t('onboarding.workflow_default_hint'))}</p>`}
         </li>`;
       };
-      const head = `<h3>${esc(t('onboarding.workflows_title'))}</h3>
-        <p class="muted">${esc(t(at === 'choose' ? 'onboarding.workflows_choose_line' : suggestionsKey(), { name }))}</p>`;
+      const head = `<h3 class="sr-only">${esc(t('onboarding.workflows_title'))}</h3>
+        <p class="${at === 'choose' ? 'wizard-question-title' : 'muted'}">${esc(t(at === 'choose' ? 'onboarding.workflows_choose_line' : at === 'manual' ? 'onboarding.workflows_line_manual' : suggestionsKey(), { name }))}</p>`;
       let body;
-      if (at === 'choose') body = `<div class="wizard-workflows-choices">${choiceButton('analyze')}${choiceButton('manual')}</div>`;
+      // the acceptance notice closes the column; with the rows it scrolls with them (only the rows' area scrolls)
+      let notice = awaitingNotice();
+      // the two ways in stand alone: the default's acceptance is said with the rows
+      if (at === 'choose') { body = `<div class="wizard-workflows-choices">${choiceButton('analyze')}${choiceButton('manual')}</div>`; notice = ''; }
       else if (at === 'failed') {
         const job = jobOf('profile');
         // Retry: the engine's retry runs a failed profile job again, and one done without a valid profile
@@ -221,10 +244,11 @@
         // #781: once analyzed in this wizard the lines stay, ended, with what they found (a new project's rows have no analysis)
         const ended = at === 'analyzed' && cur().workflowsMode === 'analyze' ? phasesHtml() : '';
         // Define manually keeps Analyze the repository on offer
-        const analyze = at === 'manual' ? `<div class="wizard-workflows-choices">${choiceButton('analyze')}</div>` : '';
-        body = `${ended}${busy ? '' : wayOfWorking()}<div class="wizard-workflows-stage">${list}${overlay}</div>${analyze}`;
+        const analyze = at === 'manual' ? `<div class="wizard-workflows-choices compact">${choiceButton('analyze')}</div>` : '';
+        body = `${ended}${busy ? '' : wayOfWorking()}<div class="wizard-workflows-scroll"><div class="wizard-workflows-stage">${list}${overlay}</div>${notice && !cur().manifest?.default ? awaitingNotice('short') : ''}</div>${analyze}`;
+        notice = '';
       }
-      return `<div class="wizard-column wizard-workflows-column" data-testid="wizard-workflows-column" data-state="${at}">${head}${awaitingNotice()}${body}
+      return `<div class="wizard-column wizard-workflows-column" data-testid="wizard-workflows-column" data-state="${at}">${head}${body}${notice}
         <p class="muted small">${esc(t('onboarding.workflows_more'))}</p></div>`;
     }
 
@@ -240,11 +264,18 @@
 
     // #40: step 3 and the review say that default must be reviewed and accepted before it runs (Workflows ›
     // Definitions at its file, data-act="review-accept"); acceptance stays the owner's click there
-    function awaitingNotice() {
+    // `where` 'row': inside the Default row, in its hint's place (one short sentence and the button); 'short': under
+    // the rows when the repository's manifest gives no Default row; else the whole sentence (the review)
+    function awaitingNotice(where = '') {
       const found = awaitingDefault();
       if (!found) return '';
+      if (where === 'row') {
+        return `<p class="small wizard-default-awaiting" data-testid="wizard-default-awaiting-acceptance"><span>${esc(t('onboarding.default_awaiting_inline'))}</span>
+            <button type="button" class="btn sm" data-act="review-accept" data-file="${esc(found.entry.file)}" data-testid="wizard-default-review-accept">${esc(t('onboarding.review_and_accept'))}</button></p>`;
+      }
+      const key = where === 'short' ? 'onboarding.default_awaiting_short' : 'onboarding.default_awaiting_acceptance';
       return `<div class="wizard-alert warn" data-testid="wizard-default-awaiting-acceptance">
-          <span>${esc(t('onboarding.default_awaiting_acceptance', { name: found.name }))}</span>
+          <span>${esc(t(key, { name: found.name }))}</span>
           <div class="wizard-actions"><button type="button" class="btn sm" data-act="review-accept" data-file="${esc(found.entry.file)}" data-testid="wizard-default-review-accept">${esc(t('onboarding.review_and_accept'))}</button></div>
         </div>`;
     }
@@ -309,6 +340,9 @@
 
     return {
       awaitingNotice,
+      // #100: the workflows are defined once their rows show (by hand, or the analysis asked for)
+      defined: () => !['choose', 'failed'].includes(columnState()),
+      state: () => columnState(),
       cliWarning,
       forkNotice,
       forkPending,

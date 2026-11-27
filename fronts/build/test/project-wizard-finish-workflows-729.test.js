@@ -6,6 +6,8 @@
 // The contract assumed here:
 // - step 3's selects (data-testid="wizard-workflow-select" data-workflow-kind="feature|fix|release|ci")
 //   keep the owner's pick (the profile's suggestion when untouched);
+// - visual-layout rework: each row also offers its choices as tiles, data-testid="wizard-workflow-tile"
+//   data-kind data-value, the picked one aria-pressed="true"; a click on a tile is the same pick as the select's;
 // - Finish calls api.updateProject(projectId, { workflows, defaultWorkflow }) once, workflows being the
 //   bundled feature, fix and release, one entry each { name: 'feature' | 'fix' | 'release', origin,
 //   category?, variant: <the select's value> } (variant: e.g. 'remote-code', 'train'), the CI pick
@@ -184,6 +186,71 @@ test('#729 Finish saves the workflows picked in step 3 with their variants, the 
   assert.equal(patch.defaultWorkflow, 'feature', 'the feature workflow is the default');
 });
 
+// ---- the tiles (visual-layout rework): the same pick as the select's ---------------------------------------
+
+const KINDS = ['feature', 'fix', 'release', 'ci'];
+const isTile = (e, kind) => e.attrs['data-testid'] === 'wizard-workflow-tile' && e.attrs['data-kind'] === kind;
+const tilesOf = (app, kind) => H.findAll(wizardMarkup(app), (e) => isTile(e, kind));
+const pressedOf = (app, kind) => tilesOf(app, kind).filter((e) => e.attrs['aria-pressed'] === 'true').map((e) => e.attrs['data-value']);
+const selectOf = (app, kind) => H.findEl(wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-workflow-select' && e.attrs['data-workflow-kind'] === kind);
+const optionsOf = (app, kind) => H.findAll(selectOf(app, kind)?.inner || '', (e) => e.name === 'option');
+const selectedOf = (app, kind) => optionsOf(app, kind).find((o) => 'selected' in o.attrs)?.attrs.value ?? null;
+async function pressTile(app, kind, value) {
+  const tile = tilesOf(app, kind).find((e) => e.attrs['data-value'] === value);
+  assert.ok(tile, `step 3 has the ${kind} tile ${value}`);
+  await clickRendered(app, tile, ['#project-wizard']);
+  await app.settle(10);
+}
+
+test('#729 each row offers its select\'s choices as tiles, the profile\'s suggestion pressed', { timeout: 30000 }, async () => {
+  const app = await atWorkflows();
+  for (const kind of KINDS) {
+    assert.deepEqual(tilesOf(app, kind).map((e) => e.attrs['data-value']), optionsOf(app, kind).map((o) => o.attrs.value), `the ${kind} tiles are the select's options`);
+    assert.equal(tilesOf(app, kind).length >= 2, true, `${kind}: at least two tiles`);
+    assert.deepEqual(pressedOf(app, kind), [selectedOf(app, kind)], `${kind}: one tile pressed, the select's value`);
+    assert.equal(tilesOf(app, kind).every((e) => e.name === 'button' && !('disabled' in e.attrs)), true, `${kind}: enabled buttons`);
+  }
+  assert.deepEqual(KINDS.map((kind) => pressedOf(app, kind)[0]), ['remote-e2e', 'remote-e2e', 'milestone', 'release']);
+});
+
+test('#729 a click on a wizard-workflow-tile picks the variant: aria-pressed, the select\'s value, and what Finish saves', { timeout: 30000 }, async () => {
+  const app = await atWorkflows();
+  await pressTile(app, 'feature', 'remote-code');
+  assert.deepEqual(pressedOf(app, 'feature'), ['remote-code'], 'the clicked tile is the only one pressed');
+  assert.equal(selectedOf(app, 'feature'), 'remote-code', 'the feature select follows');
+  assert.deepEqual(pressedOf(app, 'fix'), ['remote-e2e'], 'the other rows keep their pick');
+  await pressTile(app, 'fix', 'local-e2e');
+  await pressTile(app, 'release', 'train');
+  await pressTile(app, 'ci', 'pr+release');
+  assert.deepEqual(KINDS.map((kind) => pressedOf(app, kind)), [['remote-code'], ['local-e2e'], ['train'], ['pr+release']]);
+  assert.deepEqual(KINDS.map((kind) => selectedOf(app, kind)), ['remote-code', 'local-e2e', 'train', 'pr+release']);
+  await finish(app);
+  const patch = savedPatch(app);
+  assert.deepEqual((patch.workflows || []).map((w) => w?.name), ['feature', 'fix', 'release'], 'feature, fix and release');
+  assert.equal(entry(patch, 'feature')?.variant, 'remote-code', 'feature\'s variant');
+  assert.equal(entry(patch, 'fix')?.variant, 'local-e2e', 'fix\'s variant');
+  assert.equal(entry(patch, 'release')?.variant, 'train', 'release\'s variant');
+  assert.equal(entry(patch, 'release')?.ci, 'pr+release', `the CI choice is saved: ${JSON.stringify(patch)}`);
+  assert.equal(patch.defaultWorkflow, 'feature', 'the feature workflow is the default');
+});
+
+test('#729 a tile click after a select pick (and the reverse): the last one wins, on the tiles, the select and at Finish', { timeout: 30000 }, async () => {
+  const app = await atWorkflows();
+  await pickVariant(app, 'feature', 'local-code');
+  await pressTile(app, 'feature', 'local-e2e');
+  await pressTile(app, 'release', 'train');
+  await pickVariant(app, 'release', 'per-merge');
+  await pressTile(app, 'fix', 'remote-code'); // a render: the select's pick of release shows on its tiles
+  assert.deepEqual(pressedOf(app, 'feature'), ['local-e2e']);
+  assert.deepEqual(pressedOf(app, 'release'), ['per-merge']);
+  assert.equal(selectedOf(app, 'release'), 'per-merge');
+  await finish(app);
+  const patch = savedPatch(app);
+  assert.equal(entry(patch, 'feature')?.variant, 'local-e2e');
+  assert.equal(entry(patch, 'fix')?.variant, 'remote-code');
+  assert.equal(entry(patch, 'release')?.variant, 'per-merge');
+});
+
 test('#729 Finish with step 3 untouched saves the profile\'s suggestions', { timeout: 30000 }, async () => {
   const app = await atWorkflows();
   await finish(app);
@@ -238,7 +305,7 @@ test('#729 after Finish, the project page shows the three cards with the variant
   const cards = cardsOn(app);
   assert.deepEqual(cards.map((c) => c.id), ['feature', 'fix', 'release'], 'one card per workflow picked');
   const feature = cards.find((c) => c.id === 'feature').text;
-  assert.equal(feature.includes('Remote PRs · code first'), true, `feature's variant: ${feature}`);
+  assert.equal(feature.includes('Remote PR · code first'), true, `feature's variant: ${feature}`); // onboarding.choice_feature_remote_code, reworded (singular)
   const release = cards.find((c) => c.id === 'release').text;
   assert.equal(release.includes('CI: On pull requests and releases'), true, `release's CI pick: ${release}`);
 });

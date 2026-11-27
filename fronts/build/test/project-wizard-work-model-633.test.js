@@ -4,19 +4,23 @@
 // (packages/ui-kit/test/renderer-app-harness.js), driven as project-wizard-helpers.js,
 // project-wizard-finish-workflows-729.test.js and projects-resume-741.test.js drive the wizard.
 //
+// Updated for the visual-layout rework (the owner's decisions, 2026-11-26): the section shows with the workflow
+// rows only (an import: after Define manually or the analysis), its texts were reworded, and Standard and Full are
+// not ready yet: disabled, each marked "Coming soon" (data-testid="wizard-work-model-soon").
+//
 // The interface assumed here (the developer implements these names):
-// - step 3 has a section data-testid="wizard-work-model": a heading "How work on <project name> is
-//   documented", the subtitle "Each step leaves a file the next step reads, and a person approves it.",
+// - step 3, once the workflow rows show, has a section data-testid="wizard-work-model": a heading "How the work is
+//   documented", the subtitle "How much each step writes down for the next one to read and a person to approve.",
 //   and three radios (input type="radio" or role="radio") data-testid="wizard-work-model-light",
 //   "wizard-work-model-standard", "wizard-work-model-full", in that order, labelled Light, Standard, Full
-//   with mock-5's descriptions; Light is checked by default (#851) (`checked` or aria-checked="true");
-// - next to it, data-testid="wizard-work-model-files", "Where the files live": "In the repository", the
-//   path "docs/work/<item>/" with intent.md, spec.md, plan.md (no .html: D16, no HTML is committed), and
-//   the chips "fix: issue only", "feature: Standard", "release: notes";
-// - a click (or a change event) on a radio picks it; Finish's api.updateProject patch carries
-//   workModel: 'light' | 'standard' | 'full';
+//   with their descriptions; Light is checked by default (#851) (`checked` or aria-checked="true"); Standard and
+//   Full are disabled with wizard-work-model-soon; no section while the two choices show;
+// - data-testid="wizard-work-model-files", "Where the files live" (docs/work/<item>/, the chips), showed for
+//   Standard and Full only (#851): with both disabled it never shows;
+// - a click (or a change event) on Light picks it; one on Standard or Full changes nothing; Finish's
+//   api.updateProject patch carries workModel: 'light';
 // - the pick is one of the wizard's saved picks (api.saveOnboardingWizard({ projectId, step, picks }),
-//   picks.workModel), and a resumed wizard (the onboarding state's wizard.picks.workModel) shows it checked.
+//   picks.workModel); a resumed wizard whose saved pick is Standard or Full shows Light checked.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -59,8 +63,9 @@ function page({ projects = [W.clone(PROJECT)], status = null } = {}) {
   });
 }
 
-// the import of Shop started and its clone ready: the wizard on step 3
-async function atAnalysis(opts) {
+// the import of Shop started and its clone ready: the wizard on step 3; define: its workflows defined by hand
+// (Define manually: nothing runs), so the rows and the work model section show; false leaves the two choices
+async function atAnalysis({ define = true, ...opts } = {}) {
   const app = page(opts);
   await app.boot();
   W.wizard(app).open();
@@ -73,6 +78,7 @@ async function atAnalysis(opts) {
   await W.emit(app, W.READY);
   if (W.currentStep(app) !== 'analysis') await W.press(app, 'wizard-next');
   assert.equal(W.currentStep(app), 'analysis', 'the wizard is on the analysis step');
+  if (define) await W.defineWorkflows(app, 'manual');
   return app;
 }
 
@@ -82,6 +88,8 @@ const isRadio = (e) => (e.name === 'input' && String(e.attrs.type).toLowerCase()
 const isChecked = (e) => 'checked' in e.attrs || e.attrs['aria-checked'] === 'true';
 const radio = (app, id) => W.byTestId(W.wizardMarkup(app), `wizard-work-model-${id}`);
 const checkedModels = (app) => MODELS.map((m) => m.id).filter((id) => { const r = radio(app, id); return !!r && isChecked(r); });
+const disabledModels = (app) => MODELS.map((m) => m.id).filter((id) => 'disabled' in (radio(app, id)?.attrs || {}));
+const filesPanel = (app) => W.byTestId(W.wizardMarkup(app), 'wizard-work-model-files');
 
 // the text that names a radio: its aria-label, else the smallest element around it with some text
 function labelOf(html, el) {
@@ -138,13 +146,25 @@ function savedWorkModel(app) {
 
 // ---- the section ------------------------------------------------------------------------------------
 
-test('#633 step 3 has the work model section, headed "How work on <project> is documented", with its subtitle', { timeout: 30000 }, async () => {
+test('#633 step 3 has the work model section, headed "How the work is documented", with its subtitle', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
   const s = section(app);
   assert.ok(s, 'step 3 shows data-testid="wizard-work-model"');
   const heading = H.findEl(s.inner, (e) => /^h[1-6]$/.test(e.name) || e.attrs.role === 'heading');
-  assert.equal(heading ? H.visibleText(heading.inner) : null, `How work on ${NAME} is documented`);
-  assert.equal(sectionText(app).includes('Each step leaves a file the next step reads, and a person approves it.'), true, sectionText(app));
+  assert.equal(heading ? H.visibleText(heading.inner) : null, 'How the work is documented');
+  assert.equal(sectionText(app).includes('How much each step writes down for the next one to read and a person to approve.'), true, sectionText(app));
+});
+
+test('#633 the work model section comes with the workflow rows: not while the two choices show, then after Define manually and after the analysis', { timeout: 30000 }, async () => {
+  const app = await atAnalysis({ define: false });
+  assert.equal(section(app), null, 'no data-testid="wizard-work-model" while the two choices show');
+  await W.press(app, 'wizard-workflows-choice-manual');
+  assert.ok(section(app), 'the section under the rows defined by hand');
+  const analysed = await atAnalysis({ define: false });
+  await W.press(analysed, 'wizard-workflows-choice-analyze');
+  assert.equal(section(analysed), null, 'no section while the analysis runs (the rows are not shown yet)');
+  await W.emit(analysed, { ...W.ANALYZING, jobs: W.jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } }, projectMap: { status: 'running' } }) });
+  assert.ok(section(analysed), 'the section under the analysed rows');
 });
 
 test('#633 the work model section offers three radios, Light, Standard and Full, in that order', { timeout: 30000 }, async () => {
@@ -176,31 +196,42 @@ test('#633 #851 Light is the work model checked by default', { timeout: 30000 },
   assert.deepEqual(checkedModels(app), ['light']);
 });
 
-test('#633 picking Standard checks Standard only', { timeout: 30000 }, async () => {
+// Standard and Full are not ready yet (the owner's call): shown, disabled, marked "Coming soon"
+test('#633 Standard and Full are disabled, each marked "Coming soon" (wizard-work-model-soon); Light is not', { timeout: 30000 }, async () => {
+  const app = await atAnalysis();
+  assert.deepEqual(disabledModels(app), ['standard', 'full']);
+  const s = section(app);
+  const soon = H.findAll(s.inner, (e) => e.attrs['data-testid'] === 'wizard-work-model-soon');
+  assert.deepEqual(soon.map((e) => H.visibleText(e.inner)), ['Coming soon', 'Coming soon']);
+  assert.deepEqual(MODELS.map((m) => labelOf(s.inner, radio(app, m.id)).includes('Coming soon')), [false, true, true], 'on Standard\'s and Full\'s choices only');
+});
+
+test('#633 picking Standard changes nothing: Light stays the only one checked', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
   await pick(app, 'standard');
-  assert.deepEqual(checkedModels(app), ['standard']);
+  assert.deepEqual(checkedModels(app), ['light']);
+  assert.deepEqual(disabledModels(app), ['standard', 'full']);
 });
 
 // ---- where the files live ---------------------------------------------------------------------------
 
-test('#633 "Where the files live" shows docs/work/<item>/ with intent.md, spec.md and plan.md in the repository', { timeout: 30000 }, async () => {
+// the panel showed for Standard and Full only (#851: Light writes nothing to docs/work/): with both disabled it
+// never shows, whatever is tried
+test('#633 "Where the files live" (docs/work/<item>/ in the repository) never shows: not with Light, not after a pick of Standard', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
-  await pick(app, 'standard'); // #851: the panel is hidden while Light is picked
-  const panel = W.byTestId(W.wizardMarkup(app), 'wizard-work-model-files');
-  assert.ok(panel, 'step 3 shows data-testid="wizard-work-model-files"');
-  const text = H.visibleText(panel.inner);
-  const missing = ['Where the files live', 'In the repository', 'docs/work/<item>/', 'intent.md', 'spec.md', 'plan.md'].filter((s) => !text.includes(s));
-  assert.deepEqual(missing, [], text);
+  assert.equal(filesPanel(app), null, 'no data-testid="wizard-work-model-files" with Light');
+  await pick(app, 'standard');
+  assert.equal(filesPanel(app), null, 'nor after a pick of Standard (disabled)');
+  const text = sectionText(app);
+  assert.deepEqual(['Where the files live', 'In the repository', 'docs/work/<item>/'].filter((s) => text.includes(s)), [], text);
 });
 
-test('#633 "Where the files live" has the chips fix: issue only, feature: Standard, release: notes', { timeout: 30000 }, async () => {
+test('#633 the chips of "Where the files live" (fix: issue only, feature: Standard, release: notes) never show: not after a pick of Full', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
-  await pick(app, 'standard'); // #851: the panel is hidden while Light is picked
-  const panel = W.byTestId(W.wizardMarkup(app), 'wizard-work-model-files');
-  assert.ok(panel, 'step 3 shows data-testid="wizard-work-model-files"');
-  const text = H.visibleText(panel.inner);
-  assert.deepEqual(['fix: issue only', 'feature: Standard', 'release: notes'].filter((s) => !text.includes(s)), [], text);
+  await pick(app, 'full');
+  assert.equal(filesPanel(app), null, 'no data-testid="wizard-work-model-files" after a pick of Full (disabled)');
+  const text = sectionText(app);
+  assert.deepEqual(['fix: issue only', 'feature: Standard', 'release: notes'].filter((s) => text.includes(s)), [], text);
 });
 
 // ---- Finish saves the pick ----------------------------------------------------------------------------
@@ -211,18 +242,18 @@ test('#633 #851 Finish with the work model untouched saves workModel light on th
   assert.equal(savedWorkModel(app), 'light');
 });
 
-test('#633 Finish after picking Standard saves workModel standard on the project', { timeout: 30000 }, async () => {
+test('#633 Finish after a pick of Standard (disabled, "Coming soon") saves workModel light on the project', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
   await pick(app, 'standard');
   await finish(app);
-  assert.equal(savedWorkModel(app), 'standard');
+  assert.equal(savedWorkModel(app), 'light');
 });
 
-test('#633 Finish after picking Full saves workModel full on the project', { timeout: 30000 }, async () => {
+test('#633 Finish after a pick of Full (disabled, "Coming soon") saves workModel light on the project', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
   await pick(app, 'full');
   await finish(app);
-  assert.equal(savedWorkModel(app), 'full');
+  assert.equal(savedWorkModel(app), 'light');
 });
 
 // ---- the pick is saved with the wizard and resumed ------------------------------------------------------
@@ -234,11 +265,24 @@ test('#633 picking Light is saved with the wizard (saveOnboardingWizard picks.wo
   assert.equal(last?.picks?.workModel ?? null, 'light', `the last save: ${JSON.stringify(last)}`);
 });
 
-test('#633 a resumed wizard whose saved work model is Full shows Full checked', { timeout: 30000 }, async () => {
+// Full is not ready yet: a pick of it saved earlier falls back to Light, on the screen and at Finish
+test('#633 a resumed wizard whose saved work model is Full shows Light checked, and Finish saves light', { timeout: 30000 }, async () => {
   const app = page({ projects: [W.clone(UNFINISHED)], status: atStep(W.PID, 'analysis', { ...PICKS, workModel: 'full' }) });
   await app.boot();
   W.wizard(app).open({ projectId: W.PID });
   await app.settle(10);
   assert.equal(W.currentStep(app), 'analysis', 'the wizard resumed on step 3');
-  assert.deepEqual(checkedModels(app), ['full']);
+  assert.deepEqual(checkedModels(app), ['light']);
+  assert.deepEqual(disabledModels(app), ['standard', 'full']);
+  await finish(app);
+  assert.equal(savedWorkModel(app), 'light');
+});
+
+test('#633 a resumed wizard whose saved work model is Light shows Light checked', { timeout: 30000 }, async () => {
+  const app = page({ projects: [W.clone(UNFINISHED)], status: atStep(W.PID, 'analysis', { ...PICKS, workModel: 'light' }) });
+  await app.boot();
+  W.wizard(app).open({ projectId: W.PID });
+  await app.settle(10);
+  assert.equal(W.currentStep(app), 'analysis', 'the wizard resumed on step 3');
+  assert.deepEqual(checkedModels(app), ['light']);
 });

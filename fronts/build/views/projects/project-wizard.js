@@ -94,14 +94,15 @@
   const usd = (n) => (window.I18n?.formatCost ? window.I18n.formatCost(n) : `$${Number(n).toFixed(2)}`);
   const money = (n) => (n > 0 && n < 0.01 ? `< ${usd(0.01)}` : usd(n));
   const statusText = (s) => t(`onboarding.status_${s}`);
-  // #725: Continue on the analysis step never waits for the analysis (running, done or failed)
-  const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model)
+  // #725: Continue on the analysis step never waits for the analysis (running, done or failed); #100: it waits for
+  // the workflows to be defined, by hand or by the analysis (a new project's rows show at once)
+  const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model) && column.defined()
     : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   // #79: push-fix, the push notice's setup-git button
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'push-fix': 'setupGitOnboarding', 'work-locally': 'workLocallyOnboarding' };
   const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
-  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), costHint: () => costs.estimateText(), phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
+  const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), costHint: () => costs.estimateText(), icons: () => ANSWER_ICON, phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur, recommended: column.recommended }); // #633: step 3's work model section
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
@@ -388,6 +389,7 @@
     mode: { local: 'M2.5 3.5h11v7h-11zM1 13h14', remote: 'M4 5.5v5M5.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M13.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M12 10.5V7a2 2 0 0 0-2-2H7.5M9 3.5 7.5 5 9 6.5' },
     ci: { none: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11M4.2 11.8l7.6-7.6', release: 'M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6', 'pr+release': 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11M5.5 8.2l1.8 1.8 3.4-3.8' },
     release: { milestone: 'M2.5 2.5h5l6 6-5 5-6-6zM5.3 5.3h.01', 'per-merge': 'M6 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M6 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M13 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M4.5 5.5v5M4.5 5.5c0 2.5 2 3.5 5.5 3.5', train: 'M3 3.5h10v9H3zM3 6.5h10M5.5 2v3M10.5 2v3', 'rc-stable': 'M2.5 8h7M7 4.5 10.5 8 7 11.5M13 4v8' },
+    tests: { e2e: 'M2 3.5h12v9H2zM2 6h12M5.8 9.3l1.4 1.4 3-3.1', code: 'M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5' },
     kind: { frontend: 'M2 3.5h12v9H2zM2 6h12', 'full-stack': 'M8 2.5 2.5 5.5 8 8.5l5.5-3zM2.5 8 8 11l5.5-3M2.5 10.5 8 13.5l5.5-3', backend: 'M2.5 3h11v4h-11zM2.5 9h11v4h-11zM5 5h.01M5 11h.01' },
   };
 
@@ -461,21 +463,22 @@
 
   function analysisStep() {
     const o = cur.onboarding || {};
-    const started = ['analyzing', 'analyzed'].includes(o.status);
-    const said = started ? `<p class="muted small">${esc(t(o.status === 'analyzed' ? 'onboarding.analysis_done' : 'onboarding.analysis_running'))}</p>` : '';
-    return `<div class="wizard-columns">
-        <div class="wizard-column">
-          <h2 id="project-wizard-title">${esc(t(column.sourceKey('onboarding.analyze_title'), { name: cur.model.name }))}</h2>
-          <p class="muted">${esc(t(column.sourceKey('onboarding.read_only')))}</p>
-          ${costs.costBlock(started)}
-          ${said}
-          ${o.status === 'failed' ? errorBlock(o) : ''}
-          ${cliWarning(o.cli)}
-          ${remoteWarning(o.remote)}
-          ${pushNotice(o)}
-        </div>
+    // one screen at a time, by the workflows' state (data-state): the two ways in (choose); the progress of the
+    // analysis (analyzing: the bar, the jobs and their cost, the activity lines); then the workflows on the whole width
+    // with the work model under them (analyzed, manual). The jobs also show while one of them failed (reason, Retry)
+    const at = column.state();
+    const rows = at === 'analyzed' || at === 'manual';
+    return `<div class="wizard-analysis" data-state="${at}">
+        <h2 id="project-wizard-title">${esc(t(column.sourceKey('onboarding.analyze_title'), { name: cur.model.name }))}</h2>
+        ${at === 'analyzing' ? `<p class="muted">${esc(t(column.sourceKey('onboarding.read_only')))}</p>` : ''}
+        ${costs.costBlock({ rows: at === 'analyzing' || at === 'failed', running: o.status === 'analyzing' })}
+        ${o.status === 'failed' ? errorBlock(o) : ''}
+        ${cliWarning(o.cli)}
+        ${remoteWarning(o.remote)}
+        ${pushNotice(o)}
         ${workflowsColumn()}
-      </div>${workModel.section()}`;
+        ${rows ? workModel.section() : ''}
+      </div>`;
   }
 
   const jobOf = (id) => cur.onboarding?.jobs?.[id] || {};
@@ -613,7 +616,7 @@
   function cloneProgress() {
     const s = jobOf('clone').status || (CLONED.includes(cur.onboarding?.status) ? 'done' : 'running');
     return `<div class="card wizard-clone-progress" data-testid="wizard-clone-progress" data-status="${esc(s)}">
-        ${s === 'running' ? SPINNER('wizard-spinner') : ''}<span class="text-cut" title="${esc(cur.model.name)}">${esc(t('onboarding.cloning_name', { name: cur.model.name }))}</span>
+        ${s === 'running' ? SPINNER('wizard-spinner') : ''}<span class="text-cut" title="${esc(cur.model.name)}">${esc(t(s === 'done' ? 'onboarding.cloned_name' : 'onboarding.cloning_name', { name: cur.model.name }))}</span>
         <span class="wizard-bar job-${esc(s)}" aria-hidden="true"></span>
         <span class="badge job-${esc(s)}">${esc(t(`onboarding.job_status_${s}`))}</span>
       </div>`;
@@ -808,10 +811,9 @@
       return;
     }
     if (cur.model.step === 'repository') toAnalysis();
-    else if (cur.model.step === 'analysis' && cur.model.source !== 'new') { // #725, #20: Continue starts an import's analysis (after the clone, engine), a refused start stays
-      const started = ['analyzing', 'analyzed'].includes(cur.onboarding?.status) || await call(() => api.analyzeOnboarding(cur.projectId));
-      if (!cur || !started) return;
-      cur.model = M.next({ ...cur.model, analyzeLater: false });
+    else if (cur.model.step === 'analysis' && cur.model.source !== 'new') { // #100: Continue starts nothing: workflows defined by hand leave the analysis for later
+      const asked = ['analyzing', 'analyzed'].includes(cur.onboarding?.status) || !!cur.onboarding?.wanted;
+      cur.model = M.next({ ...cur.model, analyzeLater: !asked });
     } else cur.model = M.next(cur.model);
     if (cur.model.step === 'review') loadReview();
     render();
@@ -922,8 +924,8 @@
     else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));
     // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part too; #20: an earlier Skip no longer holds), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
+    else if (act === 'workflow-pick') { const tile = e.target.closest('[data-act]'); cur.workflows = { ...cur.workflows, [tile.dataset.kind]: tile.dataset.value }; render(); }
     else if (act === 'workflows-analyze' && cur.projectId) await analyze();
-    else if (act === 'skip') { cur.model = M.skipAnalysis(cur.model); loadReview(); render(); }
     else if (act === 'edit-repo') {
       // a new import from the same fields; the failed one stays in the tray with its Retry
       cur = { ...cur, projectId: null, onboarding: null, estimate: undefined, profileEstimate: undefined, estimatedAt: undefined, workflowsMode: undefined, manifest: undefined, manifestFor: undefined, repoWorkflows: undefined, ...freshReview() };

@@ -10,7 +10,10 @@
 // - "waits for acceptance" is the existing rule (packages/ui-kit/workflows-acceptance.js awaitsAcceptance): an entry
 //   of api.listWorkflows({ projectId[, repositoryOnly] }) with origin 'repository' and accepted === false;
 // - the notice is data-testid="wizard-default-awaiting-acceptance" (on step 3 and on step 4), naming the workflow,
-//   with a <button> or <a> whose text is the "Review and accept" action.
+//   with a <button> or <a> whose text is the "Review and accept" action. Visual-layout rework: on step 3 it sits
+//   inside the Default row (data-kind="default", in its hint's place), one short sentence, the workflow named by the
+//   row's own select; a default with no manifest row (the record's) gets it under the rows, naming the workflow; it
+//   comes with the rows (not while the two choices show).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -39,7 +42,7 @@ const repoEntry = (accepted) => ({
   trusted: accepted, steps: [], inputs: task, category: 'build',
 });
 
-async function atWorkflows({ accepted = false, lang = 'en' } = {}) {
+async function atWorkflows({ accepted = false, lang = 'en', manifest = MANIFEST, analyze = true } = {}) {
   const app = await W.atAnalysis({
     api: {
       listProjects: async () => [clone(RECORD)],
@@ -47,7 +50,7 @@ async function atWorkflows({ accepted = false, lang = 'en' } = {}) {
         if (opts?.projectId !== PID) return clone(WORKSPACE);
         return clone(opts.repositoryOnly ? [repoEntry(accepted)] : [...WORKSPACE, repoEntry(accepted)]);
       },
-      projectManifest: async () => clone(MANIFEST),
+      projectManifest: async () => clone(manifest),
       onboardingStatus: async () => clone(ANALYZED),
       analyzeOnboarding: async (id) => ({ ...clone(PROFILED), projectId: id }),
       getBacklog: async () => ({ issues: [] }),
@@ -55,6 +58,7 @@ async function atWorkflows({ accepted = false, lang = 'en' } = {}) {
     },
     record: (a) => { if (lang !== 'en') a.sandbox.I18n.setLanguage(lang); },
   });
+  if (!analyze) { await app.settle(20); return app; }
   await W.press(app, 'wizard-workflows-choice-analyze');
   await W.emit(app, PROFILED);
   await app.settle(20);
@@ -80,7 +84,34 @@ test('#40 step 3: a manifest default awaiting acceptance shows the notice, namin
   assert.equal(row === null, false, 'fixture: step 3 shows the manifest\'s Default row');
   const el = notice(app);
   assert.equal(el === null, false, `step 3 shows data-testid="${NOTICE}"`);
+  // the notice is in the Default row, whose select names the workflow (the sentence itself says "This workflow")
+  const defaultRow = H.findEl(W.wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-workflow' && e.attrs['data-kind'] === 'default');
+  assert.equal(defaultRow === null, false, 'the Default row (data-kind="default")');
+  assert.equal(W.byTestId(defaultRow.outer, NOTICE) === null, false, 'the notice is inside the Default row');
+  const picked = H.findAll(row.inner, (e) => e.name === 'option').find((o) => 'selected' in o.attrs);
+  assert.equal(picked?.attrs.value, REPO_WF, 'the row\'s select names the workflow');
+  assert.equal(H.visibleText(defaultRow.inner).includes(REPO_WF), true, H.visibleText(defaultRow.inner));
+  assert.match(H.visibleText(el.inner), /only runs after you accept it/i);
+  assert.equal(H.findAll(W.wizardMarkup(app), (e) => e.attrs['data-testid'] === NOTICE).length, 1, 'said once on step 3');
+});
+
+test('#40 step 3: a default awaiting acceptance with no Default row (the manifest declares none) shows the notice under the rows, naming the workflow', { timeout: 30000 }, async () => {
+  const app = await atWorkflows({ manifest: { workflows: SET, kinds: {} } });
+  const defaultRow = H.findEl(W.wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-workflow' && e.attrs['data-kind'] === 'default');
+  assert.equal(defaultRow, null, 'fixture: no Default row');
+  const el = notice(app);
+  assert.equal(el === null, false, `step 3 shows data-testid="${NOTICE}"`);
   assert.equal(H.visibleText(el.inner).includes(REPO_WF), true, H.visibleText(el.inner));
+  assert.match(H.visibleText(action(el)?.inner || ''), /review and accept/i);
+});
+
+test('#40 step 3: no notice while the two choices show (it comes with the rows)', { timeout: 30000 }, async () => {
+  const app = await atWorkflows({ analyze: false });
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-choice-manual') === null, false, 'the two choices');
+  assert.equal(notice(app), null);
+  await W.press(app, 'wizard-workflows-choice-manual');
+  await app.settle(20);
+  assert.equal(notice(app) === null, false, 'the notice with the rows defined by hand');
 });
 
 test('#40 step 3: the notice offers "Review and accept"', { timeout: 30000 }, async () => {

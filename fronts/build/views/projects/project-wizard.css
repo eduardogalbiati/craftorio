@@ -326,3 +326,208 @@ body:has(.drawer.open) .onboarding-tray:not([hidden]) { z-index: 4; }
 .wizard-pick-bar #wizard-repo-filter:focus { position: relative; z-index: 1; }
 .wizard-name-lead input::placeholder { font-weight: 400; font-size: 14px; color: var(--muted); opacity: .7; }
 #wizard-repo-slot:not(:empty) { min-height: 180px; }
+/* step 3, simplified: at the left the analyses as status rows in a well (a paid one carries a "paid" badge, its
+   locked checkbox is kept for assistive tech only), then the one decision about cost in its own well, with Skip at a
+   button's size; at the right the two ways in as stacked icon tiles (actions: no selected state) and the acceptance
+   notice under them as one strip; under both, the work model as three tiles in a row */
+.wizard-cost { display: flex; flex-direction: column; gap: 10px; }
+.wizard-jobs { padding: 2px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.wizard-job-side { display: inline-flex; align-items: center; gap: 8px; }
+.wizard-job-side .wizard-amount:empty { display: none; }
+.badge.wizard-job-paid { font-family: inherit; font-size: 11px; font-weight: 600; color: var(--orange); border-color: rgba(251,146,60,.4); background: none; border-radius: 99px; padding: 1px 8px; }
+.wizard-cost-total-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.wizard-cost-total-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wizard-cost-total-row .wizard-amount { font-family: inherit; font-size: 14px; font-weight: 600; white-space: normal; }
+.wizard-cost-total-row .btn { flex: none; }
+.wizard-columns > .wizard-workflows-column > h3 { font-size: 20px; font-weight: 700; margin-top: 0; }
+.wizard-workflows-column .wizard-question-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.wizard-workflows-choices { grid-template-columns: minmax(0, 1fr); }
+.card.wizard-workflows-choice { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; align-content: start; padding: 10px 12px; border-radius: var(--radius); background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; }
+.wizard-workflows-choice > .wizard-tile-icon { grid-row: 1 / span 3; }
+.wizard-workflows-choice > :not(.wizard-tile-icon) { grid-column: 2; }
+.wizard-workflows-choice > strong { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.wizard-workflows-choice .badge.wizard-recommended { margin-left: 0; }
+.card.wizard-workflows-choice:hover .wizard-tile-icon { color: var(--accent); }
+.wizard-workflows-column [data-testid="wizard-default-awaiting-acceptance"] { flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; font-size: 12px; line-height: 17px; border-color: rgba(250,204,21,.4); }
+.wizard-workflows-column [data-testid="wizard-default-awaiting-acceptance"] > span { flex: 1; min-width: 0; color: var(--muted); }
+.wizard-workflows-column [data-testid="wizard-default-awaiting-acceptance"] .wizard-actions { flex: none; }
+.wizard-work-model { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; }
+.wizard-work-model-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; min-height: 46px; }
+.wizard-work-model-head .wizard-column { gap: 4px; }
+.wizard-work-model-head h3 { font-size: 16px; }
+.wizard-work-model-files { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wizard-work-model-files strong { color: var(--text); font-weight: 600; }
+.wizard-work-model-where { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.wizard-work-model-where .wizard-work-model-path { padding: 3px 8px; border: 0; border-radius: 8px; background: var(--bg); }
+.wizard-work-model-where .wizard-chips { display: inline-flex; flex-wrap: nowrap; }
+.wizard-starts.wizard-model-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wizard-model-tile { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
+.wizard-model-tile input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.wizard-model-tile > .wizard-tile-icon { display: grid; grid-row: auto; }
+.wizard-model-tile strong { font-weight: 600; }
+.wizard-model-tile:hover { border-color: var(--muted); }
+.wizard-model-tile:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: rgba(124,156,255,.10); }
+.wizard-model-tile:has(input:checked) .wizard-tile-icon { color: var(--accent); }
+.wizard-model-tile:has(input:focus-visible) { outline: var(--focus-ring); outline-offset: 2px; }
+/* the footer's clone status once done: quiet text, no bar (the Clone row above already says it) */
+.card.wizard-clone-progress[data-status="done"] { width: auto; padding: 0; border: 0; background: none; color: var(--muted); }
+.wizard-clone-progress[data-status="done"] .wizard-bar { display: none; }
+.wizard-clone-progress[data-status="done"] .badge { padding: 0; border: 0; background: none; font-family: inherit; }
+@media (max-width: 760px) { .wizard-work-model-head, .wizard-starts.wizard-model-tiles { grid-template-columns: minmax(0, 1fr); } }
+.wizard-jobs .wizard-job { padding: 6px 0; }
+.wizard-work-model-head { min-height: 50px; }
+.wizard-work-model-where { flex-wrap: nowrap; min-width: 0; }
+.wizard-work-model-where > strong { flex: 1; min-width: 0; }
+.wizard-work-model-where .wizard-chip, .wizard-work-model-where .wizard-chip.accent { font-size: 11px; white-space: nowrap; }
+.wizard-work-model-where > .muted { white-space: nowrap; }
+/* with the workflow rows (defined by hand, analysing, analysed) the column keeps the left column's height and only
+   the rows' area scrolls; Analyze the repository stays under it as one compact line */
+@media (min-width: 761px) { .wizard-columns > .wizard-workflows-column:has(> .wizard-workflows-scroll) { height: 0; min-height: 100%; } }
+.wizard-workflows-scroll { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+.wizard-workflows-scroll .wizard-workflows { gap: 6px; }
+.wizard-workflows-scroll .wizard-workflow { padding: 6px 6px 6px 12px; gap: 4px; background: var(--panel-2); }
+.wizard-workflows-choices.compact .wizard-workflows-choice { grid-template-columns: 28px auto minmax(0, 1fr); align-items: center; padding: 8px 12px; }
+.wizard-workflows-choices.compact .wizard-workflows-choice > .wizard-tile-icon { grid-row: 1; }
+.wizard-workflows-choices.compact .wizard-workflows-choice > strong { grid-column: 2; }
+.wizard-workflows-choices.compact .wizard-workflows-choice > .small { grid-column: 3; text-align: right; }
+.wizard-workflows-choices.compact .wizard-workflows-choice > .small:not([data-testid]) { display: none; }
+/* the cost is one quiet line under the rows (no box); Skip sits in the footer, beside the step's action */
+.wizard-body p.wizard-cost-total-row { display: block; padding: 0 2px; border: 0; background: none; line-height: 18px; }
+p.wizard-cost-total-row .wizard-amount { font-size: 12px; margin: 0 4px; }
+p.wizard-cost-total-row [data-testid="wizard-cost-unknown"] { display: block; }
+/* step 3's polish: the profile row keeps its finding on two lines; one type for the amounts; a waiting job is a ring;
+   the files' chips are plain text (read-only, not toggles); the two ways in carry a chevron (actions, not picks);
+   the rows' area fades out at its lower edge */
+.wizard-jobs [data-testid="wizard-profile"] { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wizard-jobs .wizard-amount { font-family: inherit; }
+.wizard-dot.job-waiting { background: none; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.wizard-work-model-where .wizard-chips { gap: 0; }
+.wizard-work-model-where .wizard-chip, .wizard-work-model-where .wizard-chip.accent { padding: 0; border: 0; color: var(--muted); font-size: 12px; }
+.wizard-work-model-where .wizard-chip + .wizard-chip::before { content: '·'; margin: 0 6px; }
+.card.wizard-workflows-choice { padding-right: 32px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a91a3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3.5 10.5 8 6 12.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; }
+.wizard-workflows-scroll { padding-bottom: 12px; -webkit-mask-image: linear-gradient(#000 calc(100% - 16px), transparent); mask-image: linear-gradient(#000 calc(100% - 16px), transparent); }
+/* step 3's two columns take the body's spare height (the work model closes the body), so the rows' area gets it */
+.wizard-body > .wizard-columns:has(> .wizard-workflows-column) { flex: 1 0 auto; }
+.wizard-workflows-choices.compact .wizard-workflows-choice { padding-right: 32px; }
+.wizard-workflows-choices.compact .wizard-recommended { display: none; }
+.wizard-workflows-choices.compact .wizard-workflows-choice > .small { white-space: nowrap; }
+/* the workflow rows as one well of plain lines (as the analyses at the left), so the five fit with no scrolling
+   when defined by hand; the Default row's hint is its tooltip there */
+.wizard-workflows-scroll .wizard-workflows { gap: 0; padding: 0 6px 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.wizard-workflows-scroll .wizard-workflow { padding: 3px 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; }
+.wizard-workflows-scroll .wizard-workflow:last-child { border-bottom: 0; }
+.wizard-workflows-column[data-state="manual"] .wizard-workflow[data-kind="default"] .wizard-workflow-reason { display: none; }
+.wizard-workflows-scroll { padding-right: 0; }
+.wizard-workflows-scroll .wizard-workflow .select-trigger, .wizard-workflows-scroll .wizard-workflow select { min-height: 30px; height: 30px; }
+.wizard-workflows-column:has(> .wizard-workflows-scroll) > p.muted.small:last-child { display: none; }
+.wizard-workflows-scroll { padding-bottom: 0; -webkit-mask-image: none; mask-image: none; }
+.wizard-workflows-scroll [data-testid="wizard-default-awaiting-acceptance"] { padding: 6px 6px 6px 12px; }
+
+/* step 3 as one screen at a time (.wizard-analysis[data-state], the workflows' state):
+   choose: the two ways in as two big cards; analyzing: the progress (bar, jobs, activity lines);
+   analyzed / manual: the workflows on the whole width, the work model under them */
+.wizard-analysis { flex: 1 0 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.wizard-analysis > .wizard-workflows-column { gap: 12px; }
+.wizard-analysis[data-state="choose"] .wizard-question-title { font-size: 14px; font-weight: 400; color: var(--muted); margin-top: -6px; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.wizard-analysis[data-state="choose"] .card.wizard-workflows-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 220px; padding: 20px; background-image: none; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choice > .wizard-tile-icon { width: 44px; height: 44px; border-radius: var(--radius); color: var(--accent); margin-bottom: 4px; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choice > .wizard-tile-icon svg { width: 20px; height: 20px; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choice > strong { font-size: 16px; gap: 4px 10px; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choice > .small { font-size: 13px; line-height: 20px; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choice > [data-testid="wizard-workflows-choice-cost"] { margin-top: auto; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-choice:has(.wizard-recommended) { border-color: rgba(124,156,255,.45); }
+.card.wizard-workflows-choice:hover { border-color: var(--accent); }
+/* the progress */
+.wizard-progress { display: flex; flex-direction: column; gap: 6px; }
+.wizard-progress progress { appearance: none; -webkit-appearance: none; width: 100%; height: 8px; border: 0; border-radius: 999px; overflow: hidden; background: var(--panel-2); }
+.wizard-progress progress::-webkit-progress-bar { background: var(--panel-2); border-radius: 999px; }
+.wizard-progress progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .4s ease; }
+.wizard-analysis[data-state="analyzing"] .wizard-workflows[aria-busy="true"] { display: none; }
+.wizard-analysis[data-state="analyzing"] .wizard-workflows-analyzing { position: static; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.wizard-analysis[data-state="analyzing"] .wizard-workflows-column > p.muted { display: none; }
+/* the workflows on the whole width: a row is its name, its selector and, once analysed, why */
+.wizard-analysis .wizard-workflows-scroll { flex: none; min-height: 0; overflow: visible; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflow { display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); align-items: center; gap: 4px 16px; padding: 5px 0; }
+.wizard-analysis .wizard-workflow-head > strong { flex: 0 0 150px; }
+.wizard-analysis .wizard-workflow-head > :not(strong) { flex: 1; min-width: 0; max-width: none; }
+.wizard-analysis .wizard-workflow select { max-width: none; }
+.wizard-analysis .wizard-workflow-reason { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wizard-analysis .wizard-workflows-column[data-state="manual"] .wizard-workflow[data-kind="default"] .wizard-workflow-reason { display: -webkit-box; }
+.wizard-analysis .wizard-workflows-column[data-state="analyzed"] .wizard-analysis-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.wizard-analysis .wizard-work-model { margin-top: auto; }
+.wizard-analysis[data-state="choose"] .wizard-workflows-column > p.muted.small:last-child { display: none; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflow { padding: 3px 0; }
+.wizard-analysis .wizard-work-model { padding-top: 12px; gap: 8px; }
+.wizard-analysis .wizard-workflows-column:has(> .wizard-workflows-scroll) { gap: 10px; }
+
+/* step 3, less on the screen: the ended activity lines are not shown with the rows; the Default row carries its
+   acceptance notice; the reasons are quiet text in a wider column; once defined by hand, Analyze with AI is a link;
+   the work model has one small title; the way of working is a plain value; a finished clone leaves the footer */
+.wizard-analysis .wizard-workflows-column[data-state="analyzed"] .wizard-analysis-phases { display: none; }
+.wizard-analysis .wizard-workflow p.wizard-default-awaiting { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 0; border: 0; background: none; }
+.wizard-analysis .wizard-workflow p.wizard-default-awaiting > span { color: var(--orange); }
+.wizard-analysis .wizard-workflow p.wizard-default-awaiting .btn { min-height: 28px; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflow { grid-template-columns: 430px minmax(0, 1fr); }
+.wizard-analysis .wizard-workflow-head > strong { flex: 0 0 120px; }
+.wizard-analysis .wizard-workflow-why { color: var(--text); }
+.wizard-analysis .wizard-workflows-choices.compact .card.wizard-workflows-choice { display: inline-flex; justify-self: start; width: auto; min-height: 0; padding: 0; border: 0; background: none; color: var(--accent); font-size: 12px; }
+.wizard-analysis .wizard-workflows-choices.compact .wizard-workflows-choice > strong { font-weight: 400; }
+.wizard-analysis .wizard-workflows-choices.compact .wizard-tile-icon { display: none; }
+.wizard-analysis .wizard-workflows-choices.compact .wizard-workflows-choice:hover { text-decoration: underline; }
+.wizard-analysis .wizard-work-model-head { min-height: 0; }
+.wizard-analysis .wizard-work-model-head h3 { font-size: 14px; font-weight: 600; }
+.wizard-analysis .wizard-work-model-head .wizard-column > p { display: none; }
+.wizard-analysis .wizard-way-of-working .badge { padding: 0; border: 0; background: none; font-family: inherit; font-weight: 500; color: var(--text); }
+.badge.wizard-recommended { font-family: inherit; }
+.wizard-clone-progress[data-status="done"] { visibility: hidden; }
+.wizard-analysis[data-state="analyzing"] .wizard-job-text > .muted.small { display: none; }
+.wizard-analysis[data-state="analyzing"] .wizard-workflows-analyzing { padding: 0 12px; border: 0; background: none; }
+
+/* a workflow's choices as tiles: the row is its name, then its tiles, then (once analysed) why on one line; the row's
+   select is kept out of sight. The Default row keeps its select: its choices are the repository's own names */
+.wizard-analysis .wizard-workflows-scroll .wizard-workflows { padding: 0; border: 0; background: none; gap: 8px; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflow { grid-template-columns: 120px minmax(0, 1fr); align-items: start; gap: 4px 12px; padding: 0; border: 0; }
+.wizard-analysis .wizard-workflow:has(> .wizard-workflow-tiles) .wizard-workflow-head { display: block; padding-top: 8px; }
+.wizard-analysis .wizard-workflow:has(> .wizard-workflow-tiles) .wizard-workflow-head > :not(strong) { position: absolute; width: 1px; height: 1px; overflow: hidden; visibility: hidden; }
+.wizard-workflow-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.wizard-workflow-tiles[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wizard-workflow-tile { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 0 8px; align-items: center; align-content: center; min-height: 46px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.wizard-workflow-tile:hover:not([disabled]) { border-color: var(--muted); }
+.wizard-workflow-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: rgba(124,156,255,.10); }
+.wizard-workflow-tile[aria-pressed="true"] .wizard-tile-icon { color: var(--accent); }
+.wizard-workflow-tile:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.wizard-workflow-tile[disabled] { cursor: default; opacity: .6; }
+.wizard-workflow-tile .wizard-tile-icon { grid-row: 1 / span 2; align-self: center; }
+.wizard-workflow-tile .wizard-tile-title:last-child { grid-row: 1 / span 2; }
+.wizard-workflow-tile .wizard-tile-title, .wizard-workflow-tile .wizard-tile-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wizard-analysis .wizard-workflow > .wizard-workflow-tiles { grid-column: 2; }
+.wizard-analysis .wizard-workflow > .wizard-workflow-reason { grid-column: 2; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wizard-analysis .wizard-workflow[data-kind="default"] { grid-template-columns: 120px 310px minmax(0, 1fr); align-items: center; }
+.wizard-analysis .wizard-workflow[data-kind="default"] .wizard-workflow-head { display: contents; }
+.wizard-analysis .wizard-workflow[data-kind="default"] > p { grid-column: 3; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflows { gap: 6px; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflow { grid-template-columns: 92px minmax(0, 1fr); gap: 3px 12px; }
+.wizard-analysis .wizard-workflow[data-kind="default"] { grid-template-columns: 120px 310px minmax(0, 1fr); }
+.wizard-workflow-tile { min-height: 44px; padding: 5px 10px; }
+.wizard-workflow-tile .wizard-tile-title { text-transform: none; }
+.wizard-workflow-tile .wizard-tile-text::first-letter, .wizard-workflow-tile .wizard-tile-title::first-letter { text-transform: uppercase; }
+
+/* step 3's rows, quieter: only the picked tile is filled, so the screen reads as its answers; the way of working sits
+   on the subtitle's line; the Default row lines up with the tiles; with Standard or Full the files are one line
+   beside the work model's title */
+.wizard-workflow-tile:not([aria-pressed="true"]), .wizard-model-tile:not(:has(input:checked)) { background: none; }
+.wizard-workflow-tile:not([aria-pressed="true"]) .wizard-tile-icon, .wizard-model-tile:not(:has(input:checked)) .wizard-tile-icon { border-color: transparent; background: none; }
+.wizard-workflow-tile:not([aria-pressed="true"]) .wizard-tile-title { font-weight: 500; }
+.wizard-analysis .wizard-workflow-why { color: var(--muted); font-weight: 500; }
+.wizard-analysis .wizard-way-of-working { align-self: flex-end; margin: -30px 0 0; line-height: 20px; }
+.wizard-analysis .wizard-work-model-head { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+.wizard-analysis .wizard-work-model-files { flex-direction: row; justify-content: flex-end; align-items: center; gap: 12px; }
+.wizard-analysis .wizard-work-model-where { flex: 0 1 auto; overflow: hidden; }
+.wizard-analysis .wizard-work-model-where:first-child { order: 2; }
+.wizard-analysis .wizard-work-model-where > strong, .wizard-analysis .wizard-work-model-where > .muted { display: none; }
+.wizard-analysis .wizard-workflows-scroll .wizard-workflows { gap: 10px; }
+.wizard-analysis .wizard-workflow[data-kind="default"] { grid-template-columns: 92px 338px minmax(0, 1fr); }
+.wizard-analysis .wizard-workflow p.wizard-default-awaiting { justify-content: flex-start; }
+.wizard-analysis .wizard-workflow-head > strong { display: block; }
+.wizard-analysis .wizard-workflow-head > strong::first-letter { text-transform: uppercase; }

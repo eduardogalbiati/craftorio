@@ -1,20 +1,25 @@
 // #851 acceptance, written before the code: step 3's defaults. Light is the default work model, "Where the files
-// live" shows only for Standard and Full, and a "Recommended" label marks Light and "Analyze the repository". On the
-// real page (packages/ui-kit/test/renderer-app-harness.js), driven as project-wizard-work-model-633.test.js and
-// project-wizard-create-632.test.js.
+// live" does not show with Light, and a "Recommended" label marks Light and "Analyze the repository" (now "Analyze
+// with AI"). On the real page (packages/ui-kit/test/renderer-app-harness.js), driven as
+// project-wizard-work-model-633.test.js and project-wizard-create-632.test.js.
+// Updated for the visual-layout rework (the owner's decisions, 2026-11-26): the work model section
+// (wizard-work-model) shows with the workflow rows only (an import: after Define manually or the analysis; a new
+// project: at once), and Standard and Full are disabled, each marked "Coming soon" (wizard-work-model-soon): they
+// can't be picked, a saved pick of one falls back to Light, so "Where the files live" never shows.
 //
 // The contract assumed here:
-// - OnboardingModel.DEFAULT_WORK_MODEL === 'light'; a fresh import and a fresh new project open step 3 with
-//   wizard-work-model-light checked; a resumed wizard keeps its saved pick (standard); Finish with step 3 untouched
-//   sends workModel 'light' in api.updateProject's patch;
-// - wizard-work-model-files ("Where the files live") is not rendered with Light picked, rendered with Standard / Full;
+// - OnboardingModel.DEFAULT_WORK_MODEL === 'light'; a fresh import (its workflows defined) and a fresh new project
+//   show step 3 with wizard-work-model-light checked; a resumed wizard whose saved pick is Standard shows Light and
+//   Finish saves light; Finish with the work model untouched sends workModel 'light' in api.updateProject's patch;
+// - wizard-work-model-files ("Where the files live") is not rendered with Light picked; Standard / Full are disabled
+//   radios with wizard-work-model-soon, a pick of one changes nothing and the panel stays out;
 // - the NEW key onboarding.recommended (en "Recommended", pt-BR "Recomendado") shows exactly once inside Light's
 //   choice (its <label>, the smallest element around the radio with text) and inside the
 //   wizard-workflows-choice-analyze button, never inside Standard, Full nor wizard-workflows-choice-manual (a new
 //   project has no workflows choice: its column opens analyzed);
 // - the catalogs: onboarding.work_model_standard_text loses "Recommended for features" / "Recomendado para
-//   features" and names the Anthropic playbook, simplified; onboarding.work_model_full_text names the complete
-//   playbook with REVIEW.md and evals.
+//   features" and names its chain, intent.md → spec.md → plan.md; onboarding.work_model_full_text is Standard plus
+//   REVIEW.md and evals (both reworded in the rework: no "Anthropic playbook" any more).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -35,7 +40,9 @@ const atStep = (projectId, step, picks) => ({ ...W.clone(W.READY), projectId, wi
 const GH_IN = { provider: 'github', cli: 'gh', installed: true, signedIn: true, account: 'eduardo' };
 const CREATED = {
   projectId: 'field-notes', name: 'Field Notes', status: 'ready', cli: null,
-  jobs: { clone: { status: 'skipped' }, facts: { status: 'waiting' }, projectMap: { status: 'waiting' }, profile: { status: 'done', profile: { mode: 'local', ci: 'release', release: 'milestone' } } },
+  // the engine's create() gives a new project's profile its answers and tests: 'unit' (project-onboarding.js): a valid
+  // profile, so its rows (and the work model under them) show at once
+  jobs: { clone: { status: 'skipped' }, facts: { status: 'waiting' }, projectMap: { status: 'waiting' }, profile: { status: 'done', profile: { mode: 'local', ci: 'release', release: 'milestone', tests: 'unit' } } },
 };
 
 function page({ projects = [W.clone(PROJECT)], status = null } = {}) {
@@ -62,7 +69,9 @@ function page({ projects = [W.clone(PROJECT)], status = null } = {}) {
   });
 }
 
-async function importAtAnalysis({ lang = 'en' } = {}) {
+// define: the workflows defined by hand (Define manually: nothing runs), so the rows and the work model show;
+// false leaves the two choices
+async function importAtAnalysis({ lang = 'en', define = true } = {}) {
   const app = page();
   await app.boot();
   if (lang !== 'en') app.sandbox.I18n.setLanguage(lang);
@@ -76,6 +85,7 @@ async function importAtAnalysis({ lang = 'en' } = {}) {
   await W.emit(app, W.READY);
   if (W.currentStep(app) !== 'analysis') await W.press(app, 'wizard-next');
   assert.equal(W.currentStep(app), 'analysis', 'the import is on step 3');
+  if (define) await W.defineWorkflows(app, 'manual');
   return app;
 }
 
@@ -99,6 +109,7 @@ const isChecked = (e) => 'checked' in e.attrs || e.attrs['aria-checked'] === 'tr
 const radio = (app, id) => W.byTestId(W.wizardMarkup(app), `wizard-work-model-${id}`);
 const checkedModels = (app) => MODELS.filter((id) => { const r = radio(app, id); return !!r && isChecked(r); });
 const filesPanel = (app) => W.byTestId(W.wizardMarkup(app), 'wizard-work-model-files');
+const isDisabled = (app, id) => 'disabled' in (radio(app, id)?.attrs || {});
 
 // the text of a radio's choice: the smallest element around it with some text (its <label>)
 function choiceText(app, id) {
@@ -146,7 +157,10 @@ test('#851 OnboardingModel.DEFAULT_WORK_MODEL is light', () => {
 });
 
 test('#851 a fresh import opens step 3 with Light picked', { timeout: 30000 }, async () => {
-  const app = await importAtAnalysis();
+  const app = await importAtAnalysis({ define: false });
+  // the two choices stand alone: the work model comes with the workflow rows
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-work-model'), null, 'no work model section while the two choices show');
+  await W.defineWorkflows(app, 'manual');
   assert.deepEqual(checkedModels(app), ['light']);
 });
 
@@ -155,16 +169,25 @@ test('#851 a fresh new project opens step 3 with Light picked', { timeout: 30000
   assert.deepEqual(checkedModels(app), ['light']);
 });
 
-test('#851 a resumed wizard whose saved work model is Standard keeps Standard', { timeout: 30000 }, async () => {
+// Standard is not ready yet ("Coming soon"): a pick of it saved earlier falls back to Light
+test('#851 a resumed wizard whose saved work model is Standard shows Light, and Finish saves light', { timeout: 30000 }, async () => {
   const app = page({ projects: [W.clone(UNFINISHED)], status: atStep(W.PID, 'analysis', { ...PICKS, workModel: 'standard' }) });
   await app.boot();
   W.wizard(app).open({ projectId: W.PID });
   await app.settle(10);
   assert.equal(W.currentStep(app), 'analysis', 'the wizard resumed on step 3');
-  assert.deepEqual(checkedModels(app), ['standard']);
+  assert.deepEqual(checkedModels(app), ['light']);
+  assert.equal(isDisabled(app, 'standard'), true, 'Standard is disabled');
+  await W.press(app, 'wizard-next');
+  assert.equal(W.currentStep(app), 'review', 'the review');
+  await Promise.race([W.press(app, 'wizard-finish'), app.settle(60)]);
+  await app.settle(30);
+  const calls = app.callsTo('updateProject');
+  assert.equal(calls.length, 1, `one api.updateProject call at Finish (${calls.length})`);
+  assert.equal(JSON.parse(JSON.stringify(calls[0][1] || {})).workModel ?? null, 'light');
 });
 
-test('#851 Finish with step 3 untouched saves workModel light', { timeout: 30000 }, async () => {
+test('#851 Finish with the work model untouched saves workModel light', { timeout: 30000 }, async () => {
   const app = await importAtAnalysis();
   await W.press(app, 'wizard-next');
   assert.equal(W.currentStep(app), 'review', 'the review');
@@ -185,16 +208,27 @@ test('#851 with Light picked, "Where the files live" is not shown', { timeout: 3
   assert.equal(H.visibleText(W.wizardMarkup(app)).includes('docs/work/'), false, 'no docs/work/ path');
 });
 
+// Standard and Full are "Coming soon": disabled, so the panel that showed for them never shows
 for (const id of ['standard', 'full']) {
-  test(`#851 with ${id} picked, "Where the files live" is shown with its docs/work/ path`, { timeout: 30000 }, async () => {
+  test(`#851 ${id} is disabled and marked "Coming soon": a pick of it changes nothing, "Where the files live" stays out`, { timeout: 30000 }, async () => {
     const app = await importAtAnalysis();
+    assert.equal(isDisabled(app, id), true, `wizard-work-model-${id} is disabled`);
+    assert.equal(isDisabled(app, 'light'), false, 'Light is not');
+    assert.equal(count(choiceText(app, id), 'Coming soon'), 1, choiceText(app, id));
+    const soon = H.findAll(W.wizardMarkup(app), (e) => e.attrs['data-testid'] === 'wizard-work-model-soon');
+    assert.equal(soon.length, 2, 'one wizard-work-model-soon on Standard and one on Full');
+    assert.equal(count(choiceText(app, 'light'), 'Coming soon'), 0, choiceText(app, 'light'));
     await pick(app, id);
-    assert.deepEqual(checkedModels(app), [id]);
-    const panel = filesPanel(app);
-    assert.ok(panel, 'data-testid="wizard-work-model-files"');
-    assert.equal(H.visibleText(panel.inner).includes('docs/work/'), true, H.visibleText(panel.inner));
+    assert.deepEqual(checkedModels(app), ['light']);
+    assert.equal(filesPanel(app), null, 'no data-testid="wizard-work-model-files"');
+    assert.equal(H.visibleText(W.wizardMarkup(app)).includes('docs/work/'), false, 'no docs/work/ path');
   });
 }
+
+test('#851 pt-BR: Standard and Full read "Em breve"', { timeout: 30000 }, async () => {
+  const app = await importAtAnalysis({ lang: 'pt-BR' });
+  assert.deepEqual(MODELS.map((id) => count(choiceText(app, id), 'Em breve')), [0, 1, 1], MODELS.map((id) => choiceText(app, id)).join(' | '));
+});
 
 // ---- c) Recommended on Light and on Analyze the repository ------------------------------------------------
 
@@ -216,7 +250,7 @@ for (const [where, open] of [['import', importAtAnalysis], ['new project', newAt
 for (const lang of ['en', 'pt-BR']) {
   test(`#851 import (${lang}): "Recommended" shows once on Analyze the repository and never on Define manually`, { timeout: 30000 }, async () => {
     const word = lang === 'en' ? 'Recommended' : 'Recomendado';
-    const app = await importAtAnalysis({ lang });
+    const app = await importAtAnalysis({ lang, define: false });
     const html = W.wizardMarkup(app);
     const texts = ['analyze', 'manual'].map((id) => {
       const el = W.byTestId(html, `wizard-workflows-choice-${id}`);
@@ -229,20 +263,20 @@ for (const lang of ['en', 'pt-BR']) {
 
 // ---- d) the work models' texts -----------------------------------------------------------------------------
 
-test('#851 work_model_standard_text no longer recommends itself and names the Anthropic playbook, simplified', () => {
-  for (const [lang, old] of [['en', /Recommended for features/i], ['pt-BR', /Recomendado para features/i]]) {
+// reworded in the visual-layout rework: one short line per tile, no "Anthropic playbook" any more
+test('#851 work_model_standard_text no longer recommends itself and names its chain: intent.md, spec.md, plan.md, then the code', () => {
+  for (const [lang, old, code] of [['en', /Recommended for features/i, 'code'], ['pt-BR', /Recomendado para features/i, 'código']]) {
     const s = String(catalog(lang)['onboarding.work_model_standard_text'] || '');
     assert.doesNotMatch(s, old, `${lang}: ${s}`);
-    assert.match(s, /playbook/i, `${lang}: ${s}`);
-    assert.match(s, /Anthropic/, `${lang}: ${s}`);
-    assert.match(s, /simplif/i, `${lang}: ${s}`);
+    assert.doesNotMatch(s, /recommend|recomend/i, `${lang}: ${s}`);
+    assert.equal(s, `intent.md → spec.md → plan.md → ${code}.`, lang);
   }
 });
 
-test('#851 work_model_full_text names the complete playbook with REVIEW.md and evals', () => {
+test('#851 work_model_full_text is Standard plus REVIEW.md and evals', () => {
   for (const lang of ['en', 'pt-BR']) {
     const s = String(catalog(lang)['onboarding.work_model_full_text'] || '');
-    assert.match(s, /playbook/i, `${lang}: ${s}`);
+    assert.match(s, /^Standard\b/, `${lang}: ${s}`);
     assert.match(s, /REVIEW\.md/, `${lang}: ${s}`);
     assert.match(s, /evals/i, `${lang}: ${s}`);
   }

@@ -6,9 +6,12 @@
 // The contract assumed here:
 // - the profile job's profile of an imported repository with no test command and no test file has
 //   testCommand null and its tests unset (null) or 'none';
-// - then the feature and fix rows' reasons (data-testid="wizard-workflow-reason"), their picked option and
-//   the profile line (data-testid="wizard-profile") say nothing of unit tests: no "unit" in English, no
-//   "unitários" in pt-BR (so no "Código + unitários", no "depois escreve os testes unitários");
+// - then the feature and fix rows' reasons (data-testid="wizard-workflow-reason"), their picked option (and its
+//   tile, data-testid="wizard-workflow-tile" aria-pressed="true"), the way of working beside the rows
+//   (data-testid="wizard-way-of-working") and the profile line (data-testid="wizard-profile": since the visual-layout
+//   rework it shows only with the job rows, here by a failed project map, what was found in its tooltip) say nothing
+//   of unit tests: no "unit" in English, no "unitários" in pt-BR (so no "Só unitários", no "depois escreve os
+//   testes unitários");
 // - a profile with a test command and unit tests may still say so.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -139,32 +142,49 @@ const pickedText = (row) => {
   const opt = H.findAll(sel?.inner || '', (e) => e.name === 'option').find((o) => 'selected' in o.attrs);
   return opt ? H.visibleText(opt.inner) : '';
 };
-// what the feature and fix rows and the profile line say: their reasons and picked options
-function promised(app) {
+const pickedTile = (row) => H.findAll(row?.outer || '', (e) => e.attrs['data-testid'] === 'wizard-workflow-tile').find((e) => e.attrs['aria-pressed'] === 'true');
+// what the feature and fix rows and the profile line say: their reasons, picked options and picked tiles, the way
+// of working, then the job row's profile line with its tooltip (the job rows listed again by a failed project map)
+async function promised(app, profile) {
   const parts = ['feature', 'fix'].map((kind) => {
     const row = rowOf(app, kind);
     assert.ok(row, `step 3 has the ${kind} row (a profile without tests is still a profile: the column shows its rows)`);
-    return `${kind}: ${textOf(byTestId(row.outer, 'wizard-workflow-reason'))} | ${pickedText(row)}`;
+    const tile = pickedTile(row);
+    assert.ok(tile, `the ${kind} row has a pressed tile`);
+    return `${kind}: ${textOf(byTestId(row.outer, 'wizard-workflow-reason'))} | ${pickedText(row)} | ${textOf(tile)} | ${tile.attrs.title}`;
   });
-  parts.push(`profile: ${textOf(byTestId(wizardMarkup(app), 'wizard-profile'))}`);
+  const way = byTestId(wizardMarkup(app), 'wizard-way-of-working');
+  assert.ok(way, 'data-testid="wizard-way-of-working"');
+  parts.push(`way of working: ${textOf(way)}`);
+  const state = profiledState(profile);
+  await emit(app, { ...state, jobs: { ...state.jobs, projectMap: { status: 'failed', error: 'boom', reason: 'boom' } } });
+  const line = byTestId(wizardMarkup(app), 'wizard-profile');
+  assert.ok(line, 'data-testid="wizard-profile" with the job rows');
+  assert.equal(String(line.attrs.title || '').length > 0, true, 'the profile line\'s tooltip says what was found');
+  parts.push(`profile: ${textOf(line)} | ${line.attrs.title}`);
   return parts.join('\n');
 }
 
 test('#844 no test command: the suggested feature and fix never promise unit tests (English)', async () => {
   for (const tests of [null, 'none']) {
-    const said = promised(await profiled({ ...NO_TESTS, tests }, 'en'));
+    const profile = { ...NO_TESTS, tests };
+    const said = await promised(await profiled(profile, 'en'), profile);
     assert.doesNotMatch(said, /\bunit\b/i, `tests ${tests}:\n${said}`);
+    assert.match(said, /No tests found/, `the profile line says so:\n${said}`);
   }
 });
 
 test('#844 no test command: the suggested feature and fix never promise unit tests (pt-BR)', async () => {
   for (const tests of [null, 'none']) {
-    const said = promised(await profiled({ ...NO_TESTS, tests }, 'pt-BR'));
+    const profile = { ...NO_TESTS, tests };
+    const said = await promised(await profiled(profile, 'pt-BR'), profile);
     assert.doesNotMatch(said, /unitári/i, `tests ${tests}:\n${said}`);
+    assert.match(said, /Nenhum teste encontrado/, `the profile line says so:\n${said}`);
   }
 });
 
 test('#844 guard: a project with a test command and unit tests is still told so', async () => {
-  const said = promised(await profiled(WITH_TESTS, 'en'));
+  const said = await promised(await profiled(WITH_TESTS, 'en'), WITH_TESTS);
   assert.match(said, /\bunit\b/i, said);
+  assert.match(said.split('\n').find((l) => l.startsWith('profile:')), /Unit tests/, said);
 });

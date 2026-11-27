@@ -1,6 +1,7 @@
 // #725: the project wizard's analysis step (fronts/build/views/projects/project-wizard.js): the "Suggested
 // workflows" column starts with two choices, shows the analysis running, its failure with Retry, or the
-// rows defined by hand; Continue is always possible; a failed paid job says why with Retry on its row, in
+// rows defined by hand; Continue is possible in every state where the workflows are defined (#100: locked while
+// the two choices show and while the profile job failed); a failed paid job says why with Retry on its row, in
 // the review's refactor card and in the tray. Acceptance tests, written before the code, on the real page
 // (packages/ui-kit/test/renderer-app-harness.js), driven as project-wizard-workflows-630.test.js.
 //
@@ -19,8 +20,12 @@
 //     data-testid="wizard-workflows-retry" (api.retryOnboarding) and wizard-workflows-choice-manual;
 //   - Define manually: the four rows, selects enabled at once, no data-testid="wizard-workflow-reason";
 //     wizard-workflows-choice-analyze stays offered.
-// - footer: data-testid="wizard-next" (Continue) on the analysis step, never disabled, in every state; no
-//   data-testid="wizard-analyze" ("Analyze and continue" / "Analisar e continuar") any more.
+// - footer: data-testid="wizard-next" (Continue) on the analysis step, shown in every state, never waiting for the
+//   analysis to end; #100: disabled only while the workflows are not defined (the two choices, or the failed
+//   profile job: Retry or Define manually first); no data-testid="wizard-analyze" ("Analyze and continue" /
+//   "Analisar e continuar") any more.
+// - #100 (visual-layout): the job rows (wizard-cost) are not drawn while the two choices show, unless a job
+//   failed (its reason and Retry).
 // - a failed job's state from the engine (packages/engine/test/project-onboarding-failed-job-725.test.js):
 //   jobs.<id> = { status: 'failed', error: <the full error>, code: 'cli-missing' | 'invalid-ranking' |
 //   'no-folder' | 'refused' | 'timeout' | ..., reason: <a short English sentence>, cli?: 'claude' }; the wizard
@@ -181,12 +186,13 @@ const selectOf = (row) => H.findEl(row.outer, (e) => e.name === 'select' && e.at
 const part = (app, id) => H.findEl(byTestId(wizardMarkup(app), 'wizard-cost')?.outer || '', (e) => e.attrs['data-part'] === id);
 const amountOf = (row) => textOf(H.findEl(row.outer, (e) => /\bwizard-amount\b/.test(e.attrs.class || ''))).trim();
 
-// Continue on the footer, shown and enabled; no "Analyze and continue"
-function assertContinue(app, when) {
+// Continue on the footer, shown, enabled once the workflows are defined (#100: `locked` while they are not); no
+// "Analyze and continue"
+function assertContinue(app, when, { locked = false } = {}) {
   const markup = wizardMarkup(app);
   const next = byTestId(markup, 'wizard-next');
   assert.equal(next === null, false, `${when}: Continue (data-testid="wizard-next") is shown`);
-  assert.equal('disabled' in next.attrs, false, `${when}: Continue is enabled`);
+  assert.equal('disabled' in next.attrs, locked, `${when}: Continue is ${locked ? 'disabled (#100: the workflows are not defined)' : 'enabled'}`);
   assert.equal(byTestId(markup, 'wizard-analyze'), null, `${when}: no "Analyze and continue" (data-testid="wizard-analyze")`);
 }
 
@@ -285,11 +291,11 @@ test('#725 Define manually: the four rows editable at once, no profile reason, a
   assert.equal(byTestId(markup, 'wizard-workflows-choice-analyze') === null, false, 'Analyze the repository is still offered');
 });
 
-// ---- 5. Continue always possible -----------------------------------------------------------------
+// ---- 5. Continue never waits for the analysis (#100: only for the workflows to be defined) -------
 
-test('#725 Continue is enabled and "Analyze and continue" is gone in every state of the step', { timeout: 30000 }, async () => {
+test('#725 #100 Continue is enabled whatever the analysis does once the workflows are defined, locked in choose and failed, and "Analyze and continue" is gone in every state', { timeout: 30000 }, async () => {
   const app = await atAnalysis();
-  assertContinue(app, 'not started');
+  assertContinue(app, 'not started', { locked: true });
   await press(app, 'wizard-workflows-choice-analyze');
   await emit(app, PROFILING);
   assertContinue(app, 'analyzing (profile running)');
@@ -298,16 +304,40 @@ test('#725 Continue is enabled and "Analyze and continue" is gone in every state
   await emit(app, PROFILED);
   assertContinue(app, 'done');
   await emit(app, PROFILE_FAILED);
-  assertContinue(app, 'profile failed');
+  assertContinue(app, 'profile failed', { locked: true });
   await emit(app, MAP_FAILED);
   assertContinue(app, 'project map failed');
   assert.doesNotMatch(H.visibleText(wizardMarkup(app)), /analyze and continue/i);
 });
 
+// #100: what the lock does. A click on the locked Continue stays on the step and starts nothing; the profile job
+// failed locks it again; Define manually (beside Retry) unlocks it
+test('#100 Continue locked (the two choices, a failed profile job): a click does nothing; Define manually unlocks it and starts nothing', { timeout: 30000 }, async () => {
+  const app = await atAnalysis();
+  const calls = () => ['analyzeOnboarding', 'retryOnboarding'].map((m) => app.callsTo(m).length);
+  await press(app, 'wizard-next');
+  assert.equal(currentStep(app), 'analysis', 'choose: a click on the locked Continue stays on step 3');
+  assert.deepEqual(calls(), [0, 0], 'and starts nothing');
+  await press(app, 'wizard-workflows-choice-analyze');
+  await emit(app, PROFILING);
+  await emit(app, PROFILE_FAILED);
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-workflows-column')?.attrs['data-state'], 'failed');
+  assertContinue(app, 'profile failed', { locked: true });
+  const before = calls();
+  await press(app, 'wizard-next');
+  assert.equal(currentStep(app), 'analysis', 'failed: a click on the locked Continue stays on step 3');
+  assert.deepEqual(calls(), before, 'and starts nothing');
+  await press(app, 'wizard-workflows-choice-manual');
+  assertContinue(app, 'failed, then Define manually');
+  await press(app, 'wizard-next');
+  assert.equal(currentStep(app), 'review', 'on to the review');
+  assert.deepEqual(calls(), before, 'Continue starts nothing');
+});
+
 test('#725 pt-BR: no "Analisar e continuar" on the analysis step', { timeout: 20000 }, async () => {
   const app = await atAnalysis({ lang: 'pt-BR' });
   assert.doesNotMatch(H.visibleText(wizardMarkup(app)), /analisar e continuar/i);
-  assertContinue(app, 'pt-BR, not started');
+  assertContinue(app, 'pt-BR, not started', { locked: true });
 });
 
 // ---- 8, 9. a failed job says why, with Retry on its row ------------------------------------------
@@ -346,6 +376,7 @@ test('#725 amounts: a failed job reads "—", a done job its cost or "grátis", 
 test('#725 #730 the review\'s findings card, its project map failed, shows the same reason and a Retry', { timeout: 20000 }, async () => {
   const app = await atAnalysis({ lang: 'pt-BR' });
   await emit(app, MAP_FAILED);
+  await press(app, 'wizard-workflows-choice-manual'); // #100: Continue waits for the workflows to be defined
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');
   const card = byTestId(wizardMarkup(app), 'wizard-review-findings');

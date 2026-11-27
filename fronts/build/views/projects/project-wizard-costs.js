@@ -58,17 +58,26 @@
       const s = job.status || 'waiting';
       // #630 (mock-4): the profile row says the ways of working it found (#726: keys, in the interface's language)
       const found = id === 'profile' && column.textOf(M.profileLine(column.profileOf()));
-      const line = id === 'clone' ? cur().model.repository : found ? t(column.profileSourceKey(), { profile: found }) : t(`onboarding.job_${id}_${later(id) ? 'later_new' : 'text'}`);
+      // an import's profile row only says where it is read from: what was found shows once, at the right, with the
+      // workflows it gives (wizard-way-of-working); the row keeps it as its tooltip
+      const said = found ? t(column.profileSourceKey(), { profile: found }) : '';
+      const line = id === 'clone' ? cur().model.repository : said && isNew() ? said : t(`onboarding.job_${id}_${later(id) ? 'later_new' : 'text'}`);
       const testid = id === 'profile' ? ' data-testid="wizard-profile"' : later(id) ? ` data-testid="wizard-job-later-${id}"` : '';
-      // mock-4's pick of a paid analysis (shown checked, disabled; #850 unchecked when left for later)
-      const pick = paid.includes(id) ? `<input type="checkbox"${later(id) ? '' : ' checked'} disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
+      // a paid analysis: its pick stays for assistive tech and the tests (checked, disabled; #850 unchecked when
+      // left for later) but is not shown: it can't be changed, so the row says "paid" with a badge instead
+      const pick = paid.includes(id) ? `<input type="checkbox" class="sr-only"${later(id) ? '' : ' checked'} disabled aria-label="${esc(t(`onboarding.job_${id}`))}">` : '';
+      const charged = COSTED.includes(id) && !later(id) && !isFree(id) && jobOf(id).status !== 'done';
+      const badge = charged ? `<span class="badge warn wizard-job-paid" data-testid="wizard-job-paid">${esc(t('onboarding.job_paid'))}</span>` : '';
+      // the paid row's amount only once there is one: "not known" is said once, in the total under the rows
+      const sum = amount(id);
+      const shown = charged && sum === t('onboarding.cost_not_known') ? '' : sum;
       // #725: a failed job says why under its title (the full error on hover), with its Retry
       const failed = s === 'failed' && id !== 'clone'
         ? `<span class="small wizard-job-error" data-testid="wizard-job-error-${id}" title="${esc(job.error || job.reason || '')}">${esc(column.jobReason(job))}</span>` : '';
       return `<li class="wizard-job"${COSTED.includes(id) ? ` data-part="${id}"` : ''}>
           <span class="${s === 'running' ? 'spinner wizard-job-spinner' : 'wizard-dot'} job-${esc(s)}" role="img" aria-label="${esc(t(`onboarding.job_status_${s}`))}" title="${esc(t(`onboarding.job_status_${s}`))}"></span>
-          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(line)}">${esc(line)}</span>${failed}</span>
-          <span class="wizard-amount muted">${esc(amount(id))}</span>${failed ? retryButton(id) : ''}
+          <span class="wizard-job-text"><strong class="wizard-job-title">${pick}${esc(t(`onboarding.job_${id}`))}</strong><span class="muted small text-cut"${testid} title="${esc(said || line)}">${esc(line)}</span>${failed}</span>
+          <span class="wizard-job-side">${badge}<span class="wizard-amount muted">${esc(shown)}</span></span>${failed ? retryButton(id) : ''}
         </li>`;
     }
 
@@ -87,13 +96,27 @@
       return `<span class="muted small" data-testid="wizard-cost-unknown">${esc(t(total == null ? 'onboarding.cost_unknown' : 'onboarding.cost_partial'))}</span>`;
     }
 
-    function costBlock(started) {
-      const skip = started || paid.every(later) || cur().onboarding?.wanted ? '' : `<button type="button" class="btn sm" data-act="skip" data-testid="wizard-skip">${esc(t('onboarding.skip'))}</button>`;
+    // the progress of the analysis: how many of its jobs ended, as a bar, and the one running
+    function progress(ids, ready = false) {
+      const done = ids.filter((id) => ENDED.includes(jobOf(id).status)).length;
+      const now = ids.find((id) => jobOf(id).status === 'running');
+      const label = [t(ready ? 'onboarding.progress_label_ready' : 'onboarding.progress_label', { done, total: ids.length }), now ? t(`onboarding.job_${now}`) : ''].filter(Boolean).join(' · ');
+      return `<div class="wizard-progress" data-testid="wizard-progress"><span class="small">${esc(label)}</span>
+          <progress max="${ids.length}" value="${Math.max(done, 0.15)}" aria-label="${esc(label)}"></progress></div>`;
+    }
+
+    // rows: the jobs, one per line, with their total (while the workflows wait for the analysis, or it failed; also
+    // any failed job outside those states); running: the bar. Nothing of it before the analysis is asked for
+    function costBlock({ rows = false, running = false } = {}) {
+      const ids = isNew() ? jobs : ['clone', ...jobs];
+      const list = rows || ids.some((id) => id !== 'clone' && jobOf(id).status === 'failed');
+      if (!list && !running) return '';
+      if (!list) return `<div class="wizard-cost" data-testid="wizard-cost">${progress(ids, true)}</div>`;
       return `<div class="wizard-cost" data-testid="wizard-cost">
-        <ul class="wizard-jobs">${(isNew() ? jobs : ['clone', ...jobs]).map(row).join('')}</ul>
-        <div class="card wizard-cost-total-row"><span>${esc(t('onboarding.cost_real_models'))}</span>
-          <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(totalText())}</strong>${skip}</div>
-        ${unknownNote()}
+        ${running ? progress(ids) : ''}
+        <ul class="wizard-jobs">${ids.map(row).join('')}</ul>
+        <p class="wizard-cost-total-row small muted"><span>${esc(t('onboarding.cost_real_models'))}</span>
+          <strong class="wizard-amount" data-testid="wizard-cost-total">${esc(totalText())}</strong>${unknownNote()}</p>
       </div>`;
     }
 
