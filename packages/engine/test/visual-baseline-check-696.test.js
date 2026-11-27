@@ -11,7 +11,8 @@
 //     one `{ name, file, feature, scenario, command }` per screenshot name the scenarios tagged
 //     @issue-<n> (on the scenario or the Feature) use without a baseline: name '671-documents.png',
 //     file 'features/__screenshots__/671-documents-win32.png', feature (repository-relative, forward
-//     slashes), command 'npm run test:e2e:update -- --grep @issue-671'. A name is a quoted "*.png" in
+//     slashes), command 'npm run test:e2e:update -- --grep "@issue-671(?![0-9])"' (#93: anchored,
+//     so @issue-67 never selects @issue-671). A name is a quoted "*.png" in
 //     a step's text (Scenario Outline placeholders expanded from the Examples), or the static
 //     `toHaveScreenshot('…png')` of the step definition (in `steps`) whose text the step matches.
 //     The .feature files are every one of the repository (node_modules and .git skipped).
@@ -80,7 +81,7 @@ test('#696 missingBaselines: a scenario of the issue naming a PNG without a base
     file: 'features/__screenshots__/671-documents-win32.png',
     feature: 'fronts/plan/features/docs.feature',
     scenario: 'The documents list looks like its baseline',
-    command: 'npm run test:e2e:update -- --grep @issue-671',
+    command: 'npm run test:e2e:update -- --grep "@issue-671(?![0-9])"',
   }]);
 });
 
@@ -135,7 +136,7 @@ test('#696 missingBaselines: only the issue\'s scenarios count; a Feature-level 
     '',
   ].join('\n'));
   assert.deepEqual(missingBaselines(root, { issues: [671], platform: 'win32' }).map((m) => m.name), ['671-board.png']);
-  assert.deepEqual(missingBaselines(root, { issues: [600], platform: 'win32' }).map((m) => m.command), ['npm run test:e2e:update -- --grep @issue-600']);
+  assert.deepEqual(missingBaselines(root, { issues: [600], platform: 'win32' }).map((m) => m.command), ['npm run test:e2e:update -- --grep "@issue-600(?![0-9])"']);
 });
 
 test('#696 missingBaselines: a static toHaveScreenshot(\'…png\') of the step definition the scenario\'s step matches is checked too', (t) => {
@@ -228,7 +229,7 @@ test('#696 run: a visual_baselines step reports the missing baseline (file and u
   assert.equal(missing.output.status, 'missing');
   assert.deepEqual(missing.output.missing.map((m) => m.file), [baseline]);
   assert.ok(missing.output.message.includes(baseline), missing.output.message);
-  assert.ok(missing.output.message.includes('npm run test:e2e:update -- --grep @issue-671'), missing.output.message);
+  assert.ok(missing.output.message.includes('npm run test:e2e:update -- --grep "@issue-671(?![0-9])"'), missing.output.message);
   png(repo, baseline);
   const present = await runCheckOnly(t, repo, { issues: '671' });
   assert.equal(present.output.status, 'pass');
