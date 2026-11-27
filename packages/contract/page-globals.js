@@ -63,7 +63,6 @@ var api;
 /** @type {PageFunction} */ var openSupervisorChat;
 /** @type {PageObject} */ var OracleChat;
 /** @type {PageObject} */ var OracleChatModel;
-/** @type {PageObject | undefined} no file defines it: oracle.js reads undefined (a bug of its own, out with its fix) */ var oracleAgent;
 /** @type {PageObject} */ var PasteImage;
 /** @type {PageObject} */ var ProjectCityImpact;
 /** @type {PageObject} */ var ProjectConflictMap;

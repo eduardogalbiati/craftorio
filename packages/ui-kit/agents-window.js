@@ -64,7 +64,7 @@
   function headerHtml(d) {
     if (!d) return `<span class="muted">${t('agents_window.no_agent')}</span>`;
     const h = (typeof d.header === 'function' ? d.header() : null) || {};
-    const parts = [h.model && `<span class="mono aw-model" title="${t('agents_window.model')}">${esc(h.model)}</span>`,
+    const parts = [h.model && `<span class="mono aw-model" data-testid="agents-window-model" title="${t('agents_window.model')}">${esc(h.model)}</span>`,
       h.cost != null && `<span title="${t('agents_window.what_this_conversation_cost')}">${esc(money(h.cost))}</span>`,
       h.tokens != null && `<span title="${t('agents_window.tokens_of_this_conversation')}">${esc(Number(h.tokens).toLocaleString('en-US'))} ${t('agents_window.tokens')}</span>`,
       h.note && `<span class="aw-note" title="${esc(h.note)}">${esc(h.note)}</span>`].filter(Boolean);
