@@ -9,6 +9,8 @@
 //   agents-window-pane       the selected agent's pane: agents-window-header names the agent, and the
 //                            shared chat (agent-chat with data-agent, agent-chat-input, agent-chat-send,
 //                            agent-chat-messages, agent-chat-message)
+//   agents-window-model      in agents-window-header, the agent's model (absent while it has none, #77)
+//   oracle-model             in the Oracle's pane, its status badge, titled with the model id (#77)
 // The window is found among the app's windows (e2e.app.windows()) by its rail, after the click or the
 // shortcut, and kept on the scenario's fixture as e2e.agentsWindow. The fixture closes the app, and
 // every window with it, after the scenario (fixtures.js): a scenario closes it only to check what that leaves (#76).
