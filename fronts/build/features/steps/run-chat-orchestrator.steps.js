@@ -141,7 +141,8 @@ Then('once it ends, the orchestrator\'s message for {string} shows that it passe
 Then('the orchestrator\'s message for {string} shows that it was skipped, not passed', async ({ e2e }, name) => {
   const msg = message(e2e.window, name);
   await expect(msg).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(msg).toContainText(/\b(Skipped|Pulado)\b/, { timeout: LOAD_TIMEOUT });
+  // the state pill is its own element: the message's text run together ("Rule checkSkipped") has no word boundary
+  await expect(msg.locator('.pill').first()).toHaveText(/^(Skipped|Pulado)$/, { timeout: LOAD_TIMEOUT });
   await expect(msg).not.toContainText(/\b(Passed|Passou)\b/);
   await expect(msg).not.toHaveAttribute('data-state', 'passed');
 });

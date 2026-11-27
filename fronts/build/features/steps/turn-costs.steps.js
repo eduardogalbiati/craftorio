@@ -54,7 +54,9 @@ function writeRun(run) {
       return [
         { ts: from, type: 'step.started', step_id: t.step, step_type: 'agent', agent: t.session.agent, visit: 1 },
         { ts: from, type: 'session.opened', session_id: t.session.id, session: open },
-        { ts: to, type: 'session.message_received', session_id: t.session.id, step_id: t.step, text: 'Done.', cost_usd: t.session.cost_usd, duration_ms: 9 * MIN, session: t.session },
+        { ts: to, type: 'session.message_received', session_id: t.session.id, step_id: t.step, text: 'Done.', turn: 1, cost_usd: t.session.cost_usd, duration_ms: 9 * MIN, session: t.session,
+          // Codex reports only a count of reasoning tokens, no thinking items (#117)
+          ...(t.session.provider === 'codex' ? { usage: { input: 1200, output: 3400, cache_read: 52000, reasoning: 2100 } } : {}) },
         { ts: to, type: 'step.finished', step_id: t.step, duration_ms: 9 * MIN, output: { summary: `${t.session.agent} finished.` } },
         { ts: to, type: 'session.closed', session_id: t.session.id, status: 'success', session: t.session },
       ];
