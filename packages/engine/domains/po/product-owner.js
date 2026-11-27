@@ -14,6 +14,8 @@
 // Calibration (#189, apps/desktop/renderer/po-calibration.js): a plan question is planned with the agent's saved
 // Speed ↔ Quality step, or a step for that question only; the prompt states its parameters, the simulated
 // answer follows them, normalizeAnswer caps the runs per stage, and the answer records the step.
+// #110: the simulated plan's head line (po.simulated_plan_head*) and a group's over-the-cap warning
+// (po.group_over_cap) name the calibration step in the interface language; the prompts stay English.
 // Cost (#205, PoCalibration.cost): the saved Economy ↔ Generous step (`cost`), or one for the question
 // ("plan this one cheap"). It sets the largest group (groupCap: cost wins over the calibration), packs
 // groups of one area or files into one run at Economy (packGroups), sets the test, screenshot and

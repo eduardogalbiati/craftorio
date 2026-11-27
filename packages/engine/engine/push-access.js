@@ -8,6 +8,8 @@
 // (project-onboarding.js forkRemoteOf); `safeUrl(url)` drops a user:token@ before a URL is logged.
 // `isGitUrl` is the onboarding model's rule (packages/shared/onboarding-model.js). Used by the import
 // (service/areas/project-onboarding.js) and a Remote / Fork + PR run's start (engine/run/checkout.js checkPush).
+// #110: the fix stays English; `fixKey` + `fixParams` (httpsFixWithKey, pushFix) name its catalog text
+// (onboarding.push_fix_*), which the wizard's push notice shows in the interface language.
 
 'use strict';
 

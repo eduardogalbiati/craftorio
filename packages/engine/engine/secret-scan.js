@@ -161,7 +161,7 @@ function reviewPrompt(output) {
 /**
  * gitleaks on the commits of `range` in `dir` (the checkout's top folder).
  * @param {{ dir: string, file: string, range: { head: string, not: string[] }, env?: object, signal?: AbortSignal }} what
- * @returns {Promise<{ status: 'pass' | 'fail' | 'error', findings: Finding[], message: string }>}
+ * @returns {Promise<{ status: 'pass' | 'fail' | 'error', findings: Finding[], message: string, message_key?: string, message_params?: object }>}
  */
 async function scanSecrets({ dir, file, range, env, signal }) {
   const open = await uncommitted(dir);

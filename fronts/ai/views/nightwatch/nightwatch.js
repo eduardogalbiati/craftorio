@@ -70,7 +70,6 @@
       ${placeholder ? `<option value="" selected disabled>${esc(placeholder)}</option>` : ''}${MULTIPLIERS.map((m) => `<option value="${m}"${!placeholder && Number(value) === m ? ' selected' : ''}>×${m}</option>`).join('')}
     </select>`;
   // Customize: one row per limit, the day value and tonight's (in M tokens, US$, hours, a factor, US$)
-  const LIMIT_ROWS = [
   const noLimit = () => I18n.t('nightwatch.limit_none');
   const LIMIT_ROWS = [
     { id: 'context', label: () => I18n.t('nightwatch.limit_context'), unit: () => I18n.t('nightwatch.limit_unit_m_tokens'), day: (d) => (d.context ? tokM(d.context) : noLimit()), shown: (x) => x.context / 1e6, sent: (n) => n * 1e6 },
@@ -310,7 +309,7 @@
       <div class="row nw-card-head"><h3>${t('nightwatch.timeline')}</h3><div class="an-legend nw-legend"><span><i class="nw-l-run"></i>${t('nightwatch.run_active')}</span><span><i class="nw-l-inc"></i>${t('nightwatch.incident')}</span><span><i class="nw-l-act"></i>${t('nightwatch.watch_action')}</span></div></div>
       <div class="nw-tl">
         ${lanes.map((l) => `<div class="nw-tl-lane">${l.items.join('')}</div>`).join('') || `<div class="nw-tl-lane muted small">${t('nightwatch.no_run_in_this_window')}</div>`}
-        <div class="nw-tl-lane nw-tl-marks">${marks(m.timeline.incidents, 'inc', (e) => `${KIND[e.kind] || e.kind}: ${e.target}${e.resolved ? ' (resolved)' : ''}`)}</div>
+        <div class="nw-tl-lane nw-tl-marks">${marks(m.timeline.incidents, 'inc', (e) => `${kindLabel(e.kind)}: ${e.target}${e.resolved ? ` (${t('nightwatch.resolved').toLowerCase()})` : ''}`)}</div>
         <div class="nw-tl-lane nw-tl-marks">${marks(m.timeline.actions, 'act', (e) => `${e.title}${e.auto ? '' : ' (your click)'}`)}</div>
       </div>
       <div class="row nw-tl-axis muted small"><span>${esc(hm(m.window.from))}</span><span>${esc(hm(new Date(a + span / 2).toISOString()))}</span><span>${esc(hm(m.window.to))}</span></div>

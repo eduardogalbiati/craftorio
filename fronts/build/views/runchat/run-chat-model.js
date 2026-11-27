@@ -100,6 +100,11 @@
     ? { passed: o.passed ?? c?.passed ?? null, failed: typeof o.failed === 'number' ? o.failed : c?.failed ?? null } : null);
   const machineFailures = (o) => (Array.isArray(o.failures) ? o.failures : []).slice(0, MAX_FAILURES)
     .map((f) => ({ test: clip(String(f?.test || f?.name || f || ''), 300), file: f?.file ? String(f.file) : null }));
+  // #110: a machine step's message as the catalog's text for its message_key (interface language), else its first line
+  const machineSummary = (o, step) => {
+    const english = firstLine(o.message, step);
+    return (o.message_key && i18n()?.translated(o.message_key, english, o.message_params || {})) || english;
+  };
   function machineOutcome(it, ev) {
     const o = ev.output || {};
     const failed = !!ev.error || (o.status != null && !ENDED_WELL.includes(o.status));
@@ -112,9 +117,7 @@
       scope: o.scope || it.scope, why: o.selection?.why ? firstLine(o.selection.why, it.step) : it.why,
       // why it did not simply pass (test ids missing, a broken red check, a skipped check), in the engine's words
       // #110: the engine's English as the catalog's text for its message_key, in the interface language
-      summary: o.status && !['pass', 'passed', 'ok', 'success'].includes(o.status) && o.message
-        ? (o.message_key ? i18n()?.translated(o.message_key, firstLine(o.message, it.step), o.message_params || {}) ?? firstLine(o.message, it.step) : firstLine(o.message, it.step))
-        : null,
+      summary: o.status && !['pass', 'passed', 'ok', 'success'].includes(o.status) && o.message ? machineSummary(o, it.step) : null,
       error: ev.error ? clip(String(o.error || o.message || 'unknown error'), 600) : null,
     });
     if (o.timeout_ms) it.timeoutMin = Math.round(o.timeout_ms / 60e3);
