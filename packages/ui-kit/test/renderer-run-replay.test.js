@@ -12,6 +12,7 @@ const RunProgress = require('@craftorio/shared/run-progress-model');
 const RunBadges = require('../run-badges');
 const ChainModel = require('@craftorio/shared/chain-model'); // #134: runInfo reads a run's chain through it
 const RunRecord = require('@craftorio/shared/run-record'); // #350: onEvent upgrades a past run's events through it
+const SessionCost = require('@craftorio/shared/session-cost'); // #117: onEvent prices a turn through it (a renderer global)
 const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 // run titles, issues and PRs moved into run-meta.js: both files are searched
@@ -68,6 +69,7 @@ function loadHelpers({ api = {}, view = 'dashboard' } = {}) {
     RunBadges,
     ChainModel,
     RunRecord,
+    SessionCost,
     showToast: (...args) => calls.showToast.push(args),
     loadUsage: () => { calls.loadUsage += 1; },
     loadUsageThrottled: () => { calls.loadUsageThrottled += 1; },
