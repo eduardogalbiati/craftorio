@@ -55,7 +55,7 @@ for (const rel of WORKFLOWS) {
     assert.equal(quoted, true, `the pattern is quoted for the shell (got "${command}")`);
     const re = new RegExp(pattern);
     const selected = Object.keys(titles).filter((k) => re.test(titles[k]));
-    assert.deepEqual(selected, ['83', '83-visual', '41', 'smoke'], `pattern "${pattern}"`);
+    assert.deepEqual(selected.sort(), ['41', '83', '83-visual', 'smoke'], `pattern "${pattern}"`);
   });
 }
 
