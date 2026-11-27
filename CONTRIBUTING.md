@@ -94,7 +94,7 @@ only on your machine.
 These come from [`AGENTS.md`](AGENTS.md), which holds the full list (`CLAUDE.md` imports it):
 
 - **English everywhere** in the source: UI, YAML, skills, docs, comments, logs, errors, test names.
-  What agents write follows Settings › Language (English by default).
+  What agents write follows Settings › Language (the interface language by default, issues included: #110).
 - **Branch + pull request**: never commit to `main`; the maintainer merges.
 - **Tests with every change**: new or fixed behaviour comes with a test that fails without it.
 - Real model calls cost money: automated checks never start real runs.

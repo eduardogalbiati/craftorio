@@ -108,7 +108,7 @@ form with proper controls and Save/Cancel).
 
 ## Rules
 
-- Write in the issues language the Language line names (Settings › Language; English when unset).
+- Write in the issues language the Language line names (Settings › Language; the interface language when unset).
   An addition to an existing issue is in that language too; never rewrite existing text only to
   translate it. `- [ ]`, `#n`, closing keywords (`Closes #n`) and label names never change.
 - Concrete over general: names, numbers, paths, ids. No filler, no marketing tone.

@@ -66,14 +66,17 @@
     return 'done';
   }
 
+  /** The line of a suite step's output. */
+  function suiteNote(o) {
+    if (o.status === 'not_run') return String(o.message || 'not run');
+    const counts = o.passed == null && o.failed == null ? `${o.status || 'ran'}${(o.failures || []).length ? `, ${o.failures.length} failure(s)` : ''}` : `${o.passed ?? 0} passed, ${o.failed ?? 0} failed`;
+    return `${counts} (${o.scope || 'suite'}): ${o.command || ''}`;
+  }
+
   /** One line about a step's output. */
   function noteOf(o) {
     if (!o || typeof o !== 'object') return one(o);
-    if (o.kind === 'suite') {
-      if (o.status === 'not_run') return String(o.message || 'not run');
-      const counts = o.passed == null && o.failed == null ? `${o.status || 'ran'}${(o.failures || []).length ? `, ${o.failures.length} failure(s)` : ''}` : `${o.passed ?? 0} passed, ${o.failed ?? 0} failed`;
-      return `${counts} (${o.scope || 'suite'}): ${o.command || ''}`;
-    }
+    if (o.kind === 'suite') return suiteNote(o);
     if (o.kind === 'screenshots') return `${o.taken ?? 0} screenshots of ${o.screens ?? 0} screens`;
     if (o.results) {
       return Object.entries(o.results).filter(([, r]) => r && r.verdict)
