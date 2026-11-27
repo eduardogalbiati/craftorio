@@ -3,9 +3,9 @@
 // it runs. The command is the step's `command` (a template, e.g. "{{ inputs.test_command }}") or,
 // when it renders empty, the one the worktree's files give (`detectTestCommand`: package.json's test
 // script → `npm test`, go.mod → `go test ./...`, ...). The whole output goes to
-// <run_dir>/logs/suite-<round>.log; the failing tests are read from it (`parseFailures`: node:test
-// spec and TAP, Jest, pytest, go test, dotnet test, Maven) as { test, file, error } (the error's
-// first lines). Failures the run already knows fail on the base too (`preexisting`, the test
+// <run_dir>/logs/suite-<round>.log; the failing tests are read from it (`parseFailures`, suite-failures.js:
+// node:test spec and TAP, Jest, pytest, go test, cargo test, dotnet test, Maven) as { test, file, error }
+// (the error's first lines). Failures the run already knows fail on the base too (`preexisting`, the test
 // writer's pre-existing failures, #101) are reported apart and never fail the step.
 // The step tells pre-existing failures apart by itself (#211): when tests fail, it runs only their
 // test files in the base checkout (`base()`, the run's <run_id>-base worktree), same command filtered
@@ -14,6 +14,8 @@
 // output: the engine adds them to the run's list and to the project's base-health store, #405); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
+// cargo test (#109) names tests, not files: its failing tests run by name on the base
+// (`checkCargoOnBase`, `cargo test -- <names>`), cached per commit + `cargo:<name>`.
 // A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
 // `base`: nothing is checked there, every failing test fails the step.
 // The suite runs as from a shell (#210) with the allowlisted environment (#470, child-env.js plus the
@@ -87,6 +89,11 @@ const {
 const { saveCoverage } = require('../domains/evidence/coverage-summary');
 const { parseCounts } = require('./suite-counts');
 const { clean, fileOf } = require('./output-lines');
+const {
+  ERROR_LINES,
+  parseFailures,
+  sameTest,
+} = require('./suite-failures'); // #109
 const { suiteSlotRun } = require('./suite-slot');
 const { noTests, notRunMessage, suiteWithoutCommand } = require('./suite-no-command'); // #71
 const { excusedOnBase } = require('./suite-last-green');
@@ -107,8 +114,6 @@ const TIMEOUT_FACTOR = 3;
 // the step's timeout stays this much above the largest per-test budget (#402)
 const BACKSTOP_MARGIN_MS = 2 * 60e3;
 const HISTORY = 10;
-const MAX_FAILURES = 30;
-const ERROR_LINES = 3;
 const MOCK_BASE_FILE = 'test/simulated-base.test.js';
 const MOCK_OUTSIDE_FILE = 'test/simulated-outside.test.js';
 const SELECTION_LINES = 20;
@@ -147,120 +152,6 @@ function detectTestCommand(dir) {
   if (PYTHON_PROJECT_FILES.some((f) => exists(dir, f))) return 'python -m pytest';
   return null;
 }
-
-const firstLines = (lines) => lines.map((l) => l.trim()).filter(Boolean).slice(0, ERROR_LINES).join('\n').slice(0, 400);
-// The failing tests of a suite's output: [{ test, file, error }], at most MAX_FAILURES, deduplicated.
-// The agent reporter's JSON (#219) is read as is, with the failure's `line` and `kind` (file: a test
-// file that could not run); the runners' text formats are scraped otherwise.
-function parseFailures(text, { cwd } = {}) {
-  const report = parseAgentReport(clean(text));
-  if (report) {
-    return report.failures.slice(0, MAX_FAILURES).map((f) => ({
-      test: String(f.test || ''),
-      file: f.file ? fileOf(f.file, cwd) : '',
-      error: [f.error, f.expected !== undefined ? `expected: ${f.expected}, actual: ${f.actual}` : ''].filter(Boolean).join('\n'),
-      line: f.line ?? null,
-      kind: f.kind || 'test',
-    }));
-  }
-  const lines = clean(text).split(/\r?\n/);
-  const out = [];
-  const add = (test, file, error, extra = {}) => {
-    test = String(test || '').trim();
-    if (!test || out.some((f) => f.test === test && f.file === file)) return;
-    out.push({ test, file: file || '', error: error || '', ...extra });
-  };
-  // node:test, spec reporter: "✖ failing tests:", then "test at <file>:<l>:<c>" / "✖ <name> (<ms>)" / the error
-  const spec = lines.findIndex((l) => /^\s*✖ failing tests:/.test(l));
-  if (spec >= 0) {
-    let file = '';
-    for (let i = spec + 1; i < lines.length; i++) {
-      const at = /^\s*test at (.+)$/.exec(lines[i]);
-      if (at) { file = fileOf(at[1], cwd); continue; }
-      const name = /^(\s*)✖ (.+?)(?: \([\d.]+m?s\))?$/.exec(lines[i]);
-      if (!name) continue;
-      const err = [];
-      for (let j = i + 1; j < lines.length && !/^\s*(test at |✖ )/.test(lines[j]); j++) err.push(lines[j]);
-      // a suite whose subtests failed repeats them: only the tests with their own error
-      if (!/^\s*\d+ subtests? failed/.test(err.find((l) => l.trim()) || '')) add(name[2], file, firstLines(err));
-    }
-  }
-  // node:test, TAP: "not ok N - name" + a YAML block with location / error / failureType
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^(\s*)not ok \d+ - (.+?)(?:\s+#.*)?$/.exec(lines[i]);
-    if (!m) continue;
-    let file = '';
-    let error = '';
-    let subtests = false;
-    if (/^\s*---\s*$/.test(lines[i + 1] || '')) {
-      for (let j = i + 2; j < lines.length && !/^\s*\.\.\.\s*$/.test(lines[j]); j++) {
-        const kv = /^\s*(location|error|failureType):\s*(.*)$/.exec(lines[j]);
-        if (!kv) continue;
-        if (kv[1] === 'location') file = fileOf(kv[2], cwd);
-        if (kv[1] === 'failureType') subtests = /subtestsFailed/.test(kv[2]);
-        if (kv[1] === 'error') {
-          const v = kv[2].replace(/^['"]|['"]$/g, '');
-          const block = /^[|>]-?$/.test(v) ? [] : [v];
-          for (let k = j + 1; block.length < ERROR_LINES && k < lines.length && /^\s{4,}\S/.test(lines[k]) && !/^\s*\w+:\s/.test(lines[k]); k++) block.push(lines[k]);
-          error = firstLines(block);
-        }
-      }
-    }
-    if (!subtests) add(m[2], file, error);
-  }
-  // Jest: "FAIL <file>" then "● Suite › test" and the error
-  let jestFile = '';
-  for (let i = 0; i < lines.length; i++) {
-    const f = /^\s*FAIL\s+(\S+\.\w+)\s*/.exec(lines[i]);
-    if (f) { jestFile = f[1]; continue; }
-    const t = /^\s*● (.+)$/.exec(lines[i]);
-    if (t && jestFile && !/Console$/.test(t[1])) add(t[1], jestFile, firstLines(lines.slice(i + 1, i + 6)));
-  }
-  // pytest: "FAILED tests/test_x.py::test_name - AssertionError: ..."
-  for (const l of lines) {
-    const m = /^FAILED (\S+?)::(\S+)(?: - (.*))?$/.exec(l.trim());
-    if (m) add(m[2], m[1], m[3] || '');
-  }
-  // go test: "--- FAIL: TestName (0.00s)" then "    file_test.go:12: message"
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*--- FAIL: (\S+)/.exec(lines[i]);
-    if (!m) continue;
-    const loc = /^\s+(\S+\.go):\d+: (.*)$/.exec(lines[i + 1] || '');
-    add(m[1], loc ? loc[1] : '', loc ? loc[2] : '');
-  }
-  // dotnet test: "  Failed Name [12 ms]" then "  Error Message:" and the message
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*Failed (\S+) \[[^\]]+\]\s*$/.exec(lines[i]);
-    if (!m) continue;
-    const at = lines.slice(i + 1, i + 4).findIndex((l) => /Error Message:/.test(l));
-    add(m[1], '', at >= 0 ? firstLines(lines.slice(i + 2 + at, i + 2 + at + ERROR_LINES)) : '');
-  }
-  // Maven surefire: "[ERROR]   ClassTest.method:12 message"
-  for (const l of lines) {
-    const m = /^\[ERROR\]\s+([\w.$]+)\.(\w+):(\d+)\s+(.*)$/.exec(l);
-    if (m) add(m[2], m[1], m[4]);
-  }
-  // Playwright (playwright-bdd, #223): "  1) <spec>:7:7 › Feature › Scenario @tag", the error, then the
-  // attachments; the trace kept for the failure is the "trace.zip" line. The generated spec
-  // (.features-gen/features/x.feature.spec.js) is reported as its feature file (features/x.feature).
-  // A config with projects prefixes the file with the project: "1) [chromium] › <spec>:7:7 › ...".
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*\d+\) (?:\[[^\]]+\] › )?(\S+?):\d+:\d+ › (.+)$/.exec(lines[i]);
-    if (!m) continue;
-    const block = [];
-    for (let j = i + 1; j < lines.length && !/^\s*\d+\) (?:\[[^\]]+\] › )?\S+?:\d+:\d+ › /.test(lines[j]) && !/^\s*\d+ (failed|passed|flaky|skipped|interrupted)\b/.test(lines[j]); j++) block.push(lines[j]);
-    const end = block.findIndex((l) => /^\s*attachment #\d+:/.test(l));
-    const trace = block.map((l) => l.trim()).find((l) => /trace\.zip$/.test(l) && !/^npx /.test(l));
-    const file = fileOf(m[1].split('\\').join('/'), cwd).replace(/^\.features-gen\//, '').replace(/\.spec\.[cm]?[jt]s$/, '');
-    add(m[2], file, firstLines(end >= 0 ? block.slice(0, end) : block), trace ? { trace: trace.split('\\').join('/') } : {});
-  }
-  return out.slice(0, MAX_FAILURES);
-}
-
-const sameTest = (a, b) => {
-  const base = (f) => String(f || '').split(/[\\/]/).pop();
-  return String(a.test).trim() === String(b.test).trim() && (!a.file || !b.file || base(a.file) === base(b.file));
-};
 
 // Is this command an agent ran the whole suite? `npm test`, `npm run test`, `pytest`, `go test ./...`,
 // `dotnet test`, `mvn test`, `gradle test` with no file, filter or pattern, or the suite's own command.
@@ -522,14 +413,58 @@ function shellRefusal(r, text, report, cwd) {
 const baseCacheFile = (cacheDir, commit) => (cacheDir && commit ? path.join(cacheDir, `${String(commit).replace(/[^\w.-]/g, '')}.json`) : null);
 const sameFile = (a, b) => String(a || '').split(/[\\/]/).pop() === String(b || '').split(/[\\/]/).pop();
 
+// The run's base checkout ({ dir, commit }; info.commit set), or null with info.reason
+async function prepareBase(base, info) {
+  if (typeof base !== 'function') { info.reason = 'the run has no base checkout'; return null; }
+  let b = null;
+  try { b = await base(); } catch (e) { info.reason = `the base checkout could not be prepared: ${e.message}`; return null; }
+  if (!b?.dir || !fs.existsSync(b.dir)) { info.reason = 'the run has no base checkout'; return null; }
+  info.commit = b.commit || null;
+  return b;
+}
+
+// Runs `cmd` in the base checkout, its log in logFile (info.log, onLog) → { r, found: the failures it
+// printed }; info.reason when it timed out or failed without a recognizable failure.
+async function runOnBase(cmd, what, { b, info, env, timeoutMs, signal, run, logFile, runDir, log, onLog }) {
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  fs.writeFileSync(logFile, `$ ${cmd}\n# in the base checkout ${b.dir}${info.commit ? ` (${String(info.commit).slice(0, 8)})` : ''}: are these failures already there?\n`);
+  if (runDir) {
+    info.log = path.relative(runDir, logFile).split(path.sep).join('/');
+    onLog?.({ path: info.log, command: cmd, base: true });
+  }
+  log('info', `suite: checking ${what} on the base (log ${info.log || logFile})`);
+  const r = await run({ command: cmd, cwd: b.dir, env, timeoutMs, signal, logFile });
+  let text = '';
+  try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
+  const found = parseFailures(text, { cwd: b.dir });
+  if (r.timedOut) info.reason = 'the base run timed out';
+  else if (r.code !== 0 && !found.length) info.reason = `the base run failed without a recognizable failure (exit ${r.code ?? '?'})`;
+  return { r, found };
+}
+
+// Whether a base run ended with its tests' result (worth caching)
+const endedOnBase = (r, found) => !r.timedOut && r.code != null && (r.code === 0 || found.length > 0);
+// Caches the base's failing tests per key (a file, or `cargo:<test>`): failingOf(key) → [test names]
+function cacheOnBase(cacheFile, keys, failingOf) {
+  if (!cacheFile) return;
+  try {
+    const now = new Date().toISOString();
+    const all = readJson(cacheFile);
+    for (const k of keys) all[k] = { failing: failingOf(k), at: now };
+    writeJson(cacheFile, all);
+  } catch { /* a cache: the next round runs them again */ }
+}
+
 // Which of `failures` also fail on the base (#211): their test files run in the base checkout (cached
 // per commit + file). → { onBase: [failure], info: { status: done | skipped, commit, files, cached,
 // ran, log, reason } }; never throws. Too many files for the platform's command line (#400): skipped,
-// like a command that cannot run single files.
+// like a command that cannot run single files. cargo test (#109): by test name, checkCargoOnBase.
 async function checkOnBase({ command, failures, base, mock, env, timeoutMs, signal, run = runCommand, logFile, runDir, cacheDir, log = () => {}, platform = process.platform, onLog, cwd = null }) {
   const info = { status: 'skipped', commit: null, files: [], cached: [], ran: [], log: null, reason: null };
   const files = [...new Set(failures.map((f) => f.file).filter(Boolean))].sort();
   info.files = files;
+  const opts = { env, timeoutMs, signal, run, logFile, runDir, log, onLog, info };
+  if (cargoByName(command, failures, mock)) return checkCargoOnBase({ ...opts, command, failures, base, cacheDir, platform });
   if (!files.length) { info.reason = 'the failures name no test file'; return { onBase: [], info }; }
   if (mock) {
     Object.assign(info, { status: 'done', commit: '(simulated)', ran: files });
@@ -538,10 +473,8 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   if (typeof base !== 'function') { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
   info.reason = baseFilesSkip(command, files, platform, cwd);
   if (info.reason) return { onBase: [], info };
-  let b = null;
-  try { b = await base(); } catch (e) { info.reason = `the base checkout could not be prepared: ${e.message}`; return { onBase: [], info }; }
-  if (!b?.dir || !fs.existsSync(b.dir)) { info.reason = 'the run has no base checkout'; return { onBase: [], info }; }
-  info.commit = b.commit || null;
+  const b = await prepareBase(base, info);
+  if (!b) return { onBase: [], info };
   // a test file the base does not have is the run's
   const present = files.filter((f) => exists(b.dir, f));
   const cacheFile = baseCacheFile(cacheDir, info.commit);
@@ -550,35 +483,51 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
   const baseFailing = info.cached.flatMap((f) => cache[f].failing.map((test) => ({ test, file: f })));
   const toRun = present.filter((f) => !info.cached.includes(f));
   if (toRun.length) {
-    const cmd = filteredCommand(command, toRun, b.dir);
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    fs.writeFileSync(logFile, `$ ${cmd}\n# in the base checkout ${b.dir}${info.commit ? ` (${String(info.commit).slice(0, 8)})` : ''}: are these failures already there?\n`);
-    if (runDir) {
-      info.log = path.relative(runDir, logFile).split(path.sep).join('/');
-      onLog?.({ path: info.log, command: cmd, base: true });
-    }
-    log('info', `suite: checking ${toRun.length} failing test file(s) on the base (log ${info.log || logFile})`);
-    const r = await run({ command: cmd, cwd: b.dir, env, timeoutMs, signal, logFile });
-    let text = '';
-    try { text = fs.readFileSync(logFile, 'utf8'); } catch { /* no log */ }
-    const found = parseFailures(text, { cwd: b.dir });
+    const { r, found } = await runOnBase(filteredCommand(command, toRun, b.dir), `${toRun.length} failing test file(s)`, { ...opts, b });
     baseFailing.push(...found);
     info.ran = toRun;
     // cached only when the base run ended and every failure it found belongs to one of its files
-    const complete = !r.timedOut && r.code != null && (r.code === 0 || found.length > 0) && found.every((f) => f.file && toRun.some((t) => sameFile(t, f.file)));
-    if (r.timedOut) info.reason = 'the base run timed out';
-    else if (r.code !== 0 && !found.length) info.reason = `the base run failed without a recognizable failure (exit ${r.code ?? '?'})`;
-    if (complete && cacheFile) {
-      try {
-        const now = new Date().toISOString();
-        const all = readJson(cacheFile);
-        for (const f of toRun) all[f] = { failing: found.filter((x) => sameFile(x.file, f)).map((x) => x.test), at: now };
-        writeJson(cacheFile, all);
-      } catch { /* a cache: the next round runs them again */ }
+    if (endedOnBase(r, found) && found.every((f) => f.file && toRun.some((t) => sameFile(t, f.file)))) {
+      cacheOnBase(cacheFile, toRun, (f) => found.filter((x) => sameFile(x.file, f)).map((x) => x.test));
     }
   }
   info.status = 'done';
   return { onBase: failures.filter((f) => present.some((p) => sameFile(p, f.file)) && baseFailing.some((x) => sameTest(f, x))), info };
+}
+
+// #109: a cargo test round whose failures name tests, not files (checked by name on the base)
+const cargoByName = (command, failures, mock) => !mock && /^cargo\s+test\b/.test(String(command || '').trim()) && failures.some((f) => !f.file);
+// `cargo test` → `cargo test -- <names>` (libtest keeps the tests whose name contains one of them), or
+// the whole `cargo test` when a name is not a plain module path or the line is too long (#400)
+function cargoFilteredCommand(command, names, platform) {
+  const c = String(command).trim();
+  if (!names.every((n) => /^[\w:]+$/.test(n))) return c;
+  const cmd = `${c}${/\s--(\s|$)/.test(c) ? '' : ' --'} ${names.join(' ')}`;
+  return fitsCommandLine(cmd, platform) ? cmd : c;
+}
+
+// The base check of a cargo test round (#109): the failing tests run by name in the base checkout; the
+// ones red there too are on the base. Cached per base commit + `cargo:<test name>`. Never throws.
+async function checkCargoOnBase({ command, failures, base, cacheDir, platform, ...opts }) {
+  const { info } = opts;
+  const named = failures.filter((f) => !f.file);
+  const names = [...new Set(named.map((f) => String(f.test).trim()))].sort();
+  const b = await prepareBase(base, info);
+  if (!b) return { onBase: [], info };
+  const key = (n) => `cargo:${n}`;
+  const cacheFile = baseCacheFile(cacheDir, info.commit);
+  const cache = cacheFile ? readJson(cacheFile) : {};
+  info.cached = names.filter((n) => Array.isArray(cache[key(n)]?.failing));
+  const baseFailing = info.cached.flatMap((n) => cache[key(n)].failing.map((test) => ({ test, file: '' })));
+  const toRun = names.filter((n) => !info.cached.includes(n));
+  if (toRun.length) {
+    const { r, found } = await runOnBase(cargoFilteredCommand(command, toRun, platform), `${toRun.length} failing cargo test(s)`, { ...opts, b });
+    baseFailing.push(...found);
+    info.ran = toRun;
+    if (endedOnBase(r, found)) cacheOnBase(cacheFile, toRun.map(key), (k) => found.filter((x) => sameTest({ test: k.slice('cargo:'.length) }, x)).map((x) => x.test));
+  }
+  info.status = 'done';
+  return { onBase: named.filter((f) => baseFailing.some((x) => sameTest(f, x))), info };
 }
 
 // `node --test …` → `node --test --experimental-test-coverage …` (#225). An npm script (`npm test`,
