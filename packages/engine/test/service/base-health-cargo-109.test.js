@@ -61,6 +61,10 @@ function tmp(t, prefix) {
 
 // a fake `cargo` first on PATH: records its arguments (one call per line) and prints LOG
 function fakeCargo(t) {
+  // macOS and Linux (#316): the engine puts the login shell's PATH first, once per process, when it
+  // first resolves a command; on a machine with a real cargo (a CI runner) that would win over the
+  // fake. Merge it now, so the fake below stays first.
+  require('../../engine/providers').resolveCommand('git');
   const bin = tmp(t, 'bh109-bin-');
   const calls = path.join(bin, 'calls.txt');
   const script = path.join(bin, 'cargo.js');
