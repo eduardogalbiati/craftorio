@@ -103,6 +103,9 @@ const DEFAULT_SETTINGS = {
   // the first-run Setup (#319, packages/ui-kit/setup.js): done once Finish or Skip is pressed; a
   // settings.json written before Setup existed reads true (readSettings), so current users skip it
   setupDone: false,
+  // #97: the AI that leads a run, chosen in the Setup's AIs step or Settings › Agents & CLIs: 'claude' |
+  // 'codex'; the default workflows (feature, fix, release) run on its models (packages/shared/orchestrator-models.js)
+  orchestratorProvider: 'claude',
   // workflow ids (file names without .yaml) the Setup's Workflows step left unpicked: not offered by
   // Start (Home's Run a workflow opens it), shown again by Workflows › Definitions › Show in Start
   hiddenWorkflows: [],

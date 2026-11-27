@@ -8,10 +8,15 @@
 // diffs). `forge`: the workflow has a `git_platform` input, i.e. it talks to GitHub or GitLab
 // (issues, backlog sync, pull requests) through gh or glab; the local workflows that only allow
 // bash:gh in their tools do not count, nor a run in `mode: local` (#630: feature and fix only push main).
-// - workflowRequirements(wf, inputs) -> { clis: sorted ids among claude, codex, git, grok; forge };
+// #97: a bundled default workflow is read as it runs with the orchestrator AI chosen in the Setup
+// (settings.orchestratorProvider, applyOrchestrator of packages/shared/orchestrator-models.js): with
+// Codex its Claude agents need Codex, and the multi-model second reviewer Claude Code.
+// - workflowRequirements(wf, inputs, { orchestrator, bundled }) -> { clis: sorted ids among claude, codex,
+//   git, grok; forge }; `bundled` defaults to followsOrchestrator(wf) (feature, fix, release);
 // - missingRequirements(reqs, states): from apps/desktop/renderer/setup-model.js (shared with the renderer).
 
 const { render } = require('../../engine/workflow');
+const { applyOrchestrator } = require('@craftorio/shared/orchestrator-models');
 const { missingRequirements } = require('@craftorio/shared/setup-model');
 const registry = require('@craftorio/shared/providers');
 
@@ -31,7 +36,8 @@ function cliOf(wf, name) {
   return CLIS.includes(name) ? name : null;
 }
 
-function workflowRequirements(wf, inputs = {}) {
+function workflowRequirements(wf, inputs = {}, { orchestrator, bundled } = {}) {
+  wf = applyOrchestrator(wf, orchestrator, { bundled });
   const values = inputValues(wf, inputs);
   const resolve = (v) => (typeof v === 'string' && v.includes('{{') ? render(v, { inputs: values }) : v);
   const names = [];

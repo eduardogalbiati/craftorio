@@ -4,7 +4,7 @@
 // callbacks, child runs, the PR probe, peer sessions) stay in runs.js.
 //
 //   runOptionsFromSettings({ settings, ws, mock }) -> { memoryGuard, idleWarnMs, models, fallbacks,
-//     accounts, accountCooldownMs, language, testWorkers }
+//     accounts, accountCooldownMs, language, testWorkers, orchestrator }
 //   configureGuardFromSettings(settings) -> the shared memory guard (#276), or null when turned off
 //
 // configureGuardFromSettings configures the process's shared memory guard from settings.memoryGuard
@@ -12,6 +12,7 @@
 // over the previous configuration. runOptionsFromSettings calls it, and the run service before the
 // waits for memory of a run start (runs.js applyMemorySettings).
 
+const { orchestratorOf } = require('@craftorio/shared/orchestrator-models');
 const {
   configureMemoryGuard,
   sharedMemoryGuard,
@@ -60,6 +61,8 @@ function runOptionsFromSettings({ settings, ws, mock }) {
     language: () => readSettings(ws).language,
     // #367: the machine profile's test workers per run (auto from this machine, or the owner's)
     testWorkers: resolveLimits(settings, readMachine()).testWorkers,
+    // #97: the orchestrator AI chosen in the Setup, read once at the start (a change reaches the next run)
+    orchestrator: orchestratorOf(settings.orchestratorProvider),
   };
 }
 

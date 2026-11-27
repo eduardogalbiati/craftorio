@@ -3,8 +3,11 @@
 // #643: the Setup lost its Workflows step, and preselectedWorkflows with it.
 // - statusBadge(tool): { label, state } for an envDetails entry ({ id, path, connected, checking });
 //   state is 'checking' | 'missing' | 'signed-out' | 'ready';
-// - toolRequirement(id): 'Required' or 'Optional: <what it enables>';
-// - requirementBadges(reqs): 'Needs Codex'... for a workflow's { clis, forge } (packages/engine/domains/workflow/workflow-requirements.js);
+// - requiredTools(opts): #97, the required CLI ids, sorted: the orchestrator AI chosen in the Setup
+//   (opts.orchestrator, settings.orchestratorProvider: 'claude' | 'codex'; anything else is claude) and git;
+// - toolRequirement(id, opts): 'Required' or 'Optional: <what it enables>';
+// - requirementBadges(reqs, opts): 'Needs Codex'... for a workflow's { clis, forge } (packages/engine/domains/workflow/workflow-requirements.js),
+//   beyond the required tools;
 // - missingRequirements(reqs, states): the CLI ids not 'ready', plus 'forge' when neither gh nor glab is;
 // - missingLabel(missing): 'Missing Codex CLI' for a card or the Start panel ('' when nothing);
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
@@ -18,7 +21,9 @@
   const t = (...a) => (node ? require('./i18n') : root.I18n)?.t(...a) ?? a[0];
   const NAMES = { claude: 'Claude Code', codex: 'Codex CLI', grok: 'Grok Build', gh: 'GitHub CLI', glab: 'GitLab CLI', git: 'Git', gitleaks: 'Gitleaks' };
   const SHORT = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok', git: 'Git' };
-  const REQUIRED = ['claude', 'git'];
+  // #97: the orchestrator's CLI and git (Grok Build is never the orchestrator)
+  /** @param {{ orchestrator?: string }} [opts] */
+  const requiredTools = (opts) => [opts?.orchestrator === 'codex' ? 'codex' : 'claude', 'git'].sort();
   const forge = () => t('setup.forge');
 
   const toolName = (id) => NAMES[id] || String(id || '');
@@ -32,16 +37,17 @@
     return { label: t('setup.status.ready'), state: 'ready' };
   }
 
-  function toolRequirement(id) {
-    if (REQUIRED.includes(id)) return t('setup.required');
+  function toolRequirement(id, opts) {
+    if (requiredTools(opts).includes(id)) return t('setup.required');
     if (id === 'gh' || id === 'glab') return t('setup.optional_forge');
     if (id === 'gitleaks') return t('setup.optional_secret_scan');
     return t('setup.optional_models');
   }
 
-  /** Badges for what a workflow needs beyond the required Claude Code and Git. */
-  function requirementBadges(reqs) {
-    const out = (reqs?.clis || []).filter((id) => !REQUIRED.includes(id)).map((id) => t('setup.needs', { name: SHORT[id] || toolName(id) }));
+  /** Badges for what a workflow needs beyond the required orchestrator CLI and Git. */
+  function requirementBadges(reqs, opts) {
+    const required = requiredTools(opts);
+    const out = (reqs?.clis || []).filter((id) => !required.includes(id)).map((id) => t('setup.needs', { name: SHORT[id] || toolName(id) }));
     if (reqs?.forge) out.push(t('setup.needs', { name: forge() }));
     return out;
   }
@@ -78,6 +84,7 @@
     installHintText,
     missingLabel,
     missingRequirements,
+    requiredTools,
     requirementBadges,
     statusBadge,
     toolName,

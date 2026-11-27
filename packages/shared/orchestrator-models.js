@@ -1,0 +1,156 @@
+// @ts-check
+// The orchestrator AI chosen in the Setup (#97, settings.orchestratorProvider: 'claude' | 'codex') and
+// the one mapping from the Claude models of the default workflows to their Codex counterparts. The
+// bundled default workflows (feature, fix, release) are written on Claude; with Codex chosen they run
+// their orchestrator and their agents on Codex, each Claude model replaced by its Codex model, and the
+// multi-model second reviewer (on Codex in the YAML) moves to Claude, a provider other than the
+// orchestrator's. A custom workflow keeps the providers it names.
+// - ORCHESTRATORS: the AIs that can lead a run (Grok Build is not one);
+// - orchestratorOf(value): 'codex' for 'codex', else 'claude' (no setting, Grok, anything else);
+// - CODEX_MODEL_FOR: { <claude model>: <codex model> }; CODEX_LABEL_FOR: the Codex models' names;
+// - mapModel(model, provider): the model to run on with that orchestrator (unknown models unchanged);
+// - followsOrchestrator(wf): the workflow is one of the bundled defaults (metadata.name);
+// - applyOrchestrator(wf, provider, { bundled }) -> the workflow to run: a new object with Codex, the
+//   same `wf` with Claude, no provider or a custom workflow (bundled false; default followsOrchestrator);
+// - mapRunInputs(wf, inputs, provider, { bundled }): a run's given values of a model input mapped the same way.
+// The Codex slugs must exist for the account: usage.preflight checks them against the CLI's model cache.
+// Browser: window.OrchestratorModels; Node: module.exports (workflow-requirements.js, workflow.js).
+(function (root) {
+  const node = typeof module === 'object' && module.exports;
+  const registry = () => (node ? require('./providers') : root.Providers);
+
+  const ORCHESTRATORS = ['claude', 'codex'];
+  /** @type {Record<string, string>} */
+  const CODEX_MODEL_FOR = {
+    'claude-fable-5-2': 'gpt-6.2-astra',
+    'claude-opus-5-5': 'gpt-6.2-sol',
+    'claude-sonnet-5-5': 'gpt-6.1-terra',
+    'claude-haiku-5-5': 'gpt-6-luna',
+  };
+  /** @type {Record<string, string>} */
+  const CODEX_LABEL_FOR = {
+    'gpt-6.2-astra': 'GPT Astra 6.2',
+    'gpt-6.2-sol': 'GPT Sol 6.2',
+    'gpt-6.1-terra': 'GPT Terra',
+    'gpt-6-luna': 'GPT Luna',
+  };
+  /** @type {Record<string, string>} */
+  const CLAUDE_MODEL_FOR = Object.fromEntries(Object.entries(CODEX_MODEL_FOR).map(([c, x]) => [x, c]));
+  const DEFAULT_WORKFLOWS = ['feature', 'fix', 'release'];
+
+  /** @param {unknown} value */
+  const orchestratorOf = (value) => (value === 'codex' ? 'codex' : 'claude');
+
+  /** @param {unknown} model @param {unknown} provider */
+  function mapModel(model, provider) {
+    if (provider !== 'codex' || typeof model !== 'string') return model;
+    return CODEX_MODEL_FOR[model] || model;
+  }
+
+  // a model template ("{{ inputs.developer_model or 'claude-opus-5-5' }}"): each Claude id in it mapped
+  /** @param {unknown} value @param {Record<string, string>} table */
+  function mapIn(value, table) {
+    if (typeof value !== 'string') return value;
+    if (table[value]) return table[value];
+    if (!value.includes('{{')) return value;
+    let out = value;
+    for (const [from, to] of Object.entries(table)) out = out.split(from).join(to);
+    return out;
+  }
+
+  /** @param {any} wf */
+  function followsOrchestrator(wf) {
+    return DEFAULT_WORKFLOWS.includes(String(wf?.metadata?.name || '').trim().toLowerCase());
+  }
+
+  const known = (/** @type {unknown} */ v) => typeof v === 'string' && !!CODEX_MODEL_FOR[v];
+  /** @param {any} def an input of the workflow as written: does it pick a Claude model? */
+  const isModelInput = (def) => (Array.isArray(def?.enum) && def.enum.some(known)) || known(def?.default);
+
+  // a model input (feature's developer_model): its enum, default and options on the Codex models; a
+  // Claude model with no Codex counterpart (a saved Fable 5.1) is left out
+  /** @param {any} def */
+  function mapModelInput(def) {
+    if (!isModelInput(def)) return def;
+    const out = { ...def };
+    const keep = (/** @type {unknown} */ v) => known(v) || !/^claude-/.test(String(v));
+    if (Array.isArray(def.enum)) out.enum = def.enum.filter(keep).map((/** @type {unknown} */ v) => mapModel(v, 'codex'));
+    if (def.default !== undefined) out.default = mapModel(def.default, 'codex');
+    if (def.options && typeof def.options === 'object') {
+      out.options = Object.fromEntries(Object.entries(def.options).filter(([k]) => keep(k))
+        .map(([k, label]) => [mapModel(k, 'codex'), CODEX_LABEL_FOR[CODEX_MODEL_FOR[k]] || label]));
+    }
+    return out;
+  }
+
+  /**
+   * @param {any} wf the loaded workflow (not changed)
+   * @param {unknown} provider settings.orchestratorProvider
+   * @param {{ bundled?: boolean }} [opts]
+   */
+  function applyOrchestrator(wf, provider, { bundled } = {}) {
+    if (!wf || orchestratorOf(provider) !== 'codex') return wf;
+    if (!(bundled ?? followsOrchestrator(wf))) return wf;
+    const out = JSON.parse(JSON.stringify(wf));
+    const codexDef = registry()?.byId('codex')?.definition;
+    out.providers = { ...(out.providers || {}) };
+    if (!out.providers.codex && codexDef) out.providers.codex = JSON.parse(JSON.stringify(codexDef));
+    const claudeDef = registry()?.byId('claude')?.definition;
+    if (!out.providers.claude && claudeDef) out.providers.claude = JSON.parse(JSON.stringify(claudeDef));
+    const orch = out.orchestrator || (out.orchestrator = {});
+    orch.provider = 'codex';
+    orch.model = mapIn(orch.model || 'claude-sonnet-5-5', CODEX_MODEL_FOR);
+    if (orch.supervisor && typeof orch.supervisor === 'object') {
+      if (orch.supervisor.provider === 'claude') orch.supervisor.provider = 'codex';
+      if (orch.supervisor.model) orch.supervisor.model = mapIn(orch.supervisor.model, CODEX_MODEL_FOR);
+    }
+    for (const agent of Object.values(out.agents || {})) {
+      if (!agent || typeof agent !== 'object') continue;
+      if (agent.provider === 'claude') {
+        agent.provider = 'codex';
+        agent.model = mapIn(agent.model, CODEX_MODEL_FOR);
+      } else if (agent.provider === 'codex') {
+        // the multi-model second reviewer: on a provider other than the orchestrator's
+        agent.provider = 'claude';
+        agent.model = mapIn(agent.model, CLAUDE_MODEL_FOR);
+        if (typeof agent.model === 'string' && !agent.model.startsWith('claude-')) agent.model = 'claude-haiku-5-5';
+      }
+    }
+    for (const [key, def] of Object.entries(out.inputs || {})) out.inputs[key] = mapModelInput(def);
+    if (out.models && typeof out.models === 'object') {
+      for (const [model, limits] of Object.entries(out.models)) {
+        const codex = CODEX_MODEL_FOR[model];
+        if (codex && !out.models[codex]) out.models[codex] = limits;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The values given to a run (a saved Developer model 'claude-opus-5-5') on the models applyOrchestrator
+   * gave the same workflow; `inputs` unchanged when it leaves the workflow as it is.
+   * @param {any} wf the loaded workflow, as written @param {any} inputs @param {unknown} provider
+   * @param {{ bundled?: boolean }} [opts]
+   */
+  function mapRunInputs(wf, inputs, provider, { bundled } = {}) {
+    if (!wf || !inputs || orchestratorOf(provider) !== 'codex' || !(bundled ?? followsOrchestrator(wf))) return inputs;
+    const out = { ...inputs };
+    for (const [key, def] of Object.entries(wf.inputs || {})) {
+      if (isModelInput(def) && key in out) out[key] = mapModel(out[key], 'codex');
+    }
+    return out;
+  }
+
+  const api = {
+    applyOrchestrator,
+    CODEX_LABEL_FOR,
+    CODEX_MODEL_FOR,
+    followsOrchestrator,
+    mapModel,
+    mapRunInputs,
+    ORCHESTRATORS,
+    orchestratorOf,
+  };
+  if (node) module.exports = api;
+  else root.OrchestratorModels = api;
+})(typeof window !== 'undefined' ? window : globalThis);

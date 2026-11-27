@@ -222,6 +222,7 @@ function cliArgs(provider, { resume, model, effort } = {}) {
 }
 
 module.exports = {
+  cachedModels,
   CLI_PROVIDERS,
   cliArgs,
   findCliSession,

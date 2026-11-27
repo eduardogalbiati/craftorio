@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { cachedModels } = require('../cli/cli-sessions');
 const { installCommand } = require('../machine/install-commands');
 const { readRunSummary } = require('../run/run-record');
 const { runSummaries } = require('../run/runs');
@@ -256,8 +257,11 @@ function withPeerUsage(budget, sessions, prices = {}) {
 /**
  * Checks, before a real run, that every CLI the workflow's agents use is installed and that
  * no provider is already over a blocking budget. Returns a list of human-readable problems.
+ * #97: also that every agent's model is offered to the account, for a CLI that caches its model
+ * list (Codex: ~/.codex/models_cache.json; no cache: nothing is known, nothing reported).
+ * @param {{ home?: string }} [opts] the home folder of the CLIs' config (tests)
  */
-function preflight(wf, budget, resolveCommand, inputs = {}) {
+function preflight(wf, budget, resolveCommand, inputs = {}, { home } = {}) {
   const problems = [];
   // folder inputs (repo_path, project_path…): agents working in a missing or empty folder
   // produce confident documents about nothing, so refuse early
@@ -281,7 +285,24 @@ function preflight(wf, budget, resolveCommand, inputs = {}) {
       problems.push(`${meta.name} already reached its monthly budget. Raise it in Usage to run this workflow.`);
     }
   }
+  problems.push(...unavailableModels(wf, home));
   return problems;
+}
+
+// #97: the agents' models a CLI's cached model list does not offer (a mapped Codex model the account lacks)
+function unavailableModels(wf, home) {
+  const offered = new Map();
+  const missing = new Map();
+  for (const agent of Object.values(wf.agents || {})) {
+    const cfg = agent && wf.providers?.[agent.provider];
+    const meta = cfg && PROVIDERS.find((p) => p.type === cfg.type || p.id === agent.provider);
+    const model = typeof agent?.model === 'string' ? agent.model.trim() : '';
+    if (!meta || !model || model.includes('{{')) continue;
+    if (!offered.has(meta.id)) offered.set(meta.id, new Set(cachedModels(meta.id, home).map((m) => m.id)));
+    const list = offered.get(meta.id);
+    if (list.size && !list.has(model)) missing.set(model, meta);
+  }
+  return [...missing].map(([model, meta]) => `${meta.name} does not offer the model "${model}" to this account (not in its model list). Update the CLI or pick another orchestrator AI or model.`);
 }
 
 module.exports = {
