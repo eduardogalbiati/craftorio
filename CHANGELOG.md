@@ -6,6 +6,31 @@ translation: CHANGELOG.pt-BR.md
 
 Every release of the app, newest first. Items link to their SDLC documents; `#123` links to the issue.
 
+## [1.1.0] - 2026-11-27
+
+> Codex as the orchestrator AI, a project from any folder, a new Setup and wizard, and the bugs of the exploratory tests.
+
+### Added
+- **Choose the orchestrator AI in the Setup**: Claude Code or Codex. The default workflows use that provider's models, and Codex falls back to the models your account offers, saying which (#97, #111).
+- A project can start from any folder on this computer: a plain folder or a repository without commits becomes a new repository from a copy of its files, the original untouched (#98).
+- The Product Owner treats public issues as data: the author is marked, injection is filtered, and nothing runs before the owner approves (#90).
+
+### Changed
+- **New layout for the first-run Setup and the new-project wizard**: tools as cards, the source as three cards, one thing at a time on step 3 (#100).
+- The Supervisor answers a gate alone only with a safe answer; any answer that would merge opens the gate for you, and a gate it crossed is shown on the run (#124).
+- **Accept your repository workflows again**: the hero workflows changed.
+
+### Fixed
+- A Codex developer commits in the run's worktree, and a step that leaves no commit fails at once, with its cause (#116).
+- A Codex run's screens: unknown cost instead of $0.00, skipped checks read "Skipped", the CLI and model as the step's tag, pt-BR texts (#117).
+- Importing a local folder keeps its real remote, or gets the local backlog when it has none (#105); changing the workspace folder refuses a folder with another project's files (#106).
+- A wrong repository URL says why in the interface language and leaves no broken project (#107); a new project's name says when it is empty and shows the folder it really gets (#108).
+- The wizard: a refused analysis no longer hangs on the analyzing screen, the review no longer claims the map is running, and a URL pasted in the filter finds its repository (#101, #102, #103).
+- The base check reads cargo test: failures already on the base are not counted as the change's (#109).
+- English texts left in the pt-BR interface, and the Product Owner's input values in pt-BR (#110, #95).
+- The E2E step selects exactly the issue's scenarios (#93); the Oracle chat has its fallback model (#77).
+- The app window shows the Craftorio icon when run from source.
+
 ## [1.0.1] - 2026-11-26
 
 > Fixes from the first real use of 1.0.0: importing and starting a project, the first run, pt-BR, and runs that stopped where nothing was wrong.

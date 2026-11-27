@@ -6,6 +6,31 @@ source: CHANGELOG.md (English)
 
 Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos seus documentos do SDLC; `#123` leva à issue.
 
+## [1.1.0] - 2026-11-27
+
+> O Codex como IA orquestradora, projeto a partir de qualquer pasta, Setup e wizard novos, e os bugs dos testes exploratórios.
+
+### Adicionado
+- **Escolha da IA orquestradora no Setup**: Claude Code ou Codex. Os workflows padrão usam os modelos desse provedor, e o Codex cai para os modelos que a sua conta oferece, dizendo quais (#97, #111).
+- Um projeto pode começar de qualquer pasta deste computador: uma pasta comum ou um repositório sem commits vira um repositório novo a partir de uma cópia dos arquivos, sem mexer na original (#98).
+- O Product Owner trata issues públicas como dados: o autor é marcado, injeções são filtradas e nada roda antes da aprovação do dono (#90).
+
+### Alterado
+- **Layout novo do Setup e do wizard de novo projeto**: ferramentas em cards, a origem em três cards, uma coisa por vez no passo 3 (#100).
+- O Supervisor só responde um gate sozinho com uma resposta segura; qualquer resposta que levaria ao merge abre o gate para você, e um gate que ele atravessou aparece na run (#124).
+- **Aceite de novo os workflows do repositório**: os workflows hero mudaram.
+
+### Corrigido
+- Um developer no Codex faz commit no worktree da run, e um passo que termina sem commit falha na hora, com a causa (#116).
+- As telas de uma run do Codex: custo desconhecido em vez de $0,00, verificações puladas aparecem como "Pulado", o CLI e o modelo como marca do passo, textos em pt-BR (#117).
+- Importar uma pasta local mantém o remoto real, ou ganha o backlog local quando não tem remoto (#105); trocar a pasta do workspace recusa uma pasta com arquivos de outro projeto (#106).
+- Uma URL de repositório errada diz o motivo no idioma da interface e não deixa projeto quebrado (#107); o nome de um projeto novo avisa quando está vazio e mostra a pasta que ele realmente recebe (#108).
+- O wizard: uma análise recusada não trava mais na tela de análise, a revisão não diz mais que o mapa está rodando, e uma URL colada no filtro encontra o repositório (#101, #102, #103).
+- A verificação da base lê o cargo test: falhas que já existem na base não contam como da mudança (#109).
+- Textos em inglês que sobravam na interface em pt-BR, e os valores de entrada do Product Owner em pt-BR (#110, #95).
+- O passo de E2E seleciona exatamente os cenários da issue (#93); o chat do Oracle tem o modelo de reserva (#77).
+- A janela do app mostra o ícone do Craftorio quando roda do código-fonte.
+
 ## [1.0.1] - 2026-11-26
 
 > Correções do primeiro uso real da 1.0.0: importar e começar um projeto, a primeira run, o pt-BR e runs que paravam onde nada estava errado.

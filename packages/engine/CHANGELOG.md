@@ -1,5 +1,26 @@
 # @craftorio/engine
 
+## 1.2.0
+
+### Minor Changes
+
+- 60fa2c0: A project can start from any folder on this computer (#98). The wizard's folder step reads the folder as soon as it is
+  picked and says what it is: a git repository (cloned as before), a git repository without a commit or a plain folder
+  (a new repository is created from a copy of its files, with one first commit), or a folder that does not exist or
+  cannot be read (Next stays disabled). The first commit leaves out what the folder's `.gitignore` ignores, or the new
+  project's `.gitignore` when it has none; a folder over 500 MB is refused with a message. The original folder is never
+  changed. New channel `onboarding:inspect-folder`.
+
+### Patch Changes
+
+- d80ca53: Importing a local folder keeps its real remote: a folder with a GitHub or GitLab remote records that remote as the
+  project's repository (the push of a run still goes back to the folder), and a folder with no remote gets the local
+  backlog, so the backlog refresh works, "Create issue" on a finding files a local issue and step 3 suggests the local
+  workflows (#105).
+- Updated dependencies [60fa2c0]
+- Updated dependencies [d52e778]
+  - @craftorio/shared@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes
