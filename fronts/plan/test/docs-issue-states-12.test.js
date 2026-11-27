@@ -76,6 +76,51 @@ test('#12 a signed-off spec without plan whose issues are all closed offers no W
   assert.match(html, /data-testid="docs-item-done"/);
 });
 
+// the row's issue link (its <a>…</a>, '' without one) and its href ('' when the link has none)
+const hrefOf = (link) => /^<a [^>]*href="([^"]*)"/.exec(link)?.[1] || '';
+const linkHtml = (html) => /<a [^>]*data-testid="docs-item-issue-link"[^>]*>[\s\S]*?<\/a>/.exec(html)?.[0] || '';
+
+test('#12 the issue link of a bare #N opens it in the project\'s repository (GitHub, GitLab)', () => {
+  const L = loadDocsList();
+  assert.equal(hrefOf(linkHtml(String(L.itemsHtml([specOnly('#625')], 'p1', { repo: 'https://github.com/me/proj.git' })))), 'https://github.com/me/proj/issues/625');
+  assert.equal(hrefOf(linkHtml(String(L.itemsHtml([specOnly('#7')], 'p1', { repo: 'https://gitlab.com/group/sub/proj.git' })))), 'https://gitlab.com/group/sub/proj/-/issues/7');
+});
+
+test('#12 the issue link of an owner/repo#N on a GitLab project opens it on the project\'s host', () => {
+  const L = loadDocsList();
+  const html = String(L.itemsHtml([specOnly('group/other#9')], 'p1', { repo: 'https://gitlab.com/group/proj.git' }));
+  assert.equal(hrefOf(linkHtml(html)), 'https://gitlab.com/group/other/-/issues/9');
+});
+
+test('#12 an issue given as a URL links to that URL', () => {
+  const L = loadDocsList();
+  const html = String(L.itemsHtml([specOnly('https://gitlab.com/g/r/-/issues/12')], 'p1', { repo: 'https://github.com/me/proj.git' }));
+  assert.equal(hrefOf(linkHtml(html)), 'https://gitlab.com/g/r/-/issues/12');
+});
+
+test('#12 a bare #N in a project without a repository draws the link without href, and still no Create epic', () => {
+  const L = loadDocsList();
+  const html = String(L.itemsHtml([specOnly('#625')], 'p1', null));
+  const link = linkHtml(html);
+  assert.equal([link !== '', /#625/.test(link), hrefOf(link)].join('|'), 'true|true|');
+  assert.doesNotMatch(html, /data-docs-issues/);
+});
+
+test('#12 issueRef reads the first issue of a range or a pair glued together ("#835–#837", "#628/#629")', () => {
+  const DocModel = require('@craftorio/shared/doc-model');
+  const range = DocModel.issueRef('"#625 (phases eduardogalbiati/multiagent-orchestrator#835–#837)"');
+  assert.equal(range?.number, 625);
+  assert.equal(DocModel.issueRef('#835–#837')?.number, 835);
+  assert.equal(DocModel.issueRef('#628/#629')?.number, 628);
+});
+
+test('#12 "epic #628" alone names the epic once in the row\'s link', () => {
+  const L = loadDocsList();
+  const link = linkHtml(String(L.itemsHtml([specOnly('epic #628')], 'p1')));
+  const text = link.replace(/<[^>]+>/g, '');
+  assert.equal((text.match(/#628/g) || []).length, 1, `link text: ${text}`);
+});
+
 test('#12 an open issue keeps Write the plan; a closed phase of an open epic is not Done', () => {
   const L = loadDocsList();
   assert.match(String(L.itemsHtml([specOnly('#636', { issueState: 'open' })], 'p1')), /data-docs-write-plan/);
