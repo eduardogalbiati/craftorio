@@ -160,7 +160,8 @@ module.exports = {
   'artifacts:evidence': onRun({ arg: ({ runId }) => ({ runId }), invalid: BAD_RUN }),
   'artifacts:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
   'audio:status': { arg: null },
-  'backlog:approve-outside': { setup: project, arg: ({ projectId }) => ({ projectId, number: 1 }), invalid: BAD_PROJECT },
+  // #90: a fresh project has no synced outside issue to approve: refused (400)
+  'backlog:approve-outside': { setup: project, arg: ({ projectId }) => ({ projectId, number: 1 }), status: 400, invalid: BAD_PROJECT },
   'backlog:auto-epic': { setup: project, arg: ({ projectId }) => ({ projectId, on: false }), invalid: BAD_PROJECT },
   'backlog:dismiss-refresh': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   'backlog:get': { setup: project, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },

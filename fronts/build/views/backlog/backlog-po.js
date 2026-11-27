@@ -718,7 +718,7 @@
       try {
         const out = await api.proposeRoadmap(po.projectId, { stages }, false);
         actions().showRoadmap(out);
-        po.notes[`${m}:all`] = { text: `Added to the roadmap as planned.${out.dropped?.length ? ` Already planned, left out: ${out.dropped.map((n) => `#${n}`).join(', ')}.` : ''}` };
+        po.notes[`${m}:all`] = { text: `Added to the roadmap as planned.${out.dropped?.length ? ` Already planned, left out: ${out.dropped.map((n) => `#${n}`).join(', ')}.` : ''}${out.awaitingOwner?.length ? ` ${t('backlog.outside_issues_awaiting_approval', { issues: out.awaitingOwner.map((n) => `#${n}`).join(', ') })}` : ''}` }; // #90
       } catch (e) { po.notes[`${m}:all`] = { text: errMsg(e), error: true }; }
       render();
       return;

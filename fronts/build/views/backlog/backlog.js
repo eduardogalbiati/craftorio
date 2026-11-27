@@ -1368,9 +1368,12 @@
     if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
     $b('#bl-synced').textContent = syncedText(local);
     const prError = bl.data?.pullRequestsError ? `Open ${platformOf(bl.data.platform).request.short}s could not be read: ${bl.data.pullRequestsError}` : '';
-    $b('#bl-error').textContent = bl.error || prError;
+    // #90: a failed read of the authors marks new issues Outside; the header says why
+    const authorsError = bl.data?.authorsError ? `${t('backlog.authors_could_not_be_read')} (${bl.data.authorsError})` : '';
+    const headError = bl.error || [prError, authorsError].filter(Boolean).join(' · ');
+    $b('#bl-error').textContent = headError;
     // (#269: an empty error line takes no room between the alerts, the filter row and the list)
-    $b('#bl-error').classList.toggle('hidden', !(bl.error || prError));
+    $b('#bl-error').classList.toggle('hidden', !headError);
     renderAlerts();
     renderLive();
 

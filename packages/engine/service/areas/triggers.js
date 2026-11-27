@@ -87,15 +87,19 @@ module.exports = (ctx) => {
     if (!sim && ctx.budgetBlock({}, 0)) return null;
     if (ctx.slotProblem({ mock: sim, projectId: project.id })) return null;
     // #90: an outside issue of the synced backlog the owner has not approved holds its event (unseen, read again
-    // after the Approve); an approved one's task says it came from outside
+    // after the Approve); an approved one's task says it came from outside. The hold is logged: the trigger card's
+    // event waits with no run, and the log says why
     let notice = '';
     try {
       notice = issuesOf(event) ? backlog.outsideRunNotice(ctx.ws.backlog, project.id, issuesOf(event)) : '';
-    } catch { return null; }
+    } catch (err) {
+      console.error(`[triggers] ${project.id}: ${trigger.kind} event held: ${err.message}`);
+      return null;
+    }
     const { file } = fileOf(ctx.headManifest(project)?.manifest, workflow);
-    const resolved = withProjectDefaults(ctx, { file, inputs, projectId: project.id });
+    const resolved = backlog.withOutsideNotice(withProjectDefaults(ctx, { file, inputs, projectId: project.id }), notice);
     const started = await ctx.startWorkflowRun({
-      file, inputs: notice && typeof resolved.task === 'string' ? { ...resolved, task: `${notice}${resolved.task}` } : resolved, mock: sim, projectId: project.id,
+      file, inputs: resolved, mock: sim, projectId: project.id,
       issues: issuesOf(event),
       notices: [{ level: 'info', message: `Started by a platform trigger (${trigger.kind}${trigger.url ? `: ${trigger.url}` : ''}).` }],
     });

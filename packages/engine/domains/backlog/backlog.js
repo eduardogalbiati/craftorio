@@ -191,7 +191,9 @@ function withOutside(cache, { approvals, verdicts }) {
   const issues = cache.issues.map((i) => {
     if (!isOutside(i)) return i;
     const ownerApproved = approvalHolds(i, approvals[i.number]) ? approvals[i.number] : null;
-    const verdict = verdicts[i.number] || null;
+    // a verdict holds for the text reviewed, like the approval: an issue edited since shows none until the next review
+    const recorded = verdicts[i.number] || null;
+    const verdict = recorded && (!recorded.hash || recorded.hash === textHash(i)) ? recorded : null;
     return { ...i, outside: true, ownerApproved, verdict, quarantined: !!verdict?.injection_suspected && !ownerApproved };
   });
   return { ...cache, issues };
@@ -220,10 +222,15 @@ function keepKnownAuthors(issues, previous) {
   });
 }
 
-/** The Product Owner's reviews of outside issues (product-owner.js normalizeAnswer), kept per issue. */
+/**
+ * The Product Owner's reviews of outside issues (product-owner.js normalizeAnswer), kept per issue with the hash of
+ * the text reviewed (textHash): withOutside drops a verdict once the issue is edited.
+ */
 function recordReviews(dir, projectId, reviews) {
   if (!dir || !projectId || !Array.isArray(reviews) || !reviews.length) return;
-  writeOutside(dir, projectId, (o) => ({ ...o, verdicts: { ...o.verdicts, ...Object.fromEntries(reviews.map((r) => [r.issue, r])) } }));
+  const synced = new Map((readCache(dir, projectId)?.issues || []).map((i) => [i.number, i]));
+  const hashed = (r) => (synced.has(Number(r.issue)) ? { ...r, hash: textHash(synced.get(Number(r.issue))) } : r);
+  writeOutside(dir, projectId, (o) => ({ ...o, verdicts: { ...o.verdicts, ...Object.fromEntries(reviews.map((r) => [r.issue, hashed(r)])) } }));
 }
 
 /** #35: readBacklog, or an empty local backlog for a project with no repository (never null for one). */
@@ -695,6 +702,13 @@ function outsideRunNotice(dir, projectId, refs) {
   return issues.map(outsideNotice).join('');
 }
 
+/** #90: the outside notice (outsideRunNotice) before the prompt a run gets: its `task`, else its `prompt`. */
+function withOutsideNotice(inputs, notice) {
+  if (!notice) return inputs;
+  const key = ['task', 'prompt'].find((k) => typeof inputs?.[k] === 'string');
+  return key ? { ...inputs, [key]: `${notice}${inputs[key]}` } : inputs;
+}
+
 // The task of a group: every issue (title, URL and body) in the order selected, shipped together.
 function groupTask(issues) {
   const refs = issues.map((i) => `#${i.number}`).join(', ');
@@ -826,5 +840,6 @@ module.exports = {
   saveRunToIssue,
   stagesShape,
   updateCachedIssue,
+  withOutsideNotice,
   withSyncedText,
 };

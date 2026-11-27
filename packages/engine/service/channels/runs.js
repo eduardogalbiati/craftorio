@@ -37,13 +37,6 @@ const {
   WORKFLOW_FILE,
 } = require('../schemas');
 
-// #90: the outside notice (backlog.js outsideRunNotice) before the prompt a run gets: its `task`, else its `prompt`
-function withOutsideNotice(inputs, notice) {
-  if (!notice) return inputs;
-  const key = ['task', 'prompt'].find((k) => typeof inputs?.[k] === 'string');
-  return key ? { ...inputs, [key]: `${notice}${inputs[key]}` } : inputs;
-}
-
 // #795: the last `bytes` (8 KB by default, 64 KB at most) of a log file, from its first whole line
 const TAIL_BYTES = 8192;
 function logTail(file, bytes) {
@@ -127,7 +120,7 @@ module.exports = (ctx) => [
       const notice = list && projectId ? backlog.outsideRunNotice(ctx.ws.backlog, projectId, list) : '';
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-      const resolved = withOutsideNotice(withProjectDefaults(ctx, { file, inputs, projectId }), notice);
+      const resolved = backlog.withOutsideNotice(withProjectDefaults(ctx, { file, inputs, projectId }), notice);
       const start = (notices) => ctx.startWorkflowRun({ file, inputs: resolved, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace, notices });
       const target = ctx.localRunTarget({ file, inputs: resolved, projectId: projectId || null, workspaceWorkflow: !!workspace });
       if (!target) return start([]);

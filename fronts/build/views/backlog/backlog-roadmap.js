@@ -1725,7 +1725,7 @@
     if (act === 'replace' && r.stages.length && !await confirmDialog(t('backlog_roadmap.replace_the_roadmap'), t('backlog_roadmap.the_current_stages_are_removed_and'), t('backlog_roadmap.replace'))) return 'handled';
     const out = await api.proposeRoadmap(ctx.projectId, proposal, act === 'replace');
     ctx.setData(out);
-    if (out.dropped?.length) ctx.setError(t('backlog_roadmap.already_in_the_roadmap_left_out', { issues: out.dropped.map((n) => `#${n}`).join(', ') }));
+    if (out.dropped?.length || out.awaitingOwner?.length) ctx.setError([[out.dropped, 'backlog_roadmap.already_in_the_roadmap_left_out'], [out.awaitingOwner, 'backlog.outside_issues_awaiting_approval']].filter(([l]) => l?.length).map(([l, key]) => t(key, { issues: l.map((n) => `#${n}`).join(', ') })).join(' · ')); // #90: unapproved outside issues too
     if (act === 'replace') undoToast(ctx, out, t('backlog_roadmap.replaced_the_roadmap'), plural(r.stages.length, 'backlog_roadmap.stages_gave_way'));
   }
   async function itemClicked({ ctx, r, target }, el) {

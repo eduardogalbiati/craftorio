@@ -161,9 +161,10 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, proposal: ANY, replace: FLAG }, ['projectId']), result: OBJECT },
       fn: ({ projectId, proposal, replace }) => {
         const before = stagesOf(project(projectId));
-        const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
+        // #90 awaitingOwner: unapproved outside issues left out of the proposal, said on the screen
+        const { dropped, awaitingOwner } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
         const edit = edited(project(projectId), before, replace ? 'Replaced the roadmap' : 'Added a proposal to the roadmap', { undoable: !!replace });
-        return { ...withEdit(projectId, edit), dropped };
+        return { ...withEdit(projectId, edit), dropped, awaitingOwner: awaitingOwner || [] };
       },
     },
     // simulated: every item runs as a simulation (mock runs), whatever its own setting; stage: a
