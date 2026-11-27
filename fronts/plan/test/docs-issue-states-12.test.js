@@ -19,7 +19,7 @@ function loadDocsList() {
   i18n.setLanguage?.('en');
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const DocModel = require('@craftorio/shared/doc-model');
-  const sandbox = { esc, t: (...a) => i18n.t(...a), DocModel, DocsPanels: { openLabel: (doc) => `Open ${doc}` }, console };
+  const sandbox = { esc, t: (...a) => i18n.t(...a), DocModel, DocsPanels: { openLabel: (doc) => `Open ${doc}` }, Platforms: require('@craftorio/shared/platforms'), console };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(DOCS_LIST, 'utf8'), sandbox, { filename: DOCS_LIST });
@@ -39,6 +39,34 @@ test('#12 withIssueStates leaves unknown issues, other repositories and items wi
   const out = withIssueStates(items, BACKLOG);
   assert.deepEqual(out, items);
   assert.equal(withIssueStates(items, null), items);
+});
+
+test('#12 issueRef reads an issue URL, a GitLab subgroup path, and the epic after "epic"', () => {
+  const DocModel = require('@craftorio/shared/doc-model');
+  const url = DocModel.issueRef('https://github.com/o/r/issues/628');
+  assert.deepEqual({ repo: url.repo, number: url.number, url: url.url }, { repo: 'o/r', number: 628, url: 'https://github.com/o/r/issues/628' });
+  const gl = DocModel.issueRef('"#5 (phase of epic https://gitlab.com/group/sub/repo/-/issues/4)"');
+  assert.equal(gl.number, 5);
+  assert.deepEqual({ repo: gl.epic.repo, number: gl.epic.number }, { repo: 'group/sub/repo', number: 4 });
+  assert.equal(DocModel.issueRef('none'), null);
+});
+
+test('#12 withIssueStates compares whole repository paths (GitLab subgroups) and reads a phase in its epic\'s repository', () => {
+  const backlog = { repo: 'https://gitlab.com/group/sub/repo.git', issues: [{ number: 5, state: 'closed' }, { number: 4, state: 'closed' }] };
+  assert.equal(withIssueStates([{ item: 'a', docs: [], issue: 'sub/repo#5' }], backlog)[0].issueState, undefined);
+  assert.equal(withIssueStates([{ item: 'a', docs: [], issue: 'group/sub/repo#5' }], backlog)[0].issueState, 'closed');
+  const [other] = withIssueStates([{ item: 'b', docs: [], issue: '#5 (phase 1 of epic other/repo#4)' }], backlog);
+  assert.equal(other.issueState, undefined);
+  assert.equal(other.epicState, undefined);
+});
+
+test('#12 a Done item (closed epic, phase state unknown) offers no Write the plan; the link opens the epic', () => {
+  const L = loadDocsList();
+  const it = specOnly('#629 (phase 1 of epic o/r#628)', { epicState: 'closed' });
+  const html = String(L.itemsHtml([it], 'p1', { repo: 'https://github.com/me/proj.git' }));
+  assert.match(html, /data-testid="docs-item-done"/);
+  assert.doesNotMatch(html, /data-docs-write-plan/);
+  assert.match(html, /href="https:\/\/github\.com\/o\/r\/issues\/628"/);
 });
 
 test('#12 a signed-off spec without plan whose issues are all closed offers no Write the plan, and is Done', () => {

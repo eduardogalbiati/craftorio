@@ -6,7 +6,8 @@
 // docs:list reads from the Backlog's synced issues) and the Intents tab (#650, spec R16: every
 // docs/work/<item>/intent.md with its status and its link back to the maintain.md that opened it).
 // Markup only, from the values docs.js passes; the clicks are docs.js's (data-docs-*). Uses app.js
-// globals (esc, t), DocsPanels.openLabel and DocModel.ACCEPTED. Browser: window.DocsList.
+// globals (esc, t), DocsPanels.openLabel, DocModel.ACCEPTED and DocModel.issueRef, and window.Platforms
+// (parseRepoUrl, projectPlatform, findPlatform) for the issue links. Browser: window.DocsList.
 (() => {
   // #671 the SDLC steps of an item (living-doc.jpg), each with its document; Plan and Design are written here
   const SDLC = [
@@ -47,7 +48,7 @@
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
     // #633 the plan (plan.md) is written from the signed-off spec, at its own gate
     // #12 nor once the item's issues are all closed (built without a plan.md)
-    if (spec && signedOff(spec.status) && !names.includes('plan') && !issuesClosed(it)) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
+    if (spec && signedOff(spec.status) && !names.includes('plan') && !issuesClosed(it) && !isDone(it)) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
     // #12 an item whose documents name its issue already has it: no second epic
     if (spec && signedOff(spec.status) && !issueOf(it)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
     return open.join('');
@@ -55,8 +56,10 @@
 
   // #12 the item's issue from its documents' `issue:` field (DocModel.issueRef), null without one
   const issueOf = (it) => (it.issue ? window.DocModel?.issueRef?.(it.issue) || null : null);
-  // #12 a ref's page: owner/repo#N on the project's host (github.com without one), #N in the project's repository
+  // #12 a ref's page: its URL when the `issue:` gave one, owner/repo#N on the project's host (github.com
+  // without one), #N in the project's repository
   function issueHref(ref, project) {
+    if (ref.url) return ref.url;
     const P = window.Platforms;
     const repo = P?.parseRepoUrl?.(project?.repo);
     const path = ref.repo || repo?.path;
@@ -64,13 +67,13 @@
     const platform = (repo && P.projectPlatform?.(project)) || P.findPlatform?.('github');
     return platform?.issueUrl?.(`https://${repo?.host || platform.host}/${path}`, ref.number) || '';
   }
-  // #12 the row's link to its issue, "Epic owner/repo#628 · #629" for an epic's phase
+  // #12 the row's link to its issue, "Epic owner/repo#628 · #629" for an epic's phase, opening the epic
   function issueLink(it, project) {
     const ref = issueOf(it);
     if (!ref) return '';
     const name = (r) => `${r.repo || ''}#${r.number}`;
     const label = ref.epic ? `${t('docs.item_epic', { ref: name(ref.epic) })} · ${name(ref)}` : t('docs.item_issue', { ref: name(ref) }); // i18n-ignore
-    const href = issueHref(ref, project);
+    const href = ref.epic ? issueHref(ref.epic, project) : issueHref(ref, project);
     return `<a class="docs-item-issue small" data-testid="docs-item-issue-link"${href ? ` href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(ref.text)}">${esc(label)}</a>`;
   }
 
@@ -121,7 +124,7 @@
     if (!items.length) return `<div class="empty-state" data-testid="docs-empty"><b>${t('docs.no_item_yet')}</b><p class="muted">${t('docs.start_with_new_item')}</p></div>`;
     const ordered = [...items].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
     return ordered.map((it) => `
-      <div class="docs-item${isDone(it) ? ' is-done' : ''}" data-testid="docs-item" data-item="${esc(it.item)}">
+      <div class="docs-item" data-testid="docs-item" data-item="${esc(it.item)}">
         <div class="docs-item-main" title="${esc(`docs/work/${it.item}/`)}">
           <b class="docs-item-title" data-testid="docs-item-title" title="${esc(it.title || it.item)}">${esc(it.title || it.item)}</b>
           <span class="docs-sep muted">·</span>

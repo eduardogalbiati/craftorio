@@ -46,6 +46,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const DocModel = require('@craftorio/shared/doc-model');
+const { parseRepoUrl } = require('@craftorio/shared/platforms');
 const { gitOut } = require('@craftorio/engine/service/common');
 
 const DOCS = ['intent', 'spec', 'plan']; // #633: the plan, the pre-flow's third document
@@ -171,26 +172,26 @@ function listItems(dir) {
   return items.sort((a, b) => a.item.localeCompare(b.item));
 }
 
-// "owner/repo" of a repository URL or path (https://github.com/o/r.git, git@host:o/r), lower case
-const repoPath = (repo) => String(repo || '').trim().replace(/\.git$/i, '').split(/[/:]/).filter(Boolean).slice(-2).join('/').toLowerCase();
-
 // #12 the items with the platform state of the issue (issueState) and of the epic (epicState) their
 // `issue:` names, from the Backlog's synced issues (backlog.readBacklog: { repo, issues: [{ number, state }] },
-// closed ones included); a ref to another repository or not in the list gets no state (no network call)
+// closed ones included); a ref to another repository or not in the list gets no state (no network call).
+// Limit: the Backlog keeps the newest issues only (MAX_ISSUES, domains/backlog/issues.js), so an old closed
+// epic, or a project never synced, has no state: unknown counts as open (Write the plan stays, no Done by epic).
+// A phase number without repository (`#629 (phase 1 of epic o/r#628)`) is in its epic's repository.
 function withIssueStates(items, backlog) {
   const issues = Array.isArray(backlog?.issues) ? backlog.issues : [];
   if (!issues.length) return items;
-  const here = repoPath(backlog.repo);
-  const stateOf = (ref) => {
-    if (!ref || (ref.repo && repoPath(ref.repo) !== here)) return null;
+  const here = String(parseRepoUrl(backlog.repo)?.path || '').toLowerCase();
+  const stateOf = (ref, repo) => {
+    if (!ref || (repo && repo.toLowerCase() !== here)) return null;
     const found = issues.find((i) => Number(i?.number) === ref.number);
     return found?.state ? String(found.state).toLowerCase() : null;
   };
   return items.map((it) => {
     const ref = it.issue ? DocModel.issueRef(it.issue) : null;
     if (!ref) return it;
-    const issueState = stateOf(ref);
-    const epicState = ref.epic ? stateOf(ref.epic) : null;
+    const issueState = stateOf(ref, ref.repo || ref.epic?.repo);
+    const epicState = ref.epic ? stateOf(ref.epic, ref.epic.repo) : null;
     return { ...it, ...(issueState ? { issueState } : {}), ...(epicState ? { epicState } : {}) };
   });
 }

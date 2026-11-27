@@ -38,7 +38,8 @@
 // - planStatus(markdown): the plan's effective status, `built` when planBuilt, else its front matter's
 //   `status` without an inline `# comment` ('' without one);
 // - issueRef(value) (#12): an `issue:` front matter value (quotes dropped) → { text, repo, number, epic:
-//   { repo, number } | null } (its first `[owner/repo]#N`, the epic from `epic owner/repo#N`), null without one;
+//   { repo, number } | null } (its first `[owner/repo]#N` or issue URL, `url` set for a URL, the epic from
+//   `epic owner/repo#N` or `epic <URL>`), null without one;
 // - isItemName(name): a work item's folder name (letters, digits, `.`, `_`, `-`, 100 characters, no `..`);
 // - addTableRow(markdown, headings, row): the row in the first table of the section titled one of
 //   `headings` (`## …` lines), in place of its "nothing yet" row (every cell `—` but the last), else
@@ -405,15 +406,27 @@
     return String(frontMatter(markdown).status || '').replace(/\s+#.*$/, '').trim();
   }
 
-  // #12 an `issue:` front matter value: its first `[owner/repo]#N` and the epic it names (`epic owner/repo#N`)
-  const ISSUE_REF = /(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/;
+  // #12 an `issue:` front matter value: its first `[owner/repo]#N` or issue URL and the epic it names
+  // (`epic owner/repo#N`, `epic <issue URL>`); a URL's ref keeps its `url`
+  const ISSUE_REF = /^(?:([\w.-]+(?:\/[\w.-]+)+))?#(\d+)$/;
+  // the platform adapters' parseIssueUrl (platforms/index.js), read when called: the browser loads it later
+  const platforms = () => (typeof module === 'object' && module.exports ? require('./platforms') : root.Platforms);
+  function wordRef(word) {
+    for (const p of platforms()?.PLATFORMS || []) {
+      const found = p.parseIssueUrl(word);
+      if (found) return { repo: found.repo, number: found.number, url: word };
+    }
+    const m = ISSUE_REF.exec(word);
+    return m ? { repo: m[1] || null, number: Number(m[2]) } : null;
+  }
   function issueRef(value) {
     const text = String(value ?? '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
-    const first = ISSUE_REF.exec(text);
+    const words = text.split(/\s+/).map((w) => w.replace(/^[([]+|[)\],.;:]+$/g, ''));
+    const refs = words.map(wordRef);
+    const first = refs.find(Boolean);
     if (!first) return null;
-    const epic = new RegExp(`\\bepic\\s+${ISSUE_REF.source}`, 'i').exec(text);
-    const ref = (m) => ({ repo: m[1] || null, number: Number(m[2]) });
-    return { text, ...ref(first), epic: epic ? ref(epic) : null };
+    const at = words.findIndex((w, i) => /^epic$/i.test(w) && refs[i + 1]);
+    return { text, ...first, epic: at >= 0 ? refs[at + 1] : null };
   }
 
   function isItemName(name) {
