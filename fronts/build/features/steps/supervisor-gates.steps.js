@@ -23,9 +23,10 @@
 // - The Supervisor answered (the recommended answer, or retry / stop):
 //     { type: 'supervisor.started', ... }
 //     { type: 'supervisor.decision', step_id: 'test_failed', kind: 'escalation', action: 'route',
-//       route: 'stop', explanation: <reason>, recommended: true }        NEW `recommended`
+//       route: 'stop', explanation: <reason>, recommended: true,         NEW `recommended`
+//       label, label_key }                                               NEW: the answer's label (gateAnswerLabel)
 //     { type: 'step.finished', step_id: 'test_failed', output: { choice: 'stop', by: 'supervisor',
-//       reason: <reason> } }                                             NEW `reason`
+//       reason: <reason>, label, label_key } }                           NEW `reason`, `label`, `label_key`
 //   then workflow.finished { status: 'failed' } (stop ends the run as failed; nothing merged).
 //
 // What the screens expose (NEW data-testids, the renderer's contract for these steps):
@@ -124,8 +125,9 @@ function writeFeatureRun(e2e, { suffix, start, mock, task, steps, finished = nul
 // the events of a gate the Supervisor answered with `answer` (recommended or safe), the run then stopped
 const answeredGate = (at, answer, reason) => [
   ...redSuite(at),
-  { ts: at(27), type: 'supervisor.decision', step_id: GATE, kind: 'escalation', action: 'route', route: answer, explanation: reason, recommended: answer === 'stop' },
-  { ts: at(27), type: 'step.finished', step_id: GATE, duration_ms: MIN, output: { choice: answer, by: 'supervisor', reason } },
+  // the answer's label as the engine records it (gates.js gateAnswerLabel): the workflow's text + its catalog key
+  { ts: at(27), type: 'supervisor.decision', step_id: GATE, kind: 'escalation', action: 'route', route: answer, explanation: reason, recommended: answer === 'stop', label: labelOf(answer), label_key: `engine.test_failed_${answer}` },
+  { ts: at(27), type: 'step.finished', step_id: GATE, duration_ms: MIN, output: { choice: answer, feedback: '', by: 'supervisor', reason, label: labelOf(answer), label_key: `engine.test_failed_${answer}` } },
 ];
 
 Given('the demo project has a Feature run {string} waiting at its test gate, where the Supervisor would answer {string} against the recommended {string} because {string}', async ({ e2e }, suffix, wanted, recommended, reason) => {
