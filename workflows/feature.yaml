@@ -334,7 +334,8 @@ inputs:
     main: true
     options: { "off": "Off", write: Write, write_and_run: Write and run }
     description: "Write: the test writer writes the issue's end-to-end scenarios first, with the acceptance tests, and checks that they parse; the E2E release workflow runs them. Write and run: the orchestrator also runs them here, with the @smoke journeys, after the suite (no agent while they pass; starts the app). Off: none."
-  # #223: the e2e step adds `--grep "@issue-<n>|@smoke"` (Playwright) to it
+  # #223: the e2e step adds `--grep "@issue-<n>(?![0-9])|@smoke"` (Playwright) to it; the tag is
+  # anchored so @issue-83 never selects @issue-835 (#93)
   e2e_command:
     type: string
     # #735: no Node assumption; the project's run defaults fill it when its facts found an E2E suite
@@ -2280,7 +2281,7 @@ steps:
   - id: e2e
     display: Run suite (E2E)
     type: suite
-    command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke"'
+    command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}(?![0-9])|{% endfor %}@smoke"'
     timeout: 30m
     transitions:
       - when: "output.status == 'pass'"

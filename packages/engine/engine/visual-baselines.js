@@ -9,7 +9,9 @@
 //     expanded from its Examples), or the static `toHaveScreenshot('….png')` of the step definition
 //     whose text the step matches ({string}, {int}, {word}… as wildcards);
 //   - its baseline is features/__screenshots__/<name>-<platform>.png (playwright.config.js'
-//     snapshotPathTemplate `{arg}-{platform}{ext}`), one per platform.
+//     snapshotPathTemplate `{arg}-{platform}{ext}`), one per platform;
+//   - the update command's --grep is a regex: the tag is anchored (`@issue-<n>(?![0-9])`, quoted) so
+//     @issue-83 never selects @issue-835 (#93).
 
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +21,7 @@ const SCREENSHOTS_DIR = 'features/__screenshots__';
 const STEP_KEYWORDS = /^(?:Given|When|Then|And|But|\*)\s+(.*)$/;
 const SCENARIO = /^(?:Scenario|Scenario Outline|Scenario Template|Example):\s*(.*)$/;
 
-const updateCommand = (issue) => `npm run test:e2e:update -- --grep @issue-${issue}`;
+const updateCommand = (issue) => `npm run test:e2e:update -- --grep "@issue-${issue}(?![0-9])"`;
 const pngNames = (text) => [...String(text).matchAll(/"([^"$`]+?\.png)"/g)].map((m) => m[1]);
 
 // The scenarios of a .feature text: { name, tags, steps, examples: [{ <column>: value }] }; the

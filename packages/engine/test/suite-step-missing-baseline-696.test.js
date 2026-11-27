@@ -68,7 +68,7 @@ test('#696 runSuite: a round whose only failure is "A snapshot doesn\'t exist at
   const cwd = tmp(t);
   const at = path.join(cwd, 'features', '__screenshots__', '671-documents-win32.png');
   const run = runWith(playwrightLog({ blocks: [missingBlock(1, at)], failed: 1, passed: 1 }));
-  const out = await runSuite({ command: 'npm run test:e2e -- --grep "@issue-671|@smoke"', cwd, runDir, round: 1, run });
+  const out = await runSuite({ command: 'npm run test:e2e -- --grep "@issue-671(?![0-9])|@smoke"', cwd, runDir, round: 1, run });
   assert.equal(out.status, 'pass', out.message);
   assert.deepEqual(out.failures, []);
   assert.deepEqual((out.new_baselines || []).map((b) => b.baseline), ['features/__screenshots__/671-documents-win32.png']);

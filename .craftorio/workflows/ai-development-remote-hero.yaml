@@ -303,7 +303,8 @@ inputs:
     main: true
     options: { "off": "Off", write: Write, write_and_run: Write and run }
     description: "Write: the test writer writes the issue's end-to-end scenarios first, with the acceptance tests, and checks that they parse; the E2E release workflow runs them. Write and run: the orchestrator also runs them here, with the @smoke journeys, after the suite (no agent while they pass; starts the app). Off: none."
-  # #223: the e2e step adds `--grep "@issue-<n>|@smoke"` (Playwright) to it
+  # #223: the e2e step adds `--grep "@issue-<n>(?![0-9])|@smoke"` (Playwright) to it; the tag is
+  # anchored so @issue-83 never selects @issue-835 (#93)
   e2e_command:
     label_key: workflow_texts.feature_e2e_command_label
     help_key: workflow_texts.ai_development_hero_e2e_command_desc
@@ -1154,7 +1155,7 @@ steps:
       {% if inputs.e2e_tests == 'write_and_run' %}The orchestrator runs them, with the @smoke journeys, after the review. When your change
       intentionally changes a screen with a `toHaveScreenshot` baseline, update that baseline on
       the branch (the reviewer approves it). Every new @visual scenario carries its baseline before
-      the review (`npm run test:e2e:update -- --grep @issue-<n>`, the PNG committed): the orchestrator
+      the review (`npm run test:e2e:update -- --grep "@issue-<n>(?![0-9])"`, the PNG committed): the orchestrator
       checks it right after your commit (#696). Their run's screenshots and traces are the evidence of
       the states they cover: in `screenshots`, list only the states no scenario covers.{% else %}They run at release time (E2E release workflow), not in this run.{% endif %}
       {% endif %}
@@ -1793,7 +1794,7 @@ steps:
       {% for r in wreuse %}- `{{ r.name }}` ({{ r.path }}:{{ r.line }}): {{ r.what }}{% if r.issue %} (for issue {{ r.issue }}){% endif %}
       {% endfor %}
       {% endif %}
-      {% if inputs.e2e_tests != 'off' %}A missing baseline of a new @visual scenario (its PNG not under features/__screenshots__/ on the branch) is blocking (#696): name the file and its update command (`npm run test:e2e:update -- --grep @issue-<n>`), never leave it as a note.{% endif %}
+      {% if inputs.e2e_tests != 'off' %}A missing baseline of a new @visual scenario (its PNG not under features/__screenshots__/ on the branch) is blocking (#696): name the file and its update command (`npm run test:e2e:update -- --grep "@issue-<n>(?![0-9])"`), never leave it as a note.{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
       This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
@@ -2174,7 +2175,7 @@ steps:
     display: Run suite (E2E)
     display_key: workflow_texts.feature_step_e2e
     type: suite
-    command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke"'
+    command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}(?![0-9])|{% endfor %}@smoke"'
     timeout: 30m
     transitions:
       - when: "output.status == 'pass'"

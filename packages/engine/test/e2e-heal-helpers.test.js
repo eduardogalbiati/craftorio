@@ -7,10 +7,11 @@ const { loadWorkflow, render } = require('../engine/workflow');
 const { parseFailures } = require('../engine/suite-step');
 const capabilities = require('../engine/capabilities');
 
-const grep = '{% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke';
+// The tag is anchored (#93): @issue-7 never selects @issue-70.
+const grep = '{% for n in inputs | issue_numbers %}@issue-{{ n }}(?![0-9])|{% endfor %}@smoke';
 
 test('issue_numbers: the numbers of issue and issues, without duplicates; none gives only @smoke', () => {
-  assert.equal(render(grep, { inputs: { issue: 'https://github.com/a/b/issues/223', issues: ['https://github.com/a/b/issues/223', 'https://github.com/a/b/issues/7/'] } }), '@issue-223|@issue-7|@smoke');
+  assert.equal(render(grep, { inputs: { issue: 'https://github.com/a/b/issues/223', issues: ['https://github.com/a/b/issues/223', 'https://github.com/a/b/issues/7/'] } }), '@issue-223(?![0-9])|@issue-7(?![0-9])|@smoke');
   assert.equal(render(grep, { inputs: { issue: '', issues: [] } }), '@smoke');
   assert.equal(render(grep, { inputs: {} }), '@smoke');
 });

@@ -121,7 +121,7 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   expanded from `Examples`, or the static name of the step definition it matches under `steps`)
   with no `features/__screenshots__/<name>-<platform>.png`. Output `{ kind: 'visual_baselines',
   status: pass | missing | skipped, missing: [{ name, file, feature, scenario, command }], round,
-  message }`; the message names each file and its `npm run test:e2e:update -- --grep @issue-<n>`.
+  message }`; the message names each file and its `npm run test:e2e:update -- --grep "@issue-<n>(?![0-9])"`.
   ai-development-local-hero runs it as `baseline_check` right after a passing `testid_check`
   (scenarios written first): a missing baseline goes back to develop at most twice
   (`vars.baseline_returns`).
