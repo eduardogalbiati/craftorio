@@ -300,9 +300,6 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     orchestratorChoice.resolveAgentTemplates(this.wf, this.inputs, chosen.onOrchestrator); // agents' provider/model/effort templates
     this.applyOwnerCopy(ownerCopy);
     this.applyAgentOverrides(agentOverrides);
-    // #111: a Codex agent's model the account does not offer runs on its fallback, noted in the log (whatever the
-    // orchestrator: usage.preflight lets any Codex model with a fallback through)
-    for (const message of orchestratorChoice.applyCodexFallback(this.wf)) this.notices.push({ level: 'warn', message });
     // #262: Settings' fallback chains per provider and limits per model
     validateModels(models || undefined, 'Settings models');
     this.models = { ...(models || {}), ...(this.wf.models || {}) };
@@ -313,6 +310,10 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     this.nightLimits = typeof nightLimits === 'function' ? nightLimits : null;
     this.grantedLimits = null;
     this.dropDisabledAgents();
+    // #111: a Codex agent's model the account does not offer runs on its fallback, noted in the log (whatever the
+    // orchestrator: usage.preflight lets any Codex model with a fallback through); after dropDisabledAgents, so an
+    // agent left out of the run gets no note
+    for (const message of orchestratorChoice.applyCodexFallback(this.wf)) this.notices.push({ level: 'warn', message });
     // #286: an effort the CLI never gets goes to the run's log at start, never silent
     for (const message of silentEfforts(this.wf)) this.notices.push({ level: 'warn', message });
     this.pickPersonas(personas || [], (resume || recover)?.personas);
