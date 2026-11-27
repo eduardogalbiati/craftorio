@@ -919,7 +919,7 @@
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
-            <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
+            <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}${window.BacklogOutside.row(i)}</div>
           </div>
           <span class="bl-status">${prBadges(i)}${status(i)}</span>
           ${tasks(i) || '<span></span>'}
@@ -940,7 +940,7 @@
   const card = (i) => `
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="${t('backlog.open_on_value', { value: esc(PLATFORMS[bl.data?.platform]?.label || 'the platform') })}">${esc(i.title)}</a>${issueMenu(i)}</div>
-      <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
+      <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}${window.BacklogOutside.row(i)}</div>
       ${tasks(i)}<button type="button" class="btn sm ghost bl-card-map" data-show-map="${i.number}" data-testid="show-on-map" title="${t('backlog.open_the_project_city_with_the_2')}">${t('backlog.show_on_the_map')}</button>
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
     </div>`;
@@ -1580,7 +1580,7 @@
       if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }
       if (arch) { if (arch.getAttribute('aria-disabled') === 'true') return; bl.menu = null; render(); await archive([Number(arch.dataset.archive)]); return; }
       if (back) { await restore(Number(back.dataset.restore)); return; }
-      if (e.target.closest('.bl-menu, a')) return;
+      if (e.target.closest('.bl-menu, a, [data-approve-outside]')) return;
       const row = e.target.closest('[data-act="toggle"]');
       if (!row) return;
       const n = Number(row.closest('.bl-issue').dataset.n);

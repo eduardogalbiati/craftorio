@@ -162,6 +162,7 @@ const UNCHECKED = [
   'fronts/build/views/backlog/backlog-epics.js',
   'fronts/build/views/backlog/backlog-labels.js',
   'fronts/build/views/backlog/backlog-live.js',
+  'fronts/build/views/backlog/backlog-outside.js',
   'fronts/build/views/backlog/backlog-po-confirm.js',
   'fronts/build/views/backlog/backlog-po-kinds.js',
   'fronts/build/views/backlog/backlog-po-options.js',

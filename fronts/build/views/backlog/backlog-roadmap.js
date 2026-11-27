@@ -630,7 +630,7 @@
     const titles = issues.map((i) => {
       const title = i.title && i.title !== `#${i.number}` ? i.title : '';
       const text = i.url ? `<a class="rm-title" href="${esc(i.url)}" target="_blank" rel="noopener" draggable="false">${esc(title || t('backlog_roadmap.open_the_issue'))}</a>` : `<span class="rm-title">${esc(title)}</span>`;
-      return `<li class="rm-issue"${locked || open ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(`#${i.number} ${title}`.trim())}"><span class="rm-num mono">#${i.number}</span>${text}</li>`;
+      return `<li class="rm-issue"${locked || open ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(`#${i.number} ${title}`.trim())}"><span class="rm-num mono">#${i.number}</span>${text}${window.BacklogOutside?.badge(byNumber?.get(i.number) || i) || ''}</li>`;
     }).join('');
     // the complexity belongs to the issues: the sum of their complexity:n labels
     const foot = `<span class="rm-issues-foot muted" data-testid="roadmap-issues-foot"${size != null ? ` title="${t('backlog_roadmap.the_complexity_is_the_sum_of')}"` : ''}>${plural(issues.length, 'backlog_roadmap.issues_count')}${size != null ? t('backlog_roadmap.complexity_size', { size }) : ''}</span>`;
