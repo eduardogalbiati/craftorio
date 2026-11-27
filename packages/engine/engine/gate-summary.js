@@ -78,6 +78,13 @@ function parseRecommend(text, ids) {
 // message: the gate's rendered message; summary / recommend: the step's rendered templates ('' when
 // it has none); diagnosis: the supervisor on call's ({ explanation, recommend, recommendation,
 // options, user_action }) or null; answers: [{ id, label }], `approve` / `reject` for a yes/no gate.
+// #117: the gate's answer id a recommendation names (any case), null when the gate does not offer it;
+// the one rule for the supervisor's diagnosis (run/supervision.js gateDiagnosis) and the card.
+function offeredAnswer(recommend, ids) {
+  if (!recommend) return null;
+  const want = String(recommend).toLowerCase();
+  return ids.map(String).find((a) => a.toLowerCase() === want) || null;
+}
 /** @param {{ message?: string, summary?: string, recommend?: string, diagnosis?: object | null, answers?: object[] }} [options] */
 function gateBrief({ message = '', summary = '', recommend = '', diagnosis = null, answers = [] } = {}) {
   const lines = String(summary || '').trim().split(/\r?\n/);
@@ -88,9 +95,9 @@ function gateBrief({ message = '', summary = '', recommend = '', diagnosis = nul
   const ids = answers.map((a) => String(a.id));
   let recommendation = null;
   if (diagnosis && (diagnosis.recommend || diagnosis.recommendation)) {
-    const id = diagnosis.recommend ? ids.find((a) => a.toLowerCase() === String(diagnosis.recommend).toLowerCase()) : null;
+    const id = offeredAnswer(diagnosis.recommend, ids);
     // #117: a supervisor advising an answer the gate does not offer: no recommendation on the card
-    if (!(diagnosis.recommend && ids.length && !id)) recommendation = { answer: id || null, reason: clip(plain(diagnosis.recommendation || ''), REASON_MAX), source: 'supervisor' };
+    if (!(diagnosis.recommend && ids.length && !id)) recommendation = { answer: id, reason: clip(plain(diagnosis.recommendation || ''), REASON_MAX), source: 'supervisor' };
   } else {
     const p = parseRecommend(recommend, ids);
     if (p) recommendation = { ...p, source: 'workflow' };
@@ -110,6 +117,7 @@ module.exports = {
   firstSentences,
   gateBrief,
   issueLines,
+  offeredAnswer,
   oneLine,
   parseRecommend,
   suiteLines,

@@ -132,12 +132,15 @@
   // where it stopped: the gate left waiting, else the step it was at
   const stoppedStep = () => chat.model.pendingGates().at(-1)?.stepId || chat.model.run.stepId || null;
   const resumeButton = () => `<button type="button" class="btn sm primary" data-testid="runchat-resume" data-resume-at="${esc(stoppedStep() || '')}" title="${t('runchat.resume_the_run_where_it_stopped')}">${t('runchat.resume')}</button>`;
+  // #117: the run's total as on every screen (run-list.js runCostText): "unknown" with no price, "(partial)"
+  const usdText = (n, approx) => `${approx ? '≈ ' : ''}$${(Number(n) || 0).toFixed(2)}`;
+  const costText = (c) => runCostText({ usd: c.cost, approx: c.costApprox, unknown: c.costUnknown, partial: c.costPartial }, usdText);
   // the chat's last message while the run is interrupted (drawn by draw, after the items)
   function interruptedHtml() {
     const r = chat.model.run;
     const at = stoppedStep();
     const spent = r.lastTs && r.startedAt ? Date.parse(r.lastTs) - Date.parse(r.startedAt) : 0;
-    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">${t('runchat.interrupted_at')} <span title="${esc(at || '')}">${esc(at ? stepName(at) : t('runchat.its_first_step'))}</span></b> ${t('runchat.the_app_closed_value', { value: (r.cost || 0).toFixed(2) })} ${fmtSecs(spent)}</span>
+    return `<div class="duo-note failed rc-interrupted" data-testid="runchat-interrupted-note"><span><b data-status="interrupted">${t('runchat.interrupted_at')} <span title="${esc(at || '')}">${esc(at ? stepName(at) : t('runchat.its_first_step'))}</span></b> ${t('runchat.the_app_closed_value', { value: costText(r) })} ${fmtSecs(spent)}</span>
       ${resumeButton()}<button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_another')}">${t('runchat.resume_from_step')}</button></div>`;
   }
 
@@ -304,7 +307,7 @@
         const ok = it.status === 'success';
         const tested = testedPill(it);
         // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? t('runchat.done') : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · ${it.costApprox ? '≈ ' : ''}$${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? t('runchat.done') : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · ${costText(it)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
           <button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_a')}">${t('runchat.resume_from_step')}</button></div>`;
       }
       default: return '';
@@ -380,7 +383,7 @@
     pill.dataset.status = waiting ? 'waiting' : status;
     pill.textContent = StatusPill.statusLabel(status, { waiting: !!waiting });
     // #31: a simulated run reads $0.00 (the title's badge says simulated)
-    $c('#rc-cost').textContent = r.mock ? '$0.00' : r.cost ? `${r.costApprox ? '≈ ' : ''}$${r.cost.toFixed(2)}` : '';
+    $c('#rc-cost').innerHTML = r.mock ? '$0.00' : r.cost || r.costUnknown ? costText(r) : '';
     $c('#rc-stop').classList.toggle('hidden', !chat.live);
   }
 

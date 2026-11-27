@@ -16,6 +16,7 @@ const {
   validateSchema,
 } = require('./outputs');
 const { GATE } = require('./field-rules');
+const { offeredAnswer } = require('../gate-summary');
 const { isLooping } = require('./load');
 const { DENIAL_WARN } = require('./turns');
 
@@ -39,10 +40,10 @@ const median = (xs) => {
 // gate does not offer is dropped with its reason (it advised "Approve" with a capability the app lacks
 // at a retry/stop gate).
 function gateDiagnosis(d, answers) {
-  const offered = answers.includes(d.recommend);
+  const offered = offeredAnswer(d.recommend, answers || []);
   return {
     explanation: d.explanation,
-    recommend: offered ? d.recommend : null,
+    recommend: offered,
     recommendation: ((offered || !d.recommend) && d.recommendation) || null,
     options: Array.isArray(d.options) ? d.options.filter((o) => typeof o === 'string' && o.trim()).slice(0, 3) : null,
     user_action: d.user_action || null,

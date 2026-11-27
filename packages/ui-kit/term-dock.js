@@ -13,9 +13,9 @@ const readOnlyTerm = (kind) => kind === 'live' || LOG_KINDS.includes(kind);
 // "Live terminal" / "Open in CLI" (embedded in the dock) + "↗" (external window). The ↗ button is
 // disabled with the reason when the app found no terminal window to open (#318, api.externalTerminal).
 function termButtons(kind, title, blocked = '') {
-  // #117: the labels in the interface language (the English ones stay the accessible names in English)
+  // #117: the labels (and so the buttons' accessible names) in the interface language
   const label = readOnlyTerm(kind) ? I18n.t('term_dock.live_terminal') : I18n.t('term_dock.open_in_cli');
-  const t = blocked || title || (kind === 'cli' ? I18n.t('term_dock.cli_title') : LOG_KINDS.includes(kind) ? I18n.t('term_dock.log_title') : I18n.t('term_dock.live_title'));
+  const t = blocked || title || (kind === 'cli' ? I18n.t('term_dock.cli_title') : LOG_KINDS.includes(kind) ? I18n.t('term_dock.log_title') : I18n.t('run.follow_this_session_live_in_a_terminal'));
   const dis = blocked ? 'disabled' : '';
   const ext = api.externalTerminal || { available: true };
   const extBlocked = blocked || (ext.available ? '' : ext.reason || 'No terminal window available');

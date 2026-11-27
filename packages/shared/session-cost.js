@@ -6,10 +6,12 @@
 //   What was recorded stays: a price added after the run does not change it.
 // - A session with nothing recorded (Codex) is priced from its tokens (the user's price, else the
 //   adapter's table); without a price it counts nothing and the total is `approx` too.
-// sessionCost(s, prices) → US$ or null; runCost(sessions, prices) → { usd, approx }, `prices` null:
-// only what was recorded; tokenPricedUsd(sessions, prices): what the prices add to that; turnCost(ev):
-// the same rule on one turn's event. Sessions come as snapshots (cost_usd, cost_estimate) or as the
-// lists' views (costUsd, costEstimate).
+// - #117: a session or turn whose cost the app does not know at all reads "unknown", never $0.00; a
+//   total that misses such a cost is `partial`.
+// sessionCost(s, prices) → US$ or null; runCost(sessions, prices) → { usd, approx, unknown, partial },
+// `prices` null: only what was recorded; tokenPricedUsd(sessions, prices): what the prices add to that;
+// turnCost(ev, prices, model) → { usd, approx, unknown? }: the same rule on one turn's event. Sessions
+// come as snapshots (cost_usd, cost_estimate) or as the lists' views (costUsd, costEstimate).
 // Browser: window.SessionCost; Node: module.exports.
 (function (root) {
   const node = typeof module === 'object' && module.exports;
@@ -54,8 +56,9 @@
     return unknownOf(s) != null || (sessionCost(s, prices) == null && totalTokens(s.tokens) > 0);
   }
 
-  // #117: tokens with no cost at all (a Codex turn on a ChatGPT account, a model with no price): its cost is unknown
-  const unpriced = (s, prices = {}) => s.provider !== 'mock' && unknownOf(s) == null && sessionCost(s, prices) == null && totalTokens(s.tokens) > 0;
+  // #117: a session whose cost the app does not know at all (unpriced tokens, a Codex turn on a ChatGPT
+  // account, or an unknown turn with no CLI figure): drawn "unknown"
+  const unpriced = (s, prices = {}) => isApprox(s, prices) && !sessionCost(s, prices);
 
   // { usd, approx, unknown, partial }: #117 `unknown` when no session has a cost and some has unpriced
   // tokens (drawn "unknown", never $0.00); `partial` when the total misses such a session's cost
@@ -69,10 +72,13 @@
   const tokenPricedUsd = (sessions, prices = {}) => runCost(sessions, prices).usd - runCost(sessions, null).usd;
 
   // A turn's event (session.message_received): { usd, approx, unknown }; #117: a turn with no cost
-  // recorded (cost_usd null, a Codex turn on a ChatGPT account) is unknown, never $0.00
-  function turnCost(ev) {
+  // recorded (cost_usd null, a Codex turn) is priced from its tokens when its model has a price
+  // (`prices`, else the adapter's table), else it is unknown, never $0.00
+  function turnCost(ev, prices = {}, model = ev.session?.model) {
     const unknown = ev.cost_usd == null && ev.cost_source === 'unknown';
     const none = ev.cost_usd === null && !ev.cost_source && !ev.cost_not_recorded && ev.session?.provider !== 'mock';
+    const price = none && prices && model ? priceOf(model, prices) : null;
+    if (price) return { usd: tokensCost(ev.usage || {}, price), approx: false };
     return { usd: Number(unknown ? ev.cli_cost_usd : ev.cost_usd) || 0, approx: unknown || none, ...(none ? { unknown: true } : {}) };
   }
 

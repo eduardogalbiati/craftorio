@@ -132,7 +132,7 @@ export function Kpis() {
       </div></div>
       <div className="r3d-kpi r3d-card" data-testid="run3d-card-cost"><i><Icon name="coin" /></i><div><label><T k="run3d.cost" /></label>
         <b>
-          {m.costApprox() ? '≈ ' : ''}{usd(m.cost())}
+          {m.costUnknown() ? t('run_list.cost_unknown') : `${m.costApprox() ? '≈ ' : ''}${usd(m.cost())}`}
         </b>
         <em data-testid="run3d-cost-per-m">
           {perM == null ? '—' : t('run3d.cost_per_m', { cost: usd(perM) })}

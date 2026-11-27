@@ -370,6 +370,8 @@
     cost(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.cost : 0), 0); }
     /** #72: whether that includes a cost the app does not know (drawn "≈"). */
     costApprox(filter) { return this.spend.some((x) => x.approx && (!filter || filter(x))); }
+    /** #117: whether no kept turn had a price (drawn "unknown", never $0.00). */
+    costUnknown(filter) { return !this.cost(filter) && this.spend.some((x) => x.unknown && (!filter || filter(x))); }
     tokensOut(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.out : 0), 0); }
     /** #833: the kept turns' tokens by kind, their total and the share of cache reads (0 with no tokens). */
     tokens(filter) {
@@ -477,8 +479,8 @@
       const s = this.sessions[ev.session_id];
       if (!s) return false;
       const u = ev.usage || {};
-      const { usd, approx } = SessionCost().turnCost(ev); // #72: a turn of unknown cost counts the CLI's figure, marked
-      this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: usd, approx, out: u.output || 0, tokens: tokensOf(u) });
+      const { usd, approx, unknown } = SessionCost().turnCost(ev, {}, s.model); // #72: a turn of unknown cost counts the CLI's figure, marked
+      this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: usd, approx, unknown: !!unknown, out: u.output || 0, tokens: tokensOf(u) });
       const r = this.robot(this.turnOf[ev.session_id]);
       if (r) Object.assign(r, { busy: false, doneAt: this.now, say: short(ev.text, 240) || r.say, tool: '' });
       delete this.turnOf[ev.session_id];

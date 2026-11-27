@@ -12,10 +12,12 @@
   // packages/shared/providers/, resolves both).
   const registry = typeof module === 'object' && module.exports ? require('@craftorio/shared/providers') : root.Providers;
   const cost = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/session-cost') : root.SessionCost);
+  // A run's total from its turns (#117): unknown when none had a price, partial when some had none
+  const missingCost = (usd, missing) => ({ unknown: !!missing && !usd, partial: !!missing && !!usd });
   // a finished run's total (#72): its sessions', as on every screen; a summary without them: what it says
   const endCost = (s, run) => {
-    const total = s.sessions?.length ? cost().runCost(s.sessions, null) : { usd: s.cost_usd ?? run.cost, approx: s.cost_approx || run.costApprox };
-    return { cost: total.usd, costApprox: !!total.approx };
+    const total = s.sessions?.length ? cost().runCost(s.sessions) : { usd: s.cost_usd ?? run.cost, approx: s.cost_approx || run.costApprox, ...missingCost(s.cost_usd ?? run.cost, run.costMissing) };
+    return { cost: total.usd, costApprox: !!total.approx, costUnknown: !!total.unknown, costPartial: !!total.partial };
   };
   // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
   const cliNamed = (key) => {
@@ -280,9 +282,12 @@
       const s = ev.session ? { ...known, ...sessionInfo({ ...known, ...ev.session }) } : known;
       this.sessions.set(ev.session_id, s);
       this.active.delete(ev.session_id);
-      const { usd, approx } = cost().turnCost(ev); // #72: a turn of unknown cost counts the CLI's figure, marked
+      const { usd, approx, unknown } = cost().turnCost(ev, {}, s.model); // #72: a turn of unknown cost counts the CLI's figure, marked
       this.run.cost += usd;
       this.run.costApprox ||= approx;
+      this.run.costMissing ||= !!unknown; // #117
+      const total = missingCost(this.run.cost, this.run.costMissing);
+      Object.assign(this.run, { costUnknown: total.unknown, costPartial: total.partial });
       const t = this.turns.get(`${ev.session_id}:${ev.turn}`) || { activity: [] };
       this.turns.delete(`${ev.session_id}:${ev.turn}`);
       const stepId = baseStep(ev.step_id);
@@ -294,7 +299,7 @@
         kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider, simulates: s.simulates || null,
         model: s.model || '', effort: s.effort || null, mode: s.mode || null, side: this.sideOf(s.agent || '?'), stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
         tokensIn: (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0), tokensOut: u.output || 0,
-        cost: ev.cost_usd || 0, costUnknown: approx, durationMs: ev.duration_ms || 0, parent: group?.id,
+        cost: approx ? ev.cost_usd || 0 : usd, costUnknown: approx, durationMs: ev.duration_ms || 0, parent: group?.id,
         // the engine takes the ```handoff block out of the answer; context = { start, peak } tokens
         handoff: ev.handoff || null, context: ev.context || null, fresh: ev.turn === 1,
       });
