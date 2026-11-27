@@ -1,4 +1,5 @@
 /* global esc, t, uiLocale */
+// @ts-check
 // The import step's list of the account's repositories (mock-2, #848), split out of project-wizard.js (its size cap).
 // window.ProjectWizardRepos({ cur, pickedProvider, platformById, repoUrl }) gives the wizard, over its own state (`cur()`):
 // - repoList(): wizard-repo-list, the first five repositories (API order, newest first) of the picked provider whose
@@ -9,8 +10,11 @@
 // Uses app.js globals (esc, t, uiLocale) and window.Platforms (parseRepoUrl).
 
 (function () {
+  /**
+   * @param {{ cur: () => any, pickedProvider: () => string, platformById: (id: string) => any, repoUrl: (name: string) => string }} deps
+   */
   window.ProjectWizardRepos = function ({ cur, pickedProvider, platformById, repoUrl }) {
-    // "updated 2 days ago" in the interface's language
+    /** "updated 2 days ago" in the interface's language @param {string} iso */
     function updatedAgo(iso) {
       const s = (Date.parse(iso) - Date.now()) / 1000;
       if (!Number.isFinite(s)) return '';
@@ -23,7 +27,7 @@
       } catch { return ''; }
     }
 
-    // the filter box's text as the part of owner/name to look for; null when it is a URL of another host
+    /** the filter box's text as the part of owner/name to look for; null when it is a URL of another host @param {string} text */
     function filterQuery(text) {
       const url = window.Platforms?.parseRepoUrl?.(text);
       if (url) return url.host === platformById(pickedProvider())?.host ? String(url.path).toLowerCase() : null;

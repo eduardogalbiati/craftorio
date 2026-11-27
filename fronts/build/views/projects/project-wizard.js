@@ -1,4 +1,4 @@
-/* global api, uiLocale */
+/* global api */
 // @ts-check
 // The new-project wizard (#641, onboarding step 4 of docs/work/first-project-onboarding/plan.md; spec
 // R1-R3, R5): a modal over the page with the steps of OnboardingModel (packages/shared/onboarding-model.js),

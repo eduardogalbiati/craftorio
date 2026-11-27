@@ -32,6 +32,7 @@ const CONFIGS = ['jsconfig.json', 'jsconfig.pages.json'];
 const CHECKED = [
   'fronts/ai/views/oracle/oracle.js',
   'fronts/build/views/backlog/backlog-roadmap.js',
+  'fronts/build/views/projects/project-wizard-repos.js',
   'fronts/build/views/projects/project-wizard.js',
   'fronts/build/views/supervisor/supervisor.js',
   'packages/contract/node-globals.js',
@@ -183,7 +184,6 @@ const UNCHECKED = [
   'fronts/build/views/projects/project-wizard-activity.js',
   'fronts/build/views/projects/project-wizard-cli.js',
   'fronts/build/views/projects/project-wizard-costs.js',
-  'fronts/build/views/projects/project-wizard-repos.js',
   'fronts/build/views/projects/project-wizard-resume.js',
   'fronts/build/views/projects/project-wizard-review.js',
   'fronts/build/views/projects/project-wizard-tray.js',
