@@ -108,15 +108,16 @@
     new: 'Its next turn opens a new session with only the prompt.',
   };
 
-  // The session table's "Next turn" cell: the state first, then the detail
-  function turnText(t, now = Date.now()) {
+  // The session table's "Next turn" cell: the state first, then the detail. An optional
+  // text(key, English fallback) localizes it with gateTurnText's keys (#117).
+  function turnText(t, now = Date.now(), text = (_key, english) => english) {
     if (!t) return '—';
     const tokens = t.tokens > 0 ? ` · ~${kTok(t.tokens)} tokens` : '';
-    if (t.kind === 'fresh') return `fresh from note${tokens}`;
+    if (t.kind === 'fresh') return `${text('fresh', 'fresh from note')}${tokens}`;
     if (t.kind === 'warm') return `warm · ${Math.max(1, Math.ceil((t.until - now) / MIN))} min left`;
     if (t.kind === 'cold') return `cold since ${clockOf(t.since)}${tokens}${usdOf(t.cost_usd)}`;
-    if (t.kind === 'resume') return `resumes${tokens} · cache lifetime unknown`;
-    return 'new session';
+    if (t.kind === 'resume') return `${text('resume', 'resumes')}${tokens} · ${text('unknown', 'cache lifetime unknown')}`;
+    return text('new', 'new session');
   }
 
   const turnTitle = (t) => (t ? `${TURN_TITLES[t.kind] || ''} ${ESTIMATE}`.trim() : 'Closed: this session has no next turn.');

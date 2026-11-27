@@ -819,7 +819,7 @@ function renderSessions() {
 // #320: how the session's next turn starts (session-cache.js), like the run lists' Next turn column
 function nextTurnMetric(s) {
   const t = SessionCache.currentTurn(s);
-  return `<div class="metric next-turn"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}"><label>${I18n.t('run.next_turn')}</label><b>${esc(SessionCache.turnText(t))}</b></div>`;
+  return `<div class="metric next-turn"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}"><label>${I18n.t('run.next_turn')}</label><b>${esc(SessionCache.turnText(t, Date.now(), (key, en) => I18n.translated(`phone_page.turn_${key}`, en)))}</b></div>`;
 }
 
 function detailsBlock(key, cls, label, body) {

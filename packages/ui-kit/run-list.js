@@ -568,7 +568,11 @@ function sessionsTotalRow(sessions) {
 // colour follows (warm green, cold orange); — for a closed session. Run screen too (views/run/run.js).
 function nextTurnCell(s, now = Date.now()) {
   const t = SessionCache.currentTurn(s, now);
-  return `<td class="next-turn small"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}">${esc(SessionCache.turnText(t, now))}</td>`;
+  return `<td class="next-turn small"${t ? ` data-next-turn="${esc(t.kind)}"` : ''} data-testid="session-next-turn" title="${esc(SessionCache.turnTitle(t))}">${esc(SessionCache.turnText(t, now, nextTurnWords))}</td>`;
+}
+// #117: the next turn's words in the interface language (the gate card's keys, gate-panel.js)
+function nextTurnWords(key, en) {
+  return I18n.translated(`phone_page.turn_${key}`, en);
 }
 
 function runTaskBlock(r) {
