@@ -464,6 +464,24 @@ const methods = {
     return this.checkDeveloperCommit(step, output);
   },
 
+  // #116: an agent step's turn (one agent or a fan-out), its answer through committedOutput: a develop step
+  // that left nothing committed fails here, before review, verify or merge.
+  async agentStepAnswer(step, st) {
+    const answer = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
+    return this.committedOutput(step, answer);
+  },
+
+  // #116: an output the supervisor fixed, on a still uncommitted tree, fails like the turn did: undefined, the
+  // cause in lastStepError, so on_error may take it.
+  async fixedCommittedOutput(step, output) {
+    try {
+      return await this.committedOutput(step, output);
+    } catch (e) {
+      this.lastStepError = e.message;
+      return undefined;
+    }
+  },
+
   // The run's base branch, local and remote: commits reachable from it are not the agent's.
   baseRefs() {
     const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
