@@ -247,13 +247,14 @@ function originOf(dir) {
  * #84: the folder of `url`'s clone in reposDir: <name> (repoNameFromUrl), or its clone already there; a folder
  * taken by something else (not git and not empty, or a clone whose origin is another repository) gives the
  * first free sibling <name>-2, <name>-3…; a clone whose origin can't be read counts as the same repository.
+ * #98 `fresh` (a new repository from a folder's files): only a missing or empty folder is free, no clone is reused.
  * @returns {{ dir: string, existing: boolean }}
  */
-function cloneFolder(url, reposDir) {
+function cloneFolder(url, reposDir, { fresh = false } = {}) {
   const base = path.join(reposDir, repoNameFromUrl(url));
   for (let i = 1; ; i++) {
     const dir = i === 1 ? base : `${base}-${i}`;
-    if (isDir(path.join(dir, '.git'))) {
+    if (!fresh && isDir(path.join(dir, '.git'))) {
       const origin = originOf(dir);
       if (!origin || sameRepo(origin, url)) return { dir, existing: true };
     } else if (!isDir(dir) || !fs.readdirSync(dir).length) return { dir, existing: false };

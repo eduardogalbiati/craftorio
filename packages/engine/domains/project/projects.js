@@ -24,7 +24,8 @@
 // #105: a folder on this computer given as a file:// URL is the clone's `source` (the clone's origin, where a run
 // pushes), not the project's repository: `repo` is the folder's own origin when it is a git URL, else none (local backlog).
 // #98: `fromFiles` (a plain folder, or a repository without a commit): the job makes the project's repository from a
-// copy of the folder's files (folder-import.js) instead of a clone; it has no origin, so nothing is pushed to the folder.
+// copy of the folder's files (folder-import.js) instead of a clone; it never has the folder as origin, so nothing is
+// pushed to the folder. A repository without a commit that had a platform origin keeps it: the copy's origin is `repo`.
 
 const fs = require('fs');
 const path = require('path');
@@ -50,6 +51,7 @@ const { readManifest } = require('./project-manifest');
 // #98: a plain folder's import (a new repository from a copy of its files) and its size limit
 const {
   commitFolderFiles,
+  FILE_URL,
   FOLDER_IMPORT_LIMIT_BYTES,
 } = require('./folder-import');
 // #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery);
@@ -95,7 +97,7 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
       const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
       if (p.fromFiles) {
         // #98: a plain folder (or a repository without a commit): a new repository from a copy of its files
-        await commitFolderFiles(fileURLToPath(p.source), p.folder, { git });
+        await commitFolderFiles(fileURLToPath(p.source), p.folder, { git, origin: p.repo || null });
       } else {
         // #79: cloned with the URL runs can push with (SSH when the platform CLI's protocol is ssh); #105: from the folder
         const { url } = await pushableUrl(p.source || p.repo);
@@ -140,13 +142,6 @@ function listProjects(dir) {
 
 const notEmpty = (folder) => isDir(folder) && fs.readdirSync(folder).length > 0;
 
-// #98: a copy of a folder's files goes to an empty folder: `dir`, else its first free sibling <dir>-2, -3…
-function freeFolder(dir) {
-  let free = dir;
-  for (let i = 2; notEmpty(free); i++) free = `${dir}-${i}`;
-  return free;
-}
-
 // createProject's folder: its parent for a clone (the folder itself empty or missing), else the folder
 // (#632 fresh: empty or missing) → the repository, read from the folder's origin when none was given
 async function prepareFolder(folder, { repo, cloned, fresh, git }) {
@@ -179,15 +174,14 @@ function withoutCredentials(url) {
 // #105: the given repository, or for a file:// folder its remote (folderRemote) and the folder as the clone's source
 async function repoAndSource(given, git) {
   const repo = String(given || '').trim() || null;
-  if (!repo || !/^file:\/\//i.test(repo)) return { repo, source: null };
+  if (!repo || !FILE_URL.test(repo)) return { repo, source: null };
   return { repo: await folderRemote(repo, git), source: repo };
 }
 
 // createProject's folder: the given one, else (#84) the clone's own name in reposDir, or its free sibling (name-2…)
-// when that folder holds something else; #98: a copy of a folder's files needs an empty one (freeFolder)
+// when that folder holds something else; #98: a copy of a folder's files needs an empty one (cloneFolder's fresh)
 function projectFolder(given, { from, reposDir, fallback, fromFiles }) {
-  const defaultFolder = from && reposDir ? cloneFolder(from, reposDir).dir : fallback;
-  return path.resolve(String(given || '').trim() || (fromFiles ? freeFolder(defaultFolder) : defaultFolder));
+  return path.resolve(String(given || '').trim() || (from && reposDir ? cloneFolder(from, reposDir, { fresh: fromFiles }).dir : fallback));
 }
 
 /**

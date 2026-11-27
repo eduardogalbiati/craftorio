@@ -46,9 +46,27 @@ async function inspectFolder(folder, { git = execGit } = {}) {
   } catch (e) {
     return { state: ['ENOENT', 'ENOTDIR'].includes(String(/** @type {NodeJS.ErrnoException} */ (e)?.code)) ? 'missing' : 'unreadable' };
   }
-  if (!fs.existsSync(path.join(dir, '.git'))) return { state: 'plain' };
-  const head = await Promise.resolve().then(() => git(['rev-parse', '--verify', '-q', 'HEAD'], dir)).then(() => true, () => false);
-  return { state: head ? 'repository' : 'empty-repository' };
+  const ok = (args) => Promise.resolve().then(() => git(args, dir)).then((s) => String(s ?? '').trim() || true, () => false);
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    // a bare repository (HEAD, objects/, refs/ at its root) is cloned as before, whatever its commits
+    return { state: (await ok(['--git-dir', dir, 'rev-parse', '--is-bare-repository'])) === 'true' ? 'repository' : 'plain' };
+  }
+  if (await ok(['rev-parse', '--verify', '-q', 'HEAD'])) return { state: 'repository' };
+  // no HEAD commit: empty only when git reads the repository (an unborn branch); git missing, a dubious ownership
+  // or a broken .git stays a repository, so the clone path's access check names the cause
+  return { state: (await ok(['symbolic-ref', '-q', 'HEAD'])) ? 'empty-repository' : 'repository' };
+}
+
+// #98 #632: a new repository in `dir` on main (a new project's, a folder import's)
+async function initOnMain(dir, { git = execGit, quiet = false } = {}) {
+  await git(['init', ...(quiet ? ['-q'] : [])], dir);
+  await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], dir);
+}
+
+// #98 #632: `git commit <args>` in `dir` with the run identity (worktree.js identityArgs) and no signing
+async function commitAsIdentity(dir, args, { git = execGit } = {}) {
+  const identity = await identityArgs(dir, (a, d) => git(a, d).then((s) => String(s).trim() || null, () => null));
+  await git([...identity, '-c', 'commit.gpgsign=false', 'commit', ...args], dir);
 }
 
 // the folder's own .gitignore, else the new project's in the git dir's info/exclude (→ whether it had one)
@@ -61,63 +79,96 @@ function excludeFor(gitDir, source) {
 
 const onSource = (gitDir, source, args) => ['--git-dir', gitDir, '--work-tree', source, ...args];
 
-/** #98: the size of the files a first commit of `source` would hold, counted up to just over `limit`. */
-async function folderFilesSize(source, limit, { git = execGit } = {}) {
+// #98: the folder's files a first commit would hold (git ls-files -o: an embedded repository is one `<dir>/` entry)
+async function folderFiles(source, git) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-folder-'));
   try {
     await git(['init', '-q', tmp], tmp);
     const gitDir = path.join(tmp, '.git');
     excludeFor(gitDir, source);
-    const out = String(await git(onSource(gitDir, source, ['ls-files', '-o', '--exclude-standard', '-z']), source));
-    let bytes = 0;
-    for (const rel of out.split('\0').filter(Boolean)) {
-      try { bytes += fs.statSync(path.join(source, rel)).size; } catch { /* gone meanwhile */ }
-      if (bytes > limit) break;
-    }
-    return bytes;
+    return String(await git(onSource(gitDir, source, ['ls-files', '-o', '--exclude-standard', '-z']), source)).split('\0').filter(Boolean);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-/** #98: a new repository in `target` (on main) with one first commit of `source`'s files; `source` is only read. */
-async function commitFolderFiles(source, target, { git = execGit } = {}) {
+// #98: what a first commit of `source` would hold: the size of its files (counted up to just over `limit`) and the
+// git repositories inside it (their files would not be copied: git records them as gitlinks)
+async function folderContents(source, limit, git) {
+  const entries = await folderFiles(source, git);
+  const nested = entries.filter((rel) => /[\\/]$/.test(rel)).map((rel) => rel.replace(/[\\/]+$/, ''));
+  let bytes = 0;
+  for (const rel of entries) {
+    if (bytes > limit) break;
+    if (/[\\/]$/.test(rel)) continue;
+    try { bytes += (await fs.promises.stat(path.join(source, rel))).size; } catch { /* gone meanwhile */ }
+  }
+  return { bytes, nested };
+}
+
+/** #98: the size of the files a first commit of `source` would hold, counted up to just over `limit`. */
+async function folderFilesSize(source, limit, { git = execGit } = {}) {
+  return (await folderContents(source, limit, git)).bytes;
+}
+
+/**
+ * #98: a new repository in `target` (on main) with one first commit of `source`'s files; `source` is only read.
+ * `origin` (a repository without a commit that already had a platform remote): the copy's origin, so the project
+ * pushes where its record says.
+ */
+async function commitFolderFiles(source, target, { git = execGit, origin = null } = {}) {
   fs.mkdirSync(target, { recursive: true });
-  await git(['init', '-q'], target);
-  await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], target);
+  await initOnMain(target, { git, quiet: true });
   const gitDir = path.join(target, '.git');
   const ownIgnore = excludeFor(gitDir, source);
   await git(onSource(gitDir, source, ['add', '-A']), source);
+  const gitlinks = String(await git(['ls-files', '-s'], target)).split('\n').filter((l) => l.startsWith('160000 ')).map((l) => l.split('\t')[1]);
+  if (gitlinks.length) throw new Error(nestedMessage(gitlinks));
   if (!ownIgnore) {
     fs.writeFileSync(path.join(target, '.gitignore'), NEW_PROJECT_GITIGNORE);
     await git(['add', '.gitignore'], target);
   }
-  const identity = await identityArgs(target, (args, dir) => git(args, dir).then((s) => String(s).trim() || null, () => null));
-  await git([...identity, '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '--allow-empty', '-m', `Initial commit from ${path.basename(source)}`], target);
+  await commitAsIdentity(target, ['-q', '--no-verify', '--allow-empty', '-m', `Initial commit from ${path.basename(source)}`], { git });
   await git(['reset', '-q', '--hard'], target);
+  if (origin) await git(['remote', 'add', 'origin', origin], target);
 }
+
+const nestedMessage = (dirs) => `The folder holds other git repositories (${dirs.slice(0, 3).join(', ')}${dirs.length > 3 ? '…' : ''}): their files would not be copied into the new repository. Import each repository on its own, or move them out of the folder.`;
 
 const sizeText = (bytes) => (bytes >= 1024 * 1024 ? `${Math.round(bytes / (1024 * 1024))} MB` : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB` : `${bytes} bytes`);
 
 /**
  * #98: how the onboarding imports `repo`: null when it is not a file:// folder to copy (a repository with a commit,
  * a missing or unreadable folder, any other URL: the clone as before); { fromFiles: true } for a plain folder or a
- * repository without a commit; { refused } (a refusal's access: cause folder-too-large, the limit in its message)
- * when its files exceed `limit`.
+ * repository without a commit; { refused } (a refusal's access) when its files exceed `limit` (cause
+ * folder-too-large, the limit in its message; also a file list over git's output buffer), when it holds other git
+ * repositories (cause nested-repository) or when git is missing (status no-git). Never rejects for those.
  */
 async function planFolderImport(repo, { git = execGit, limit = FOLDER_IMPORT_LIMIT_BYTES } = {}) {
   if (!FILE_URL.test(String(repo || '').trim())) return null;
   const { state } = await inspectFolder(repo, { git });
   if (state !== 'plain' && state !== 'empty-repository') return null;
-  const bytes = await folderFilesSize(/** @type {string} */ (folderPath(repo)), limit, { git });
-  if (bytes <= limit) return { fromFiles: true };
-  return { refused: { status: 'failed', cause: 'folder-too-large', message: `The folder's files take more than ${sizeText(limit)}, over the ${sizeText(limit)} limit of a folder import. Pick a smaller folder, or add a .gitignore that leaves out the large files.` } };
+  const tooLarge = { refused: { status: 'failed', cause: 'folder-too-large', message: `The folder's files take more than the ${sizeText(limit)} limit of a folder import. Pick a smaller folder, or add a .gitignore that leaves out the large files.` } };
+  let contents;
+  try {
+    contents = await folderContents(/** @type {string} */ (folderPath(repo)), limit, git);
+  } catch (e) {
+    const err = /** @type {NodeJS.ErrnoException} */ (e);
+    if (err?.code === 'ENOENT') return { refused: { status: 'no-git', message: String(err.message) } };
+    if (/maxBuffer/i.test(String(err?.message))) return tooLarge;
+    return { refused: { status: 'failed', cause: 'folder-unreadable', message: `The folder's files could not be listed: ${String(err?.message || err)}` } };
+  }
+  if (contents.nested.length) return { refused: { status: 'failed', cause: 'nested-repository', message: nestedMessage(contents.nested) } };
+  return contents.bytes <= limit ? { fromFiles: true } : tooLarge;
 }
 
 module.exports = {
+  commitAsIdentity,
   commitFolderFiles,
+  FILE_URL,
   FOLDER_IMPORT_LIMIT_BYTES,
   folderFilesSize,
+  initOnMain,
   inspectFolder,
   NEW_PROJECT_GITIGNORE,
   planFolderImport,

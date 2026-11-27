@@ -58,7 +58,6 @@ const depsCache = require('../../engine/deps-cache');
 const { oneLine } = require('../../engine/gate-summary');
 const folderImport = require('../../domains/project/folder-import');
 const issues = require('../../domains/backlog/issues');
-const { identityArgs } = require('../../engine/worktree');
 const projectMap = require('../../domains/project/project-map');
 const projects = require('../../domains/project/projects');
 const seedRuns = require('../seed-runs');
@@ -790,14 +789,12 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
   // #632: the local repository of a new project: git init on main, README.md and .gitignore in a first commit
   // (starts 'readme') or nothing more ('empty')
   async function initRepository(folder, name, starts) {
-    await git(['init'], folder);
-    await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], folder);
+    await folderImport.initOnMain(folder, { git });
     if (starts !== 'readme') return;
     fs.writeFileSync(path.join(folder, 'README.md'), README(name));
     fs.writeFileSync(path.join(folder, '.gitignore'), GITIGNORE);
     await git(['add', 'README.md', '.gitignore'], folder);
-    const identity = await identityArgs(folder, (args, dir) => git(args, dir).then((s) => String(s).trim() || null, () => null));
-    await git([...identity, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Initial commit'], folder);
+    await folderImport.commitAsIdentity(folder, ['-m', 'Initial commit'], { git });
   }
 
   /**

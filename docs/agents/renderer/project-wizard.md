@@ -82,7 +82,7 @@ the left, the step's action on the right.
    import a repository (`wizard-source-import`, picked when the wizard opens); create new
    (`wizard-source-new`, #632, the create step below in place of step 2). Other sources (`wizard-other-sources`): Any git
    URL (`wizard-source-git-url`, the URL field of step 2) and A folder on this computer
-   (`wizard-source-folder`, a folder pick, then step 2 with its `file://` URL).
+   (`wizard-source-folder`, a folder pick, then step 2; #98, any folder: [project-wizard-folder.md](project-wizard-folder.md)).
 2. **repository** (mock-2): `#wizard-repo`, `#wizard-name`, the GitHub / GitLab toggle (`#wizard-provider`,
    it follows the URL), the gh / glab sign-in badges (`wizard-cli-account`, read through `onboarding:accounts`
    when the wizard opens, then from the import's own check), the signed-in account's five latest
