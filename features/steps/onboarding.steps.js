@@ -274,6 +274,16 @@ When('I go to the next step of the wizard', async ({ e2e }) => {
   await wizard(e2e.window).getByTestId('wizard-next').click();
 });
 
+// #743: on the Repository step the first Next starts the clone and the button turns into "Cloning <name>…"
+// (disabled while the start call is in flight); once enabled again, the next click goes on to the analysis
+// with the clone still running
+When('I go on to the analysis while the import runs', async ({ e2e }) => {
+  const next = wizard(e2e.window).getByTestId('wizard-next');
+  await expect(next).toHaveText(/Cloning/, { timeout: IMPORT_TIMEOUT });
+  await expect(next).toBeEnabled({ timeout: IMPORT_TIMEOUT });
+  await next.click();
+});
+
 Then('the wizard is on its {string} step', async ({ e2e }, step) => {
   await expect(currentStep(e2e.window)).toHaveAttribute('data-step', step, { timeout: IMPORT_TIMEOUT });
 });

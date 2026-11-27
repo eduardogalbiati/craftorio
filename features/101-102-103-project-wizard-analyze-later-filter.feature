@@ -31,6 +31,7 @@ Feature: The project wizard says plainly when an analysis did not start, and fin
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "later-102"
     And I go to the next step of the wizard
+    And I go on to the analysis while the import runs
     Then the wizard is on its "analysis" step
     When I choose "Define manually" in the wizard's suggested workflows
     And I go to the next step of the wizard
