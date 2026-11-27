@@ -3,7 +3,8 @@
 // --mode sets the machine profile of Execution › Concurrent runs (#367): machine-auto (the default:
 // concurrent runs off, this machine's values), machine-manual (the owner's 3 runs, 2 workers),
 // machine-unknown (the threads cannot be read: today's defaults), machine-suggestion (auto, on, and
-// the memory guard held or stopped runs on 3 days of the last 7: the suggestion and its Apply).
+// the memory guard held or stopped runs on 3 days of the last 7: the suggestion and its Apply),
+// workspace-refused (#106: Change… picked a folder with another project's files, the refusal shown).
 
 const fs = require('fs');
 const os = require('os');
@@ -45,16 +46,40 @@ function seed({ args, ws, workspace, project }) {
   }
   // this process is the app's main process: a machine whose threads cannot be read
   if (args.mode === 'machine-unknown') { os.availableParallelism = () => 0; os.cpus = () => []; }
+  if (args.mode === 'workspace-refused') pickProjectFolder();
+}
+
+// --mode workspace-refused (#106): General › Workspace folder › Change… picks a folder that holds
+// another project's files (a docs-only repository); the native picker is replaced, as in the E2E
+// steps, so the click reaches the real check and the General tab shows its refusal.
+function pickProjectFolder() {
+  const electron = require('electron');
+  if (!electron.dialog) return; // plain Node (the seed tests): no picker to replace
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'craftorio-docs-repo-'));
+  fs.mkdirSync(path.join(dir, 'docs'));
+  fs.writeFileSync(path.join(dir, 'README.md'), '# Team handbook\n');
+  fs.writeFileSync(path.join(dir, 'docs', 'onboarding.md'), '# Onboarding\n');
+  electron.dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
 }
 
 async function afterOpen({ args, click }) {
   if (args.tab) await click(`.settings-tab[data-stab="${args.tab}"]`);
+  if (args.mode === 'workspace-refused') {
+    if (!args.tab) await click('.settings-tab[data-stab="general"]');
+    await click('#btn-ws-change');
+  }
 }
 
 module.exports = {
   afterOpen,
   demoDepsCache,
-  modes: ['machine-auto', 'machine-manual', 'machine-suggestion', 'machine-unknown'],
+  modes: [
+    'machine-auto',
+    'machine-manual',
+    'machine-suggestion',
+    'machine-unknown',
+    'workspace-refused',
+  ],
   seed,
   tabs: ['general', 'agents', 'execution', 'phone', 'about'],
 };
