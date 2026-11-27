@@ -5,9 +5,11 @@
 //   an unknown or missing association too (fail closed);
 // - gitlabAssociation: a GitLab member's access level as an association (the adapter's WRITE_LEVEL may push);
 // - withAuthors: the synced issues with `authorAssociation` (their own, else the adapter's authors read) and `outside`;
-// - awaitsOwner: an outside issue the owner has not approved (never planned nor run: roadmap.js propose, backlog.js runInputs);
+// - awaitsOwner: an outside issue the owner has not approved, or edited since (textHash, approvalHolds), never planned
+//   nor run (roadmap.js propose and cleanItem, backlog.js runInputs, the runs:start channel);
 // - trustFields: the fields a copy of an issue (a roadmap or queue item) keeps.
 
+const crypto = require('crypto');
 const gitlab = require('@craftorio/shared/platforms/gitlab');
 
 const INSIDE = [
@@ -42,7 +44,12 @@ function withAuthors(issues, authors = []) {
   });
 }
 
-const awaitsOwner = (i) => i?.outside === true && !i.ownerApproved;
+// The text the owner approved: an approval ({ at, hash }) holds for that title and body only, so an issue edited after
+// the Approve waits for the owner again (an approval without a hash, from a test or a copy, holds as it is)
+const textHash = (i) => crypto.createHash('sha256').update(`${i?.title || ''}\n${i?.body || ''}`).digest('hex');
+const approvalHolds = (i, approval) => !!approval && (!approval.hash || approval.hash === textHash(i));
+
+const awaitsOwner = (i) => i?.outside === true && !approvalHolds(i, i.ownerApproved);
 
 // What a copy of an issue keeps of who wrote it and the owner's approval (only what is known: an older copy, a
 // local or demo issue stays as it was)
@@ -52,10 +59,12 @@ function trustFields(i) {
 }
 
 module.exports = {
+  approvalHolds,
   awaitsOwner,
   gitlabAssociation,
   INSIDE,
   isOutsideAssociation,
+  textHash,
   trustFields,
   withAuthors,
 };

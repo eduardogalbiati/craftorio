@@ -19,6 +19,7 @@ const baseHealth = require('../../domains/project/base-health');
 const refreshes = require('../../domains/backlog/backlog-refresh');
 const { git } = require('../../engine/worktree');
 const epics = require('../../domains/backlog/epics');
+const { awaitsOwner } = require('../../domains/backlog/issue-author');
 const roadmaps = require('../../domains/roadmap/roadmap');
 const { normalizeThen } = require('@craftorio/shared/chain-model');
 const { platformOrDefault } = require('@craftorio/shared/platforms');
@@ -153,6 +154,9 @@ module.exports = (ctx) => {
       return b.group ? [issues] : issues.map((i) => [i]);
     }).filter((g) => g.length);
     if (!groups.length) throw new Error('Select at least one open issue.');
+    // #90: propose leaves an outside issue the owner has not approved out: refuse it here, so none goes missing
+    const waiting = groups.flat().filter(awaitsOwner).map((i) => `#${i.number}`);
+    if (waiting.length) throw clientError(`${waiting.join(', ')} came from outside the project: approve ${waiting.length > 1 ? 'them' : 'it'} in the Backlog first. Nothing was assigned.`);
     const largest = Math.max(...groups.map((g) => g.length));
     if (largest > maxGroup) throw new Error(`One run takes at most ${maxGroup} issues (Settings › General › Backlog); ${largest} were selected.`);
     const file = path.basename(String(workflow || ''));

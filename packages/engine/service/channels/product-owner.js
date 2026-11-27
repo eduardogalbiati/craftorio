@@ -40,6 +40,7 @@ const simulation = require('../../engine/simulation');
 const usage = require('../../domains/usage/usage');
 const workspace = require('../../domains/workspace/workspace');
 const { resolveCommand } = require('../../engine/providers');
+const { awaitsOwner } = require('../../domains/backlog/issue-author');
 const { isArchived } = require('@craftorio/shared/backlog-archive');
 const { isRelease, stageCount } = require('@craftorio/shared/roadmap-model');
 const { clientError, requireObject } = require('../common');
@@ -171,6 +172,9 @@ module.exports = (ctx) => {
       // propose leaves archived issues out silently: refuse them here, so none is reported as added
       const archived = numbers.filter((n) => isArchived(issues.find((i) => i.number === n)));
       if (archived.length) throw new Error(`${refs(archived)} ${archived.length > 1 ? 'are' : 'is'} archived: restore ${archived.length > 1 ? 'them' : 'it'} in the Backlog before planning. Nothing was added.`);
+      // #90: and an outside issue the owner has not approved
+      const waiting = numbers.filter((n) => awaitsOwner(issues.find((i) => i.number === n)));
+      if (waiting.length) throw new Error(`${refs(waiting)} came from outside the project: approve ${waiting.length > 1 ? 'them' : 'it'} in the Backlog first. Nothing was added.`);
       const project = projects.readProject(ctx.ws.projects, id);
       const files = projectListing(ctx, project).filter((w) => w.inputs?.task).map((w) => w.file);
       const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(projects.projectDefaultWorkflow(project), files).file;

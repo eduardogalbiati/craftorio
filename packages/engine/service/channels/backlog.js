@@ -300,7 +300,10 @@ module.exports = (ctx) => {
       schema: { params: args({ projectId: PROJECT_ID, number: ISSUE_NUMBER }, ['projectId', 'number']), result: shape({ backlog: BACKLOG }) },
       fn: async ({ projectId, number }) => {
         const id = project(projectId);
-        backlog.approveOutsideIssue(ctx.ws.backlog, id, Number(number), { at: new Date().toISOString() });
+        // only an outside issue of the synced backlog (backlog.js refuses any other number: no approval in advance)
+        try {
+          backlog.approveOutsideIssue(ctx.ws.backlog, id, Number(number), { at: new Date().toISOString() });
+        } catch (e) { throw clientError(e.message); }
         return { backlog: current(id) };
       },
     },

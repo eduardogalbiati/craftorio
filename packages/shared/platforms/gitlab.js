@@ -133,10 +133,12 @@
       ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
     }),
     // #90: the project's members (inherited ones too) → [{ login, accessLevel }]: an issue's author is mapped
-    // through them (packages/engine/domains/backlog/issue-author.js gitlabAssociation, WRITE_LEVEL)
-    issueAuthorsCommand: ({ host, path }) => cmd(['api', ...gitlab.apiHostArgs({ host }), `projects/${encodeURIComponent(path)}/members/all?per_page=100`]),
+    // through them (packages/engine/domains/backlog/issue-author.js gitlabAssociation, WRITE_LEVEL). Every page is
+    // read (--paginate prints one JSON array per page, back to back): a member past the first 100 stays a member
+    issueAuthorsCommand: ({ host, path }) => cmd(['api', ...gitlab.apiHostArgs({ host }), '--paginate', `projects/${encodeURIComponent(path)}/members/all?per_page=100`]),
     parseIssueAuthors: (out) => {
-      const list = JSON.parse(out || '[]');
+      const text = String(out || '').trim();
+      const list = text ? JSON.parse(`[${text.replace(/\]\s*\[/g, ',').replace(/^\[|\]$/g, '')}]`) : [];
       return (Array.isArray(list) ? list : []).filter((m) => m && m.username).map((m) => ({ login: m.username, accessLevel: Number(m.access_level) || 0 }));
     },
 

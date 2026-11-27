@@ -891,7 +891,8 @@
     if (i.state !== 'open') return '';
     const [open, label, n] = [bl.menu === i.number, t('backlog.actions_for_number', { number: i.number }), i.number];
     return `<span class="bl-menu-wrap"><button class="btn sm ghost" type="button" data-menu="${n}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="${label}" title="${esc(t('backlog.actions'))}">⋯</button>${open ? Menu.menuHtml([
-      { id: 'enrich', label: t('backlog.enrich_in_documents'), title: t('backlog.enrich_this_issue_in_write_review'), testid: 'backlog-enrich', attrs: `data-enrich="${n}"` },
+      // #90: an outside issue waits for the owner's Approve before any run, Enrich's included
+      { id: 'enrich', label: t('backlog.enrich_in_documents'), title: t('backlog.enrich_this_issue_in_write_review'), disabledReason: window.BacklogOutside?.runBlockReason(i) || '', testid: 'backlog-enrich', attrs: `data-enrich="${n}"` },
       { id: 'map', label: t('backlog.show_on_the_map'), title: t('backlog.open_the_project_city_with_the'), testid: 'show-on-map', attrs: `data-show-map="${n}"` }, { divider: true },
       { id: 'archive', label: t('backlog.archive'), title: t('backlog.close_it_as_not_planned_on'), disabledReason: archiveBlockReason(i), testid: 'backlog-archive', attrs: `data-archive="${n}"` },
     ], { className: 'bl-menu', label }) : ''}</span>`;
@@ -1574,7 +1575,7 @@
       const gate = e.target.closest('[data-gate]');
       if (gate) { openGate(gate); return; }
       const enrich = e.target.closest('[data-enrich]'), onMap = e.target.closest('[data-show-map]'); // #375: the issue's impact preview on its project's city
-      if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, issueOf(Number(onMap.dataset.showMap))); return; } if (enrich) { bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
+      if (onMap) { bl.menu = null; window.ProjectCityImpact?.showIssue(bl.projectId, issueOf(Number(onMap.dataset.showMap))); return; } if (enrich) { if (enrich.getAttribute('aria-disabled') === 'true') return; bl.menu = null; render(); enrichIssue(Number(enrich.dataset.enrich)); return; }
       // #238: an issue's actions menu, its Archive, and Restore
       const menu = e.target.closest('[data-menu]'), arch = e.target.closest('[data-archive]'), back = e.target.closest('[data-restore]');
       if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }

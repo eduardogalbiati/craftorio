@@ -3,6 +3,7 @@
 // Execution › Concurrent runs): the channels that act on one take its runId.
 
 const fs = require('fs');
+const backlog = require('../../domains/backlog/backlog');
 const runs = require('../../domains/run/runs');
 const { withProjectDefaults } = require('../seed-runs');
 const {
@@ -35,6 +36,13 @@ const {
   text,
   WORKFLOW_FILE,
 } = require('../schemas');
+
+// #90: the outside notice (backlog.js outsideRunNotice) before the prompt a run gets: its `task`, else its `prompt`
+function withOutsideNotice(inputs, notice) {
+  if (!notice) return inputs;
+  const key = ['task', 'prompt'].find((k) => typeof inputs?.[k] === 'string');
+  return key ? { ...inputs, [key]: `${notice}${inputs[key]}` } : inputs;
+}
 
 // #795: the last `bytes` (8 KB by default, 64 KB at most) of a log file, from its first whole line
 const TAIL_BYTES = 8192;
@@ -115,9 +123,11 @@ module.exports = (ctx) => [
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
+      // #90: an outside issue the owner has not approved never starts a run; an approved one's prompt says it came from outside
+      const notice = list && projectId ? backlog.outsideRunNotice(ctx.ws.backlog, projectId, list) : '';
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-      const resolved = withProjectDefaults(ctx, { file, inputs, projectId });
+      const resolved = withOutsideNotice(withProjectDefaults(ctx, { file, inputs, projectId }), notice);
       const start = (notices) => ctx.startWorkflowRun({ file, inputs: resolved, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then, agentOverrides, workspaceWorkflow: !!workspace, notices });
       const target = ctx.localRunTarget({ file, inputs: resolved, projectId: projectId || null, workspaceWorkflow: !!workspace });
       if (!target) return start([]);

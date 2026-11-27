@@ -34,7 +34,13 @@ const fs = require('fs');
 const path = require('path');
 const { readEpics } = require('./epics');
 const localIssues = require('./local-backlog');
-const { awaitsOwner, isOutsideAssociation, trustFields } = require('./issue-author');
+const {
+  approvalHolds,
+  awaitsOwner,
+  isOutsideAssociation,
+  textHash,
+  trustFields,
+} = require('./issue-author');
 const {
   ARCHIVED_COLOR,
   DEFAULT_PLATFORM,
@@ -179,23 +185,39 @@ function writeOutside(dir, projectId, fn) {
 // an older cache has the association and no `outside`; a demo or local issue has neither: not outside
 const isOutside = (i) => i.outside ?? (i.authorAssociation != null && isOutsideAssociation(i.authorAssociation));
 
+// an approval holds for the text approved (issue-author.js approvalHolds): an issue edited since waits again
 function withOutside(cache, { approvals, verdicts }) {
   if (!cache?.issues) return cache;
   const issues = cache.issues.map((i) => {
     if (!isOutside(i)) return i;
-    const ownerApproved = approvals[i.number] || null;
+    const ownerApproved = approvalHolds(i, approvals[i.number]) ? approvals[i.number] : null;
     const verdict = verdicts[i.number] || null;
     return { ...i, outside: true, ownerApproved, verdict, quarantined: !!verdict?.injection_suspected && !ownerApproved };
   });
   return { ...cache, issues };
 }
 
-/** The owner's Approve of an outside issue: it may then enter the roadmap and a run. */
+/**
+ * The owner's Approve of an outside issue of the synced backlog: it may then enter the roadmap and a run. The approval
+ * keeps the hash of the title and body approved (textHash), so a later edit of the issue takes it back.
+ */
 function approveOutsideIssue(dir, projectId, number, { at = new Date().toISOString() } = {}) {
   const n = Number(number);
   if (!Number.isInteger(n) || n <= 0) throw new Error(`Not an issue number: ${number}`);
-  writeOutside(dir, projectId, (o) => ({ ...o, approvals: { ...o.approvals, [n]: { at } } }));
+  const issue = (readCache(dir, projectId)?.issues || []).find((i) => i.number === n);
+  if (!issue || !isOutside(issue)) throw new Error(`Issue #${n} is not an outside issue of this project's backlog: nothing to approve.`);
+  writeOutside(dir, projectId, (o) => ({ ...o, approvals: { ...o.approvals, [n]: { at, hash: textHash(issue) } } }));
   return readBacklog(dir, projectId);
+}
+
+// #90: a sync whose authors read failed keeps, for each issue it left with no association, the association the
+// previous sync knew; only an issue never seen stays unknown (outside)
+function keepKnownAuthors(issues, previous) {
+  const known = new Map((previous?.issues || []).filter((i) => i.authorAssociation).map((i) => [i.number, i]));
+  return issues.map((i) => {
+    const before = !i.authorAssociation && known.get(i.number);
+    return before ? { ...i, authorAssociation: before.authorAssociation, outside: isOutsideAssociation(before.authorAssociation) } : i;
+  });
 }
 
 /** The Product Owner's reviews of outside issues (product-owner.js normalizeAnswer), kept per issue. */
@@ -248,6 +270,8 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress, fo
   let pullRequestsError = null;
   // #845: a repository with Issues turned off syncs with no issues and says so (issuesDisabled), not a failed read
   let issuesDisabled = false;
+  // #90: the authors read failed (issues.js readAuthors): a note, and the associations known before stay
+  let authorsError = null;
   onProgress?.({ what: 'issues', read: 0, total: null });
   const [fetched, prs] = await Promise.all([
     fetchIssues({ platform, repo: project.repo, exec, onProgress: followed ? onProgress : undefined })
@@ -257,15 +281,18 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress, fo
         return [];
       })
       .then((issues) => {
+        authorsError = issues.authorsError || null;
         onProgress?.({ what: 'issues', read: issues.length, total: issues.length });
         return issues;
       }),
     fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
   ]);
   // epics, like the PRs, never fail the sync: an error leaves a note (epicsError)
-  const { issues, epics, epicsError } = await readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
+  const read = await readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
+  const { epics, epicsError } = read;
+  const issues = authorsError ? keepKnownAuthors(read.issues, readCache(dir, project.id)) : read.issues;
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError, ...(issuesDisabled ? { issuesDisabled } : {}) };
+  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError, ...(authorsError ? { authorsError } : {}), ...(issuesDisabled ? { issuesDisabled } : {}) };
   // #35: before the platform's numbers are cached, the local issues that share one move past them
   renumberLocal(dir, project.id, issues);
   fs.mkdirSync(dir, { recursive: true });
@@ -656,6 +683,18 @@ function refuseUnapproved(issues) {
   if (waiting) throw new Error(`Issue #${waiting.number} came from outside the project: the owner must approve it before a run.`);
 }
 
+/**
+ * #90: a run started by hand for backlog issues (the runs:start channel, e.g. the Backlog's Enrich in Documents):
+ * throws when one is an outside issue the owner has not approved, else answers the notice its prompt starts with
+ * ('' for issues of the owner). `refs`: [{ number }].
+ */
+function outsideRunNotice(dir, projectId, refs) {
+  const synced = new Map((readBacklog(dir, projectId)?.issues || []).map((i) => [i.number, i]));
+  const issues = (refs || []).map((r) => synced.get(Number(r?.number))).filter(Boolean);
+  refuseUnapproved(issues);
+  return issues.map(outsideNotice).join('');
+}
+
 // The task of a group: every issue (title, URL and body) in the order selected, shipped together.
 function groupTask(issues) {
   const refs = issues.map((i) => `#${i.number}`).join(', ');
@@ -776,6 +815,7 @@ module.exports = {
   issueSaveCommand,
   localCreateCommand: localIssues.localCreateCommand,
   localSaveCommand: localIssues.localSaveCommand,
+  outsideRunNotice,
   prCommentCommand,
   projectBacklog,
   readIssueSaves,

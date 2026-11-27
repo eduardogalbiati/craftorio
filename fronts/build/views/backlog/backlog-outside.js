@@ -38,6 +38,9 @@
   /** Everything a Backlog row or card shows for an outside issue, in its labels line. */
   const row = (i) => `${badge(i)}${quarantined(i)}${verdict(i)}${approveButton(i)}`;
 
+  /** Why a run cannot start on the issue yet (the ⋯ menu's Enrich in Documents), '' when it can. */
+  const runBlockReason = (i) => (isOutside(i) && !i.ownerApproved ? t('backlog.outside_issue_run_blocked', { number: i.number }) : '');
+
   async function approve(btn) {
     const actions = root.BacklogActions;
     const number = Number(btn.dataset.approveOutside);
@@ -51,7 +54,7 @@
     }
   }
 
-  const api = { approveButton, badge, quarantined, row, verdict };
+  const api = { approveButton, badge, quarantined, row, runBlockReason, verdict };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else {
     root.BacklogOutside = api;

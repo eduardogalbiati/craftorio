@@ -100,11 +100,15 @@ async function readIssueSteps(p, parsed, exec, onProgress) {
   return raw;
 }
 
-// #90: who wrote the listed issues (the adapter's authors read), [] when it fails: an issue whose author stays
-// unknown is outside (issue-author.js, fail closed)
+// #90: who wrote the listed issues (the adapter's authors read). A read that fails answers no authors and its
+// error: an issue whose author stays unknown is outside (issue-author.js, fail closed), and the sync keeps the
+// association it knew (backlog.js syncBacklog, authorsError)
 async function readAuthors(p, parsed, list, exec) {
   const c = p.issueAuthorsCommand(parsed, list.map((i) => i.number));
-  try { return c ? p.parseIssueAuthors(await runCommand(exec, c)) : []; } catch { return []; }
+  try { return { authors: c ? p.parseIssueAuthors(await runCommand(exec, c)) : [], error: null }; } catch (e) {
+    console.error('issue authors:', e.message);
+    return { authors: [], error: e.message || String(e) };
+  }
 }
 
 /**
@@ -125,7 +129,9 @@ async function fetchIssues({ platform, repo, exec = execCli, onProgress }) {
   try {
     const list = onProgress ? normalize(p, await readIssueSteps(p, parsed, exec, onProgress))
       : normalize(p, JSON.parse((await runCommand(exec, p.issueListCommand(p.cliTarget(parsed), MAX_ISSUES))) || '[]'));
-    return withAuthors(list, await readAuthors(p, parsed, list, exec));
+    const { authors, error } = await readAuthors(p, parsed, list, exec);
+    // the list carries the failed read's message (authorsError) for the sync's note
+    return Object.assign(withAuthors(list, authors), error ? { authorsError: error } : {});
   } catch (e) {
     // #845: Issues turned off is a setting of the repository: the error says so (issuesDisabled), with its message
     if (p.issuesDisabled(e.message)) e.issuesDisabled = true;
