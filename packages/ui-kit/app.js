@@ -641,7 +641,9 @@ const RUN_EVENT_REDUCERS = {
   'session.message_received': (v, ev, sess, effects) => {
     if (sess) {
       const own = upgradedTail(v, ev).at(-1); // #117: a turn with no cost recorded (Codex on ChatGPT) is unknown too
-      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, ...(own.cost_source === 'unknown' || SessionCost.turnCost(own, state.usage?.prices || {}, own.session?.model ?? sess.model).unknown ? { unknown: true } : {}), duration: ev.duration_ms };
+      const priced = SessionCost.turnCost(own, state.usage?.prices || {}, own.session?.model ?? sess.model); // user prices count
+      const unknown = own.cost_source === 'unknown' || !!priced.unknown;
+      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd ?? (unknown ? null : priced.usd), ...(unknown ? { unknown: true } : {}), duration: ev.duration_ms };
       Object.assign(sess, own.session);
       orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
     }
