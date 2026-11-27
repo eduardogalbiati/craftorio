@@ -300,8 +300,9 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     orchestratorChoice.resolveAgentTemplates(this.wf, this.inputs, chosen.onOrchestrator); // agents' provider/model/effort templates
     this.applyOwnerCopy(ownerCopy);
     this.applyAgentOverrides(agentOverrides);
-    // #111: on Codex as the orchestrator, a model the account does not offer runs on its fallback, noted in the log
-    if (chosen.onOrchestrator) for (const message of orchestratorChoice.applyCodexFallback(this.wf)) this.notices.push({ level: 'warn', message });
+    // #111: a Codex agent's model the account does not offer runs on its fallback, noted in the log (whatever the
+    // orchestrator: usage.preflight lets any Codex model with a fallback through)
+    for (const message of orchestratorChoice.applyCodexFallback(this.wf)) this.notices.push({ level: 'warn', message });
     // #262: Settings' fallback chains per provider and limits per model
     validateModels(models || undefined, 'Settings models');
     this.models = { ...(models || {}), ...(this.wf.models || {}) };

@@ -6347,6 +6347,7 @@
   "setup.check_again_help": "Depois de instalar ou fazer login, pressione Verificar de novo (ou feche o terminal: as linhas verificam de novo sozinhas).",
   "setup.codex_models_fallback": "Faltam nesta conta do Codex alguns modelos que o orquestrador usa; as execuções usam no lugar: {pairs}.",
   "setup.codex_models_none": "Esta conta do Codex não tem nenhum modelo que o orquestrador possa usar, então o Codex não pode ser escolhido como orquestrador. Atualize o Codex CLI ou confira o plano da conta.",
+  "setup.codex_models_partial": "Esta conta do Codex não tem modelo do mesmo nível ou abaixo para usar no lugar de {models}, então o Codex não pode ser escolhido como orquestrador. Atualize o Codex CLI ou confira o plano da conta.",
   "setup.come_back": "Você pode seguir e voltar depois em Configurações › Agentes &amp; CLIs.",
   "setup.finish": "Concluir",
   "setup.forge": "CLI do GitHub ou do GitLab",

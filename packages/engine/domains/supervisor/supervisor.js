@@ -419,6 +419,7 @@ function supervisorConfig(runDir, workflowsDir) {
   let wf = {};
   try { wf = readRunWorkflow(workflowsDir, started.file) || {}; } catch { /* workflow file gone */ }
   if (started.orchestrator_applied) wf = OrchestratorModels.applyOrchestrator(wf, started.orchestrator_ai, { bundled: true });
+  require('../../engine/run/orchestrator-choice').applyCodexFallback(wf); // #111: a Codex supervisor on a model the account offers
   const orch = wf.orchestrator || {};
   const providerName = orch.supervisor?.provider || orch.provider || 'claude';
   const provider = wf.providers?.[providerName] || DEFAULT_PROVIDER;

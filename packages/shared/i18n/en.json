@@ -6347,6 +6347,7 @@
   "setup.check_again_help": "After installing or signing in, press Check again (or end its terminal: the rows check again by themselves).",
   "setup.codex_models_fallback": "This Codex account lacks some of the models Codex runs on as the orchestrator; runs use these instead: {pairs}.",
   "setup.codex_models_none": "This Codex account offers no model the orchestrator can run on, so Codex cannot be chosen as the orchestrator. Update the Codex CLI or check the account's plan.",
+  "setup.codex_models_partial": "This Codex account offers no model of their tier or below to run {models} on, so Codex cannot be chosen as the orchestrator. Update the Codex CLI or check the account's plan.",
   "setup.come_back": "You can go on and come back later from Settings › Agents &amp; CLIs.",
   "setup.finish": "Finish",
   "setup.forge": "GitHub or GitLab CLI",

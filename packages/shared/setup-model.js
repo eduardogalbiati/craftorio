@@ -79,8 +79,8 @@
   }
 
   // #111: the Codex card's warning when the account (tool.models, env:details) lacks a model Codex runs on as the
-  // orchestrator: { text, usable } (usable false: no model at all, Codex cannot be chosen); null for another CLI,
-  // no known list, or every mapped model offered
+  // orchestrator: { text, usable } (usable false: a mapped model with no fallback, so the bundled workflows'
+  // Start would refuse and Codex cannot be chosen); null for another CLI, no known list, or every mapped model offered
   function codexModelsWarning(tool) {
     const Orch = node ? require('./orchestrator-models') : root.OrchestratorModels;
     const models = tool?.models;
@@ -88,7 +88,9 @@
     const missing = Orch.codexFallbacks(models);
     if (!missing.length) return null;
     if (!missing.some((/** @type {{ use: string | null }} */ f) => f.use)) return { text: t('setup.codex_models_none'), usable: false };
-    const pairs = missing.map((/** @type {{ model: string, use: string | null }} */ f) => `${f.model} → ${f.use || '—'}`).join(', ');
+    const lacking = missing.filter((/** @type {{ use: string | null }} */ f) => !f.use);
+    if (lacking.length) return { text: t('setup.codex_models_partial', { models: lacking.map((/** @type {{ model: string }} */ f) => f.model).join(', ') }), usable: false };
+    const pairs = missing.map((/** @type {{ model: string, use: string | null }} */ f) => `${f.model} → ${f.use}`).join(', ');
     return { text: t('setup.codex_models_fallback', { pairs }), usable: true };
   }
 

@@ -71,11 +71,11 @@ function applyCodexFallback(/** @type {any} */ wf, offered = cachedModelList(Orc
   const targets = [
     ...Object.entries(wf.agents || {}).map(([name, a]) => ({ who: `Agent "${name}"`, block: a })),
     { who: 'The orchestrator', block: orch },
-    { who: 'The supervisor', block: orch.supervisor },
+    { who: 'The supervisor', block: orch.supervisor, inherits: orch.provider }, // no provider of its own: the orchestrator's
   ];
   const notes = [];
-  for (const { who, block } of targets) {
-    if (!block || typeof block !== 'object' || block.provider !== CODEX || typeof block.model !== 'string') continue;
+  for (const { who, block, inherits } of /** @type {{ who: string, block: any, inherits?: string }[]} */ (targets)) {
+    if (!block || typeof block !== 'object' || (block.provider || inherits) !== CODEX || typeof block.model !== 'string') continue;
     const model = block.model.trim();
     if (!model || model.includes('{{') || offered.includes(model)) continue;
     const use = OrchestratorModels.codexFallback(model, offered);
