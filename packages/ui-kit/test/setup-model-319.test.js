@@ -64,3 +64,42 @@ test('visibleWorkflows: hidden ids are left out, order kept; no hidden list show
   assert.deepEqual(visibleWorkflows(WORKFLOWS, []).map((w) => w.id), WORKFLOWS.map((w) => w.id));
   assert.deepEqual(visibleWorkflows(WORKFLOWS, undefined).map((w) => w.id), WORKFLOWS.map((w) => w.id));
 });
+
+// #97 (acceptance, written before the code): what is required follows the orchestrator AI chosen in the Setup
+// (settings.orchestratorProvider, 'claude' | 'codex'). Contract assumed: an options argument { orchestrator } on
+// toolRequirement(id, opts) and requirementBadges(reqs, opts), and a new requiredTools(opts) -> the required CLI ids,
+// sorted (the orchestrator's CLI and git). No option, or anything but claude/codex (Grok is never an orchestrator),
+// means claude, as today.
+test('#97 toolRequirement with Codex as orchestrator: Codex and Git required, Claude Code optional', () => {
+  const { toolRequirement } = load();
+  const opts = { orchestrator: 'codex' };
+  assert.equal(toolRequirement('codex', opts), 'Required');
+  assert.equal(toolRequirement('git', opts), 'Required');
+  assert.equal(toolRequirement('claude', opts), 'Optional: multi-model workflows');
+  assert.equal(toolRequirement('grok', opts), 'Optional: multi-model workflows');
+});
+
+test('#97 toolRequirement with Claude Code as orchestrator, or none given, stays as today', () => {
+  const { toolRequirement } = load();
+  for (const opts of [undefined, {}, { orchestrator: 'claude' }]) {
+    assert.equal(toolRequirement('claude', opts), 'Required', JSON.stringify(opts));
+    assert.equal(toolRequirement('codex', opts), 'Optional: multi-model workflows', JSON.stringify(opts));
+  }
+});
+
+test('#97 requiredTools: the chosen orchestrator\'s CLI and Git; Grok is never the orchestrator', () => {
+  const { requiredTools } = load();
+  assert.equal(typeof requiredTools, 'function', 'SetupModel.requiredTools');
+  assert.deepEqual(requiredTools(), ['claude', 'git']);
+  assert.deepEqual(requiredTools({ orchestrator: 'claude' }), ['claude', 'git']);
+  assert.deepEqual(requiredTools({ orchestrator: 'codex' }), ['codex', 'git']);
+  assert.deepEqual(requiredTools({ orchestrator: 'grok' }), ['claude', 'git']);
+});
+
+test('#97 requirementBadges with Codex as orchestrator: Needs Claude Code for a two-provider workflow, never Needs Codex', () => {
+  const { requirementBadges } = load();
+  const badges = requirementBadges({ clis: ['claude', 'codex', 'git'], forge: false }, { orchestrator: 'codex' });
+  assert.ok(badges.includes('Needs Claude Code'), badges.join(' | '));
+  assert.equal(badges.includes('Needs Codex'), false, badges.join(' | '));
+  assert.deepEqual(requirementBadges({ clis: ['codex', 'git'], forge: false }, { orchestrator: 'codex' }), []);
+});

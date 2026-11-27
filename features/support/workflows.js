@@ -21,6 +21,13 @@ const TEST_BACKFILL = {
   title: 'Test backfill',
 };
 
+// fix.yaml: the default bug-fix workflow (#97: its agents follow the orchestrator AI chosen in the Setup)
+const FIX = {
+  file: 'fix.yaml',
+  name: 'fix',
+  title: 'Fix',
+};
+
 // feature.yaml's inputs: mode local | remote | fork, validation auto | validated
 const LOCAL = { mode: 'local' };
 const REMOTE = { mode: 'remote' };
@@ -46,6 +53,7 @@ function fileOf(name) {
 module.exports = {
   FEATURE,
   FEATURE_VARIANTS,
+  FIX,
   FORK,
   LOCAL,
   REMOTE,

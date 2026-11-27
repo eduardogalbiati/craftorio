@@ -106,3 +106,35 @@ test('missingRequirements: signed-out counts as missing, and the result is sorte
   const { missingRequirements } = load();
   assert.deepEqual(missingRequirements({ clis: ['claude', 'codex', 'git'], forge: false }, { claude: 'signed-out', codex: 'missing', git: 'ready' }), ['claude', 'codex']);
 });
+
+// #97 (acceptance, written before the code): a bundled workflow's requirements follow the orchestrator AI chosen in
+// the Setup. Contract assumed: workflowRequirements(wf, inputs, { orchestrator }) reads a bundled default workflow as
+// it runs with that orchestrator (orchestrator-models.js applyOrchestrator): 'codex' moves its Claude agents to
+// Codex, and the multi-model second reviewer to a provider other than the orchestrator's (Claude Code).
+test('#97 with Codex as orchestrator, fix needs Codex and Git, not Claude Code', () => {
+  const wf = loadWorkflow(path.join(WORKFLOWS, 'fix.yaml'));
+  assert.deepEqual(load().workflowRequirements(wf, {}, { orchestrator: 'codex' }).clis, ['codex', 'git']);
+});
+
+test('#97 with Claude Code as orchestrator, or none given, fix needs Claude Code and Git as today', () => {
+  const wf = loadWorkflow(path.join(WORKFLOWS, 'fix.yaml'));
+  assert.deepEqual(load().workflowRequirements(wf, {}, { orchestrator: 'claude' }).clis, ['claude', 'git']);
+  assert.deepEqual(load().workflowRequirements(wf, {}).clis, ['claude', 'git']);
+});
+
+test('#97 with Codex as orchestrator, feature needs Codex alone, and Claude Code too with the Multi-model review', () => {
+  const wf = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml'));
+  const { workflowRequirements } = load();
+  assert.deepEqual(workflowRequirements(wf, {}, { orchestrator: 'codex' }).clis, ['codex', 'git']);
+  assert.deepEqual(workflowRequirements(wf, { review: 'multi_model' }, { orchestrator: 'codex' }).clis, ['claude', 'codex', 'git']);
+});
+
+test('#97 with Codex as orchestrator, a Multi-model feature without Claude Code keeps the "Missing … CLI" label', () => {
+  const wf = loadWorkflow(path.join(WORKFLOWS, 'feature.yaml'));
+  const { workflowRequirements, missingRequirements } = load();
+  const { missingLabel } = require('@craftorio/shared/setup-model');
+  const reqs = workflowRequirements(wf, { review: 'multi_model' }, { orchestrator: 'codex' });
+  const missing = missingRequirements(reqs, { codex: 'ready', git: 'ready', claude: 'missing' });
+  assert.deepEqual(missing, ['claude']);
+  assert.equal(missingLabel(missing), 'Missing Claude Code');
+});

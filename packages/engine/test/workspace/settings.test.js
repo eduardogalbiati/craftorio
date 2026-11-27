@@ -51,3 +51,22 @@ test('an invalid settings.json reads as no saved keys, the defaults still apply'
   assert.deepEqual(settings.savedSettings(ws), {});
   assert.deepEqual(settings.readSettings(ws).memoryGuard, { enabled: true, limitPercent: 25, floorPercent: 10 });
 });
+
+// #97 (acceptance, written before the code): the orchestrator AI chosen in the Setup, settings.orchestratorProvider,
+// 'claude' | 'codex'; a workspace without it runs on Claude Code, as before.
+test('#97 orchestratorProvider defaults to claude, with no settings.json and with one saved before it existed', (t) => {
+  assert.equal(settings.DEFAULT_SETTINGS.orchestratorProvider, 'claude');
+  const ws = tmpWs(t);
+  assert.equal(settings.readSettings(ws).orchestratorProvider, 'claude');
+  fs.writeFileSync(ws.settings, JSON.stringify({ setupDone: true, idleWarningMinutes: 7 }));
+  assert.equal(settings.readSettings(ws).orchestratorProvider, 'claude');
+});
+
+test('#97 a chosen orchestratorProvider (codex) is written to settings.json and read back', (t) => {
+  const ws = tmpWs(t);
+  settings.writeSettings(ws, { orchestratorProvider: 'codex' });
+  assert.equal(settings.savedSettings(ws).orchestratorProvider, 'codex');
+  assert.equal(settings.readSettings(ws).orchestratorProvider, 'codex');
+  settings.writeSettings(ws, { orchestratorProvider: 'claude' });
+  assert.equal(settings.readSettings(ws).orchestratorProvider, 'claude');
+});
