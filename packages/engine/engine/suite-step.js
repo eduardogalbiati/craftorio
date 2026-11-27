@@ -15,7 +15,8 @@
 // the base does not have are the run's. The base's result per file is cached by base commit + file
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
 // cargo test (#109) names tests, not files: its failing tests run by name on the base
-// (`checkCargoOnBase`, `cargo test -- <names>`), cached per commit + `cargo:<name>`.
+// (`checkCargoOnBase`, `cargo test --no-fail-fast -- <names>`), cached per commit + `cargo:<bin>::<name>`;
+// every cargo round gets `--no-fail-fast` (`cargoNoFailFast`): a red binary never hides the others.
 // A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
 // `base`: nothing is checked there, every failing test fails the step.
 // The suite runs as from a shell (#210) with the allowlisted environment (#470, child-env.js plus the
@@ -215,6 +216,15 @@ function withWorkers(command, testWorkers) {
   return cmd;
 }
 
+// `cargo test …` → `cargo test --no-fail-fast …` (#109): without it cargo stops after the first test
+// binary that fails, and a failure red on the base would hide the binaries that never ran. A command
+// that already has it, or that is not a plain `cargo test`, unchanged.
+function cargoNoFailFast(command) {
+  const cmd = String(command || '');
+  if (!/^\s*cargo\s+test\b/.test(cmd) || /\s--no-fail-fast\b/.test(cmd) || /\s&&\s|\|\||[;|]/.test(cmd)) return cmd;
+  return cmd.replace(/^(\s*cargo\s+test)\b/, '$1 --no-fail-fast');
+}
+
 // The test files a list of processes runs, one per process (a runner listing many files is not one):
 // what a timed-out suite had not finished.
 const TEST_FILE = /[^\s"']*(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|[\\/])test_[^\s"'\\/]+\.py|_test\.(?:py|go))(?=["'\s]|$)/g;
@@ -380,7 +390,7 @@ function narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform,
     return { measure: true, tooLong: null, list: false };
   }
   // #400: measured as it will run, with the coverage and workers wrappers
-  const wrapped = mock ? filtered : withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers);
+  const wrapped = mock ? filtered : cargoNoFailFast(withWorkers(coverage ? coverageCommand(filtered, cwd) : filtered, testWorkers));
   if (fitsCommandLine(wrapped, platform)) {
     out.scope = 'files';
     out.command = filtered;
@@ -497,10 +507,11 @@ async function checkOnBase({ command, failures, base, mock, env, timeoutMs, sign
 
 // #109: a cargo test round whose failures name tests, not files (checked by name on the base)
 const cargoByName = (command, failures, mock) => !mock && /^cargo\s+test\b/.test(String(command || '').trim()) && failures.some((f) => !f.file);
-// `cargo test` → `cargo test -- <names>` (libtest keeps the tests whose name contains one of them), or
-// the whole `cargo test` when a name is not a plain module path or the line is too long (#400)
+// `cargo test` → `cargo test --no-fail-fast -- <names>` (libtest keeps the tests whose name contains
+// one of them), or the whole `cargo test --no-fail-fast` when a name is not a plain module path or the
+// line is too long (#400)
 function cargoFilteredCommand(command, names, platform) {
-  const c = String(command).trim();
+  const c = cargoNoFailFast(String(command).trim());
   if (!names.every((n) => /^[\w:]+$/.test(n))) return c;
   const cmd = `${c}${/\s--(\s|$)/.test(c) ? '' : ' --'} ${names.join(' ')}`;
   return fitsCommandLine(cmd, platform) ? cmd : c;
@@ -511,20 +522,29 @@ function cargoFilteredCommand(command, names, platform) {
 async function checkCargoOnBase({ command, failures, base, cacheDir, platform, ...opts }) {
   const { info } = opts;
   const named = failures.filter((f) => !f.file);
-  const names = [...new Set(named.map((f) => String(f.test).trim()))].sort();
+  // one entry per test binary + name (a workspace may have the same name in two crates)
+  const tests = [...new Map(named.map((f) => {
+    const t = { test: String(f.test).trim(), bin: f.bin || '' };
+    return [`${t.bin}\n${t.test}`, t];
+  })).values()].sort((a, b) => (a.test + a.bin).localeCompare(b.test + b.bin));
   const b = await prepareBase(base, info);
   if (!b) return { onBase: [], info };
-  const key = (n) => `cargo:${n}`;
+  const key = (t) => `cargo:${t.bin ? `${t.bin}::` : ''}${t.test}`;
   const cacheFile = baseCacheFile(cacheDir, info.commit);
   const cache = cacheFile ? readJson(cacheFile) : {};
-  info.cached = names.filter((n) => Array.isArray(cache[key(n)]?.failing));
-  const baseFailing = info.cached.flatMap((n) => cache[key(n)].failing.map((test) => ({ test, file: '' })));
-  const toRun = names.filter((n) => !info.cached.includes(n));
+  const cachedTests = tests.filter((t) => Array.isArray(cache[key(t)]?.failing));
+  info.cached = cachedTests.map((t) => t.test);
+  const baseFailing = cachedTests.flatMap((t) => cache[key(t)].failing.map((test) => ({ test, file: '', bin: t.bin })));
+  const toRun = tests.filter((t) => !cachedTests.includes(t));
   if (toRun.length) {
-    const { r, found } = await runOnBase(cargoFilteredCommand(command, toRun, platform), `${toRun.length} failing cargo test(s)`, { ...opts, b });
+    const toRunNames = [...new Set(toRun.map((t) => t.test))];
+    const { r, found } = await runOnBase(cargoFilteredCommand(command, toRunNames, platform), `${toRunNames.length} failing cargo test(s)`, { ...opts, b });
     baseFailing.push(...found);
-    info.ran = toRun;
-    if (endedOnBase(r, found)) cacheOnBase(cacheFile, toRun.map(key), (k) => found.filter((x) => sameTest({ test: k.slice('cargo:'.length) }, x)).map((x) => x.test));
+    info.ran = toRunNames;
+    if (endedOnBase(r, found)) cacheOnBase(cacheFile, toRun.map(key), (k) => {
+      const t = toRun.find((x) => key(x) === k);
+      return found.filter((x) => sameTest({ test: t?.test, file: '', bin: t?.bin }, x)).map((x) => x.test);
+    });
   }
   info.status = 'done';
   return { onBase: named.filter((f) => baseFailing.some((x) => sameTest(f, x))), info };
@@ -734,7 +754,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     }
     ({ measure, tooLong, list } = narrowToFiles(out, { files, mock, coverage, cwd, testWorkers, platform, log }));
   }
-  if (!mock) out.command = withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers);
+  if (!mock) out.command = cargoNoFailFast(withWorkers(coverage ? coverageCommand(out.command, cwd) : out.command, testWorkers));
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';

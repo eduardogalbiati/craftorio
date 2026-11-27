@@ -3,7 +3,8 @@
 // agent reporter's JSON (#219), else the runners' text formats (node:test spec and TAP, Jest, pytest,
 // go test, cargo test, dotnet test, Maven, Playwright) as { test, file, error } (the error's first
 // ERROR_LINES lines), at most MAX_FAILURES, deduplicated. `sameTest` matches two failures by name and
-// file basename (an empty file matches any). cargo test (libtest, #109) names tests, not files.
+// file basename (an empty file matches any), and by test binary when both have one. cargo test
+// (libtest, #109) names tests, not files: each failure carries its test binary (`bin`).
 
 const { parseAgentReport } = require('./agent-test-report');
 const { clean, fileOf } = require('./output-lines');
@@ -13,17 +14,34 @@ const ERROR_LINES = 3;
 
 const firstLines = (lines) => lines.map((l) => l.trim()).filter(Boolean).slice(0, ERROR_LINES).join('\n').slice(0, 400);
 
+// The test binary a cargo "Running"/"Doc-tests" line starts, without its build hash, or null:
+// "Running unittests src/lib.rs (target/debug/deps/cart-1a2b3c)" → "cart src/lib.rs",
+// "Doc-tests cart" → "doc cart". Same name in two binaries (a workspace): two failures (#109).
+function cargoBinary(line) {
+  const doc = /^Doc-tests\s+(\S+)/.exec(line);
+  if (doc) return `doc ${doc[1]}`;
+  const m = /^Running\s+(?:unittests\s+)?(\S+)\s+\((.+)\)$/.exec(line);
+  if (!m) return null;
+  const bin = (m[2].split(/[\\/]/).pop() || '').replace(/\.exe$/i, '').replace(/-[0-9a-f]{6,}$/i, '');
+  return `${bin} ${m[1].split('\\').join('/')}`;
+}
+
 // cargo test's failing tests (libtest, #109): "test x ... FAILED", then "---- x stdout ----" and the
-// panic up to the next "---- " or "failures:" line → [{ test, error }]
+// panic up to the next "---- " or "failures:" line → [{ test, error, bin }] (bin: the test binary
+// whose "Running" line came last, '' when the log has none)
 function cargoFailures(lines) {
   const out = [];
-  for (const l of lines) {
-    const m = /^test (.+?) \.\.\. FAILED$/.exec(l.trim());
+  let bin = '';
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    const started = cargoBinary(l);
+    if (started) { bin = started; continue; }
+    const m = /^test (.+?) \.\.\. FAILED$/.exec(l);
     if (!m) continue;
-    const at = lines.findIndex((x) => x.trim() === `---- ${m[1]} stdout ----`);
+    const at = lines.findIndex((x, k) => k > i && x.trim() === `---- ${m[1]} stdout ----`);
     const block = [];
     for (let j = at + 1; at >= 0 && j < lines.length && !/^(---- |failures:\s*$)/.test(lines[j].trim()); j++) block.push(lines[j]);
-    out.push({ test: m[1], error: firstLines(block) });
+    out.push({ test: m[1], error: firstLines(block), bin });
   }
   return out;
 }
@@ -47,7 +65,7 @@ function parseFailures(text, { cwd } = {}) {
   const out = [];
   const add = (test, file, error, extra = {}) => {
     test = String(test || '').trim();
-    if (!test || out.some((f) => f.test === test && f.file === file)) return;
+    if (!test || out.some((f) => f.test === test && f.file === file && (f.bin || '') === (extra.bin || ''))) return;
     out.push({ test, file: file || '', error: error || '', ...extra });
   };
   // node:test, spec reporter: "✖ failing tests:", then "test at <file>:<l>:<c>" / "✖ <name> (<ms>)" / the error
@@ -109,7 +127,7 @@ function parseFailures(text, { cwd } = {}) {
     add(m[1], loc ? loc[1] : '', loc ? loc[2] : '');
   }
   // cargo test (libtest, #109): no file, the base check runs them by name
-  cargoFailures(lines).forEach((f) => add(f.test, '', f.error));
+  cargoFailures(lines).forEach((f) => add(f.test, '', f.error, f.bin ? { bin: f.bin } : {}));
   // dotnet test: "  Failed Name [12 ms]" then "  Error Message:" and the message
   for (let i = 0; i < lines.length; i++) {
     const m = /^\s*Failed (\S+) \[[^\]]+\]\s*$/.exec(lines[i]);
@@ -141,7 +159,7 @@ function parseFailures(text, { cwd } = {}) {
 
 const sameTest = (a, b) => {
   const base = (f) => String(f || '').split(/[\\/]/).pop();
-  return String(a.test).trim() === String(b.test).trim() && (!a.file || !b.file || base(a.file) === base(b.file));
+  return String(a.test).trim() === String(b.test).trim() && (!a.file || !b.file || base(a.file) === base(b.file)) && (!a.bin || !b.bin || a.bin === b.bin);
 };
 
 module.exports = {

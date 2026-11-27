@@ -13,14 +13,18 @@ The orchestrator runs the project's whole test suite (`type: suite`, #177): comm
   for the base check's `-base.log`; the `check` and `screenshots` steps emit it too, for
   `logs/check-<visit>.log` and `logs/screenshots-<visit>.log`, and a suite waiting for the machine
   writes that line to its log first), which the Run screen's live terminal follows, and reads the failing tests from it
-  (`parseFailures`: node:test spec/TAP, Jest, pytest, go test, dotnet test, Maven). Output `{ kind:
+  (`parseFailures` in `suite-failures.js`: node:test spec/TAP, Jest, pytest, go test, cargo test,
+  dotnet test, Maven, Playwright; a cargo failure carries its test binary, `bin`). Output `{ kind:
   'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms, timed_out,
   failures: [{ test, file, error }], preexisting, reason, message }`; the run's known pre-existing
   failures (`notePreexistingFailures`) are moved to `preexisting` and never fail it; `blocked` = it
   could not run (no worktree, no command). It never throws and never calls the supervisor: the
   transitions route it. The other failures are checked on the base by the step itself (#211): their
   test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
-  get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
+  get it too), cached per base commit + file in `cache/base-tests/`. cargo test (#109) names tests,
+  not files: they run by name (`cargo test --no-fail-fast -- <names>`; the whole `cargo test
+  --no-fail-fast` for a doctest or a line too long), cached per commit + `cargo:<bin>::<name>`; every
+  cargo round runs with `--no-fail-fast`, so a binary red on the base never hides the others. Those failing there too become
   `preexisting_failures` (the run's list, the summary, the project's base-health store below).
   **Main stays green (#405, `packages/engine/domains/project/base-health.js`, wired in `packages/engine/service/areas/base-health.js`)**: a
   real run's `preexisting_failures` are recorded per project in `backlog/base-health/<project>.json`
