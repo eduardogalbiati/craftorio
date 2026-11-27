@@ -52,7 +52,8 @@ function resolveAgentTemplates(/** @type {any} */ wf, /** @type {any} */ inputs,
       if (typeof a[k] === 'string' && a[k].includes('{{')) a[k] = render(a[k], { inputs }).trim();
     }
     // #97: a Claude model left by a template (a value saved before the choice) on its Codex counterpart
-    if (onOrchestrator && a.provider === 'codex') a.model = OrchestratorModels.mapModel(a.model, 'codex');
+    // (mapModel maps only for a Codex agent)
+    if (onOrchestrator) a.model = OrchestratorModels.mapModel(a.model, a.provider);
   }
 }
 

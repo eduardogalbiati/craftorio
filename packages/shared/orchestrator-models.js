@@ -20,6 +20,9 @@
   const registry = () => (node ? require('./providers') : root.Providers);
 
   const ORCHESTRATORS = ['claude', 'codex'];
+  // the two provider ids, named once (#348: no provider literal compared outside the registry)
+  const CLAUDE = ORCHESTRATORS[0];
+  const CODEX = ORCHESTRATORS[1];
   /** @type {Record<string, string>} */
   const CODEX_MODEL_FOR = {
     'claude-fable-5-2': 'gpt-6.2-astra',
@@ -39,11 +42,11 @@
   const DEFAULT_WORKFLOWS = ['feature', 'fix', 'release'];
 
   /** @param {unknown} value */
-  const orchestratorOf = (value) => (value === 'codex' ? 'codex' : 'claude');
+  const orchestratorOf = (value) => (value === CODEX ? CODEX : CLAUDE);
 
   /** @param {unknown} model @param {unknown} provider */
   function mapModel(model, provider) {
-    if (provider !== 'codex' || typeof model !== 'string') return model;
+    if (provider !== CODEX || typeof model !== 'string') return model;
     return CODEX_MODEL_FOR[model] || model;
   }
 
@@ -74,11 +77,11 @@
     if (!isModelInput(def)) return def;
     const out = { ...def };
     const keep = (/** @type {unknown} */ v) => known(v) || !/^claude-/.test(String(v));
-    if (Array.isArray(def.enum)) out.enum = def.enum.filter(keep).map((/** @type {unknown} */ v) => mapModel(v, 'codex'));
-    if (def.default !== undefined) out.default = mapModel(def.default, 'codex');
+    if (Array.isArray(def.enum)) out.enum = def.enum.filter(keep).map((/** @type {unknown} */ v) => mapModel(v, CODEX));
+    if (def.default !== undefined) out.default = mapModel(def.default, CODEX);
     if (def.options && typeof def.options === 'object') {
       out.options = Object.fromEntries(Object.entries(def.options).filter(([k]) => keep(k))
-        .map(([k, label]) => [mapModel(k, 'codex'), CODEX_LABEL_FOR[CODEX_MODEL_FOR[k]] || label]));
+        .map(([k, label]) => [mapModel(k, CODEX), CODEX_LABEL_FOR[CODEX_MODEL_FOR[k]] || label]));
     }
     return out;
   }
@@ -89,7 +92,7 @@
    * @param {{ bundled?: boolean }} [opts]
    */
   function applyOrchestrator(wf, provider, { bundled } = {}) {
-    if (!wf || orchestratorOf(provider) !== 'codex') return wf;
+    if (!wf || orchestratorOf(provider) !== CODEX) return wf;
     if (!(bundled ?? followsOrchestrator(wf))) return wf;
     const out = JSON.parse(JSON.stringify(wf));
     // the loader's non-enumerable fields (name, warnings) the JSON clone drops
@@ -109,7 +112,7 @@
   /** @param {any} out */
   function addProviders(out) {
     out.providers = { ...(out.providers || {}) };
-    for (const id of ['codex', 'claude']) {
+    for (const id of [CODEX, CLAUDE]) {
       const def = registry()?.byId(id)?.definition;
       if (!out.providers[id] && def) out.providers[id] = JSON.parse(JSON.stringify(def));
     }
@@ -117,23 +120,23 @@
 
   /** @param {any} orch the workflow's orchestrator: block (changed) */
   function moveOrchestrator(orch) {
-    orch.provider = 'codex';
+    orch.provider = CODEX;
     orch.model = mapIn(orch.model || 'claude-sonnet-5-5', CODEX_MODEL_FOR);
     const sup = orch.supervisor;
     if (!sup || typeof sup !== 'object') return;
-    if (sup.provider === 'claude') sup.provider = 'codex';
+    if (sup.provider === CLAUDE) sup.provider = CODEX;
     if (sup.model) sup.model = mapIn(sup.model, CODEX_MODEL_FOR);
   }
 
   /** @param {any} agent an agent (changed): Claude to Codex, the multi-model Codex reviewer to Claude */
   function moveAgent(agent) {
     if (!agent || typeof agent !== 'object') return;
-    if (agent.provider === 'claude') {
-      agent.provider = 'codex';
+    if (agent.provider === CLAUDE) {
+      agent.provider = CODEX;
       agent.model = mapIn(agent.model, CODEX_MODEL_FOR);
-    } else if (agent.provider === 'codex') {
+    } else if (agent.provider === CODEX) {
       // the multi-model second reviewer: on a provider other than the orchestrator's
-      agent.provider = 'claude';
+      agent.provider = CLAUDE;
       agent.model = mapIn(agent.model, CLAUDE_MODEL_FOR);
       if (typeof agent.model === 'string' && !agent.model.startsWith('claude-')) agent.model = 'claude-haiku-5-5';
     }
@@ -155,10 +158,10 @@
    * @param {{ bundled?: boolean }} [opts]
    */
   function mapRunInputs(wf, inputs, provider, { bundled } = {}) {
-    if (!wf || !inputs || orchestratorOf(provider) !== 'codex' || !(bundled ?? followsOrchestrator(wf))) return inputs;
+    if (!wf || !inputs || orchestratorOf(provider) !== CODEX || !(bundled ?? followsOrchestrator(wf))) return inputs;
     const out = { ...inputs };
     for (const [key, def] of Object.entries(wf.inputs || {})) {
-      if (isModelInput(def) && key in out) out[key] = mapModel(out[key], 'codex');
+      if (isModelInput(def) && key in out) out[key] = mapModel(out[key], CODEX);
     }
     return out;
   }
