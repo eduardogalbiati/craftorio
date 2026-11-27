@@ -2019,14 +2019,16 @@
   "code_banner.then_open_it_again": ", then open it again.",
   "code_banner.to_go_back_to": "To go back to",
   "code_banner.waiting_for_approval": "waiting for approval",
-  "command_hint.a_terminal_opens_and_runs_command": "A terminal opens and runs:\n\n{command}\n\n{what} The terminal stays open afterwards.",
 
+  "command_hint.a_terminal_opens_and_runs": "A terminal opens and runs the command below. {what} The terminal stays open afterwards.",
   "command_hint.command": "Command",
   "command_hint.could_not_run_the_command": "Could not run the command",
   "command_hint.run": "Run",
   "command_hint.run_in_a_terminal": "Run in a terminal",
   "command_hint.run_in_a_terminal_command": "Run in a terminal: {command}",
   "command_hint.run_this_command": "Run this command?",
+  "command_hint.what_install": "It may download and install software on this machine.",
+  "command_hint.what_sign_in": "It signs this CLI in to your account (a browser page may open).",
 
   "common.ago_hours": "{n} h ago",
   "common.ago_minutes": "{n} min ago",

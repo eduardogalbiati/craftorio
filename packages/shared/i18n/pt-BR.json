@@ -2019,14 +2019,16 @@
   "code_banner.then_open_it_again": ", depois abra-o de novo.",
   "code_banner.to_go_back_to": "Para voltar para",
   "code_banner.waiting_for_approval": "aguardando aprovação",
-  "command_hint.a_terminal_opens_and_runs_command": "Um terminal abre e executa:\n\n{command}\n\n{what} O terminal fica aberto depois.",
 
+  "command_hint.a_terminal_opens_and_runs": "Um terminal abre e executa o comando abaixo. {what} O terminal fica aberto depois.",
   "command_hint.command": "Comando",
   "command_hint.could_not_run_the_command": "Não foi possível executar o comando",
   "command_hint.run": "Executar",
   "command_hint.run_in_a_terminal": "Execute em um terminal",
   "command_hint.run_in_a_terminal_command": "Execute em um terminal: {command}",
   "command_hint.run_this_command": "Executar este comando?",
+  "command_hint.what_install": "Ele pode baixar e instalar software nesta máquina.",
+  "command_hint.what_sign_in": "Ele conecta esta CLI à sua conta (uma página do navegador pode abrir).",
 
   "common.ago_hours": "há {n} h",
   "common.ago_minutes": "há {n} min",
