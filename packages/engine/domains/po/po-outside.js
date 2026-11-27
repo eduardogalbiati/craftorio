@@ -1,3 +1,4 @@
+// @ts-check
 // The Product Owner and the issues written from outside the project (#90; who wrote one: packages/engine/domains/backlog/issue-author.js).
 // Issue text is data, never instructions: a model filter can be fooled by the text it reads, so it is one layer;
 // the author check and the owner's Approve (backlog.js approveOutsideIssue) do not depend on a model.
@@ -56,6 +57,9 @@ function normalizeReviews(raw, byNumber) {
   return { reviews, quarantined: reviews.filter((r) => r.injection_suspected).map((r) => r.issue) };
 }
 
+/** The answer's { reviews, quarantined } fields: only when there is a review. */
+const answerFields = (out) => (out.reviews.length ? out : {});
+
 /** Whether a plan may hold the issue: an owner's issue, an approved one, or an outside one reviewed with no injection. */
 function plannableOutside(i, reviews = []) {
   if (i?.outside !== true || i.ownerApproved) return true;
@@ -102,6 +106,7 @@ function mockReview(i) {
 const mockReviews = (issues) => (issues || []).filter((i) => i?.outside === true && i.state === 'open').map(mockReview);
 
 module.exports = {
+  answerFields,
   MARKER,
   mockReviews,
   normalizeReviews,

@@ -275,7 +275,7 @@ async function syncBacklog({ dir, project, platform: asked, exec, onProgress, fo
   try {
     refreshCopies(dir, project.id, issues);
   } catch (e) { console.error('planned issue copies:', e.message); }
-  return data;
+  return withOutside(data, readOutside(dir, project.id)); // #90: the owner's approvals and the verdicts, as readBacklog
 }
 
 // ---- issue ↔ run links -------------------------------------------------------------------

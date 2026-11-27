@@ -51,6 +51,7 @@ var api;
 /** @type {PageFunction} */ var analyticsContext;
 /** @type {PageObject} */ var BacklogActions;
 /** @type {PageObject} */ var BacklogLive;
+/** @type {PageObject} */ var BacklogOutside;
 /** @type {PageObject} */ var BacklogPO;
 /** @type {PageObject} */ var BacklogRoadmap;
 /** @type {PageFunction} */ var builderContext;

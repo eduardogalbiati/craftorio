@@ -382,7 +382,8 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
   const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) ? inputs : {};
   const inputsOf = (file) => (workflows || []).find((w) => w.file === file)?.inputs;
   // #90: the reviews of outside issues; a suspected one, or one with no review, is in no group (po-outside.js)
-  const { reviews, quarantined } = poOutside.normalizeReviews(answer.reviews, byNumber);
+  const outside = poOutside.normalizeReviews(answer.reviews, byNumber);
+  const { reviews } = outside;
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n) && poOutside.plannableOutside(byNumber.get(n), reviews)))];
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
@@ -406,9 +407,8 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_GUIDE })),
     splits: normalizeSplits(answer.splits, byNumber, history).filter((s) => poOutside.plannableOutside(byNumber.get(s.issue), reviews)),
     epics: normalizeEpics(answer.epics, byNumber, epicList),
-    ...(reviews.length ? { reviews, quarantined } : {}),
-    // #670: a spec's proposal with its mockup coverage (po-mockups.js specProposal)
-    ...(spec ? { spec } : {}),
+    ...poOutside.answerFields(outside),
+    ...(spec ? { spec } : {}), // #670: a spec's proposal with its mockup coverage (po-mockups.js specProposal)
   };
 }
 

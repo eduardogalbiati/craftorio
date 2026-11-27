@@ -50,6 +50,8 @@ test('GitHub issues come from gh and are normalized', async () => {
     number: 29, title: 'Backlog screen', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }],
     url: 'https://github.com/o/r/issues/29', author: 'eduardo', assignees: ['bot'], body: GH_ISSUE.body,
     tasks: { done: 2, total: 4 }, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-02T00:00:00Z',
+    // #90: gh gave no association: unknown is outside (fail closed)
+    authorAssociation: null, outside: true,
   });
 });
 

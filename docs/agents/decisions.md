@@ -261,7 +261,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   language's separators; user content, workflow YAML texts, skills, agents' messages, engine errors
   and logs are never translated. Why: an owner who works in another language read an English-only
   app, and logs and errors must stay searchable and reportable.
-- **2026-10-13** (#357, #378, #381, #382): refactor proposals (Architecture findings or the owner's) are prioritized
+  Same day (#357, #378, #381, #382): refactor proposals (Architecture findings or the owner's) are prioritized
   by the Product Owner (rank, reason, complexity; the Danger Zone score as value, the conflict map
   and the roadmap's unfinished items as risk), and a cadence, off by default, adds the top ranked one
   that has an issue to the roadmap every X real runs of the project (3 to 50). The item counts in the

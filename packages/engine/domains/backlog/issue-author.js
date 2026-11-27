@@ -1,3 +1,4 @@
+// @ts-check
 // Who wrote an issue (#90): on a public repository anyone can open one, and its text must never become work
 // without the owner. The backlog sync (issues.js fetchIssues) keeps each issue's author and association:
 // - INSIDE / isOutsideAssociation: the owner, a member and a collaborator are inside; anything else is outside,

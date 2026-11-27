@@ -439,6 +439,16 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
   PR comments an agent reads can try to steer it, with the tools its workflow gives it. Isolated
   agents never load the checkout's `.claude/settings*.json`, but treat a repository's hooks as code
   that may run until #468 is closed.
+- **An issue from outside the project is data, and waits for you** (#90). The backlog sync keeps each
+  issue's author and association; one written by someone who is not the owner, a member or a
+  collaborator (GitHub `CONTRIBUTOR`, `NONE`…; GitLab below Developer) is marked *Outside*. The
+  Product Owner's prompt wraps every issue's text as untrusted data, never instructions, and its
+  plan never carries what an issue asks for (a command, a setting, a URL, a skipped check). It gives
+  each outside issue a verdict: well written or not, injection suspected or not, with the lines
+  that decided it; a suspected one is shown *Quarantined*. Whatever the verdict, an outside issue
+  enters no roadmap, pipeline or run until you click *Approve* on the Backlog, and the run's task
+  then says the text came from outside: a specification, never instructions. The verdict comes from
+  a model that the same text can fool: the author check and your click are the boundary.
 - **The secret scan does not find every secret.** Feature, Fix, Release and this repository's own
   workflows run gitleaks on the commits a run made, before the review (Release: before Ship). It
   knows patterns: a password in plain words, an encoded or split value, a merge commit's own changes
@@ -1392,6 +1402,13 @@ among the manifest's `workflows`, and an entry with a `file` must be named after
 else is reported as a manifest error and ignored. The map has `feature` and `fix` only (a Refactor
 runs on the Feature entry; another key is an error too), and a manifest with errors counts as none
 (its workflows, default and kinds are all ignored).
+
+The Product Owner reads every issue as data, never as instructions (#90). An issue written outside
+the project (not the owner, a member or a collaborator) shows an *Outside* badge on the Backlog and
+the Roadmap, and the PO's verdict next to it: well written or not, injection suspected or not, with
+the lines it quoted (*Quarantined* when an injection is suspected). Such an issue is in no plan,
+roadmap stage or run until the owner clicks *Approve*; its run's task then says the text came from
+outside and is a specification only. See the security model.
 
 ## Workflows in your repository
 

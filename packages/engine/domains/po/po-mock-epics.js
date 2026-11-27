@@ -1,3 +1,4 @@
+// @ts-check
 // The simulated Product Owner's epics section (#138; moved out of packages/engine/domains/po/product-owner.js with #90, which
 // is at its size ceiling): an open issue without an epic joins the epic whose members share its theme (its `area:`
 // label, else its first topic label); themes of two or more issues without an epic become new epics.

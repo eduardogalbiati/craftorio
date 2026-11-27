@@ -7,6 +7,8 @@ const { findPlatform } = require('@craftorio/shared/platforms');
 
 const flag = (args, name) => Number(args[args.indexOf(name) + 1]);
 const isList = (args) => args[0] === 'issue' && args[1] === 'list';
+// #90: the authors read after the list (github.js issueAuthorsCommand), not a count
+const isAuthors = (args) => args.join(' ').includes('authorAssociation');
 const ghIssues = (n) => Array.from({ length: n }, (_, i) => ({ number: i + 1, title: `Issue ${i + 1}`, state: 'OPEN', url: `https://github.com/o/r/issues/${i + 1}` }));
 const glIssues = (from, to) => Array.from({ length: Math.max(0, to - from) }, (_, i) => ({ iid: from + i + 1, title: 'x', state: 'opened' }));
 
@@ -16,6 +18,7 @@ function fakeGh(size, { count = String(size), countGate = null } = {}) {
   const exec = async (_cli, args) => {
     calls.push(args);
     if (isList(args)) return JSON.stringify(ghIssues(Math.min(size, flag(args, '--limit'))));
+    if (isAuthors(args)) return '[]';
     if (countGate) await countGate;
     if (count instanceof Error) throw count;
     return count;
@@ -113,7 +116,7 @@ test('#781 with no onProgress the list stays one call, with no count', async () 
   const fake = fakeGh(120);
   const issues = await fetchIssues({ platform: 'github', repo: 'https://github.com/o/r', exec: fake.exec });
   assert.equal(issues.length, 120);
-  assert.equal(fake.calls.length, 1);
+  assert.equal(fake.calls.filter((a) => !isAuthors(a)).length, 1);
   assert.equal(flag(fake.calls[0], '--limit'), MAX_ISSUES);
 });
 
