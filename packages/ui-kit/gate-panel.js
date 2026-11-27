@@ -125,6 +125,28 @@ window.gateEnvironmentText = gateEnvironmentText;
 // the change keeps its E2E scenarios; the long message (with the supervisor's full note) is
 // collapsed in Details. A gate of a run from before #213 (no `brief`) gets gateBriefHtml or ''.
 // g: the gate record, its event or a run chat gate (brief); fullHtml: the message as the screen shows it.
+// #124: the answer the supervisor on call would have taken, held back for the owner (it is not the
+// gate's recommended one and it merges or pushes), shown under the workflow's recommendation
+function heldSupervisorAnswerHtml(g, bySup) {
+  const sup = !bySup && g.supervisor?.answer && g.supervisor.answered === false ? g.supervisor : null;
+  if (!sup) return '';
+  const label = (g.choices || []).find((c) => String(c.id) === String(sup.answer))?.label || sup.label || sup.answer;
+  return `<p class="gate-card-rec" data-testid="gate-supervisor-recommendation" title="${esc(sup.reason || '')}"><b>${t('gate_panel.recommended_by_supervisor')}</b>
+    <b>${esc(label)}</b>${sup.reason ? `. ${esc(sup.reason)}` : ''}</p>`;
+}
+
+// #124: on the Run screen's step card (Details), a gate the supervisor on call answered alone: who, the
+// answer's label in the interface language (its label_key, else the bundled gates' engine.<step>_<answer>)
+// and why. `s` is the step app.js keeps, `s.supervisor` the gate's step.finished output.
+function supervisorAnswerHtml(s) {
+  const o = s?.supervisor;
+  if (!o) return '';
+  const key = o.label_key || `engine.${s.id}_${o.choice}`;
+  const label = t(key) !== key ? t(key) : String(o.choice ?? '');
+  return `<br><span class="muted small" data-testid="gate-supervisor-answer" data-step="${esc(s.id)}" title="${esc(o.reason || '')}">${esc(t('runchat.supervisor_answered_gate', { answer: label }))}${o.reason ? ` ${esc(o.reason)}` : ''}</span>`;
+}
+window.supervisorAnswerHtml = supervisorAnswerHtml;
+
 function gateCardHtml(runId, g, fullHtml) {
   const b = g.brief;
   const turns = gateNextTurnsHtml(runId, g);
@@ -134,12 +156,14 @@ function gateCardHtml(runId, g, fullHtml) {
   }
   const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
   const rec = b.recommendation;
-  const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"><b>${rec.source === 'supervisor' ? t('gate_panel.recommended_by_supervisor') : t('gate_panel.recommended')}</b>
+  const bySup = rec?.source === 'supervisor';
+  const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"${bySup ? ' data-testid="gate-supervisor-recommendation"' : ''}><b>${bySup ? t('gate_panel.recommended_by_supervisor') : t('gate_panel.recommended')}</b>
     ${rec.label ? `<b>${esc(rec.label)}</b>${rec.reason ? '. ' : ''}` : ''}${esc(rec.reason || '')}</p>` : '';
+  const supHtml = typeof heldSupervisorAnswerHtml === 'function' ? heldSupervisorAnswerHtml(g, bySup) : '';
   const options = b.options?.length ? `<ol class="gate-card-options small">${b.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>` : '';
   const action = b.user_action ? `<p class="gate-card-action small"><b>${t('gate_panel.only_you_can_do_this')}</b> ${esc(b.user_action)}</p>` : '';
   const scenarios = gateTriesChange(g) ? gateScenariosHtml(runId, g) : '';
-  return `<div class="gate-card"><p class="gate-card-what">${esc(b.headline)}</p>${b.body ? `<div class="gate-card-status md">${md(b.body)}</div>` : ''}${recHtml}${options}${action}${turns}${scenarios}
+  return `<div class="gate-card"><p class="gate-card-what">${esc(b.headline)}</p>${b.body ? `<div class="gate-card-status md">${md(b.body)}</div>` : ''}${recHtml}${supHtml}${options}${action}${turns}${scenarios}
     <details class="run-gate-full"><summary class="small">${t('gate_panel.details')}</summary>${fullHtml}</details></div>`;
 }
 window.gateCardHtml = gateCardHtml;

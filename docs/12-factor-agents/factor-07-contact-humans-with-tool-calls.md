@@ -20,6 +20,11 @@ over whatever channel they use. ([factor 7](https://github.com/humanlayer/12-fac
   message (`supervisorAsksHuman`, `onCallPrompt` in `src/engine/run/supervision.js`). A `kind:
   decision` gate is never answered by the supervisor; only `kind: escalation` gates may be routed
   by it.
+- **The supervisor answers alone only with a safe answer (#124).** At an escalation gate its `route`
+  is applied without the owner only when it is the gate's recommended answer or one that does not
+  merge or push (retry, stop); "the failures are pre-existing" counts only when the engine confirmed
+  them on the base (#211), never on an agent's report. Any other answer opens the gate for the owner
+  with the supervisor's recommendation and reason on it.
 - **Automation never crosses a human gate.** A hard rule in `AGENTS.md`, enforced in the engine:
   a pause never answers a gate, a resume never reuses a decision, the Night watch never resumes a
   paused run, and `save_to_issue` writes nothing before the owner confirms the preview.

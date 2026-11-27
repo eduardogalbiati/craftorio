@@ -3673,6 +3673,7 @@
   "nightwatch.simulated_mode_writes_two_demo_nights": "Modo simulado: grava duas noites de demonstração neste workspace",
   "nightwatch.since_startedat": ", desde {startedAt}",
   "nightwatch.spent_above_the_day_limits_overdayusd": "Gasto acima dos limites diários: {overDayUsd}",
+  "nightwatch.supervisor_answered_gate": "O Supervisor respondeu sozinho o gate {step} da run {run} com {answer}: {reason}",
   "nightwatch.the_backup_taken_before_the_action": "O backup feito antes da ação é restaurado.",
   "nightwatch.the_night_watch_could_not_load": "Não foi possível carregar a Vigília noturna",
   "nightwatch.the_oracle_stops_acting_without_asking": "O Oracle para de agir sem perguntar imediatamente; seu resumo é publicado.",

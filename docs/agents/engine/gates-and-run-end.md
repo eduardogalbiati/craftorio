@@ -81,7 +81,14 @@ Human gates (feedback, choices, summaries), the supervisor, refused tool calls, 
   step already visited (instruction → `supervisorNote`), `route` one of the gate's answers
   (output `by: 'supervisor'`), `user_action` / `escalate` → the gate opens with its diagnosis
   under the message and in `approval.requested.supervisor`. Over its limits the gate opens with
-  its last diagnosis. Stalls (`checkStalls` after an agent step, `watchSlowStep` while it runs):
+  its last diagnosis. #124: the supervisor's `route` is applied alone only when it is the gate's
+  recommended answer, an answer whose transition merges and pushes nothing (ends the run as not
+  successful, or goes back to a step already visited), or the last suite's failures were all
+  confirmed pre-existing by the engine on the base (#211, `preexisting_failures`; an agent's report
+  is not evidence). Any other answer is held back (`supervisor.decision` action `escalate`, `held:
+  unsafe | unconfirmed`) and the gate opens with it as the recommendation (`safeGateAnswer` in
+  `run/supervision.js`); an applied one carries `safe` and `step.finished.output.reason`, and the
+  morning summary lists it. Stalls (`checkStalls` after an agent step, `watchSlowStep` while it runs):
   same `repeatKey` N visits in a row (not /loop iterations; #121: the decision fields plus the
   findings and, for an author step, `commit_sha` (else the worktree head), `summary`, `notes`,
   `files_changed`; a step's `stall: { same_output_fields: [...] }` replaces that list, as `develop`

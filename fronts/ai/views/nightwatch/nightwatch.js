@@ -287,7 +287,11 @@
         <span>${t('nightwatch.blocked_outside_permissions')} <b>${s.blockedOutsidePermissions}</b></span>
         <span>${t('nightwatch.content_instructions_refused')} <b>${s.contentRefused}</b></span>
       </div>
-      <div class="nw-morning muted small"><b>${t('nightwatch.morning_summary')}</b> ${m.summary.selfHealing ? `${esc(m.summary.selfHealing)} ` : ''}${esc(m.summary.ran)} ${esc(m.summary.did)} ${esc(m.summary.waits)}</div>
+      <div class="nw-morning muted small"><b>${t('nightwatch.morning_summary')}</b> ${m.summary.selfHealing ? `${esc(m.summary.selfHealing)} ` : ''}${esc(m.summary.ran)} ${esc(m.summary.did)} ${esc(m.summary.waits)}${(m.summary.supervisorGates || []).map((line, i) => {
+    // #124: a gate the supervisor on call answered alone, with its answer and reason
+    const g = (m.summary.supervisorGateRuns || [])[i] || {};
+    return `<div class="nw-morning-gate" data-testid="morning-supervisor-gate" data-step="${esc(g.step || '')}" data-run="${esc(g.runId || '')}" title="${esc(line)}">${esc(line)}</div>`;
+  }).join('')}</div>
     </div>`;
   }
 

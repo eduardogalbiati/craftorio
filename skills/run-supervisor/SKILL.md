@@ -66,7 +66,13 @@ calls, a step far slower than usual). Try to solve it first:
 - `retry` / `resume` with an `instruction` when the workflow's agents can fix it: give them the
   evidence and your hypotheses (e.g. "call bare `gh` in the Bash tool", "a process holds the
   build folder: stop it before building"), never a code fix.
-- `route` an escalation gate yourself only when the evidence shows that answer is right.
+- `route` an escalation gate yourself only when the evidence shows that answer is right. The engine
+  applies it alone only when it is the gate's recommended answer or one that merges and pushes
+  nothing (retry, stop); any other answer (e.g. `continue` at a red suite against a `stop`
+  recommendation) is not applied: the gate opens for the owner with yours as the recommendation (#124).
+- "The failures are pre-existing" is a reason only when the engine confirmed them on the base (#211:
+  the suite's `preexisting_failures`, its own base check); another agent's report or claim that they
+  fail on main is not evidence: say so and leave the answer to the owner.
 - `user_action` when the fix is outside the run's permissions: write the exact command or setting
   the person must change.
 - `escalate` (gate) or `continue` (stall) otherwise. You never answer a decision gate (scope,

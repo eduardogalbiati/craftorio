@@ -401,6 +401,8 @@
         // the summary card (#213): { headline, body, recommendation, options, user_action } and an
         // Approve / Reject gate's labels and help
         brief: ev.brief || null, approve: ev.approve || null, reject: ev.reject || null,
+        // #124: the supervisor on call's diagnosis, with the answer it held back for the owner
+        supervisor: ev.supervisor || null,
         // the Markdown report that leads the message (#290: the release summary), '' without one
         report: ev.report || '',
         // Run locally ({ install, command, url }), the folder to open and the diff's base ref, when the gate offers them

@@ -3673,6 +3673,7 @@
   "nightwatch.simulated_mode_writes_two_demo_nights": "Simulated mode: writes two demo nights into this workspace",
   "nightwatch.since_startedat": ", since {startedAt}",
   "nightwatch.spent_above_the_day_limits_overdayusd": "Spent above the day limits: {overDayUsd}",
+  "nightwatch.supervisor_answered_gate": "Supervisor answered the {step} gate of run {run} alone with {answer}: {reason}",
   "nightwatch.the_backup_taken_before_the_action": "The backup taken before the action is put back.",
   "nightwatch.the_night_watch_could_not_load": "The Night watch could not load",
   "nightwatch.the_oracle_stops_acting_without_asking": "The Oracle stops acting without asking at once; its summary is posted.",

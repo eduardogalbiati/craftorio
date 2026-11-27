@@ -26,9 +26,12 @@
 // The release train (#489, decideReleaseTrain): at the night's end the last release candidate is
 // promoted (the promote-release permission), proposed to the owner or held (on Hold, red base check);
 // packages/engine/service/areas/releases.js acts on it and logs it as oracle.action / oracle.escalated.
+// #124: the escalation gates the supervisor on call answered alone (runFacts' supervisorGates) are
+// lines of the morning summary, in the interface language (nightwatch.supervisor_answered_gate).
 
 const fs = require('fs');
 const path = require('path');
+const I18n = require('@craftorio/shared/i18n');
 const { unfinishedItems } = require('@craftorio/shared/roadmap-model');
 const { regressionLine, stepRegressions } = require('../run/step-regressions');
 
@@ -478,9 +481,23 @@ function selfHealingSummary(d) {
   return `Self-healing on ${d.day}: ${d.detected} detected, ${d.repaired} repaired alone, ${d.waiting} waiting for you, US$ ${d.costUsd.toFixed(2)} (${d.tokens.toLocaleString('en-US')} tokens).`;
 }
 
+/** #124: the escalation gates the supervisor on call answered alone, from a run's events: { step, answer, reason, at }[]. */
+function supervisorGatesOf(events) {
+  return events.filter((e) => e.type === 'supervisor.decision' && e.kind === 'escalation' && e.action === 'route')
+    .map((e) => ({ step: e.step_id, answer: e.route, labelKey: e.label_key || null, reason: e.explanation || '', at: ms(e.ts) }));
+}
+
+/** #124: a gate answer's label in the interface language: its choice's label_key, else the bundled gates'
+ * `engine.<step>_<answer>` key, else the answer's id. */
+function gateAnswerLabel({ step, answer, labelKey }) {
+  const key = labelKey || `engine.${step}_${answer}`;
+  const text = I18n.t(key);
+  return text && text !== key ? text : String(answer);
+}
+
 /** A run's facts from its events:{ runId, projectId, start, end, status, cost, issues, progress, gates }. */
 function runFacts(runId, events) {
-  const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], mock: false, label: runId, context: 0, turnsCost: 0, limits: null };
+  const f = { runId, projectId: null, start: null, end: null, status: 'running', cost: 0, issues: 0, progress: [], gates: [], supervisorGates: supervisorGatesOf(events), mock: false, label: runId, context: 0, turnsCost: 0, limits: null };
   const gates = new Map();
   for (const e of events) {
     const t = ms(e.ts);
@@ -631,6 +648,8 @@ function nightMetrics(/** @type {{ night: any, log?: any[], runs?: any[], usage?
   // human gates opened in W
   const gates = facts.flatMap((f) => f.gates.filter((g) => inW(g.requested)).map((g) => ({ ...g, runId: f.runId })));
   const gateWait = gates.reduce((s, g) => s + ((g.resolved ?? w1) - g.requested), 0);
+  // #124: escalation gates the supervisor on call answered alone in W (who, which answer, why)
+  const supervisorGates = facts.flatMap((f) => (f.supervisorGates || []).filter((g) => inW(g.at)).map((g) => ({ step: g.step, answer: g.answer, labelKey: g.labelKey, reason: g.reason, at: new Date(g.at).toISOString(), runId: f.runId, label: f.label })));
 
   // loops: more than `loopCap` watch actions on one target
   const perTarget = new Map();
@@ -675,6 +694,7 @@ function nightMetrics(/** @type {{ night: any, log?: any[], runs?: any[], usage?
     hoursSaved,
     unblocked: { runs: unblockedRuns.map((f) => f.runId), issues: unblockedRuns.reduce((s, f) => s + f.issues, 0), usd: unblockedRuns.reduce((s, f) => s + f.cost, 0) },
     gates: { count: gates.length, waitMs: gateWait, open: gates.filter((g) => g.resolved == null).length },
+    supervisorGates,
     actions: { auto: auto.length, undone: auto.filter((a) => undone.has(a.actionId)).length, worse: worse.length },
     precision: auto.length ? 1 - auto.filter((a) => undone.has(a.actionId)).length / auto.length : null,
     loops,
@@ -726,6 +746,9 @@ function morningSummary(m, /** @type {{ proposed?: number, regressions?: any[], 
     regressionRuns: (regressions || []).map((f) => [...((f.evidence || f).recent?.runIds || [])]),
     limits: [...(limits?.lines || [])],
     overDayUsd: limits?.overDayUsd || 0,
+    // #124: one line per gate the supervisor on call answered alone, in the interface language
+    supervisorGates: (m.supervisorGates || []).map((g) => I18n.t('nightwatch.supervisor_answered_gate', { step: g.step, answer: gateAnswerLabel(g), reason: g.reason, run: g.label })),
+    supervisorGateRuns: (m.supervisorGates || []).map((g) => ({ step: g.step, runId: g.runId })),
   };
 }
 

@@ -4,11 +4,17 @@
 // a slow visit → `superviseStall` / `superviseSlow`; escalation gates → `superviseEscalation`; a
 // failed action, an exhausted loop or an idle agent), its budget and what blocks it (`onCallBlocked`),
 // and `supervisorAsksHuman` when it gives up. It never crosses a human gate (`kind: decision`).
+// #124: at an escalation gate it answers alone only with a safe answer (`safeGateAnswer`: the gate's
+// recommended one, one that merges and pushes nothing, or failures the engine confirmed on the base);
+// any other answer is held back and the gate opens for the owner with it as the recommendation.
 
 'use strict';
 
 const supervisor = require('../../domains/supervisor/supervisor');
-const { render } = require('./templates');
+const {
+  evalExpr,
+  render,
+} = require('./templates');
 const {
   answeredKey,
   extractJson,
@@ -16,7 +22,10 @@ const {
   validateSchema,
 } = require('./outputs');
 const { GATE } = require('./field-rules');
-const { offeredAnswer } = require('../gate-summary');
+const {
+  offeredAnswer,
+  parseRecommend,
+} = require('../gate-summary');
 const { isLooping } = require('./load');
 const { DENIAL_WARN } = require('./turns');
 
@@ -48,6 +57,35 @@ function gateDiagnosis(d, answers) {
     options: Array.isArray(d.options) ? d.options.filter((o) => typeof o === 'string' && o.trim()).slice(0, 3) : null,
     user_action: d.user_action || null,
   };
+}
+
+// #124: whether a transition merges and pushes nothing: no merge, ship, action, precheck or delegated
+// turn, and it ends the run as not successful or goes back to a step the run already went through.
+// `goto: end` with no status ends as success, so it is not safe.
+function mergesNothing(t, { steps, step, visited }) {
+  if (!t || t.merge || t.ship || t.action || t.precheck || t.delegate) return false;
+  if (t.goto === 'fail') return true;
+  if (t.goto === 'end') return !!t.status && t.status !== 'success';
+  const i = steps.findIndex((s) => s.id === t.goto);
+  return i >= 0 && i < steps.indexOf(step) && visited(t.goto);
+}
+
+// #124: may the supervisor on call take `route` at an escalation gate without the owner? { safe } when
+// it is the gate's recommended answer ('recommended'), its transition merges and pushes nothing
+// ('no_merge'), or the engine itself confirmed every failure of the last suite on the base (#211,
+// 'confirmed'); otherwise { held }: 'unconfirmed' when the supervisor's reason is "preexisting"
+// failures (another agent's report is not evidence), 'unsafe' for any other answer. Pure.
+/**
+ * @param {{ steps: any[], step: any, route: string, recommended: string | null, explanation?: string, scope: object, visited: (id: string) => boolean, suiteOutput?: any }} options
+ * @returns {{ safe?: string, held?: string }}
+ */
+function safeGateAnswer({ steps, step, route, recommended, explanation = '', scope, visited, suiteOutput = null }) {
+  if (recommended && route === recommended) return { safe: 'recommended' };
+  const t = (step.transitions || []).find((x) => evalExpr(x.when, scope));
+  if (mergesNothing(t, { steps, step, visited })) return { safe: 'no_merge' };
+  const failures = suiteOutput?.failures || [];
+  if (suiteOutput && !failures.length && (suiteOutput.preexisting_failures || []).length) return { safe: 'confirmed' };
+  return { held: /pre-?existing|fail\w* on (the )?(main|base)/i.test(String(explanation || '')) ? 'unconfirmed' : 'unsafe' };
 }
 
 const methods = {
@@ -191,13 +229,14 @@ const methods = {
    * @param {string} kind
    * @param {any} d
    * @param {string} action
-   * @param {{ goto?: string | null, route?: any, note?: string | null, evidence?: string }} [options]
+   * @param {{ goto?: string | null, route?: any, note?: string | null, evidence?: string, extra?: object }} [options]
+   *   extra: more fields of the event (#124: `held`, `safe`, `recommended` on a gate's answer)
    */
-  onCallDecided(step, kind, d, action, { goto = null, route = null, note = null, evidence = '' } = {}) {
+  onCallDecided(step, kind, d, action, { goto = null, route = null, note = null, evidence = '', extra = {} } = {}) {
     this.emitEvent('supervisor.decision', {
       step_id: step.id, kind, action, goto, cause_class: d.cause_class || null, explanation: d.explanation, instruction: d.instruction || null,
       ...(route != null ? { route } : {}), ...(d.recommendation ? { recommendation: d.recommendation } : {}),
-      ...(d.user_action ? { user_action: d.user_action } : {}), ...(note ? { note } : {}),
+      ...(d.user_action ? { user_action: d.user_action } : {}), ...(note ? { note } : {}), ...extra,
     });
     const asked = action === 'escalate' || action === 'user_action';
     this.logDecisions('supervisor', step.id, [[
@@ -212,6 +251,43 @@ const methods = {
     this.ctx.steps[target].supervisorNote = d.instruction || `The supervisor on call sent the run back here: ${d.explanation}`;
     this.emitEvent('step.transition', { from: from.id, to: target, when: `supervisor on call: ${d.action}` });
     return true;
+  },
+
+  // #124: safeGateAnswer's verdict on the supervisor's `route` at this gate, from the run's state: the
+  // gate's recommended answer, the choice's transition, and the last suite's output (the previous step
+  // when it is a suite, else the last suite visited).
+  gateAnswerVerdict(step, d, gate, answers) {
+    const rec = parseRecommend(gate.recommend, answers)?.answer || null;
+    const recommended = step.choices ? rec : { approve: 'approved', reject: 'rejected' }[rec] || null;
+    const prev = this.wf.steps.find((s) => s.id === this.ctx.previous_step);
+    const suite = prev?.type === 'suite' ? prev : this.wf.steps.filter((s) => s.type === 'suite' && this.ctx.steps[s.id]?.visits > 0).pop();
+    const yes = d.route === 'approved';
+    const scope = step.choices ? { ...this.ctx, choice: d.route, feedback: '', output: { choice: d.route, feedback: '' } }
+      : { ...this.ctx, approved: yes, rejected: !yes, feedback: '', output: { approved: yes, feedback: '' } };
+    return safeGateAnswer({
+      steps: this.wf.steps, step, route: d.route, recommended, explanation: d.explanation, scope,
+      visited: (id) => this.ctx.steps[id]?.visits > 0,
+      suiteOutput: suite ? this.ctx.steps[suite.id]?.output : null,
+    });
+  },
+
+  // #124: a safe answer is taken without the owner ({ route, reason }); any other is held back and the
+  // gate opens with it on ({ diagnosis } with the held answer, its reason and answered: false).
+  routeGateAnswer(step, st, d, verdict, evidence) {
+    if (verdict.held) {
+      const note = verdict.held === 'unconfirmed'
+        ? 'held for the owner: "preexisting" failures the engine did not confirm on the base (#211)'
+        : 'held for the owner: only the owner may take an answer that merges or pushes';
+      this.onCallDecided(step, 'escalation', d, 'escalate', { route: d.route, evidence, note, extra: { held: verdict.held } });
+      const answer = step.choices ? d.route : d.route === 'approved' ? 'approve' : 'reject';
+      const diag = st.lastDiagnosis;
+      return { diagnosis: { ...diag, recommend: diag.recommend || answer, recommendation: diag.recommendation || d.explanation, note, answer, reason: d.explanation, answered: false } };
+    }
+    // label_key: the answer's catalog key, so the run screen and the morning summary name it in the interface language
+    const key = (step.choices || []).find((c) => c.id === d.route)?.label_key;
+    const labelKey = key ? { label_key: key } : {};
+    this.onCallDecided(step, 'escalation', d, 'route', { route: d.route, evidence, extra: { safe: verdict.safe, ...(verdict.safe === 'recommended' ? { recommended: true } : {}), ...labelKey } });
+    return { route: step.choices ? d.route : d.route === 'approved', reason: d.explanation, ...labelKey };
   },
 
   // An escalation gate: the supervisor retries or resumes an agent step, routes the gate itself, or
@@ -254,10 +330,7 @@ const methods = {
       return { diagnosis: st.lastDiagnosis };
     }
     if (d.action === 'route') {
-      if (routes.includes(d.route)) {
-        this.onCallDecided(step, 'escalation', d, 'route', { route: d.route, evidence });
-        return { route: step.choices ? d.route : d.route === 'approved' };
-      }
+      if (routes.includes(d.route)) return this.routeGateAnswer(step, st, d, this.gateAnswerVerdict(step, d, gate, answers), evidence);
       this.onCallDecided(step, 'escalation', d, 'escalate', { evidence, note: `"${d.route}" is not an answer of this gate` });
       return { diagnosis: st.lastDiagnosis };
     }
@@ -523,4 +596,5 @@ const methods = {
 
 module.exports = {
   methods,
+  safeGateAnswer,
 };

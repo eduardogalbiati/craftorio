@@ -605,15 +605,15 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     if (GATE.includes(step.type)) {
       // `kind: escalation`, or any gate an exhausted loop leads to: the supervisor on call tries to
       // solve the problem before the person is asked; when it cannot, the gate opens with its
-      // diagnosis. A decision gate stays the person's: the supervisor may only send the run back.
-      // A human_edit gate (#647) is the person's alone: their requests go to its agent (requestEdit).
+      // diagnosis, or with the answer it may not take alone (#124). A decision gate stays the person's:
+      // the supervisor may only send the run back. A human_edit gate (#647) is the person's alone.
       const oc = supervisedGate(step, exhausted) ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
       if (oc?.goto) { exhausted?.refund(); return oc.goto; }
       const routed = oc?.route !== undefined;
       const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);
       if (gate.recover) return gate.recover;
       const { answer, feedback } = gate;
-      const by = routed ? { by: 'supervisor' } : {};
+      const by = routed ? { by: 'supervisor', ...(oc.reason ? { reason: oc.reason } : {}), ...(oc.label_key ? { label_key: oc.label_key } : {}) } : {};
       // who answered (#260): a `ship:` transition only follows the owner's own answer
       st.answeredBy = routed ? 'supervisor' : gate.by || 'unknown';
       if (step.choices) {
