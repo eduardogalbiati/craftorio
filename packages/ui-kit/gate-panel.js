@@ -162,7 +162,7 @@ function gateCardHtml(runId, g, fullHtml) {
   const bySup = rec?.source === 'supervisor';
   const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"${bySup ? ' data-testid="gate-supervisor-recommendation"' : ''}><b>${bySup ? t('gate_panel.recommended_by_supervisor') : t('gate_panel.recommended')}</b>
     ${rec.label ? `<b>${esc(rec.label)}</b>${rec.reason ? '. ' : ''}` : ''}${esc(rec.reason || '')}</p>` : '';
-  const supHtml = bySup ? '' : heldSupervisorAnswerHtml(g);
+  const supHtml = bySup || !g.supervisor ? '' : heldSupervisorAnswerHtml(g);
   const options = b.options?.length ? `<ol class="gate-card-options small">${b.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>` : '';
   const action = b.user_action ? `<p class="gate-card-action small"><b>${t('gate_panel.only_you_can_do_this')}</b> ${esc(b.user_action)}</p>` : '';
   const scenarios = gateTriesChange(g) ? gateScenariosHtml(runId, g) : '';
