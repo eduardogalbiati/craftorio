@@ -88,3 +88,46 @@ test('#97 Settings › Agents & CLIs: no saved choice checks Claude Code; a sign
   assert.equal('checked' in radios.get('claude').attrs, true, 'Claude Code is checked');
   assert.equal('disabled' in radios.get('codex').attrs, true, 'the signed-out Codex radio is disabled');
 });
+
+// review round 2: Settings' radios in a <form> of their own (another group than the Setup's), redrawn when
+// the Setup closes over Settings, and a change saved for the next run with the workflows read again
+const orchestratorBox = (app) => {
+  const el = existing(app, 'set-orchestrator');
+  assert.ok(el, 'the #set-orchestrator box is drawn');
+  return String(el.innerHTML || '');
+};
+
+test('#97 Settings › Agents & CLIs: the orchestrator radios sit inside their own <form>, each in a settings-orchestrator-<id> label', async () => {
+  const app = await openClis([READY('claude', 'Claude Code'), READY('codex', 'Codex CLI'), GIT]);
+  const forms = H.findAll(orchestratorBox(app), (e) => e.name === 'form');
+  assert.equal(forms.length, 1, 'one form');
+  const inForm = orchestratorRadios(forms[0].outer);
+  assert.deepEqual([...inForm.keys()].sort(), ['claude', 'codex'], 'both radios are inside the form');
+  for (const id of ['claude', 'codex']) {
+    const label = H.findEl(forms[0].outer, (e) => e.name === 'label' && e.attrs['data-testid'] === `settings-orchestrator-${id}`);
+    assert.ok(label, `the ${id} label`);
+    assert.equal(orchestratorRadios(label.outer).has(id), true, `the ${id} radio is inside its label`);
+  }
+});
+
+test('#97 Settings › Agents & CLIs: SettingsClis.refresh redraws the radios on the orchestrator saved meanwhile (the Setup closed)', async () => {
+  const app = await openClis([READY('claude', 'Claude Code'), READY('codex', 'Codex CLI'), GIT]);
+  assert.equal('checked' in orchestratorRadios(orchestratorBox(app)).get('claude').attrs, true, 'Claude Code first');
+  app.run('state.settings = { ...state.settings, orchestratorProvider: "codex" }; window.SettingsClis.refresh();');
+  const radios = orchestratorRadios(orchestratorBox(app));
+  assert.equal('checked' in radios.get('codex').attrs, true, 'Codex checked after refresh');
+  assert.equal('checked' in radios.get('claude').attrs, false);
+});
+
+test('#97 Settings › Agents & CLIs: choosing Codex saves orchestratorProvider and reads the workflows again; a disabled radio saves nothing', async () => {
+  const app = await openClis([READY('claude', 'Claude Code'), READY('codex', 'Codex CLI'), GIT]);
+  const box = existing(app, 'set-orchestrator');
+  assert.equal(typeof box.onchange, 'function', 'a change handler on the box');
+  const before = app.callsTo('listWorkflows').length;
+  await box.onchange({ target: { name: 'orchestrator', type: 'radio', value: 'grok', disabled: true } });
+  assert.equal(app.callsTo('setSettings').some(([p]) => p && 'orchestratorProvider' in p), false, 'a disabled radio saves nothing');
+  await box.onchange({ target: { name: 'orchestrator', type: 'radio', value: 'codex', disabled: false } });
+  await app.settle(10);
+  assert.deepEqual(app.callsTo('setSettings').filter(([p]) => p && 'orchestratorProvider' in p).map(([p]) => p.orchestratorProvider), ['codex']);
+  assert.equal(app.callsTo('listWorkflows').length > before, true, 'the workflows (Start\'s requirements) read again');
+});

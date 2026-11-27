@@ -209,3 +209,30 @@ test('the supervisor reads a run workflow from the workspace, falling back to th
   assert.equal(supervisor.supervisorConfig(runDir, [wsDir, bundled]).model, 'workspace-model');
   assert.equal(supervisor.supervisorConfig(runDir, wsDir).model, 'workspace-model'); // a single folder still works
 });
+
+// #97: which file a run takes follows the chosen orchestrator AI (a bundled default, as written or edited)
+test('#97 isBundledOrigin: a default or modified copy of a bundled workflow, never a custom one', () => {
+  assert.equal(wfs.isBundledOrigin('default'), true);
+  assert.equal(wfs.isBundledOrigin('modified'), true);
+  assert.equal(wfs.isBundledOrigin('custom'), false);
+  assert.equal(wfs.isBundledOrigin('repository'), false);
+  assert.equal(wfs.isBundledOrigin(undefined), false);
+});
+
+test('#97 isBundledWorkflowFile: the app\'s copy and the workspace\'s copy (edited or not) are bundled; a custom one is not; elsewhere is undecided', (t) => {
+  const bundled = tmp(t);
+  const dest = tmp(t);
+  const elsewhere = tmp(t);
+  write(bundled, 'fix.yaml', yamlOf('fix', '1.0.0'));
+  write(bundled, 'release.yaml', yamlOf('release', '1.0.0'));
+  wfs.seedWorkflows(bundled, dest);
+  write(dest, 'release.yaml', yamlOf('release', '1.0.0', 'edited_step')); // the owner's edit
+  write(dest, 'mine.yaml', yamlOf('mine', '1.0.0')); // a workflow of the owner's own
+  write(elsewhere, 'fix.yaml', yamlOf('fix', '1.0.0')); // e.g. a project's repository copy
+
+  assert.equal(wfs.isBundledWorkflowFile(path.join(bundled, 'fix.yaml'), dest, bundled), true);
+  assert.equal(wfs.isBundledWorkflowFile(path.join(dest, 'fix.yaml'), dest, bundled), true);
+  assert.equal(wfs.isBundledWorkflowFile(path.join(dest, 'release.yaml'), dest, bundled), true);
+  assert.equal(wfs.isBundledWorkflowFile(path.join(dest, 'mine.yaml'), dest, bundled), false);
+  assert.equal(wfs.isBundledWorkflowFile(path.join(elsewhere, 'fix.yaml'), dest, bundled), undefined);
+});

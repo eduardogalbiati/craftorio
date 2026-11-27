@@ -127,6 +127,39 @@ test('#97 Setup: choosing the Codex radio saves settings.orchestratorProvider co
   assert.equal(savedCodex(), true, `setSettings calls: ${JSON.stringify(app.callsTo('setSettings'))}`);
 });
 
+// review round 2: the derived default is saved once the CLIs are checked, and survives a Skip
+const savedPatches = (app) => app.callsTo('setSettings').map(([patch]) => patch || {});
+
+test('#97 Setup: with only Codex ready and nothing saved, Codex is saved as the orchestrator and the workflows read again', { timeout: 30000 }, async () => {
+  const app = await openSetup({ claude: MISSING('claude', 'Claude Code'), codex: READY('codex', 'Codex CLI') });
+  const saves = savedPatches(app).filter((p) => 'orchestratorProvider' in p);
+  assert.deepEqual(saves.map((p) => p.orchestratorProvider), ['codex'], `setSettings calls: ${JSON.stringify(savedPatches(app))}`);
+  assert.equal(app.run('state.settings.orchestratorProvider'), 'codex');
+  // boot reads the workflows once; the save reads them again (their requirements follow the orchestrator)
+  assert.equal(app.callsTo('listWorkflows').length >= 2, true, `listWorkflows calls: ${app.callsTo('listWorkflows').length}`);
+});
+
+test('#97 Setup: a saved choice, or both AIs ready, saves nothing when the CLIs are checked', { timeout: 30000 }, async () => {
+  const both = await openSetup({ claude: READY('claude', 'Claude Code'), codex: READY('codex', 'Codex CLI') });
+  assert.equal(savedPatches(both).some((p) => 'orchestratorProvider' in p), false);
+  const saved = await openSetup({ claude: READY('claude', 'Claude Code'), codex: READY('codex', 'Codex CLI'), settings: { orchestratorProvider: 'codex' } });
+  assert.equal(savedPatches(saved).some((p) => 'orchestratorProvider' in p), false);
+});
+
+test('#97 Setup: the derived Codex default stays saved after Skip; closing empties the Setup body and redraws Settings\' rows', { timeout: 30000 }, async () => {
+  const app = await openSetup({ claude: MISSING('claude', 'Claude Code'), codex: READY('codex', 'Codex CLI') });
+  app.run('window.__refreshed = 0; window.SettingsClis = window.SettingsClis || {}; window.SettingsClis.refresh = () => { window.__refreshed += 1; };');
+  await app.run('window.Setup.open("first-project")');
+  await app.settle(10);
+  await app.run('window.Setup.skip()');
+  await app.settle(10);
+  assert.equal(app.run('window.Setup.isOpen()'), false, 'the Setup closed');
+  assert.equal(app.run('state.settings.orchestratorProvider'), 'codex', 'Skip keeps the saved orchestrator');
+  assert.equal(savedPatches(app).some((p) => p.orchestratorProvider && p.orchestratorProvider !== 'codex'), false);
+  assert.equal(String(app.el('#setup-modal #setup-body').innerHTML || ''), '', 'no orchestrator radio left in the page');
+  assert.equal(app.run('window.__refreshed'), 1, 'Settings › Agents & CLIs redrawn once');
+});
+
 test('#97 Setup: with Codex chosen and not ready, the missing note names Codex CLI, not Claude Code', { timeout: 30000 }, async () => {
   const workflows = [{ file: 'fix.yaml', name: 'fix', origin: 'bundled', category: 'build', requirements: { clis: ['codex', 'git'], forge: false } }];
   const app = await openSetup({ claude: MISSING('claude', 'Claude Code'), codex: SIGNED_OUT('codex', 'Codex CLI'), settings: { orchestratorProvider: 'codex' }, workflows });
