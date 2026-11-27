@@ -83,6 +83,8 @@ function computerIn(t, locale) {
   t.after(() => { onComputer('en-US'); require('@craftorio/shared/i18n').setLanguage('en'); });
 }
 const PT_LINE = () => load().languageLine({ language: { agents: 'pt-BR', issues: 'en' } });
+// #110: with nothing set, the Issues language follows the interface too (was English, #424)
+const PT_ALL_LINE = () => load().languageLine({ language: { agents: 'pt-BR', issues: 'pt-BR' } });
 
 test('#424 the Product Owner\'s turn, interface unset and the computer in pt-BR: the Portuguese [Language] line', async (t) => {
   computerIn(t, 'pt-BR');
@@ -96,7 +98,7 @@ test('#424 the Product Owner\'s turn without a language, the computer in pt-BR: 
   computerIn(t, 'pt-BR');
   const prompts = stubTurns(t);
   await productOwner.ask({ ...PO_COMMON, backlogDir: tmp(t) });
-  assert.equal(count(prompts[0], PT_LINE()), 1);
+  assert.equal(count(prompts[0], PT_ALL_LINE()), 1);
 });
 
 test('#424 the Oracle on a service whose host\'s locale is pt-BR, nothing set: the Portuguese [Language] line', async (t) => {
@@ -104,7 +106,7 @@ test('#424 the Oracle on a service whose host\'s locale is pt-BR, nothing set: t
   const { service, api } = makeService(t, { locale: 'pt-BR' });
   await api['oracle:ask']({ question: 'What is going on?', mock: true });
   const prompt = fs.readFileSync(path.join(service.workspace().oracle, 'session.md'), 'utf8');
-  assert.equal(count(prompt, PT_LINE()), 1);
+  assert.equal(count(prompt, PT_ALL_LINE()), 1);
 });
 
 // ---- the Supervisor chat --------------------------------------------------------------------------

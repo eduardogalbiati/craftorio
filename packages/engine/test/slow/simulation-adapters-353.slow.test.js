@@ -28,6 +28,8 @@
 // #80: feature.yaml's ui_folders default is empty (no src/renderer/): the test-id check reads this
 // whole checkout ('.'), finds every id and passes on its first visit, so the two returns to develop
 // are gone: re-recorded, two runs gave 397 events.
+// #110: the secret scan's output names its catalog key (message_key, message_params) beside the
+// English message, so the run screens show it in the interface language.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
