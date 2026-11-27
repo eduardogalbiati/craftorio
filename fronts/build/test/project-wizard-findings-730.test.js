@@ -48,8 +48,9 @@ const CITY = { state: 'ok', model: { grouping: 'folders', districts: [{ id: 'src
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-// analyze: what api.analyzeOnboarding (the card Analyze with AI) answers
-function page(analyze = ANALYZED) {
+// analyze: what api.analyzeOnboarding (the card Analyze with AI) answers; urlOf: the filed issue's URL (#105: null for
+// a local issue, a project with no remote)
+function page(analyze = ANALYZED, urlOf = URL_OF) {
   let next = 70;
   return loadApp({
     api: {
@@ -68,7 +69,7 @@ function page(analyze = ANALYZED) {
       updateProject: async (id, patch) => ({ ...clone(PROJECT), ...patch }),
       createFindingIssue: async (projectId, reportId, findingIndex, opts) => {
         next += 1;
-        return { filed: { issue: next, issueUrl: URL_OF(next), stage: opts?.prioritize ? 2 : null, waiting: !!opts?.prioritize } };
+        return { filed: { issue: next, issueUrl: urlOf(next), stage: opts?.prioritize ? 2 : null, waiting: !!opts?.prioritize } };
       },
       addRefactorToRoadmap: async () => ({ proposal: {}, stage: 1, waiting: true }),
     },
@@ -138,8 +139,8 @@ async function emit(app, state) {
   await app.settle(10);
 }
 
-async function atAnalysis(analyze) {
-  const app = page(analyze);
+async function atAnalysis(analyze, urlOf) {
+  const app = page(analyze, urlOf);
   await app.boot();
   app.sandbox.ProjectWizard.open();
   await app.settle(10);
@@ -154,8 +155,8 @@ async function atAnalysis(analyze) {
   return app;
 }
 
-async function reviewDone() {
-  const app = await atAnalysis();
+async function reviewDone(urlOf) {
+  const app = await atAnalysis(undefined, urlOf);
   await press(app, 'wizard-workflows-choice-analyze'); // #100: the analysis is asked for by its card; Next waits for the workflows
   await emit(app, ANALYZED);
   await press(app, 'wizard-next');
@@ -216,6 +217,16 @@ test('#730 the review\'s Create issue and prioritize files and prioritizes the f
   assert.deepEqual(createCalls(app), [[PID, 'r1', 1, true]]);
   assert.equal(inRow(app, 1, 'wizard-review-finding-issue')?.attrs.href, URL_OF(71));
   assert.equal(inRow(app, 1, 'wizard-review-create-issue-prioritize') === null, true, 'no buttons once filed');
+});
+
+test('#105 a finding filed as a local issue (no URL) shows its number, never a link with an empty href', { timeout: 20000 }, async () => {
+  const app = await reviewDone(() => null);
+  await pressIn(app, 0, 'wizard-review-create-issue');
+  const filed = inRow(app, 0, 'wizard-review-finding-issue');
+  assert.equal(filed !== null, true, 'the filed issue is shown');
+  assert.equal(textOf(filed), '#71');
+  assert.equal('href' in filed.attrs && !filed.attrs.href, false, `no empty href: ${filed.outer}`);
+  assert.equal(inRow(app, 0, 'wizard-review-create-issue') === null, true, 'no Create issue any more');
 });
 
 test('#730 Finish sends nothing to the roadmap and files no issue on its own', { timeout: 20000 }, async () => {
