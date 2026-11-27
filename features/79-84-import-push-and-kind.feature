@@ -17,7 +17,7 @@ Feature: An imported repository can push, is named after its folder and is not t
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "push-79"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the wizard warns that the clone cannot push and says to run "gh auth setup-git"
     And the push warning offers a button to set up git's credentials
@@ -43,7 +43,7 @@ Feature: An imported repository can push, is named after its folder and is not t
     Given the app is open
     And a local git repository in the folder "repos/eslint-js" is ready to import
     When I open the project wizard
-    And I choose the other source "Any git URL" in the wizard
+    And I choose the other source "Import from any git URL" in the wizard
     And I type the local repository's folder path in the wizard
     Then the wizard says the repository will be cloned into the folder "eslint-js"
     And the wizard does not say "repos-eslint-js"

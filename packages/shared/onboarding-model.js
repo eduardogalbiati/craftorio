@@ -129,14 +129,14 @@
   // order, and the ones picked by default
   // #738: a new project has no original repository to fork, so it is local or remote only
   // #57: and its kind, asked (an almost empty folder has nothing to detect): the kinds with code, no docs;
-  // frontend by default (a new project usually starts with its first screen)
+  // full-stack first and by default (the owner's call: most new projects have an interface and a server)
   const CREATE_ANSWERS = {
     mode: PROFILE.mode.filter((m) => m !== 'fork'),
     ci: PROFILE.ci,
     release: Object.keys(CHOICES.release),
-    kind: ['frontend', 'full-stack', 'backend'],
+    kind: ['full-stack', 'frontend', 'backend'],
   };
-  const CREATE_DEFAULTS = { mode: 'local', ci: 'release', release: 'milestone', kind: 'frontend' };
+  const CREATE_DEFAULTS = { mode: 'local', ci: 'none', release: 'milestone', kind: 'full-stack' };
   const choicesOf = (kind) => Object.entries(CHOICES[kind]).map(([value, label]) => ({ value, label }));
   // #738: the fork-* variants only for a Fork + PR profile; the local/remote ones for the others
   const variantChoicesOf = (kind, mode) => choicesOf(kind).filter((c) => (mode === 'fork') === c.value.startsWith('fork-'));

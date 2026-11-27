@@ -1,5 +1,6 @@
 // packages/ui-kit/command-hint.js: commandHint's markup (code + play button, #147) and the delegated
-// click handler that confirms, then runs the command in a terminal of the dock. Pure DOM glue
+// click handler that confirms (the accent "▶ Run" button, the exact command as code under the message:
+// confirmDialog's { tone: 'primary', command }), then runs the command in a terminal of the dock. Pure DOM glue
 // (confirmDialog/showToast/errMsg from app.js, openTerminal from term-dock.js, api.termOpen from the
 // preload), so it is run in a vm sandbox against a minimal fake DOM, the way
 // test/renderer-kept-work-dialog.test.js checks kept-work-dialog.js.
@@ -27,7 +28,7 @@ function loadCommandHint({ confirmResult = true, openTerminal } = {}) {
   let clickHandler = null;
   const sandbox = {
     document: { addEventListener: (type, fn) => { if (type === 'click') clickHandler = fn; } },
-    confirmDialog: (title, message, yes) => { confirmCalls.push({ title, message, yes }); return Promise.resolve(confirmResult); },
+    confirmDialog: (title, message, yes, opts) => { confirmCalls.push({ title, message, yes, opts }); return Promise.resolve(confirmResult); },
     openTerminal: openTerminal || (async (opts) => { openCalls.push(opts); return opts.open(80, 24); }),
     api: { termOpen: (args) => { termOpenCalls.push(args); return { id: 'term1' }; } },
     showToast: (title, detail) => toasts.push({ title, detail }),
@@ -70,8 +71,11 @@ test('document click: asks for confirmation with the command shown, and declinin
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(confirmCalls.length, 1);
   assert.equal(confirmCalls[0].title, 'Run this command?');
-  assert.match(confirmCalls[0].message, /gh auth refresh -s user/);
-  assert.equal(confirmCalls[0].yes, 'Run');
+  // the command is shown as code under the message (confirmDialog's `command`), no longer inside the sentence
+  assert.equal(confirmCalls[0].opts.command, 'gh auth refresh -s user');
+  assert.equal(confirmCalls[0].opts.tone, 'primary');
+  assert.equal(confirmCalls[0].message, 'A terminal opens and runs the command below. It may download and install software on this machine. The terminal stays open afterwards.');
+  assert.equal(confirmCalls[0].yes, '▶ Run');
   assert.deepEqual(openCalls, []);
 });
 

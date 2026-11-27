@@ -1,8 +1,10 @@
 // #641 (first-project onboarding, step 4): what the review of the new-project wizard added
 // (fronts/build/views/projects/project-wizard.js) on top of the acceptance tests of
 // project-wizard.test.js: Edit the URL after a refused access, the gh / glab warning on the analysis
-// step, the cost from api.architectureEstimate (I18n.formatCost, "Not known yet"), the tray's dismiss,
-// the focus given back on close(), the analyzed state, and the keys (Enter, Escape) in the dialog.
+// step, the cost from api.architectureEstimate (I18n.formatCost, "unknown until it runs"; since #100 the
+// two cards say it first, wizard-workflows-choice-cost, and the jobs' rows show once Analyze with AI is
+// pressed), the tray's dismiss, the focus given back on close(), the analyzed state (the workflows' rows,
+// asked with Analyze with AI: Next waits for the workflows, #100), and the keys (Enter, Escape) in the dialog.
 // On the real page (packages/ui-kit/test/renderer-app-harness.js), with the contract of
 // project-wizard.test.js's header. Tab's focus trap is not tested here: the harness's
 // querySelectorAll returns [] (no focusable list to walk).
@@ -143,6 +145,8 @@ async function atAnalysis(opts) {
 }
 
 const trayItem = (app, id = PID) => H.findEl(trayMarkup(app), (e) => e.attrs['data-testid'] === 'tray-item' && e.attrs['data-project'] === id);
+// #100: the jobs' rows (wizard-cost) show once the analysis is asked for: the card Analyze with AI
+const analyze = (app) => press(app, 'wizard-workflows-choice-analyze');
 const part = (app, id) => H.findEl(byTestId(wizardMarkup(app), 'wizard-cost')?.outer || '', (e) => e.attrs['data-part'] === id);
 
 // ---- no access: Edit the URL -----------------------------------------------------------------------
@@ -190,6 +194,10 @@ test('#641 the gh warning is still shown on the analysis step after the clone is
 test('#641 the cost shows the project map\'s estimate as an amount, the total known so far (#730: no ranking part; #74: the profile\'s is not known)', async () => {
   const app = await atAnalysis({ estimate: { estimate: { usd: 0.42, basis: 'files' } } });
   await app.settle(10);
+  // before the analysis is asked for, no job row: the card Analyze with AI says what it may cost
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-cost'), null, 'no wizard-cost before the analysis is asked for');
+  assert.equal(textOf(byTestId(wizardMarkup(app), 'wizard-workflows-choice-cost')).includes('$0.42'), true, 'the card says the estimate');
+  await analyze(app);
   assert.equal(textOf(part(app, 'projectMap')).includes('$0.42'), true, `the project map part: ${textOf(part(app, 'projectMap'))}`);
   assert.ok(!part(app, 'ranking'), 'no ranking part since #730');
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
@@ -198,30 +206,45 @@ test('#641 the cost shows the project map\'s estimate as an amount, the total kn
   assert.doesNotMatch(textOf(cost), /ranking/i);
 });
 
-test('#641 with no estimate at all the cost says "Not known yet", never $0', async () => {
+test('#641 with no estimate at all the cost says "unknown until it runs" (once, in the total; the row its AI badge), never $0', async () => {
   const app = await atAnalysis({ estimate: { estimate: null } });
   await app.settle(10);
+  assert.match(textOf(byTestId(wizardMarkup(app), 'wizard-workflows-choice-cost')), /unknown until it runs/, 'the card says the cost is not known');
+  await analyze(app);
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
-  assert.match(textOf(part(app, 'projectMap')), /Not known yet/);
-  assert.equal(textOf(byTestId(cost.outer, 'wizard-cost-total')), 'Not known yet');
+  // the row of an analysis that will call a model says so with its badge; "not known" is said once, in the total
+  const row = part(app, 'projectMap');
+  assert.ok(byTestId(row.outer, 'wizard-job-paid'), 'the project map row carries wizard-job-paid');
+  assert.equal(textOf(H.findEl(row.outer, (e) => String(e.attrs.class || '').split(/s+/).includes('wizard-amount'))), '', 'no amount in the row while it is not known');
+  assert.equal(textOf(byTestId(cost.outer, 'wizard-cost-total')), 'unknown until it runs');
+  assert.match(textOf(byTestId(cost.outer, 'wizard-cost-unknown')), /real amount shows on the Review step/);
   assert.doesNotMatch(textOf(cost), /\$\s?0(\.00)?\b/, 'no $0 in the cost');
 });
 
 test('#641 a cost below one cent is shown as "< $0.01", not $0.00', async () => {
   const app = await atAnalysis({ estimate: { estimate: { usd: 0.004 } } });
   await app.settle(10);
+  await analyze(app);
   assert.equal(textOf(part(app, 'projectMap')).includes('< $0.01'), true, `the project map part: ${textOf(part(app, 'projectMap'))}`);
 });
 
 // ---- the analyzed state ----------------------------------------------------------------------------
 
-test('#641 once analyzed, the analysis step says it is done, offers no Start analysis, and Next goes to the review', async () => {
+test('#641 once analyzed, the analysis step shows the suggested workflows, offers no Start analysis, and Next goes to the review', async () => {
   const app = await atAnalysis();
-  await emit(app, ANALYZED);
+  assert.equal('disabled' in byTestId(wizardMarkup(app), 'wizard-next').attrs, true, '#100: Next waits for the workflows to be defined');
+  await analyze(app);
+  await emit(app, { ...ANALYZED, jobs: { ...ANALYZED.jobs, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } } } });
   assert.equal(currentStep(app), 'analysis');
   const markup = wizardMarkup(app);
-  assert.match(H.visibleText(markup), /analyses are done/i);
+  // the step says the analysis is done by its state: the workflows it suggests, in place of the two cards
+  const column = byTestId(markup, 'wizard-workflows-column');
+  assert.equal(column?.attrs['data-state'], 'analyzed', 'the workflows column is analyzed');
+  assert.match(H.visibleText(column.outer), /Suggested from the git history/);
+  assert.ok(byTestId(markup, 'wizard-workflows-rows'), 'the suggested workflows show');
+  assert.equal(byTestId(markup, 'wizard-cost'), null, 'no job rows nor progress once every analysis ended');
   assert.equal(byTestId(markup, 'wizard-analyze'), null, 'no Start analysis once analyzed');
+  assert.equal(byTestId(markup, 'wizard-workflows-choice-analyze'), null, 'no Analyze with AI once analyzed');
   const next = byTestId(markup, 'wizard-next');
   assert.ok(next, 'Next is offered');
   assert.equal('disabled' in next.attrs, false);

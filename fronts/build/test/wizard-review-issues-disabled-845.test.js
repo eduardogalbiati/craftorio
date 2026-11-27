@@ -3,6 +3,7 @@
 // the card says "Issues are turned off in this repository", with no red error, no Retry, and a link to the
 // repository's settings; Finish still closes the wizard. A network failure keeps its reason and Retry (#781).
 // On the real page (project-wizard-helpers, as project-wizard-backlog-failed-781.test.js). Primitives only.
+// #100: the analysed review is reached with step 3's card Analyze with AI, then Next (a done profile job carries its profile).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -13,10 +14,14 @@ const OFF_TEXT = 'Issues are turned off in this repository';
 const NETWORK = 'gh issue list failed: error connecting to api.github.com';
 const SETTINGS = 'github.com/o/new/settings';
 
+// analysed: the profile job carries the profile it found (step 3's rows, #100)
+const ANALYZED = { ...W.ANALYZED, jobs: { ...W.ANALYZED.jobs, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } } } };
+
 async function atReview(api) {
   const app = await W.atAnalysis({ api: { getBacklog: async () => null, ...api } });
-  await emit(app, W.ANALYZED);
-  await press(app, 'wizard-next');
+  await W.defineWorkflows(app, 'analyze');
+  await emit(app, ANALYZED);
+  await W.toReview(app, 'analyze');
   await app.settle(20);
   return app;
 }

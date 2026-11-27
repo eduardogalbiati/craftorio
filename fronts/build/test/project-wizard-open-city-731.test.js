@@ -4,6 +4,7 @@
 // remembered in sessionStorage 'craftorio.architecture.view' = 'city'). Acceptance test, written before the
 // code, on the real page (packages/ui-kit/test/renderer-app-harness.js), driven as project-wizard-review-642.test.js
 // drives the review. The city the review reads (api.architectureCity) has the plan the onboarding drew.
+// #100: the analysed review is reached with step 3's card Analyze with AI, then Next (a done profile job carries its profile).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -21,8 +22,8 @@ const jobs = (over = {}) => ({
 const CLI_OK = { provider: 'github', status: 'ok' };
 const CLONING = { projectId: PID, status: 'cloning', jobs: jobs(), cli: CLI_OK };
 const READY = { projectId: PID, status: 'ready', jobs: jobs({ clone: { status: 'done' } }), cli: CLI_OK };
-const ANALYZING = { projectId: PID, status: 'analyzing', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'running' } }), cli: CLI_OK };
-const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done' }, projectMap: { status: 'done' }, ranking: { status: 'done' } }), cli: CLI_OK };
+const ANALYZING = { projectId: PID, status: 'analyzing', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } }, projectMap: { status: 'running' } }), cli: CLI_OK };
+const ANALYZED = { projectId: PID, status: 'analyzed', jobs: jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile: { mode: 'remote', ci: 'release', tests: 'unit' } }, projectMap: { status: 'done' }, ranking: { status: 'done' } }), cli: CLI_OK };
 // the city after the onboarding drew its plan (#731): grouped by the plan's districts
 const CITY = {
   state: 'ok',
@@ -128,6 +129,7 @@ async function reviewDone() {
   await emit(app, CLONING);
   await emit(app, READY);
   assert.equal(currentStep(app), 'analysis', 'the wizard is on the analysis step');
+  await press(app, 'wizard-workflows-choice-analyze'); // #100: Next waits for the workflows
   await emit(app, ANALYZED);
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review', 'the wizard is on the review');

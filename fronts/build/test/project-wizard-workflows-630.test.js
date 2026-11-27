@@ -8,8 +8,11 @@
 // - step 3's "Suggested workflows" is one row per kind, data-testid="wizard-workflow" data-kind="<kind>", in the
 //   order feature, fix, release, ci; each row has its reason, data-testid="wizard-workflow-reason" ("Why ..."),
 //   and an enabled select data-testid="wizard-workflow-select" with at least two options;
-// - the "Ways of working profile" line, data-testid="wizard-profile", says the profile's mode (remote: pull
-//   requests).
+// - what the profile found is said once, with the workflows it gives: data-testid="wizard-way-of-working"
+//   (data-mode="remote": pull requests), above the rows. The job row's line, data-testid="wizard-profile", is not
+//   drawn beside the analysed rows any more (visual-layout rework: the job rows show while the analysis runs or
+//   when a job failed); when it shows, it says where the profile is read from and keeps what was found as its
+//   tooltip (title).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -162,18 +165,29 @@ test('#630 step 3: each workflow row has an enabled select with at least two cho
   }
 });
 
-test('#630 step 3: the ways of working profile line says the project works through pull requests', { timeout: 20000 }, async () => {
-  const app = await profiled();
+// what the profile found, as step 3 says it: beside the analysed rows the way of working (wizard-way-of-working);
+// in the job row (wizard-profile, shown here by a failed project map: the rows are listed again) its tooltip
+async function assertSaysPullRequests(app, state) {
+  const way = byTestId(wizardMarkup(app), 'wizard-way-of-working');
+  assert.equal(way === null, false, 'data-testid="wizard-way-of-working"');
+  assert.equal(way.attrs['data-mode'], 'remote');
+  assert.match(textOf(way), /pull request/i);
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-profile'), null, 'no job row beside the analysed rows');
+  await emit(app, { ...clone(state), jobs: { ...clone(state.jobs), projectMap: { status: 'failed', error: 'boom', reason: 'boom' } } });
   const line = byTestId(wizardMarkup(app), 'wizard-profile');
-  assert.equal(line === null, false, 'data-testid="wizard-profile"');
-  assert.match(textOf(line), /pull request|\bPR\b|remote/i);
+  assert.equal(line === null, false, 'data-testid="wizard-profile" once the job rows show');
+  assert.match(textOf(line), /git history/i, 'the row says where the profile is read from');
+  assert.match(String(line.attrs.title || ''), /pull request/i, 'and keeps what was found as its tooltip');
+}
+
+test('#630 step 3: the ways of working line says the project works through pull requests', { timeout: 20000 }, async () => {
+  const app = await profiled();
+  await assertSaysPullRequests(app, PROFILED);
 });
 
-test('#630 step 3: the profile line reads the profile job\'s result when the state has no top-level profile', { timeout: 20000 }, async () => {
+test('#630 step 3: the ways of working line reads the profile job\'s result when the state has no top-level profile', { timeout: 20000 }, async () => {
   const { profile, ...jobOnly } = clone(PROFILED);
   assert.equal(profile === undefined, false, 'the fixture had a top-level profile to drop');
   const app = await profiled(jobOnly);
-  const line = byTestId(wizardMarkup(app), 'wizard-profile');
-  assert.equal(line === null, false, 'data-testid="wizard-profile"');
-  assert.match(textOf(line), /pull request|\bPR\b|remote/i);
+  await assertSaysPullRequests(app, jobOnly);
 });

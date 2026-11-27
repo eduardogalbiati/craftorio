@@ -21,7 +21,7 @@ Feature: The wizard's review lists only the open issues of the backlog
       | Old payment provider     | open   | archived |
       | Translate the emails     | closed |          |
       | Show the order history   | open   |          |
-    When I skip the analysis for later
+    When I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the review's Backlog card says "3 open issues" and lists only the issues:
       | Export orders as CSV   |
@@ -41,7 +41,7 @@ Feature: The wizard's review lists only the open issues of the backlog
       | title                  | state  | labels |
       | Fix the login redirect | closed | bug    |
       | Translate the emails   | closed |        |
-    When I skip the analysis for later
+    When I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the review's Backlog card ends with "No open issues."
     And the review's Backlog card lists no issue

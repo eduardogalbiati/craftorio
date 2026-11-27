@@ -1,25 +1,39 @@
 Feature: First-run Setup
-  On a new workspace, after the workspace dialog and sign-in, a Setup opens: a stepper (Agents, First
-  project; #643 removed Workflows, #69 removed Try it safely) with Back / Next / Skip. Skip or Finish marks the
-  setup as done and it never opens by itself again; Settings › Agents & CLIs can run it again. An existing
-  workspace is marked as set up on upgrade, so it opens on Home. The Setup never changes the simulation
-  mode (Settings › Execution › Developer mode): off on a new workspace, kept where it is on (#69).
+  On a new workspace, after the workspace dialog and sign-in, a Setup opens: a stepper (Connect your AIs,
+  Version control, First project; #643 removed Workflows, #69 removed Try it safely) with Back / Next. The two
+  steps that list CLIs have no Skip, and their Next is locked without a ready AI CLI (Connect your AIs) or
+  without Git (Version control): "Continue with simulations only" is then the way on. Skip, on the last step,
+  or Finish marks the setup as done and it never opens by itself again; Settings › Agents & CLIs can run it
+  again. An existing workspace is marked as set up on upgrade, so it opens on Home. The Setup never changes the
+  simulation mode (Settings › Execution › Developer mode): off on a new workspace, kept where it is on (#69).
 
   # Assumes a first start is a workspace folder with no settings.json, and that Skip asks the app's
-  # confirm dialog before it closes the Setup.
+  # confirm dialog before it closes the Setup. The machine has no AI CLI (CRAFTORIO_E2E_CLI_MISSING, simulation
+  # only), so the first step's lock does not depend on the machine running the scenario. A new workspace has
+  # no project: arriving on First project opens the project wizard over the Setup (#643).
   @issue-319 @smoke
-  Scenario: A new workspace opens the Setup on its Agents step, and Skip leads to Home
-    Given the app is open on a new workspace
-    Then the first-run Setup is open on its "Agents" step
-    And the Setup's stepper reads "Agents" and "First project"
-    And the Setup lists Claude Code, Codex CLI, Grok Build, GitHub CLI, GitLab CLI and Git, each with a status
+  Scenario: A new workspace opens the Setup on its AIs step, which has no Skip, and Skip on its last step leads to Home
+    Given the app is open on a new workspace of a machine with no AI CLI
+    Then the first-run Setup is open on its "Connect your AIs" step
+    And the Setup's stepper reads "Connect your AIs", "Version control" and "First project"
+    And the Setup lists Claude Code, Codex CLI and Grok Build, each with a status
     And the Setup marks "Claude Code" as required
+    And the Setup offers no Skip on this step
+    And the Setup's Next is locked, saying "Connect at least one AI to go on", and it offers "Continue with simulations only" instead
+    When I go to the Setup's next step
+    Then the first-run Setup is open on its "Version control" step
+    And the Setup lists Git, Gitleaks, GitHub CLI and GitLab CLI, each with a status
     And the Setup marks "Git" as required
-    When I skip the Setup and confirm
+    And the Setup offers no Skip on this step
+    When I go to the Setup's next step
+    Then the project wizard is open on its first step
+    When I close the project wizard
+    And I skip the Setup and confirm
     Then the first-run Setup is not shown
     And Home is on its "Overview" tab
 
   # Assumes the renderer reads setupDone when its window loads (so a reload stands for the next start).
+  # Skip is on the Setup's last step: the step goes through the two steps before it.
   @issue-319
   Scenario: A skipped Setup does not open again by itself
     Given the app is open on a new workspace
@@ -38,16 +52,18 @@ Feature: First-run Setup
     When I open "Settings" in the sidebar
     And I open the "Agents & CLIs" settings tab
     And I ask to run the setup again
-    Then the first-run Setup is open on its "Agents" step
+    Then the first-run Setup is open on its "Connect your AIs" step
 
   # The suite runs in simulation only, which shows the Simulation boxes whatever the setting: these
   # scenarios read the saved setting and its switch. Finish opens the Start panel, which the reload closes.
   @issue-69
-  Scenario: Going through the Setup's two steps to Finish leaves the simulation mode off
+  Scenario: Going through the Setup's three steps to Finish leaves the simulation mode off
     Given the app is open on a new workspace
-    Then the first-run Setup is open on its "Agents" step
-    And the Setup's stepper reads "Agents" and "First project"
+    Then the first-run Setup is open on its "Connect your AIs" step
+    And the Setup's stepper reads "Connect your AIs", "Version control" and "First project"
     And the Setup's stepper has no "Try it safely" step
+    When I go to the Setup's next step
+    Then the first-run Setup is open on its "Version control" step
     When I go to the Setup's next step
     Then the project wizard is open on its first step
     When I close the project wizard
@@ -66,8 +82,9 @@ Feature: First-run Setup
     When I open "Settings" in the sidebar
     And I open the "Agents & CLIs" settings tab
     And I ask to run the setup again
-    Then the first-run Setup is open on its "Agents" step
+    Then the first-run Setup is open on its "Connect your AIs" step
     When I go to the Setup's next step
+    And I go to the Setup's next step
     And I finish the Setup
     Then the workspace settings record the setup as done
     And the workspace settings have developer mode "on"

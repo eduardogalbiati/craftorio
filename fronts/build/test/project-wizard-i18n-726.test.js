@@ -15,6 +15,11 @@
 //   selects' options read their labels in that language, their values unchanged;
 // - a live language switch (InterfaceLanguage.apply, Settings › Language › Interface) draws the open
 //   wizard again in the new language, the owner's picks kept.
+// Visual-layout rework (2026-11-26): the profile's labels show beside the analysed rows as the way of working
+// (data-testid="wizard-way-of-working"); the job row's line (data-testid="wizard-profile") shows only with the job
+// rows (while the analysis runs, or when a job failed) and keeps the profile's labels as its tooltip (title): the
+// "profile line" read here is both. The choices' labels were reworded ("Remote PR · E2E first", "Local merge ·
+// Unit, then E2E"); each row's choices also show as tiles (wizard-workflow-tile) with the same labels.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -192,7 +197,19 @@ const selectOf = (row) => H.findEl(row?.outer || '', (e) => e.name === 'select' 
 const optionsOf = (row) => H.findAll(selectOf(row)?.inner || '', (e) => e.name === 'option');
 const pickedOf = (row) => optionsOf(row).find((o) => 'selected' in o.attrs)?.attrs.value ?? null;
 const columnText = (app) => textOf(byTestId(wizardMarkup(app), 'wizard-workflows-column'));
-const profileText = (app) => textOf(byTestId(wizardMarkup(app), 'wizard-profile'));
+// the profile's labels as step 3 draws them: the way of working beside the rows, and the job row's line with its
+// tooltip (shown here by a failed project map: the job rows are listed again); '' for a part not drawn
+const wayText = (app) => textOf(byTestId(wizardMarkup(app), 'wizard-way-of-working'));
+async function profileText(app) {
+  const way = wayText(app);
+  await emit(app, { ...clone(PROFILED), jobs: { ...clone(PROFILED.jobs), projectMap: { status: 'failed', error: 'boom', reason: 'boom' } } });
+  const line = byTestId(wizardMarkup(app), 'wizard-profile');
+  assert.equal(line === null, false, 'data-testid="wizard-profile" with the job rows');
+  assert.equal(String(line.attrs.title || '').length > 0, true, 'its tooltip says what was found');
+  return { way, line: `${textOf(line)} ${line.attrs.title}` };
+}
+// the tiles of a row: their labels (the tooltip holds the whole label)
+const tileLabels = (row) => H.findAll(row?.outer || '', (e) => e.attrs['data-testid'] === 'wizard-workflow-tile').map((e) => norm(e.attrs.title || ''));
 
 // the model's text (a key string, { key, params }, a string of keys, an array) in a language
 const KEY = /onboarding\.[A-Za-z0-9_.-]*[A-Za-z0-9_]/g;
@@ -277,12 +294,18 @@ for (const lang of ['en', 'pt-BR']) {
 test('#726 (pt-BR) the workflows column and the profile line hold none of the model\'s English texts', { timeout: 20000 }, async () => {
   const app = await profiled({ lang: 'pt-BR' });
   const column = columnText(app);
-  const profile = profileText(app);
+  const tiles = KINDS.flatMap((kind) => tileLabels(rowOf(app, kind))).join(' | ');
+  const profile = await profileText(app);
   assert.equal(column.length > 0, true, 'the workflows column is drawn');
-  assert.equal(profile.length > 0, true, 'the profile line is drawn');
+  assert.equal(profile.way.length > 0, true, 'the way of working is drawn');
+  assert.equal(profile.line.length > 0, true, 'the profile line is drawn');
+  assert.match(profile.way, /Remoto: pull requests/);
+  assert.match(profile.line, /Remoto: pull requests · Em pull requests e releases · Unitários e E2E/);
   assert.deepEqual(englishIn(column), [], `the column in pt-BR: ${column}`);
-  assert.deepEqual(englishIn(profile), [], `the profile line in pt-BR: ${profile}`);
-  assert.equal(/onboarding\.\w/.test(column + profile), false, 'no raw i18n key shows');
+  assert.deepEqual(englishIn(tiles), [], `the tiles in pt-BR: ${tiles}`);
+  assert.deepEqual(englishIn(profile.way), [], `the way of working in pt-BR: ${profile.way}`);
+  assert.deepEqual(englishIn(profile.line), [], `the profile line in pt-BR: ${profile.line}`);
+  assert.equal(/onboarding\.\w/.test(column + tiles + profile.way + profile.line), false, 'no raw i18n key shows');
 });
 
 test('#726 (pt-BR) every select option reads in pt-BR, its value unchanged', { timeout: 20000 }, async () => {
@@ -308,9 +331,13 @@ test('#726 (pt-BR) every select option reads in pt-BR, its value unchanged', { t
 test('#726 (en) the select options and the profile line still read in English', { timeout: 20000 }, async () => {
   const app = await profiled();
   const texts = KINDS.flatMap((kind) => optionsOf(rowOf(app, kind)).map((o) => norm(H.visibleText(o.inner))));
-  assert.equal(texts.includes('Remote PRs · E2E first'), true, `the English options: ${texts.join(' | ')}`);
+  assert.equal(texts.includes('Remote PR · E2E first'), true, `the English options: ${texts.join(' | ')}`); // reworded (singular)
   assert.equal(texts.includes('On pull requests and releases'), true, `the English options: ${texts.join(' | ')}`);
-  assert.match(profileText(app), /pull requests/i);
+  // the tiles carry the same labels as the options
+  for (const kind of KINDS) assert.deepEqual(tileLabels(rowOf(app, kind)), optionsOf(rowOf(app, kind)).map((o) => norm(H.visibleText(o.inner))), `the ${kind} tiles`);
+  const profile = await profileText(app);
+  assert.match(profile.way, /Remote: pull requests/);
+  assert.match(profile.line, /Remote: pull requests · On pull requests and releases · Unit and E2E/);
 });
 
 // ---- 4. a live language switch -----------------------------------------------------------------------
@@ -333,7 +360,10 @@ test('#726 switching the interface to pt-BR with the wizard open draws the colum
   assert.equal(fix.labelText.replace(/:$/, ''), 'Por quê', `the label in pt-BR: "${fix.labelText}"`);
   assert.notEqual(fix.reason, enReason, 'the fix reason is drawn again in pt-BR');
   assert.deepEqual(englishIn(columnText(app)), [], `the column after the switch: ${columnText(app)}`);
-  assert.deepEqual(englishIn(profileText(app)), [], `the profile line after the switch: ${profileText(app)}`);
+  const profile = await profileText(app);
+  assert.match(profile.way, /Remoto: pull requests/, 'the way of working is drawn again in pt-BR');
+  assert.deepEqual(englishIn(profile.way), [], `the way of working after the switch: ${profile.way}`);
+  assert.deepEqual(englishIn(profile.line), [], `the profile line after the switch: ${profile.line}`);
 });
 
 test('#726 switching back to English draws the column in English again, the picks kept', { timeout: 20000 }, async () => {
@@ -343,5 +373,5 @@ test('#726 switching back to English draws the column in English again, the pick
   assert.equal(pickedOf(rowOf(app, 'fix')), 'local-e2e', 'the owner\'s fix pick is kept');
   assert.equal(whyOf(rowOf(app, 'ci')).labelText.replace(/:$/, ''), 'Why', 'the label in English');
   const texts = optionsOf(rowOf(app, 'fix')).map((o) => norm(H.visibleText(o.inner)));
-  assert.equal(texts.includes('Code + unit, then E2E · local merge'), true, `the fix options in English: ${texts.join(' | ')}`);
+  assert.equal(texts.includes('Local merge · Unit, then E2E'), true, `the fix options in English: ${texts.join(' | ')}`); // reworded: "<mode> · <tests>"
 });

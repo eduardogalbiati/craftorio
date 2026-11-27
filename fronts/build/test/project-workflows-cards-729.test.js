@@ -9,7 +9,7 @@
 //   data-testid="pj-wf-card" data-workflow-id="<bare name>"; a card shows the workflow's name, its
 //   category (the Workflows screen's section name, wfSectionName(wfSectionOf(category))), the variant
 //   picked in the wizard (the entry's `variant`, read as OnboardingModel's label: feature
-//   'remote-code' → "Remote PRs · code first") and its description (clamped by CSS);
+//   'remote-code' → "Remote PR · code first", singular since the wizard's layout rework of 2026-11-26) and its description (clamped by CSS);
 // - the default's card (project.defaultWorkflow) holds data-testid="pj-wf-default-badge"; every other
 //   card holds a button data-testid="pj-wf-make-default"; every card a button data-testid="pj-wf-remove";
 //   both buttons carry data-workflow-id="<bare name>" themselves (the fake DOM's closest() sees only the
@@ -203,7 +203,7 @@ test('#729 Overview: a card shows its name, its category, the variant picked and
   const plan = String(app.run('wfSectionName(wfSectionOf("plan"))'));
   assert.equal(/feature/i.test(feature), true, `the feature card's name: ${feature}`);
   assert.equal(feature.includes(build), true, `the feature card's category "${build}": ${feature}`);
-  assert.equal(feature.includes('Remote PRs · code first'), true, `the feature card's variant: ${feature}`);
+  assert.equal(feature.includes('Remote PR · code first'), true, `the feature card's variant: ${feature}`);
   assert.equal(refresh.includes('backlog-refresh'), true, `the backlog-refresh card's name: ${refresh}`);
   assert.equal(refresh.includes(plan), true, `the backlog-refresh card's category "${plan}": ${refresh}`);
   const outer = cardOf(app, 'backlog-refresh').outer;
@@ -419,9 +419,9 @@ test('#726 Overview: in pt-BR the cards show the variant and the CI pick in Port
   const app = await overviewOf({ workflows: [FEATURE, RELEASE], defaultWorkflow: 'feature' }, { lang: 'pt-BR' });
   const feature = textOf(cardOf(app, 'feature'));
   const release = textOf(cardOf(app, 'release'));
-  assert.equal(feature.includes('PRs remotos · código primeiro'), true, `the feature card's variant in pt-BR: ${feature}`);
+  assert.equal(feature.includes('PR remoto · código primeiro'), true, `the feature card's variant in pt-BR: ${feature}`);
   assert.equal(release.includes('Em pull requests e releases'), true, `the release card's CI in pt-BR: ${release}`);
-  const leaks = ['Remote PRs', 'Release train', 'On pull requests and releases', 'onboarding.'].filter((s) => (feature + release).includes(s));
+  const leaks = ['Remote PR', 'Release train', 'On pull requests and releases', 'onboarding.'].filter((s) => (feature + release).includes(s));
   assert.deepEqual(leaks, [], `English or raw keys in the cards: ${feature} | ${release}`);
 });
 

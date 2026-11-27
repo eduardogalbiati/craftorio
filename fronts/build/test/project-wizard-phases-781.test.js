@@ -18,7 +18,8 @@
 //   (.activity-line-meta). The pt-BR catalog has "Lendo o histórico do git".
 // - failed: wizard-workflows-failed holds an ActivityLine data-state="failed" with the reason and the
 //   wizard-workflows-retry button. "Define manually" stays.
-// - Continue (wizard-next) is never blocked in any of those states (#725).
+// - Continue (wizard-next) is never blocked by the phases (#725): enabled while they run and once analyzed. #100:
+//   in the failed state it is locked until Retry or Define manually (the workflows are not defined).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('@craftorio/ui-kit/test/page-pieces');
@@ -63,10 +64,10 @@ const stateOf = (app, id) => part(app, id)?.attrs['data-state'] ?? null;
 const lineText = (app, id) => H.visibleText(part(app, id)?.inner || '');
 const interviewReads = (app) => app.callsTo('workflowInterviewState');
 
-function assertContinue(app, when) {
+function assertContinue(app, when, { locked = false } = {}) {
   const next = part(app, 'wizard-next');
   assert.equal(next === null, false, `${when}: Continue is shown`);
-  assert.equal('disabled' in next.attrs, false, `${when}: Continue is enabled`);
+  assert.equal('disabled' in next.attrs, locked, `${when}: Continue is ${locked ? 'locked (#100)' : 'enabled'}`);
 }
 
 // ---- the three lines ------------------------------------------------------------------------------------
@@ -236,11 +237,13 @@ test('#781 Retry of the failed line calls api.retryOnboarding', { timeout: 20000
 
 // ---- Continue --------------------------------------------------------------------------------------------
 
-test('#781 Continue is never blocked by the phases', { timeout: 30000 }, async () => {
+test('#781 Continue is never blocked by the phases; #100: a failed analysis locks it until Define manually', { timeout: 30000 }, async () => {
   const app = await analyzing(answers(GIT_RUNNING));
   assertContinue(app, 'git running');
   await emit(app, PROFILED);
   assertContinue(app, 'analyzed');
   await emit(app, PROFILE_FAILED);
-  assertContinue(app, 'failed');
+  assertContinue(app, 'failed', { locked: true });
+  await press(app, 'wizard-workflows-choice-manual');
+  assertContinue(app, 'failed, then Define manually');
 });

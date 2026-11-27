@@ -22,6 +22,20 @@ All are under the MIT or BSD licenses, except:
 `npm run icons`) was made for this project by its author and is released with it under the
 project's MIT License (see [LICENSE](LICENSE)); it uses no third-party artwork.
 
+## Tool logos (first-run Setup and new-project wizard)
+
+The Setup's cards and the wizard's GitHub / GitLab tabs show each tool's own mark, inlined in
+`packages/ui-kit/setup.js` (`LOGOS`), only to identify the tool the card installs or signs in to:
+
+- Claude, OpenAI (for Codex), Git, GitHub and GitLab: the SVG paths of [Simple Icons](https://simpleicons.org),
+  released under CC0 1.0 Universal.
+- xAI (for Grok): the mark as published on Wikimedia Commons.
+- Gitleaks: the Gitleaks project's avatar (https://github.com/gitleaks), embedded as a PNG and shown inverted;
+  Gitleaks itself is under the MIT License.
+
+The names and marks are trademarks of their owners (Anthropic, OpenAI, X.AI Corp., the Git project / Software
+Freedom Conservancy, GitHub, GitLab, the Gitleaks project). Craftorio is not affiliated with or endorsed by them.
+
 ## Adapted sources (MIT)
 
 ### cursor/plugins: pstack

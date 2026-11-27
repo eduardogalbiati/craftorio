@@ -22,7 +22,8 @@ Feature: Bring a project in with a guided wizard
   # A local git repository (a file:// URL in the scratch folder) stands for a reachable one: the
   # access check (git ls-remote) and the clone work on it without network or credentials.
   @issue-641
-  Scenario: The analysis step shows its cost before anything starts, and skipping it reaches the review
+  # #100: "Skip, analyze later" is gone; Define manually, then Continue, starts no analysis.
+  Scenario: The analysis step shows its cost before anything starts, and leaving it for later reaches the review
     Given the app is open
     And a local git repository is ready to import
     When I open the project wizard
@@ -30,10 +31,10 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "sample-641"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard shows the import of "sample-641" as done
-    And the wizard shows the analysis cost in total and for the project map
+    And the wizard has the import of "sample-641" done, its progress no longer shown
+    And the wizard says what the analysis may cost before anything starts
     And the wizard offers to start the analysis
-    When I skip the analysis for later
+    When I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the progress tray is not shown
 
@@ -107,7 +108,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "dismiss-642"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page shows the Next steps card
@@ -140,7 +141,7 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "sample-644"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard shows the analysis cost in total and for the project map
+    And the wizard says what the analysis may cost before anything starts
     When I start the analysis in the wizard
     Then the progress tray shows the project "sample-644" as analyzed
     When I go to the next step of the wizard
@@ -169,13 +170,13 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "sample-644"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard shows the import of "sample-644" as done
+    And the wizard has the import of "sample-644" done, its progress no longer shown
     And the progress tray is not shown
 
   # #669: step 1 follows docs/work/first-project-onboarding/images/mock-1.jpg. Since #632 Create new
   # project can be chosen (no longer "soon"); its card shows its icon and its three points.
   @issue-669
-  Scenario: The wizard's first step shows the numbered steps, both cards with their icon and points, the other sources and Cancel and Next
+  Scenario: The wizard's first step shows the numbered steps, the three cards with their icon and points, the other source and Cancel and Next
     Given the app is open
     When I open the project wizard
     Then the wizard's title reads "Add a project"
@@ -183,15 +184,19 @@ Feature: Bring a project in with a guided wizard
     And the wizard's steps read "Start", "Repository", "Analysis & workflows" and "Review", numbered from 1, with "Start" current
     And the wizard's "Import a repository" card has an icon and the points "Cloned into your workspace in the background", "Its history shows how you work today" and "City and refactor backlog ready at the end"
     And the wizard's "Create new project" card has an icon and the points "A git repository in your workspace", "Optionally a private GitHub repository" and "Three questions pick its workflows"
+    And the wizard's "Use a local repository" card has an icon and the points "You pick the folder when you go on", "Cloned into your workspace in the background" and "Works without GitHub or GitLab"
     And the wizard's "Create new project" card can be chosen
-    And the wizard offers the other sources "Any git URL" and "A folder on this computer"
-    And the wizard's footer has "Cancel" on the left and "Next" on the right
+    And the wizard's "Use a local repository" card can be chosen
+    And the wizard asks "Only have the address?" and offers the other source "Import from any git URL"
+    And the wizard's footer has "Cancel" then "Next", together on the right
+    When I pick the wizard's "Use a local repository" card
+    Then the wizard's footer has "Cancel" then "Next", together on the right
 
   @issue-669
-  Scenario: Any git URL leads to the Repository step's git URL field
+  Scenario: Import from any git URL leads to the Repository step's git URL field
     Given the app is open
     When I open the project wizard
-    And I choose the other source "Any git URL" in the wizard
+    And I choose the other source "Import from any git URL" in the wizard
     Then the wizard is on its "repository" step
     And the wizard's git URL field is ready to type in
 
@@ -219,7 +224,7 @@ Feature: Bring a project in with a guided wizard
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
     # #725: the rows show only after a choice in the workflows column
-    When I choose "Analyze the repository" in the wizard's suggested workflows
+    When I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard shows the ways of working profile
     And the wizard suggests the workflows "feature", "fix", "release" and "ci"
     And each suggested workflow shows why it is suggested
@@ -239,10 +244,10 @@ Feature: Bring a project in with a guided wizard
     And I choose to create a new project in the wizard
     Then the wizard's title reads "Create new project"
     And the new project starts with "README and .gitignore"
-    And the wizard asks "Where changes land" with "Local: merge here, push main" chosen
-    And the wizard asks "CI" with "On releases: build macOS, Linux, Windows" chosen
+    And the wizard asks "How changes reach main" with "Local merge, then push main" chosen
+    And the wizard asks "CI (automatic builds and tests)" with "None" chosen
     And the wizard asks "How you release" with "Milestones (tags)" chosen
-    And the wizard says "Change them any time in Ways of working. Setting up CI is offered as a next step."
+    And the wizard asks "What you are building" with "Full-stack" chosen
     When I name the new project "Field Notes"
     Then the new project will be created in "projects/field-notes" of the workspace
     When I go to the next step of the wizard
@@ -271,11 +276,11 @@ Feature: Bring a project in with a guided wizard
     And I choose to create a new project in the wizard
     Then the next step of the wizard is unavailable
     When I start the new project with "Empty"
-    And I answer "Local + remote: pull requests on GitHub" to "Where changes land" in the wizard
-    And I answer "None" to "CI" in the wizard
+    And I answer "Pull requests on the remote repository" to "How changes reach main" in the wizard
+    And I answer "On pull requests and releases" to "CI (automatic builds and tests)" in the wizard
     And I answer "Every merge" to "How you release" in the wizard
-    Then the wizard asks "Where changes land" with "Local + remote: pull requests on GitHub" chosen
-    And the wizard asks "CI" with "None" chosen
+    Then the wizard asks "How changes reach main" with "Pull requests on the remote repository" chosen
+    And the wizard asks "CI (automatic builds and tests)" with "On pull requests and releases" chosen
     And the wizard asks "How you release" with "Every merge" chosen
     When I name the new project "Blank Slate"
     And I go to the next step of the wizard
@@ -289,7 +294,7 @@ Feature: Bring a project in with a guided wizard
   # analyzing look stays on screen for its baseline (@visual: the screenshot lane). #781: the notice with its
   # spinner became the analysis phases, one activity line each.
   @issue-725 @visual
-  Scenario: Analyzing the repository dims the suggested workflows under the analysis phases, and Continue stays available
+  Scenario: Analyzing the repository shows the analysis phases over the waiting workflows, and Continue unlocks once the analysis is asked for
     Given the app is open while the "ways of working" analysis keeps running
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -297,15 +302,15 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "analyzing-725"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard's suggested workflows offer "Analyze the repository" and "Define manually" and no workflow yet
-    And the wizard lets me continue to the review
-    When I choose "Analyze the repository" in the wizard's suggested workflows
-    Then the wizard's suggested workflows are dimmed under the analysis phases, with no spinner
+    And the wizard's suggested workflows offer "Analyze with AI" and "Define manually" and no workflow yet
+    And the wizard does not let me continue before the workflows are defined
+    When I choose "Analyze with AI" in the wizard's suggested workflows
+    Then the wizard's suggested workflows wait, not shown, under the analysis phases, with no spinner
     And the wizard lets me continue to the review
     And the wizard's suggested workflows look like the baseline "onboarding-analysis-analyzing.png"
 
   @issue-725
-  Scenario: Defining the workflows manually shows them ready to change at once, and Continue stays available
+  Scenario: Defining the workflows manually shows them ready to change at once, and Continue becomes available
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -332,7 +337,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "failed-725"
     And I go to the next step of the wizard
-    And I choose "Analyze the repository" in the wizard's suggested workflows
+    And I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard's "project map" analysis says why it failed and offers to retry it
     And the wizard's "project map" analysis shows no amount
     And the wizard lets me continue to the review
@@ -340,11 +345,12 @@ Feature: Bring a project in with a guided wizard
 
   # #726: every text of step 3's suggested workflows column follows the interface language (the reasons,
   # the selectors' options, the left column's profile line), and the "Why" of each reason is an element of
-  # its own, bold in the accent colour. The sample repository has no pull request, no CI file and unit tests
+  # its own, before the reason (no longer bold in the accent colour since the layout rework of 2026-11-26). The
+  # sample repository has no pull request, no CI file and unit tests
   # only, so its rows read the local merge reasons. A language switch with the wizard open (what Settings
   # saves, pushed to every window) re-renders the column and keeps the owner's picks.
   @issue-726
-  Scenario: With the interface in Português (Brasil), the suggested workflows read in Portuguese with a highlighted "Por quê:"
+  Scenario: With the interface in Português (Brasil), the suggested workflows read in Portuguese with their "Por quê:" label
     Given the app is open
     And a local git repository with some code is ready to import
     When I open "Settings" in the sidebar
@@ -355,17 +361,17 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "idioma-726"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    When I choose "Analyze the repository" in the wizard's suggested workflows
+    When I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard suggests the workflows "feature", "fix", "release" and "ci"
-    And every suggested workflow shows a highlighted "Por quê:" label
+    And every suggested workflow shows its "Por quê:" label, set apart from the reason
     And the wizard's "suggested workflows" shows none of these English texts:
       | Why:                                         |
-      | Remote PRs                                   |
+      | Remote PR                                    |
       | Local merge                                  |
       | Milestone · tag + notes                      |
       | On pull requests and releases                |
       | the changes are merged on your machine       |
-      | Hotfix mode                                  |
+      | starts from the last tag                      |
       | no CI file was found                         |
     And the wizard's "ways of working profile" shows none of these English texts:
       | Local: merge, then push main |
@@ -381,15 +387,15 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "switch-726"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    When I choose "Analyze the repository" in the wizard's suggested workflows
-    Then every suggested workflow shows a highlighted "Why:" label
+    When I choose "Analyze with AI" in the wizard's suggested workflows
+    Then every suggested workflow shows its "Why:" label, set apart from the reason
     When I pick "Local merge · E2E first" for the suggested "feature" workflow
     And the interface language is switched to "Português (Brasil)" while the wizard stays open
-    Then every suggested workflow shows a highlighted "Por quê:" label
+    Then every suggested workflow shows its "Por quê:" label, set apart from the reason
     And the suggested "feature" workflow still has "Local merge · E2E first" picked, read in "Português (Brasil)"
     And the wizard's "suggested workflows" shows none of these English texts:
       | Why:                                   |
-      | Remote PRs                             |
+      | Remote PR                              |
       | Local merge                            |
       | Milestone · tag + notes                |
       | On pull requests and releases          |
@@ -477,6 +483,7 @@ Feature: Bring a project in with a guided wizard
     Then the wizard is on its "review" step
     And the review lists the Oracle's findings, each with "Create issue" and "Create issue and prioritize"
     And no finding of the review has an issue yet
+    And the review's analysis costs list the project map and no refactor ranking
 
   # #724: the progress tray never covers the wizard. The simulated clone is held (an E2E hook, see
   # onboarding.steps.js) so the import is still running while it is checked.
@@ -571,7 +578,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "po-744"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page shows the Next steps card
@@ -588,7 +595,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "norefactor-744"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page shows the Next steps card
@@ -603,7 +610,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "later-744"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page shows the Next steps card
@@ -619,7 +626,7 @@ Feature: Bring a project in with a guided wizard
     And a local git repository is ready to import
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I enter the local repository and the project name "fork-738"
+    And I enter the path of the local repository and the project name "fork-738"
     And I go to the next step of the wizard
     Then the wizard suggests creating a fork to contribute, or working locally
     When I choose "Create a fork" in the fork suggestion
@@ -633,7 +640,7 @@ Feature: Bring a project in with a guided wizard
     And a local git repository is ready to import
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I enter the local repository and the project name "local-738"
+    And I enter the path of the local repository and the project name "local-738"
     And I go to the next step of the wizard
     Then the wizard suggests creating a fork to contribute, or working locally
     When I choose "Work locally" in the fork suggestion
@@ -658,8 +665,9 @@ Feature: Bring a project in with a guided wizard
   # repository. The pick is the project's workModel (light | standard | full), saved with the wizard while it is
   # open. @visual: the section's baseline is taken in the screenshot lane.
   @issue-633 @visual
-  # #851: Light is now the default; Standard is picked here to show where the files live.
-  Scenario: The Analysis & workflows step shows how work on the project is documented, Standard picked, and where the files live
+  # #851: Light is the default. Owner's decision (2026-11-26): Standard and Full are "Coming soon", shown disabled, so
+  # where the files live (only for a model that writes files) is never shown. The section comes with the workflows' rows.
+  Scenario: The Analysis & workflows step shows how the work is documented, Light picked, Standard and Full coming soon
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -667,22 +675,23 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "Shop"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard shows how work on "Shop" is documented
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard shows how the work is documented
     And the wizard offers the work models:
       | Light    | An issue, then feature or fix. Nothing else is written. |
       | Standard | intent.md → spec.md → plan.md                          |
       | Full     | REVIEW.md                                               |
     And the wizard has the "Light" work model picked
-    When I pick the "Standard" work model in the wizard
-    Then the wizard has the "Standard" work model picked
-    And the wizard's work model files live "In the repository" in "docs/work/<item>/" as "intent.md", "spec.md" and "plan.md"
-    And the wizard's work model files show the chips "fix: issue only", "feature: Standard" and "release: notes"
+    And the "Standard" work model cannot be picked yet, marked "Coming soon"
+    And the "Full" work model cannot be picked yet, marked "Coming soon"
+    And the wizard has the "Light" work model picked
+    And the wizard does not show where the files live
     And the wizard's work model looks like the baseline "onboarding-work-model.png"
 
   # The pick is saved with the wizard while it is open: an onboarding closed on step 3 and resumed from the
   # project's card on the Projects screen (#741) shows it again.
   @issue-633
-  Scenario: The work model picked in the wizard is kept when the onboarding is resumed from the Projects screen
+  Scenario: The work model of the wizard is kept when the onboarding is resumed from the Projects screen
     Given the app is open
     And a local git repository with some code is ready to import
     When I open "Projects" in the sidebar
@@ -691,20 +700,22 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "light-633"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    When I pick the "Standard" work model in the wizard
-    Then the wizard has the "Standard" work model picked
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard has the "Light" work model picked
+    And the "Standard" work model cannot be picked yet, marked "Coming soon"
     When I close the project wizard
     Then the project "light-633" on the Projects screen says its onboarding is not finished and offers Continue
     When I continue the onboarding of the project "light-633" from the Projects screen
     Then the wizard is on its "analysis" step
-    And the wizard has the "Standard" work model picked
+    And the wizard has the "Light" work model picked
+    And the "Standard" work model cannot be picked yet, marked "Coming soon"
 
   # #781: the analysis says what it is doing and what it found, one activity line per phase. The sample
   # repository has 4 commits and JavaScript files. The simulated analysis makes no model call
   # (CRAFTORIO_SIMULATION_ONLY=1), so the Oracle's phase reads "not needed". The line of a phase while it runs
   # (the Oracle's reading and elapsed time) needs a held turn: the unit tests cover it.
   @issue-781
-  Scenario: Step 3 shows the analysis phases ending done with what they found, and Continue stays available
+  Scenario: Step 3's analysis phases end done with what they found, and Continue stays available
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -795,12 +806,12 @@ Feature: Bring a project in with a guided wizard
       | e2e-owner/legacy-shop  | 2026-11-13 |
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I type the repository "LEGACY" in the wizard
+    And I filter my repositories by "LEGACY" in the wizard
     Then the wizard's repository list shows, in order:
       | e2e-owner/legacy-shop |
 
   @issue-848
-  Scenario: With the repository field emptied again the list shows the 5 newest repositories
+  Scenario: With the repository filter emptied again the list shows the 5 newest repositories
     Given the app is open where my GitHub account has the repositories:
       | repository             | updated    |
       | e2e-owner/shop-api     | 2026-11-19 |
@@ -812,10 +823,10 @@ Feature: Bring a project in with a guided wizard
       | e2e-owner/legacy-shop  | 2026-11-13 |
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I type the repository "acme" in the wizard
+    And I filter my repositories by "acme" in the wizard
     Then the wizard's repository list shows, in order:
       | acme-labs/billing |
-    When I clear the repository field in the wizard
+    When I clear the repository filter in the wizard
     Then the wizard's repository list shows, in order:
       | e2e-owner/shop-api     |
       | e2e-owner/field-notes  |
@@ -824,7 +835,7 @@ Feature: Bring a project in with a guided wizard
       | e2e-owner/city-planner |
 
   @issue-848
-  Scenario: A repository URL that matches no repository shows no list and Next still imports it
+  Scenario: The URL field does not filter the list, a filter that matches no repository shows no list, and Next still imports the typed URL
     Given the app is open where my GitHub account has the repositories:
       | repository             | updated    |
       | e2e-owner/shop-api     | 2026-11-19 |
@@ -837,12 +848,17 @@ Feature: Bring a project in with a guided wizard
     And a local git repository is ready to import
     When I open the project wizard
     And I choose to import a repository in the wizard
-    And I type the repository "shop" in the wizard
+    And I filter my repositories by "shop" in the wizard
     Then the wizard's repository list shows, in order:
       | e2e-owner/shop-api    |
       | e2e-owner/legacy-shop |
     When I enter the local repository and the project name "nomatch-848"
+    Then the wizard's repository list shows, in order:
+      | e2e-owner/shop-api    |
+      | e2e-owner/legacy-shop |
+    When I filter my repositories by "no-such-repository" in the wizard
     Then the wizard shows no repository list
+    And the wizard says "No repository with that name."
     When I go to the next step of the wizard
     Then the wizard is on its "analysis" step
 
@@ -858,7 +874,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "noissues-845"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the review's Backlog card says "Issues are turned off in this repository" without a Retry
     And the review's Backlog card links to the repository's settings
@@ -880,7 +896,7 @@ Feature: Bring a project in with a guided wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "offline-845"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the review's Backlog card says why the issues could not be read, mentioning "error connecting to api.github.com", and offers a Retry
     And the review's Backlog card does not say "Issues are turned off in this repository"
@@ -993,7 +1009,7 @@ Feature: Bring a project in with a guided wizard
   # may complete it) and what they cost in the review. No model is called: the simulated analyses act as paid ones
   # with these amounts (the E2E hook described in onboarding.steps.js).
   @issue-74
-  Scenario: The analysis step shows each estimate before anything runs, and the review what each analysis cost
+  Scenario: The analysis step shows what the analyses may cost before anything runs, and the review what each analysis cost
     Given the app is open where the "ways of working" analysis costs 0.42 and the "project map" analysis 0.74
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -1001,10 +1017,8 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "costs-74"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard's "ways of working" analysis shows the amount "$0.42"
-    And the wizard's "ways of working" analysis does not say "free"
-    And the wizard's "project map" analysis shows the amount "$0.74"
-    And the wizard's estimated total is "$1.16"
+    And the wizard's "Analyze with AI" choice says it may cost "$1.16"
+    And the wizard's "Analyze with AI" choice does not say "free"
     When I start the analysis in the wizard
     Then the progress tray shows the project "costs-74" as analyzed
     When I go to the next step of the wizard
@@ -1014,7 +1028,7 @@ Feature: Bring a project in with a guided wizard
     And the review says the analyses cost "$1.16" in total
 
   @issue-74
-  Scenario: Skipping the analysis reaches a review with no cost, the profile's Oracle turn included
+  Scenario: Leaving the analysis for later reaches a review with no cost, the profile's Oracle turn included
     Given the app is open where the "ways of working" analysis costs 0.42 and the "project map" analysis 0.74
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -1022,8 +1036,8 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "skip-74"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard's "ways of working" analysis shows the amount "$0.42"
-    When I skip the analysis for later
+    And the wizard's "Analyze with AI" choice says it may cost "$1.16"
+    When I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the review says "The analyses were skipped: you can start them later."
     And the review shows no analysis cost
@@ -1040,8 +1054,8 @@ Feature: Bring a project in with a guided wizard
     And I enter the local repository and the project name "custos-74"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard's "ways of working" analysis shows the amount "US$ 0,42"
-    And the wizard's "ways of working" analysis does not say "grátis"
+    And the wizard's "Analyze with AI" choice says it may cost "US$ 1,16"
+    And the wizard's "Analyze with AI" choice does not say "grátis"
     When I start the analysis in the wizard
     Then the progress tray shows the project "custos-74" as analyzed
     When I go to the next step of the wizard

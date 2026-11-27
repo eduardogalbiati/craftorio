@@ -168,6 +168,21 @@ function isHidden(app, id) {
   return el.hidden === true || 'hidden' in (el.attrs || {}) || !!el.classList?.contains?.('hidden');
 }
 
+/**
+ * #100: step 3's Next waits for the workflows to be defined. Defines them when they are not yet (the two cards
+ * still show): `how` 'manual' (Define manually, nothing runs) or 'analyze' (Analyze with AI: api.analyzeOnboarding).
+ */
+async function defineWorkflows(app, how = 'manual') {
+  if (byTestId(wizardMarkup(app), 'wizard-workflows-choice-manual')) await press(app, `wizard-workflows-choice-${how}`);
+}
+
+/** From the analysis step to the review: the workflows defined (`how`), then Next. */
+async function toReview(app, how = 'manual') {
+  await defineWorkflows(app, how);
+  await press(app, 'wizard-next');
+  assert.equal(currentStep(app), 'review', 'the wizard is on the review step');
+}
+
 module.exports = {
   ANALYZED,
   ANALYZING,
@@ -185,6 +200,7 @@ module.exports = {
   clickRendered,
   clone,
   currentStep,
+  defineWorkflows,
   emit,
   existing,
   hasSpinner,
@@ -197,6 +213,7 @@ module.exports = {
   press,
   recordWizard,
   toRepository,
+  toReview,
   trayMarkup,
   typeInto,
   wizard,

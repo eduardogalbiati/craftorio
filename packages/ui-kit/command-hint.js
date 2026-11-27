@@ -16,8 +16,9 @@ function commandHint(command, { signIn = false } = {}) {
 // `signIn`: a CLI's sign-in command (#319), confirmed with words that fit it. `onRefused(e)`: what to
 // show when the terminal does not open (#783: the browser UI says where to run it instead).
 async function runSuggestedCommand(command, { signIn = false, onRefused = null } = {}) {
-  const what = signIn ? 'It signs this CLI in to your account (a browser page may open).' : 'It may download and install software on this machine.';
-  const ok = await confirmDialog(t('command_hint.run_this_command'), t('command_hint.a_terminal_opens_and_runs_command', { command, what }), t('command_hint.run'));
+  const what = t(signIn ? 'command_hint.what_sign_in' : 'command_hint.what_install');
+  // nothing is destroyed: the accent button, and the exact command as code under the message
+  const ok = await confirmDialog(t('command_hint.run_this_command'), t('command_hint.a_terminal_opens_and_runs', { what }), `▶ ${t('command_hint.run')}`, { tone: 'primary', command });
   if (!ok) return null;
   try {
     return await openTerminal({ kind: 'command', sessionId: command, label: t('command_hint.command'), open: (cols, rows) => api.termOpen({ kind: 'command', command, cols, rows }) });

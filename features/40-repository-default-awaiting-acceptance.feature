@@ -17,8 +17,10 @@ Feature: A repository's own default workflow says it awaits the owner's acceptan
     And I enter the local repository and the project name "hero-40"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard says the default workflow "ai-development-remote-hero" must be reviewed and accepted before it runs, offering "Review and accept"
-    When I skip the analysis for later
+    # step 3 says it with the workflows' rows, in the Default row (not on its two choices)
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard says the default workflow "ai-development-remote-hero" must be reviewed and accepted before it runs, offering "Review and accept"
+    When I go to the next step of the wizard
     Then the wizard is on its "review" step
     And the wizard says the default workflow "ai-development-remote-hero" must be reviewed and accepted before it runs, offering "Review and accept"
 
@@ -32,7 +34,7 @@ Feature: A repository's own default workflow says it awaits the owner's acceptan
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "hero-start-40"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page of "hero-start-40" is open

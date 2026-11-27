@@ -856,6 +856,8 @@ body.resizing-dock .term-body { pointer-events: none; }
 /* #339: the engine speaks another contract than this page (apps/desktop/renderer/api-http.js), above the others */
 .code-banner.version-skew-banner { z-index: 61; border-color: rgba(248,113,113,.6); }
 #confirm-message { white-space: pre-line; }
+/* the command a confirmation asks to run (command-hint.js): the subject of the dialog, as code */
+.confirm-cmd { display: block; margin: 0 0 16px; padding: 8px 10px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; user-select: all; }
 
 .sup-drawer { width: 640px; z-index: 8; }
 .sup-backdrop { z-index: 7; }

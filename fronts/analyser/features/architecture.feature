@@ -652,7 +652,7 @@ Feature: A project's City and Health tabs tell the owner where the code hurts an
     And I enter the local repository and the project name "city-732"
     And I go to the next step of the wizard
     Then the progress tray shows the project "city-732" as ready
-    When I skip the analysis for later
+    When I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page of "city-732" is open

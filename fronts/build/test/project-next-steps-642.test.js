@@ -126,6 +126,7 @@ async function finished() {
   await emit(app, CLONING);
   await emit(app, READY);
   await emit(app, ANALYZED);
+  await press(app, 'wizard-workflows-choice-manual'); // #100: Continue waits for the workflows, defined by hand here
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review', 'the wizard reached the review');
   await app.settle(10);

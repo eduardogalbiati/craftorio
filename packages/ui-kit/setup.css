@@ -4,27 +4,65 @@
 .setup-modal { z-index: 9; align-items: start; padding-top: 5vh; }
 body.setup-open .term-dock { z-index: 11; }
 .setup-card { width: min(880px, 94vw); max-height: 88vh; display: flex; flex-direction: column; gap: 4px; }
-.setup-card h3 { margin: 12px 0 2px; font-size: 18px; }
+.setup-card h3 { margin: 0 0 6px; font-size: 20px; }
+/* the step's title and lead, with Check again at their right on the steps that list CLIs */
+.setup-head { display: flex; align-items: flex-start; gap: 16px; padding: 20px 0 8px; }
+.setup-head-text { flex: 1; min-width: 0; }
+.setup-head-text p { margin: 0; }
+.setup-check { flex: none; white-space: nowrap; color: var(--muted); font-weight: 500; }
+.setup-check:hover:not(:disabled) { color: var(--text); }
+.setup-check[hidden] { display: none; }
+.setup-check.checking .setup-check-icon { animation: spin 1s linear infinite; }
+/* a step's CLIs as cards: 3 across for the AIs, 2 by 2 for version control */
+.setup-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.setup-tools[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setup-tool { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 200px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
+.setup-tools[data-count="4"] .setup-tool { min-height: 0; }
+.setup-tool-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* the logo centred, the name and the facts under it */
+.setup-logo { align-self: center; width: 56px; height: 56px; margin-top: 8px; border-radius: 12px; display: grid; place-items: center; overflow: hidden; background: var(--panel); border: 1px solid var(--border); font-weight: 700; color: var(--text); }
+.setup-logo svg { width: 30px; height: 30px; }
+.setup-logo img { width: 100%; height: 100%; object-fit: cover; }
+/* the brands' own colours, where they read on the dark panel */
+.setup-logo[data-logo="claude"] { color: #d97757; }
+.setup-logo[data-logo="git"] { color: #f03c2e; }
+.setup-logo[data-logo="glab"] { color: #fc6d26; }
+.setup-tool-name { margin-top: 4px; font-size: 16px; text-align: center; }
+.setup-tool-what { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+/* the version and account: the card's footer line */
+.setup-tool-detail { display: flex; flex-direction: column; gap: 2px; margin: 0; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.4; text-align: center; }
+.setup-tool[data-state="ready"] .setup-tool-detail { min-height: 43px; justify-content: center; }
+/* the version in mono, the account in the interface font */
+.setup-tool-detail > span { font-family: var(--mono); }
+.setup-tool-detail > .setup-tool-account { font-family: inherit; font-size: 12px; }
+/* how to install a CLI without a one-line installer: prose, two lines at most */
+.setup-tool-detail.hint { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow: hidden; padding: 10px 0 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; font-family: inherit; font-size: 12px; line-height: 1.4; text-align: center; }
+.setup-tool-grow { flex: 1; }
+.setup-tool .btn { width: 100%; margin-top: 0; padding: 7px 14px; font-size: 13px; }
+@media (max-width: 640px) { .setup-tools, .setup-tools[data-count="4"] { grid-template-columns: minmax(0, 1fr); } }
 .setup-top { align-items: center; gap: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--border); }
 .setup-stepper { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
 /* #329 the interface language, at the stepper's right */
 .setup-language { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.setup-step { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); font-size: 12px; white-space: nowrap; }
+.setup-step { display: inline-flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border-radius: 99px; border: 1px solid transparent; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .setup-num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); font-size: 11px; font-weight: 600; }
 .setup-step.done { color: var(--text); }
 .setup-step.done .setup-num { background: rgba(74,222,128,.15); color: var(--green); }
 .setup-step[aria-current="step"] { color: var(--text); border-color: rgba(124,156,255,.45); background: rgba(124,156,255,.14); }
-.setup-step[aria-current="step"] .setup-num { background: var(--accent); color: #fff; }
-.setup-body { flex: 1; min-height: 0; overflow: auto; padding: 8px 0 12px; display: flex; flex-direction: column; gap: 10px; }
+.setup-step[aria-current="step"] .setup-num { background: var(--accent); color: #0b0d12; }
+.setup-body { flex: 1; min-height: 0; overflow: auto; padding: 8px 0 16px; display: flex; flex-direction: column; gap: 12px; }
 .setup-body > p { margin: 0; }
 .setup-actions { padding-top: 10px; border-top: 1px solid var(--border); }
 .setup-actions .spacer { flex: 1; }
+/* Next takes the focus when a step opens (Enter = Next): no ring around it */
+#btn-setup-next:focus-visible { outline: none; }
+.setup-actions .btn[hidden], .setup-actions .link-btn[hidden] { display: none; }
 .setup-row { align-items: center; gap: 10px; }
 .setup-cli .s-ctrl { display: flex; align-items: center; gap: 8px; }
 .setup-conn[data-state="checking"] .conn-dot { background: var(--accent); animation: pulse 1.2s infinite; }
 .setup-conn[data-state="signed-out"] .conn-dot { background: var(--yellow); }
 .setup-modal .badge { font-family: inherit; }
-.badge.setup-required { color: var(--accent); }
+.badge.setup-required { color: var(--orange); border-color: rgba(251,146,60,.4); }
 .setup-cmd { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-modal .setup-out { margin: 4px 0 0; padding: 6px 8px; max-height: 6.5em; overflow: auto; font-size: 11px; white-space: pre-wrap; background: var(--panel-2); border-radius: 6px; color: var(--muted); }
 .setup-note { margin: 0; }
@@ -41,3 +79,49 @@ body.setup-open .term-dock { z-index: 11; }
 .cli-device-code { font-family: var(--mono); font-size: 16px; letter-spacing: 1px; }
 .cli-console-out { margin: 0; padding: 6px 8px; max-height: 14em; overflow: auto; font-size: 11px; font-family: var(--mono); white-space: pre-wrap; color: var(--muted); }
 .setup-empty { padding: 28px 16px; }
+.setup-tool .setup-cmd { display: block; padding: 6px 10px; line-height: 1.4; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); text-align: left; }
+/* the card says its state: ready in green, the required one still to connect in orange */
+.setup-tool[data-state="ready"] { border-color: rgba(74,222,128,.3); }
+.setup-tool[data-required]:not([data-state="ready"]):not([data-state="checking"]) { border-color: rgba(251,146,60,.4); }
+/* an optional CLI that is not installed is no alarm: only the required one keeps the red dot */
+.setup-tool:not([data-required]) .setup-conn.off:not([data-state="signed-out"]):not([data-state="checking"]) .conn-dot { background: var(--muted); }
+/* one primary action on the step: the required CLI's; the optional ones' are plain buttons */
+.setup-tool:not([data-required]) .btn.primary { background: transparent; border-color: #3a4152; color: var(--text); }
+/* the card's two chips share the pill shape */
+.setup-tool-top .badge { padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; background: transparent; }
+.setup-tool-top .badge:not(.setup-required) { color: var(--muted); }
+.setup-tool-top .conn { padding: 3px 9px; font-size: 11px; }
+/* what will not run, as a quiet callout */
+.setup-body > .setup-note { padding: 10px 12px; border: 1px solid rgba(251,146,60,.4); border-radius: 8px; background: rgba(251,146,60,.08); color: var(--text); font-size: 13px; line-height: 1.45; }
+.setup-actions .btn.primary:disabled { background: var(--panel-2); border-color: var(--border); color: var(--muted); opacity: 1; }
+.setup-actions .btn.ghost:disabled { opacity: 1; color: var(--muted); }
+.setup-actions .link-btn { font-weight: 400; font-size: 12px; color: var(--muted); text-decoration: underline; text-decoration-color: #3a4152; text-underline-offset: 3px; }
+.setup-actions .link-btn:hover { color: var(--text); text-decoration-color: var(--muted); }
+/* while a CLI is being checked its card keeps the room of the footer line, so the dialog does not jump when the check ends */
+.setup-tool[data-state="checking"]::after { content: ""; flex: none; height: 45px; }
+/* the version control step: four tools, so each card lies down (logo at the left, the command and its
+   button on one line) and the 2 by 2 grid fits a short window; the AIs step keeps its upright cards */
+.setup-tools[data-count="4"] .setup-tool {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-areas: "top top top" "logo name name" "logo what what" "detail detail detail" "cmd cmd btn" "out out out";
+  align-content: start; gap: 0 12px; min-height: 0; padding: 16px;
+}
+.setup-tools[data-count="4"] .setup-tool-top { grid-area: top; margin-bottom: 12px; }
+.setup-tools[data-count="4"] .setup-logo { grid-area: logo; align-self: center; width: 44px; height: 44px; margin-top: 0; border-radius: var(--radius); }
+.setup-tools[data-count="4"] .setup-logo svg { width: 24px; height: 24px; }
+.setup-tools[data-count="4"] .setup-tool-name { grid-area: name; align-self: end; margin-top: 0; text-align: left; }
+.setup-tools[data-count="4"] .setup-tool-what { grid-area: what; align-self: start; text-align: left; }
+.setup-tools[data-count="4"] .setup-tool-grow { display: none; }
+.setup-tools[data-count="4"] .setup-tool .setup-tool-detail { grid-area: detail; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 6px; min-height: 32px; margin-top: 12px; padding-top: 13px; line-height: 18px; text-align: left; }
+.setup-tools[data-count="4"] .setup-tool-detail > span + .setup-tool-account::before { content: "·"; margin-right: 6px; }
+.setup-tools[data-count="4"] .setup-tool .setup-tool-detail.hint { grid-area: cmd; align-self: center; min-height: 0; padding: 0; border: 0; line-height: 1.4; }
+.setup-tools[data-count="4"] .setup-tool .setup-cmd { grid-area: cmd; align-self: center; margin-top: 12px; padding: 6px 8px; line-height: 18px; }
+.setup-tools[data-count="4"] .setup-tool .btn { grid-area: btn; align-self: center; width: auto; margin-top: 12px; padding: 5px 12px; line-height: 20px; white-space: nowrap; }
+.setup-tools[data-count="4"] .setup-out { grid-area: out; margin-top: 8px; }
+.setup-tools[data-count="4"] .setup-tool[data-state="checking"]::after { grid-area: detail; height: 32px; margin-top: 12px; }
+.setup-tools[data-count="4"] .setup-tool:not([data-required]) .btn { font-weight: 500; }
+.setup-tools[data-count="4"] ~ .setup-note { text-wrap: balance; }
+/* the Gitleaks avatar is dark on white: inverted, its drawing reads as a light mark on the tile like the others */
+.setup-logo[data-logo="gitleaks"] { isolation: isolate; }
+.setup-logo[data-logo="gitleaks"] img { filter: invert(1); mix-blend-mode: screen; }
+.setup-tools[data-count="4"] .setup-tool-detail > span { line-height: 18px; }

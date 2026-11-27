@@ -425,15 +425,18 @@ function applyDeveloperMode() {
 function openModal(sel) { $(sel).classList.remove('hidden'); }
 function closeModal(sel) { $(sel).classList.add('hidden'); }
 
-function confirmDialog(title, message, yes = t('common.confirm')) {
-  $('#confirm-title').textContent = title;
-  $('#confirm-message').textContent = message;
+// `tone: 'primary'`: an accent yes button for an action that destroys nothing (red stays for deletes and stops); `command`: shown
+// as code under the message. The default look is restored on close: other dialogs fill this modal themselves (project-remove.js)
+function confirmDialog(title, message, yes = t('common.confirm'), { tone = 'danger', command = '' } = {}) {
+  const yesBtn = $('#btn-confirm-yes');
+  const look = (primary, text) => { yesBtn.classList.toggle('danger-solid', !primary); yesBtn.classList.toggle('primary', primary); $('#confirm-command').textContent = text; $('#confirm-command').classList.toggle('hidden', !text); };
+  $('#confirm-title').textContent = title; $('#confirm-message').textContent = message;
   $('#confirm-details').classList.add('hidden');
-  $('#btn-confirm-yes').textContent = yes;
+  yesBtn.textContent = yes; look(tone === 'primary', command);
   openModal('#confirm-modal');
   return new Promise((resolve) => {
-    $('#btn-confirm-yes').onclick = () => { closeModal('#confirm-modal'); resolve(true); };
-    $('#btn-confirm-no').onclick = () => { closeModal('#confirm-modal'); resolve(false); };
+    const done = (answer) => { closeModal('#confirm-modal'); look(false, ''); resolve(answer); };
+    yesBtn.onclick = () => done(true); $('#btn-confirm-no').onclick = () => done(false);
   });
 }
 

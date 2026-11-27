@@ -1,16 +1,18 @@
 Feature: Setup and Projects lead to the new-project wizard
-  The first-run Setup has two steps (Agents, First project; #69 removed Try it safely): its Workflows step
-  is gone, since the wizard chooses a project's workflows. Its last step opens the new-project wizard.
-  Projects › New project, in the screen's header and in its empty state, opens the wizard too.
+  The first-run Setup has three steps (Connect your AIs, Version control, First project; #69 removed Try it
+  safely): its Workflows step is gone, since the wizard chooses a project's workflows. Its last step opens the
+  new-project wizard. Projects › New project, in the screen's header and in its empty state, opens the wizard too.
 
   # A new workspace has no project: arriving on the Setup's last step opens the wizard by itself,
   # as it opened the old New project dialog.
   @issue-643
-  Scenario: The Setup has two steps without Workflows, and its last step opens the wizard
+  Scenario: The Setup has three steps without Workflows, and its last step opens the wizard
     Given the app is open on a new workspace
-    Then the first-run Setup is open on its "Agents" step
-    And the Setup's stepper reads "Agents" and "First project"
+    Then the first-run Setup is open on its "Connect your AIs" step
+    And the Setup's stepper reads "Connect your AIs", "Version control" and "First project"
     And the Setup's stepper has no "Workflows" step
+    When I go to the Setup's next step
+    Then the first-run Setup is open on its "Version control" step
     When I go to the Setup's next step
     Then the project wizard is open on its first step
 
