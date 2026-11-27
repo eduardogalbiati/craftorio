@@ -216,6 +216,9 @@ function readRun(runsDir, runId) {
     // #72: what was recorded (the index keeps it); the lists add what settings.prices price (run-lists.js)
     costUsd: recorded.usd,
     costApprox: recorded.approx,
+    // #117: no session has a cost (a Codex run on a ChatGPT account), or the total misses one
+    costUnknown: recorded.unknown,
+    costPartial: recorded.partial,
     tokens: sumTokens(sessions),
     projectId: summary?.project_id || started?.project_id || null,
     // the issues the run implements (Backlog); runs recorded before groups have one `issue`

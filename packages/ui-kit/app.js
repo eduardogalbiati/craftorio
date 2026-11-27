@@ -641,7 +641,9 @@ const RUN_EVENT_REDUCERS = {
   'session.message_received': (v, ev, sess, effects) => {
     if (sess) {
       const own = upgradedTail(v, ev).at(-1);
-      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, ...(own.cost_source === 'unknown' ? { unknown: true } : {}), duration: ev.duration_ms };
+      // #117: a turn with no cost recorded (Codex on a ChatGPT account) is unknown too (SessionCost.turnCost)
+      const unknown = own.cost_source === 'unknown' || SessionCost.turnCost(own).unknown;
+      getTurn(sess, ev.turn).result = { usage: ev.usage, cost: own.cost_usd, ...(unknown ? { unknown: true } : {}), duration: ev.duration_ms };
       Object.assign(sess, own.session);
       orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
     }
@@ -891,8 +893,8 @@ function renderTicking() {
 }
 
 function totals(sessions = state.sessions) {
-  const { usd: cost, approx } = SessionCost.runCost([...sessions.values()], state.usage?.prices); // #72
-  const t = { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, cost, approx };
+  const { usd: cost, approx, unknown, partial } = SessionCost.runCost([...sessions.values()], state.usage?.prices); // #72, #117
+  const t = { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, cost, approx, unknown, partial };
   sessions.forEach((s) => {
     for (const k of ['input', 'output', 'cache_read', 'cache_write', 'reasoning']) t[k] += s.tokens?.[k] || 0;
   });

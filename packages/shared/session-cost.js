@@ -54,17 +54,26 @@
     return unknownOf(s) != null || (sessionCost(s, prices) == null && totalTokens(s.tokens) > 0);
   }
 
+  // #117: tokens with no cost at all (a Codex turn on a ChatGPT account, a model with no price): its cost is unknown
+  const unpriced = (s, prices = {}) => s.provider !== 'mock' && unknownOf(s) == null && sessionCost(s, prices) == null && totalTokens(s.tokens) > 0;
+
+  // { usd, approx, unknown, partial }: #117 `unknown` when no session has a cost and some has unpriced
+  // tokens (drawn "unknown", never $0.00); `partial` when the total misses such a session's cost
   function runCost(sessions, /** @type {Record<string, any> | null} */ prices = {}) {
     const list = sessions || [];
-    return { usd: list.reduce((a, s) => a + (sessionCost(s, prices) || 0), 0), approx: list.some((s) => isApprox(s, prices)) };
+    const usd = list.reduce((a, s) => a + (sessionCost(s, prices) || 0), 0);
+    const missing = list.some((s) => unpriced(s, prices));
+    return { usd, approx: list.some((s) => isApprox(s, prices)), unknown: missing && !usd, partial: missing && !!usd };
   }
 
   const tokenPricedUsd = (sessions, prices = {}) => runCost(sessions, prices).usd - runCost(sessions, null).usd;
 
-  // A turn's event (session.message_received): { usd, approx }
+  // A turn's event (session.message_received): { usd, approx, unknown }; #117: a turn with no cost
+  // recorded (cost_usd null, a Codex turn on a ChatGPT account) is unknown, never $0.00
   function turnCost(ev) {
     const unknown = ev.cost_usd == null && ev.cost_source === 'unknown';
-    return { usd: Number(unknown ? ev.cli_cost_usd : ev.cost_usd) || 0, approx: unknown };
+    const none = ev.cost_usd === null && !ev.cost_source && !ev.cost_not_recorded && ev.session?.provider !== 'mock';
+    return { usd: Number(unknown ? ev.cli_cost_usd : ev.cost_usd) || 0, approx: unknown || none, unknown: none };
   }
 
   const api = {

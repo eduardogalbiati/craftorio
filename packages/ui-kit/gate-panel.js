@@ -154,8 +154,10 @@ function gateNextTurnsHtml(runId, g) {
   const now = Date.now();
   const turns = SessionCache.agentNextTurns([...run.sessions.values()], now);
   const names = run.run?.agentNames;
-  const entries = turns.map(({ agent, turn }) => `<span class="next-turn" data-next-turn="${esc(turn.kind)}" title="${esc(SessionCache.turnTitle(turn))}">${esc(agentLabel(agent, names))} ${esc(SessionCache.gateTurnText(turn))}</span>`);
-  const lead = SessionCache.continueLead(turns);
+  // #117: in the interface language, with the phone page's catalog keys (mobile-gates-page.js)
+  const text = (key, en) => I18n.translated(`phone_page.turn_${key}`, en);
+  const entries = turns.map(({ agent, turn }) => `<span class="next-turn" data-next-turn="${esc(turn.kind)}" title="${esc(SessionCache.turnTitle(turn))}">${esc(agentLabel(agent, names))} ${esc(SessionCache.gateTurnText(turn, text))}</span>`);
+  const lead = SessionCache.continueLead(turns, text);
   const cold = turns.filter((x) => x.turn.cost_usd > 0);
   const usd = cold.reduce((a, x) => a + x.turn.cost_usd, 0);
   return `<p class="gate-next-turns small" data-testid="gate-next-turns"><b>${t('gate_panel.continue')}</b> ${[lead && esc(lead), ...entries].filter(Boolean).join(' · ')}${cold.length > 1 ? t('gate_panel.value_in_all', { value: usd.toFixed(2) }) : ''}</p>`;

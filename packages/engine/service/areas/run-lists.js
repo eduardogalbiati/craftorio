@@ -82,6 +82,8 @@ module.exports = (ctx) => {
       progress: current ? run.trail.steps : r.progress,
       costUsd: cost.usd,
       costApprox: cost.approx,
+      costUnknown: cost.unknown, // #117
+      costPartial: cost.partial,
       sessions: sessions.map((x) => {
         const why = cliReason(x, providers, current);
         return { ...x, cliAvailable: !why, cliReason: why };

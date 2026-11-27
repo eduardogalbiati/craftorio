@@ -254,7 +254,7 @@ function runListRow(r, pv) {
         <span class="pr-meta"><label>${t('run_list.started')}</label>${r.startedAt ? `<span data-testid="run-list-started"${typeof TimeZone !== 'undefined' ? ` title="${esc(TimeZone.titleOf(r.startedAt, TimeZone.current()))}"` : ''}>${esc(dateOf(r.startedAt))}</span>` : '—'}</span>
         <span class="pr-meta"><label>${t('run_list.duration')}</label>${fmtDur(dur)}</span>
         <span class="pr-meta"><label>${t('run_list.tokens')}</label>${fmtTok(r.tokens?.total)}</span>
-        <span class="pr-meta"><label>${t('run_list.cost')}</label><span data-testid="run-list-cost">${fmtUsd(r.costUsd, r.costApprox)}</span>${r.childrenCostUsd ? ` <span class="muted small" title="${t('run_list.what_its_child_runs_cost_their')}">${t('run_list.childrencostusd_child_runs', { childrenCostUsd: fmtUsd(r.childrenCostUsd, r.childrenCostApprox) })}</span>` : ''}</span>
+        <span class="pr-meta"><label>${t('run_list.cost')}</label><span data-testid="run-list-cost">${runCostText({ usd: r.costUsd, approx: r.costApprox, unknown: r.costUnknown, partial: r.costPartial }, fmtUsd)}</span>${r.childrenCostUsd ? ` <span class="muted small" title="${t('run_list.what_its_child_runs_cost_their')}">${t('run_list.childrencostusd_child_runs', { childrenCostUsd: fmtUsd(r.childrenCostUsd, r.childrenCostApprox) })}</span>` : ''}</span>
         <span class="pr-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
         ${runProgressStrip(r)}
       </div>
@@ -510,8 +510,16 @@ function sessionCostText(s, fmt) {
   const prices = state.usage?.prices;
   const recorded = s.cost_usd ?? s.costUsd;
   if (SessionCost.unknownUsd(s.cost_estimate || s.costEstimate) != null) return `<span class="muted"${approxTitle()}>${recorded ? fmt(recorded, true) : t('run_list.cost_unknown')}</span>`;
-  if (SessionCost.isApprox(s, prices) && !s.cost_not_recorded && !s.costNotRecorded) return `<span class="muted" title="${esc(t('run_list.no_price_for_this_model_see'))}">—</span>`;
+  // #117: tokens with no cost (a Codex turn on a ChatGPT account) read "unknown", never "—" nor $0.00
+  if (SessionCost.isApprox(s, prices) && !s.cost_not_recorded && !s.costNotRecorded) return `<span class="muted" title="${esc(t('run_list.no_price_for_this_model_see'))}">${t('run_list.cost_unknown')}</span>`;
   return fmt(SessionCost.sessionCost(s, prices) ?? recorded);
+}
+// #117: a run's total (SessionCost.runCost): "unknown" when nothing has a price, "≈ $x (partial)" when a
+// session's cost is missing from it; the run list, its sessions' total and the Run screen
+function runCostText(cost, fmt) {
+  if (cost.unknown) return `<span class="muted"${approxTitle()}>${t('run_list.cost_unknown')}</span>`;
+  if (cost.partial) return `${fmt(cost.usd, true)} <span class="muted"${approxTitle()}>(${t('run_list.cost_partial')})</span>`;
+  return fmt(cost.usd, cost.approx);
 }
 // The Run screen's top-bar cost (app.js renderHeader): the run's sessions' marks after the total.
 function sessionsCostMarks(sessions) {
@@ -521,10 +529,18 @@ function sessionsCostMarks(sessions) {
 // #262: the provider and model that answered (a simulated session shows its workflow provider) and,
 // for the session an agent fell back to, the provider · model it left and why.
 const providerModel = (entry) => String(entry || '').replace(':', ' · ');
+// #117: a session's provider tag: the CLI's short name ("Codex"), else the provider as recorded
+function cliName(provider) {
+  const cli = window.Providers?.resolve(provider);
+  return cli?.cli ? cli.short : provider;
+}
+// #117: the account the session ran on (#312) on hover, never as the tag ("chatgpt" is not the CLI)
+const accountTitle = (s) => (s.account ? `${t('run_list.account')}: ${s.account}` : '');
 function sessionProviderCell(s) {
   const provider = s.simulates || s.provider;
   const fb = s.fallbackFrom;
-  return `<span class="badge p-${esc(provider)}"${s.simulates ? ` title="${t('run_list.simulated_no_model_was_called')}"` : ''}>${esc(provider)}</span> <span class="mono small">${esc(s.model || '')}</span>${s.account ? ` <span class="badge" data-testid="run-session-account" title="${t('run_list.account')}">${esc(s.account)}</span>` : ''}${fb
+  const title = [s.simulates ? t('run_list.simulated_no_model_was_called') : '', accountTitle(s)].filter(Boolean).join('\n');
+  return `<span class="badge p-${esc(provider)}"${title ? ` title="${esc(title)}"` : ''}${s.account ? ` data-account="${esc(s.account)}"` : ''}>${esc(cliName(provider))}</span> <span class="mono small">${esc(s.model || '')}</span>${fb
     ? `<div class="pr-fallback small" data-testid="run-session-fallback" title="${esc(fb.reason || '')}"><span class="badge warn">${t('run_list.fallback')}</span> ${t('run_list.from')} <span class="mono">${esc(providerModel(fb.from))}</span>: ${esc(String(fb.reason || '').slice(0, 80))}</div>` : ''}`;
 }
 // #369: a session on a model the installed Claude Code does not know (estimate: the snapshot's
@@ -546,7 +562,7 @@ function sessionsTotalRow(sessions) {
   const cost = SessionCost.runCost(sessions, state.usage?.prices); // #72
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
   return `<tfoot><tr class="pr-total"><td colspan="3">${t('run_list.total')}</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
-    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost"${cost.approx ? approxTitle() : ''}>${fmtUsd(cost.usd, cost.approx)}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
+    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost"${cost.approx ? approxTitle() : ''}>${runCostText(cost, fmtUsd)}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td><td></td></tr></tfoot>`;
 }
 // #320: how the session's next turn starts (apps/desktop/renderer/session-cache.js): the text leads, the
 // colour follows (warm green, cold orange); — for a closed session. Run screen too (views/run/run.js).

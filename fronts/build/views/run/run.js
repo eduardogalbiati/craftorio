@@ -792,8 +792,8 @@ function renderSessions() {
         <span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span>
       </div>
       <div class="badges">
-        <span class="badge p-${esc(s.simulates || s.provider)}">${esc(s.simulates || s.provider)}</span>
-        <span class="badge">${esc(s.model)}</span>${s.account ? `<span class="badge" data-testid="run-session-account">${esc(s.account)}</span>` : ''}
+        <span class="badge p-${esc(s.simulates || s.provider)}"${s.account ? ` title="${esc(accountTitle(s))}" data-account="${esc(s.account)}"` : ''}>${esc(cliName(s.simulates || s.provider))}</span>
+        <span class="badge">${esc(s.model)}</span>
         ${isOrch ? '' : `<span class="badge">${s.turns || 0} ${I18n.t('run.turn_s')}</span>`}
       </div>
       <div class="metrics">
@@ -801,7 +801,7 @@ function renderSessions() {
         ${isOrch ? `
         <div class="metric"><label>${I18n.t('run.steps')}</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
         <div class="metric"><label>${I18n.t('run.child_sessions')}</label><b>${list.length - 1}</b></div>
-        <div class="metric"><label>${I18n.t('run.total_cost')}</label><b data-testid="run-total-cost"${sum.approx ? approxTitle() : ''}>${fmtCost(sum.cost, sum.approx)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
+        <div class="metric"><label>${I18n.t('run.total_cost')}</label><b data-testid="run-total-cost"${sum.approx ? approxTitle() : ''}>${runCostText({ usd: sum.cost, approx: sum.approx, unknown: sum.unknown, partial: sum.partial }, fmtCost)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
         <div class="metric" title="${I18n.t('run.what_its_child_runs_cost_their')}"><label>${I18n.t('run.child_runs_cost')}</label><b>${childRunsCostText(state.run)}</b></div>` : ''}` : `
         <div class="metric"><label>${I18n.t('run.active')}</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>${I18n.t('run.in_out')}</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
@@ -856,9 +856,9 @@ function renderDetail() {
 
   let html = `
     <div class="detail-head">
-      <h3 title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))} <span class="muted small mono">${esc(s.agent)}</span> <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="badge">${esc(s.model)}</span></h3>
+      <h3 title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))} <span class="muted small mono">${esc(s.agent)}</span> <span class="badge p-${esc(s.provider)}"${s.account ? ` title="${esc(accountTitle(s))}"` : ''}>${esc(cliName(s.provider))}</span> <span class="badge">${esc(s.model)}</span></h3>
       <div class="detail-actions">
-        ${termButtons('live', s.id === 'orchestrator' ? 'Follow the orchestrator log (steps, transitions, sessions, approvals) in a terminal' : 'Follow this session live in a terminal')}
+        ${termButtons('live', s.id === 'orchestrator' ? t('run.follow_the_orchestrator_log_in_a_terminal') : t('run.follow_this_session_live_in_a_terminal'))}
         ${s.id === 'orchestrator' ? '' : termButtons('cli', '', cliBlocked(s))}
         ${s.id === 'orchestrator' ? `<button class="btn sm ghost sup-btn" data-sup><span class="sup-mark">◆</span> ${t('run.ask_the_supervisor')}</button>` : ''}
         <span class="muted small" data-term-msg></span>
@@ -878,6 +878,7 @@ function renderDetail() {
     html += `<div class="orch-log">${state.orchLog.map((l) =>
       `<div class="line ${esc(l.level)}"><span class="ts">${esc(timeOf(l.ts))}</span><span>${esc(l.text)}</span></div>`).join('')}</div>`;
   } else {
+    html += reasoningNote(s);
     html += [...s.turnLog.values()].map((t) => `
       <div class="turn">
         <div class="turn-head">
@@ -905,11 +906,20 @@ function renderDetail() {
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
 
+// #117: a session whose turns count reasoning tokens but stream no thinking (Codex reports only the
+// count) says so once, instead of showing nothing
+function reasoningNote(s) {
+  const turns = [...s.turnLog.values()];
+  const reasoning = turns.reduce((a, x) => a + (Number(x.result?.usage?.reasoning) || 0), 0);
+  if (!reasoning || turns.some((x) => (x.items || []).some((it) => it.kind === 'thinking'))) return '';
+  return `<p class="muted small" data-testid="session-reasoning-note">${t('run.reasoning_not_shown')}</p>`;
+}
+
 // Why "Open in CLI" is not available for a session right now ('' = available).
 function cliBlocked(s) {
-  if (s.provider === 'mock') return 'Simulated sessions have no CLI conversation.';
-  if (!s.provider_session_id) return 'Available after the first turn finishes.';
-  if (s.status === 'active' || s.status === 'retrying') return 'The agent is in the middle of a turn.';
+  if (s.provider === 'mock') return t('run.cli_blocked_simulated');
+  if (!s.provider_session_id) return t('run.cli_blocked_first_turn');
+  if (s.status === 'active' || s.status === 'retrying') return t('run.cli_blocked_mid_turn');
   return '';
 }
 

@@ -43,7 +43,8 @@
     const color = !saved && window.AgentColors ? paintOf(who.agent) : undefined;
     return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...(color ? { color } : {}), ...opts });
   }
-  const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
+  // #117: no brand on the avatar ("CHATGPT" on a Codex turn): the turn's tag names the CLI and model
+  const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false, brand: false })}</span>`;
 
   // The hover card of an agent: provider, model and effort as recorded in the run, its session mode and turn.
   // the CLI's short name ("Claude"), from the provider registry through run-chat-model.js
@@ -98,13 +99,15 @@
     // context window: at the first request of the turn → its largest request (a fresh session starts small)
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · ${it.costUnknown ? esc(t('run_list.cost_unknown')) : `$${it.cost.toFixed(2)}`} · ${fmtSecs(it.durationMs)}` : '';
-    return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
+    return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-testid="run-chat-turn" data-agent="${esc(it.agent)}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
       <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? turnModelTag(it) : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
   }
   // #262: the provider and the model that answered the turn (a simulated one: its workflow provider)
   function turnModelTag(it) {
-    const provider = it.simulates || (it.provider === 'mock' ? '' : it.provider);
+    const id = it.simulates || (it.provider === 'mock' ? '' : it.provider);
+    // #117: the CLI's name ("Codex · gpt-6-luna"), never the account type nor the robot's brand
+    const provider = id ? PROVIDERS.shortName(id, it.model) || id : '';
     return `<span class="tag" data-testid="run-chat-turn-model" data-step="${esc(it.stepId || '')}"${it.simulates ? ` title="${t('runchat.simulated_no_model_was_called')}"` : ''}>${esc([provider, it.model].filter(Boolean).join(' · '))}</span>`;
   }
   // #262: an agent's provider out of credits (or past its usage limit): the turn moved on to the next one
@@ -200,7 +203,7 @@
   // and timeout, the counts, the first failures, why it waits; the tail of its log one click away
   // (api.runLogTail, followed while it runs) and the whole log in a log terminal (termAction, #465)
   const ORCH_PILL = { running: 'pill-running', waiting: 'pill-warn', passed: 'pill-success', failed: 'pill-failed' };
-  const orchState = (s) => ({ running: t('runchat.orch_running'), waiting: t('runchat.orch_waiting'), passed: t('runchat.orch_passed'), failed: t('runchat.orch_failed'), not_run: t('runchat.orch_not_run') })[s] || esc(s);
+  const orchState = (s) => ({ running: t('runchat.orch_running'), waiting: t('runchat.orch_waiting'), passed: t('runchat.orch_passed'), failed: t('runchat.orch_failed'), not_run: t('runchat.orch_not_run'), skipped: t('runchat.orch_skipped') })[s] || esc(s);
   const orchLive = (it) => it.state === 'running' || it.state === 'waiting';
   // a step still open in a run nobody runs any more (#288) stopped at its last event
   const orchElapsed = (it) => (it.finishedAt ? it.durationMs ?? Date.parse(it.finishedAt) - Date.parse(it.startedAt)

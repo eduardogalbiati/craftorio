@@ -350,6 +350,7 @@ ${flip(v.overlay || '')}
     const v = look(variant, state, opts);
     v.mirror = !!opts.mirror;
     if (opts.plaque !== undefined) v.plaque = opts.plaque;
+    if (opts.brand === false) v.name = ''; // #117: no brand above the base (the caller names the CLI)
     if (opts.bubble === false) delete v.overlay;
     else if (v.overlay) v.overlay = v.overlay.replace('__UNFLIP__', v.mirror ? ' scale(-1,1)' : '');
     return render(v, `rb${++uid}`);

@@ -5,7 +5,6 @@
 // sessions and the run lists ("Live terminal", "Open in CLI", ↗: termButtons, termAction).
 // initTerminalDock() runs from app.js's init().
 
-const CLI_TITLE = "Open the provider CLI resuming this conversation. Messages you send there become part of the agent's conversation.";
 // #465: a deterministic step's log (`log`, its sessionId the log's path in the run folder) and the
 // base check's (`base-check`, its sessionId the project) follow a file; like a live session, read-only
 const LOG_KINDS = ['base-check', 'log'];
@@ -14,8 +13,9 @@ const readOnlyTerm = (kind) => kind === 'live' || LOG_KINDS.includes(kind);
 // "Live terminal" / "Open in CLI" (embedded in the dock) + "↗" (external window). The ↗ button is
 // disabled with the reason when the app found no terminal window to open (#318, api.externalTerminal).
 function termButtons(kind, title, blocked = '') {
-  const label = readOnlyTerm(kind) ? 'Live terminal' : 'Open in CLI';
-  const t = blocked || title || (kind === 'cli' ? CLI_TITLE : LOG_KINDS.includes(kind) ? "Follow this step's log as it grows (read-only)" : 'Follow this session live in a terminal');
+  // #117: the labels in the interface language (the English ones stay the accessible names in English)
+  const label = readOnlyTerm(kind) ? I18n.t('term_dock.live_terminal') : I18n.t('term_dock.open_in_cli');
+  const t = blocked || title || (kind === 'cli' ? I18n.t('term_dock.cli_title') : LOG_KINDS.includes(kind) ? I18n.t('term_dock.log_title') : I18n.t('term_dock.live_title'));
   const dis = blocked ? 'disabled' : '';
   const ext = api.externalTerminal || { available: true };
   const extBlocked = blocked || (ext.available ? '' : ext.reason || 'No terminal window available');
