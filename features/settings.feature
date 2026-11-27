@@ -306,3 +306,42 @@ Feature: Settings
     When I open "Settings" in the sidebar
     And I open the "About" settings tab
     Then Settings shows no sandbox warning
+
+  # #106: Settings › General › Workspace folder › Change… takes an empty folder or an existing Craftorio
+  # workspace; a folder holding other files is refused with a message saying why, in the interface
+  # language, and nothing is written into it. The native folder picker is stubbed in the main process
+  # (dialog.showOpenDialog answers the scenario's folder). Assumes data-testid="settings-workspace-path"
+  # on the folder shown (today's #set-ws-path) and data-testid="workspace-folder-error" (role="alert")
+  # on the refusal (today's #ws-error). Steps: features/steps/settings-workspace-folder.steps.js
+  @issue-106
+  Scenario: Changing the workspace folder to a folder that holds another project's files is refused, and the folder is left as it was
+    Given the app is open
+    And a folder that holds another project's files
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I change the workspace folder to the folder that holds another project's files
+    Then Settings says the workspace folder must be empty or a Craftorio workspace, in English
+    And the workspace folder shown is still the demo workspace
+    And the folder that holds another project's files is exactly as it was
+
+  @issue-106
+  Scenario: With Português (Brasil) as the interface, the refusal of a folder with other files is in Portuguese
+    Given the app is open
+    And a folder that holds another project's files
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I choose "Português (Brasil)" as the "Interface" language
+    And I change the workspace folder to the folder that holds another project's files
+    Then Settings says the workspace folder must be empty or a Craftorio workspace, in Portuguese
+    And the workspace folder shown is still the demo workspace
+    And the folder that holds another project's files is exactly as it was
+
+  @issue-106
+  Scenario: Changing the workspace folder to an empty folder is taken
+    Given the app is open
+    And an empty folder
+    When I open "Settings" in the sidebar
+    And I open the "General" settings tab
+    And I change the workspace folder to the empty folder
+    Then the workspace folder shown is the empty folder
+    And Settings shows no workspace folder error
