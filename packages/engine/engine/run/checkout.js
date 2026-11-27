@@ -52,7 +52,6 @@ const {
   selectProcesses,
 } = require('../processes');
 const {
-  ownerAlive,
   readOwner,
   runOwnedElsewhere,
 } = require('../../domains/run/run-owner');
@@ -65,9 +64,9 @@ function otherRunOwners(runsDir, ownRunDir) {
   const pids = [];
   for (const id of ids) {
     const runDir = path.join(runsDir, id);
-    if (runDir === ownRunDir) continue;
+    if (runDir === ownRunDir || !runOwnedElsewhere(runDir)) continue;
     const owner = readOwner(runDir);
-    if (owner && owner.host === os.hostname() && owner.pid !== process.pid && ownerAlive(owner)) pids.push(owner.pid);
+    if (owner && owner.host === os.hostname()) pids.push(owner.pid);
   }
   return pids;
 }
@@ -152,15 +151,17 @@ const methods = {
   // #7: a resume never takes over the worktree of a run that is still running (two runs in one
   // folder, the second stopping the first's processes): refused while the resumed run's owner is
   // alive (a live pid on this host or a fresh heartbeat). With no owner file at all (a runner that
-  // wrote none), live processes in the folder say it: listed, never stopped. A dead owner's leftovers
-  // are stopped as before (#406).
+  // wrote none), live processes in the folder say it: listed, never stopped. A dead owner's leftovers,
+  // and those of a run that ended (summary.json; release() removed its owner file), are stopped as
+  // before (#406).
   async refuseLiveWorktree(dir) {
     const fromId = this.resume.runId;
     const fromDir = path.join(path.dirname(this.runDir), String(fromId || ''));
     if (fromId && runOwnedElsewhere(fromDir)) {
       throw new Error(`Run ${fromId} is still running (its owner, pid ${readOwner(fromDir).pid}, is alive): its worktree ${dir} is not reused; resume it once it has stopped`);
     }
-    if (!this.stopProcesses || !dir || !fs.existsSync(dir) || (fromId && readOwner(fromDir))) return;
+    if (!this.stopProcesses || !dir || !fs.existsSync(dir)) return;
+    if (fromId && (readOwner(fromDir) || fs.existsSync(path.join(fromDir, 'summary.json')))) return;
     let live;
     try {
       live = selectProcesses(await listProcesses(), dir);

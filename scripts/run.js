@@ -132,9 +132,11 @@ if (!args.mock) {
   if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
 }
 const rec = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
-// #7: owner.json and its heartbeat, as the app's service/areas/runs.js claims a run; child runs are
-// followed through the parent, like in the app
+// #7: owner.json and its heartbeat, as the app's service/areas/runs.js claims a run; each child run
+// (followChild) claims its own folder too, like the app's startWorkflowRun does
 const owner = runOwner.claimRun(run.runDir);
+// #7: while this process owns the run, the app neither answers its gates nor resumes it
+const gateHint = '     waiting for approval: this terminal owns the run, so the app cannot answer it; stop with Ctrl+C and resume the run in the app, or run with --auto-approve';
 
 const t = () => new Date().toLocaleTimeString('en-US');
 const short = (s, n = 160) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n);
@@ -170,7 +172,7 @@ run.on('event', (ev) => {
         // answered as 'auto': a `ship:` transition (#260) only follows the owner's own answer
         setTimeout(() => run.resolveApproval(ev.approval_id, answer, 'auto'), 200);
       } else {
-        console.log('     waiting for approval: use the UI or run with --auto-approve');
+        console.log(gateHint);
       }
       break;
     case 'log': console.log(`${t()}   [${ev.level}] ${short(ev.message, 400)}`); break;
@@ -188,6 +190,7 @@ run.on('event', (ev) => {
 // like the parent's (--auto-approve) or left waiting
 run.on('child', function followChild(child) {
   const childRec = new Recorder(child.runDir, child.wf.observability?.capture?.redact);
+  const childOwner = runOwner.claimRun(child.runDir);
   const tag = `[child ${child.runId}]`;
   child.on('child', followChild);
   child.on('event', (ev) => {
@@ -196,9 +199,12 @@ run.on('child', function followChild(child) {
     if (ev.type === 'approval.requested') {
       console.log(`${t()}   ${tag} ? ${short(ev.message, 200)}`);
       if (args.autoApprove) setTimeout(() => child.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true, 'auto'), 200);
-      else console.log('     waiting for approval: use the UI or run with --auto-approve');
+      else console.log(gateHint);
     }
-    if (ev.type === 'workflow.finished') console.log(`${t()}   ${tag} ■ ${ev.status}${ev.error ? ': ' + ev.error : ''} (${child.runDir})`);
+    if (ev.type === 'workflow.finished') {
+      console.log(`${t()}   ${tag} ■ ${ev.status}${ev.error ? ': ' + ev.error : ''} (${child.runDir})`);
+      childOwner.release();
+    }
   });
 });
 

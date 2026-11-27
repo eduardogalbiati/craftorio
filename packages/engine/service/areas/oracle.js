@@ -216,7 +216,7 @@ module.exports = (ctx) => {
     },
     'run.stop': async (a) => {
       const run = ctx.liveRun(a.params.runId);
-      if (!run && ctx.runAlive(a.params.runId)) throw new Error(`Run ${a.params.runId} runs in another app window: stop it there.`);
+      if (!run && ctx.runAlive(a.params.runId)) throw new Error(`Run ${a.params.runId} runs in another app window or a terminal: stop it there.`);
       if (!run) throw new Error(`Run ${a.params.runId} is not in progress.`);
       run.stop();
       return { text: `Run ${a.params.runId} was stopped.` };

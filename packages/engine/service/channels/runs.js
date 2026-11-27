@@ -62,7 +62,7 @@ function liveRunOf(ctx, opts, what, optional = false) {
   const runId = requireId(opts?.runId, 'runId');
   const run = ctx.liveRun(runId);
   if (run) return run;
-  if (ctx.runAlive(runId)) throw new Error(`Run ${runId} runs in another app window: ${what} it there.`);
+  if (ctx.runAlive(runId)) throw new Error(`Run ${runId} runs in another app window or a terminal: ${what} it there.`);
   if (optional) return null;
   throw clientError(`Run ${runId} is not in progress: there is nothing to ${what}.`);
 }

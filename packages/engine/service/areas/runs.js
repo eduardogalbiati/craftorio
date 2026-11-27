@@ -401,7 +401,7 @@ module.exports = (ctx) => {
     // the same issues never get a second live run, from this app or another one: resume that run instead
     const twin = liveRunForIssues(issues);
     if (twin) {
-      const err = /** @type {Error & { runId?: string }} */ (new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window)' : ''}: open or resume that run instead of starting the same work twice.`));
+      const err = /** @type {Error & { runId?: string }} */ (new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window or a terminal)' : ''}: open or resume that run instead of starting the same work twice.`));
       err.runId = twin.runId;
       throw err;
     }

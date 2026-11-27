@@ -172,8 +172,9 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
   // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
   // notices: [{ level, message }] logged right after workflow.started (e.g. the workflow file came from a fallback folder).
-  // stopProcesses: (dir) => Promise<[{ pid, exe, cwd, reason, stopped }]>, stops what agents left running in the
-  //   worktree (packages/engine/engine/processes.js). Default: the real one, none for simulations (mock agents start nothing).
+  // stopProcesses: (dir, { spare }) => Promise<[{ pid, exe, cwd, reason, stopped }]>, stops what agents left running in the
+  //   worktree (packages/engine/engine/processes.js); `spare` (#7): the pids of other live runs' owners, whose
+  //   processes and trees it must never stop. Default: the real one, none for simulations (mock agents start nothing).
   // machine (#353): the run's machine actions (git, merges, ship, probes, actions, suites, screenshots, the
   //   provider of a turn), packages/engine/engine/machine-actions.js. Default: real(), or simulated({ sequences: mockSequences })
   //   for a mock run; one that does not match `mock` is refused (a real run never simulates, nor the reverse).
