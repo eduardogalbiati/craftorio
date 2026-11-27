@@ -38,6 +38,7 @@ const STEPS = {
   'Run suite (Unit)': 'suite',
   'Run suite (E2E)': 'e2e',
   'Red check (TDD)': 'red_check',
+  'Rule checks': 'rule_check',
 };
 const stepId = (name) => {
   const id = STEPS[name];
@@ -133,6 +134,16 @@ Then('once it ends, the orchestrator\'s message for {string} shows that it passe
   await expect(msg).toHaveAttribute('data-state', 'passed', { timeout: REACH_TIMEOUT });
   await expect(msg).toContainText(/passed/i);
   await expect(allMessages(page, name)).toHaveCount(1);
+});
+
+// #117: a step that was skipped (the rule checks of a project with none) reads "Skipped" in the
+// interface language (status_pill.status_skipped: "Pulado"), never "Passed" / "Passou"
+Then('the orchestrator\'s message for {string} shows that it was skipped, not passed', async ({ e2e }, name) => {
+  const msg = message(e2e.window, name);
+  await expect(msg).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(msg).toContainText(/\b(Skipped|Pulado)\b/, { timeout: LOAD_TIMEOUT });
+  await expect(msg).not.toContainText(/\b(Passed|Passou)\b/);
+  await expect(msg).not.toHaveAttribute('data-state', 'passed');
 });
 
 Then('once it ends, the orchestrator\'s message for {string} shows that it failed with {int} failing test(s)', async ({ e2e }, name, count) => {

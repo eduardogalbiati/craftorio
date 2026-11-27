@@ -37,12 +37,19 @@ function writeRun(run) {
   const at = (m) => new Date(run.start + m * MIN).toISOString();
   const end = run.turns.length * 10 + 1;
   const events = [
-    { ts: at(0), type: 'workflow.started', workflow: WORKFLOW, file: `${WORKFLOW}.yaml`, project_id: run.projectId, mock: !run.real, inputs: { task: run.task }, steps: run.turns.map((t) => ({ id: t.step, type: 'agent', agent: t.session.agent })) },
+    { ts: at(0), type: 'workflow.started', workflow: WORKFLOW, file: `${WORKFLOW}.yaml`, project_id: run.projectId, mock: !run.real, inputs: { task: run.task }, steps: run.turns.map((t) => (t.machine ? { id: t.step, type: t.machine.type } : { id: t.step, type: 'agent', agent: t.session.agent })) },
     // #72: the engine's own session, whose card on the Run screen carries the run's total cost
     ...(run.real ? [{ ts: at(0), type: 'session.opened', session_id: ORCHESTRATOR.id, session: { ...ORCHESTRATOR, status: 'running' } }] : []),
     ...run.turns.flatMap((t, i) => {
       const from = at(i * 10 + 1);
       const to = at(i * 10 + 10);
+      // #117: a step with no agent (the rule checks), run by the orchestrator: started, then its output
+      if (t.machine) {
+        return [
+          { ts: from, type: 'step.started', step_id: t.step, step_type: t.machine.type, visit: 1 },
+          { ts: to, type: 'step.finished', step_id: t.step, duration_ms: 9 * MIN, output: t.machine.output },
+        ];
+      }
       const open = { ...t.session, status: 'running', turns: 0 };
       return [
         { ts: from, type: 'step.started', step_id: t.step, step_type: 'agent', agent: t.session.agent, visit: 1 },
@@ -58,16 +65,16 @@ function writeRun(run) {
   fs.writeFileSync(path.join(run.dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
   fs.writeFileSync(path.join(run.dir, 'summary.json'), JSON.stringify({
     run_id: run.runId, workflow: WORKFLOW, project_id: run.projectId, mock: !run.real, inputs: { task: run.task }, status: 'success', started_at: at(0), finished_at: at(end), duration_ms: end * MIN,
-    sessions: [...(run.real ? [ORCHESTRATOR] : []), ...run.turns.map((t) => t.session)],
+    sessions: [...(run.real ? [ORCHESTRATOR] : []), ...run.turns.filter((t) => t.session).map((t) => t.session)],
   }, null, 2));
 }
 
 // one closed Claude session of the agent, one turn; `cost` is cost_usd, `estimate` the #369 field
-function addTurn(e2e, agent, model, cost, estimate) {
+function addTurn(e2e, agent, model, cost, estimate, provider = 'claude') {
   const run = seeded(e2e);
   const step = `${agent}_turn`;
   const session = {
-    id: `s-${step}`, agent, provider: 'claude', model, effort: null, parent_id: null, step_id: step, turns: 1,
+    id: `s-${step}`, agent, provider, model, effort: null, parent_id: null, step_id: step, turns: 1,
     tokens: { input: 1200, output: 3400, cache_read: 52000, cache_creation: 8000 }, cost_usd: cost,
     status: 'success', provider_session_id: `s-${step}-cli`, cwd: null, mode: 'ephemeral',
     ...(estimate ? { cost_estimate: estimate } : {}),
@@ -213,4 +220,38 @@ Then('the month cost of Claude Code in Usage grew by {float}', async ({ e2e }, u
   await expect(monthCost(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   // the card may round each total to the cent: one cent of tolerance
   await expect.poll(async () => Math.abs(amountOf(await monthCost(e2e.window).innerText()) - before - usd), { timeout: LOAD_TIMEOUT }).toBeLessThan(0.011);
+});
+
+// ---- #117: Codex on a ChatGPT account, the rule checks skipped ------------------------------------------
+// A Codex turn reports tokens and no cost (packages/shared/providers/codex.js: costUsd null); on a
+// ChatGPT account (a subscription) there is no API price to put on its tokens: its cost is unknown,
+// drawn "unknown" in the interface language (run_list.cost_unknown: "desconhecido"), never "$0.00"
+// nor "≈ $0.00". A total mixing it with priced turns says it is partial. The seeded session is what the
+// engine records for such a turn today: provider codex, cost_usd null, tokens, no cost_estimate.
+// Assumes no price is configured for the model (settings.prices) in the demo workspace.
+Given('its {string} turn ran on Codex {string} on a ChatGPT account, which has no API price', async ({ e2e }, agent, model) => {
+  addTurn(e2e, agent, model, null, null, 'codex');
+});
+
+// #404: the rule checks found no check script, linter or type checker, so the step was skipped
+// (packages/engine/engine/check-step.js); step id rule_check, type check
+Given('its {string} step was skipped because the project has no rule checks', async ({ e2e }, name) => {
+  const ids = { 'Rule checks': 'rule_check' };
+  if (!ids[name]) throw new Error(`unknown step "${name}" (known: ${Object.keys(ids).join(', ')})`);
+  const run = seeded(e2e);
+  run.turns.push({
+    step: ids[name],
+    machine: {
+      type: 'check',
+      output: { kind: 'check', status: 'skipped', command: '', findings: [], round: 1, message: 'Rule checks skipped: no check script, linter or type checker found in the project.' },
+    },
+  });
+  writeRun(run);
+});
+
+// "partial" in the interface language (pt-BR "parcial"): the total leaves out a cost it does not know
+Then('the run\'s total cost in {string} says it is partial', async ({ e2e }, name) => {
+  const el = place(e2e, name);
+  await expect(el).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(el).toContainText(/partial|parcial/i, { timeout: LOAD_TIMEOUT });
 });
