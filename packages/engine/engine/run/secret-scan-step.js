@@ -41,6 +41,8 @@ const methods = {
       // gitleaks reads its ignore file and its configuration from the repository's top folder
       dir = await git(['rev-parse', '--show-toplevel'], worktree);
       range = await secretScan.commitRange(dir, step.since != null ? { since: given('since') } : { refs: this.secretScanRefs() });
+      // #116: zero commits is not a pass (a developer that committed nothing looked clean)
+      if (!(await secretScan.commitCount(dir, range))) return skipped('the run has no commit of its own, nothing to scan', 'secret_scan_no_commits');
     } catch (e) {
       const error = String(e.message).split('\n')[0];
       const why = `the run's commits could not be read (${error})`;

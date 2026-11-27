@@ -20,7 +20,10 @@
   const FEATURES_OFF = ['plugins', 'apps', 'browser_use', 'computer_use', 'in_app_browser', 'image_generation', 'memories'];
 
   // The isolation and capability flags of one turn (capabilities.providerArgs; `lib`: its helpers).
-  function isolationArgs({ caps, isolated, mcp }, lib) {
+  // #116: writableRoots, the folders a writing turn may write besides its working folder (a linked
+  // worktree's git dir and the repository's common git dir, so `git switch -c` and `git commit` work),
+  // still in workspace-write; a read-only turn gets none.
+  function isolationArgs({ caps, isolated, mcp, writableRoots = [] }, lib) {
     const args = [];
     const notes = [];
     // one -c for every server: the workflow's declared ones replace the user's config.toml table
@@ -28,6 +31,7 @@
     if (isolated) for (const f of FEATURES_OFF) args.push('--disable', f);
     if (!caps) return { args, notes };
     args.push('-s', lib.writes(caps) ? 'workspace-write' : 'read-only');
+    if (lib.writes(caps) && writableRoots.length) args.push('-c', `sandbox_workspace_write.writable_roots=${lib.toml(writableRoots)}`);
     if (!caps.web) args.push('-c', 'web_search="disabled"');
     if (lib.bashRules(caps).some((t) => t !== 'bash')) notes.push('command allowlist (bash:<command>) not enforceable: the sandbox limits writes, not which commands run');
     if (lib.writes(caps) && lib.bashRules(caps).length) notes.push('workspace-write sandbox: no network access for commands');

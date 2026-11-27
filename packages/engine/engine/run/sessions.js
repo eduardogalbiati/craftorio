@@ -467,7 +467,11 @@ const methods = {
     const own = { providerType, isolated, ownArgs: [...cliArgs, ...(provider?.args || [])] };
     const instructionsFile = this.sessionInstructions(session, agent, own);
     const instructionsExcludes = this.workspaceExcludes(session, own);
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv, instructionsFile, instructionsExcludes });
+    // #116: a linked worktree's git metadata lives outside its folder; a sandboxed writer must reach it to commit
+    const wt = this.worktree;
+    const inside = (d) => wt?.dir && !path.relative(wt.dir, d).startsWith('..') && !path.isAbsolute(path.relative(wt.dir, d));
+    const writableRoots = [...new Set([wt?.gitDir, wt?.commonDir].filter((d) => d && !inside(d)))];
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv, instructionsFile, instructionsExcludes, writableRoots });
     // #302: only a CLI with a request limit per turn can stop a turn after n requests (claude --max-turns)
     const enforced = budget && !!registry.byType(providerType)?.requestLimit;
     if (budget && providerType && !enforced) notes.push(`max_requests (${budget}) not enforceable: ${providerType} has no request limit per turn`);

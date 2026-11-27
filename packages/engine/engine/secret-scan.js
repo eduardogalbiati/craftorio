@@ -7,7 +7,8 @@
 // A finding keeps its rule, file, line and commit, never its value: gitleaks redacts its report
 // (--redact), which is read from a temporary folder outside the worktree and the run folder, then deleted.
 // Only a whole scan with an empty report is a pass: gitleaks exits with 1 for an error too, so findings
-// have an exit code of their own, and every other ending is an error.
+// have an exit code of their own, and every other ending is an error. #116: a range with no commit is not
+// scanned at all (`commitCount`): the step says there is nothing to scan, never a pass.
 
 'use strict';
 
@@ -82,6 +83,15 @@ async function commitRange(dir, { since, refs = [] }) {
   }
   const from = await tryGit(['merge-base', head, ...not], dir);
   return { head, not, from: from || not[0] };
+}
+
+/**
+ * #116: how many commits `range` holds; zero means there is nothing to scan (never "No secret found").
+ * @param {string} dir
+ * @param {{ head: string, not: string[] }} range
+ */
+async function commitCount(dir, { head, not }) {
+  return Number(await git(['rev-list', '--count', head, ...(not.length ? ['--not', ...not] : [])], dir)) || 0;
 }
 
 // A .gitleaksignore's entries with the comment lines above them, their reason
@@ -212,6 +222,7 @@ async function scanSecrets({ dir, file, range, env, signal }) {
 }
 
 module.exports = {
+  commitCount,
   commitRange,
   findGitleaks,
   findingsPrompt,

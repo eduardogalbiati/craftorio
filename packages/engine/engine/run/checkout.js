@@ -11,6 +11,8 @@
 // (no test command given or found, before the first turn; checked again after each agent step, so a
 // change that adds a test runner gets its tests run): feature.yaml / fix.yaml tell the test writer
 // and the developer, and skip the test steps (the change reported as not tested: no test command).
+// #116 `checkDeveloperCommit`: a writing `develop` step that leaves the worktree detached or with uncommitted
+// changes fails at once; otherwise its output carries the worktree's real branch.
 // The git operations themselves are packages/engine/engine/worktree.js.
 
 'use strict';
@@ -18,6 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const I18n = require('@craftorio/shared/i18n');
 const { checksOff } = require('@craftorio/shared/run-inputs');
 const {
   currentBranch,
@@ -413,6 +416,53 @@ const methods = {
       const b = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: this.worktree.workDir || this.worktree.dir, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim();
       return b && b !== 'HEAD' ? b : null;
     } catch { return null; }
+  },
+
+  // #116: after a writing `develop` step, the run's worktree must be on a branch with everything committed (a
+  // sandboxed CLI that could not commit, or an agent that forgot, failed only at the merge before). Returns the
+  // output with the worktree's real branch (never the agent's free text); throws "The developer did not commit:
+  // <cause>" otherwise. No worktree (a simulation, not a git repository), a read-only agent: the output as it is.
+  async checkDeveloperCommit(step, output) {
+    const wt = this.worktree;
+    if (step.id !== 'develop' || step.agents || !wt || !output || typeof output !== 'object') return output;
+    const agent = this.wf.agents?.[step.agent];
+    const caps = step.capabilities || agent?.capabilities;
+    if (caps && !capabilities.writes(capabilities.normalize(caps))) return output;
+    const branch = await currentBranch(wt.dir);
+    let cause = null;
+    let key = null;
+    let params = {};
+    if (!branch) {
+      cause = 'the run\'s worktree is not on a branch (detached HEAD)';
+      key = 'engine.develop_not_committed_detached';
+    } else {
+      const status = await git(['status', '--porcelain'], wt.dir).catch(() => '');
+      const files = status.split('\n').map((l) => l.slice(3).trim()).filter(Boolean);
+      if (files.length) {
+        const shown = files.length > 10 ? `${files.slice(0, 10).join(', ')} and ${files.length - 10} more` : files.join(', ');
+        cause = `uncommitted changes in ${shown}`;
+        key = 'engine.develop_not_committed_dirty';
+        params = { files: shown };
+      }
+    }
+    if (!cause) return 'branch' in output ? { ...output, branch } : output;
+    const message = `The developer did not commit: ${cause}`;
+    // shown on screen: in the interface language (#330)
+    this.emitEvent('log', { level: 'error', kind: 'develop_not_committed', step_id: step.id, message: I18n.t('engine.develop_not_committed', { cause: I18n.t(key, params) }) });
+    throw new Error(message);
+  },
+
+  // #116: an agent step's answer after checkDeveloperCommit, as { output, error }: output undefined with the
+  // step's error when the turn failed or the developer did not commit. A question to the owner (#567,
+  // ask_human) is not a finished turn: not checked.
+  async checkedAgentOutput(step, output) {
+    if (output === undefined) return { output, error: new Error(this.lastStepError || `Step "${step.id}" failed.`) };
+    if (step.ask_human && String(output?.needs_human?.question || '').trim()) return { output, error: null };
+    try {
+      return { output: await this.checkDeveloperCommit(step, output), error: null };
+    } catch (e) {
+      return { output: undefined, error: e };
+    }
   },
 
   // The run's base branch, local and remote: commits reachable from it are not the agent's.

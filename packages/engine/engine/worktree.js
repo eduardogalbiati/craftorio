@@ -383,7 +383,8 @@ async function restackOnParent({ repo, dir, parentBranch, log = () => {} }) {
  *   mode too: a stacked item
  * @param {boolean} [o.compareBase] #805 false: a local worktree skips checkLocalBase (the run's base checkout)
  * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, fork, ref, commit, reused, recreated,
- *   baseCheck (#805: a new local worktree's checkLocalBase) } or null when `repo` is not a git repository (the
+ *   baseCheck (#805: a new local worktree's checkLocalBase), gitDir and commonDir (#116: the worktree's git dir
+ *   and the repository's common git dir, canonical) } or null when `repo` is not a git repository (the
  *   caller then works in the repository folder).
  */
 async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true, fork = false, parentBranch = null, compareBase = true }) {
@@ -424,6 +425,12 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {},
     }
   }
   info.commit = await tryGit(['rev-parse', 'HEAD'], dir);
+  // #116: where the worktree's git metadata lives (outside its folder for a linked worktree): a sandboxed
+  // writing agent (Codex workspace-write) must be allowed to write there to create its branch and commit
+  const gitDir = await tryGit(['rev-parse', '--absolute-git-dir'], dir);
+  const commonDir = await tryGit(['rev-parse', '--git-common-dir'], dir);
+  info.gitDir = gitDir ? canonicalPath(gitDir) : null;
+  info.commonDir = commonDir ? canonicalPath(path.resolve(dir, commonDir)) : null;
   return info;
 }
 

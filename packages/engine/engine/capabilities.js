@@ -234,16 +234,18 @@ const ADAPTER_LIB = {
  * `instructionsFlags`; null for the internal agents (Oracle, supervisor chat, Product Owner).
  * instructionsExcludes: the instruction files a run's agent must not load (the workspace's own, #43), for an
  * adapter with a `settingsFlag`; none for the internal agents, always isolated.
+ * writableRoots (#116): folders outside the working folder a writing turn must write (a linked worktree's git
+ * dirs), for an adapter whose sandbox limits writes to the working folder (Codex).
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
  * @param {string} type
- * @param {{ caps?: object | null, isolated?: boolean, mcpServers?: object, denyEdits?: string[], denyCommands?: string[], runDir?: string | null, env?: object, instructionsFile?: string | null, instructionsExcludes?: string[] }} [options]
+ * @param {{ caps?: object | null, isolated?: boolean, mcpServers?: object, denyEdits?: string[], denyCommands?: string[], runDir?: string | null, env?: object, instructionsFile?: string | null, instructionsExcludes?: string[], writableRoots?: string[] }} [options]
  */
-function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV, instructionsFile = null, instructionsExcludes = [] } = {}) {
+function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV, instructionsFile = null, instructionsExcludes = [], writableRoots = [] } = {}) {
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
   const adapter = registry.byType(type);
   // each CLI's own flags: its adapter's isolationArgs (packages/shared/providers/<id>.js)
   const { args, notes } = adapter?.isolationArgs
-    ? adapter.isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile, instructionsExcludes }, ADAPTER_LIB)
+    ? adapter.isolationArgs({ caps, isolated, mcp, denyEdits, denyCommands, runDir, env, instructionsFile, instructionsExcludes, writableRoots }, ADAPTER_LIB)
     : { args: [], notes: [] };
   const enforced = !!adapter?.enforcesDenyRules;
   if (denyEdits.length && !enforced && (!caps || !readOnly(caps))) notes.push('test paths (edits_tests: false) are not refused by the tools: the engine checks the turn\'s changes');
@@ -292,4 +294,5 @@ module.exports = {
   runDirs,
   validate,
   WRITE_UTILITIES,
+  writes,
 };

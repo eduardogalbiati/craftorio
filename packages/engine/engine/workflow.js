@@ -698,8 +698,11 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
         if (this.worktree && !this.abort.signal.aborted) await this.prepareDeps('worktree', this.ctx.worktree_dir, `step ${step.id}`).catch(() => {});
         this.decideTestCommand(this.ctx.worktree_dir, undefined, step.id);
       }
+      // #116: a develop step that left nothing committed fails here, before review, verify or merge
+      const checked = await this.checkedAgentOutput(step, output);
+      output = checked.output;
       if (output === undefined) {
-        const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
+        const e = checked.error;
         // `on_error: <step>`: a failing step (agent error, invalid output) does not end the run;
         // its output becomes { error } and the flow goes to that step.
         if (!step.on_error) throw e;
