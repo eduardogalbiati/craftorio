@@ -366,7 +366,7 @@ function resumeSpec(runDir, fromStep) {
   }
   // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
   // orchestrator (#97): the orchestrator AI the run recorded, which its resume keeps (run/orchestrator-choice.js)
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null, orchestrator: started.orchestrator_ai || null,
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null, orchestrator: started.orchestrator_ai,
     // runs recorded before groups have a single `issue`
     issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, stoppedAt: stoppedStep(events), steps, sessions, sessionAccounts, cliTotals, handoffs, worktree,
     childRuns: [...childRuns.values()], agentOverrides: Object.keys(agentOverrides).length ? agentOverrides : null };

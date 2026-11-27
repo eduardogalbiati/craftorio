@@ -14,17 +14,16 @@ function refuseReal(what) {
   if (simulationOnly()) throw new Error(`Simulation only (${ENV}=1): refusing to start ${what}. Automated checks never call real models; start the run as a simulation (mock: true).`);
 }
 
+// The ids listed in an E2E hook variable <name>=<id>[,<id>] (none outside simulation)
+const idsOf = (name, env) => (simulationOnly(env) ? String(env[name] || '').split(',').map((s) => s.trim()).filter(Boolean) : []);
+
 // #740, #49: the CLIs the E2E hook CRAFTORIO_E2E_CLI_MISSING=<id>[,<id>] makes missing (none outside
 // simulation): domains/machine/simulated-clis.js for the probes, secret-scan.js for a run's gitleaks
-function missingIds(env = process.env) {
-  if (!simulationOnly(env)) return [];
-  return String(env.CRAFTORIO_E2E_CLI_MISSING || '').split(',').map((s) => s.trim()).filter(Boolean);
-}
+const missingIds = (env = process.env) => idsOf('CRAFTORIO_E2E_CLI_MISSING', env);
 
 // #97: the CLIs the E2E hooks CRAFTORIO_E2E_CLI_READY=<id>[,<id>] (installed and signed in) and
 // CRAFTORIO_E2E_CLI_SIGNED_OUT=<id>[,<id>] (installed, not signed in) simulate (none outside simulation):
 // domains/machine/simulated-clis.js for the probes
-const idsOf = (name, env) => (simulationOnly(env) ? String(env[name] || '').split(',').map((s) => s.trim()).filter(Boolean) : []);
 const readyIds = (env = process.env) => idsOf('CRAFTORIO_E2E_CLI_READY', env);
 const signedOutIds = (env = process.env) => idsOf('CRAFTORIO_E2E_CLI_SIGNED_OUT', env);
 

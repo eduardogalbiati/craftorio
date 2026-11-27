@@ -196,5 +196,5 @@ The app runs on Windows, macOS and Linux. What differs per OS, and where:
   (`service/areas/cli-setup.js`; output, one-time code and URL on `cli-setup:changed`; the CLI is re-checked at
   the end; behind the token, #479). Only `gh` / `glab` sign in headless; `claude`, `codex`, `grok` answer
   `status: manual` with the command for a server terminal. Simulation installs nothing
-  (`domains/machine/simulated-clis.js`; `CRAFTORIO_E2E_CLI_MISSING=<id>` hides a CLI until the simulated
-  install). The desktop app keeps its terminal dock for a sign-in.
+  (`domains/machine/simulated-clis.js`: `CRAFTORIO_E2E_CLI_MISSING=<id>` hides a CLI until the simulated install;
+  #97: `_READY=<id>` signed in, `_SIGNED_OUT=<id>` signed out). The desktop app keeps its terminal dock for a sign-in.

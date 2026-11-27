@@ -126,7 +126,7 @@ module.exports = (ctx) => {
       const drawn = builder.fromWorkflow(written).problems;
       // #97: a bundled default (default or modified copy) shown on the chosen orchestrator AI's provider and
       // models (agents, inputs, requirements), as its run will take it
-      const wf = OrchestratorModels.applyOrchestrator(written, orchestratorProvider(), { bundled: origin.origin === 'default' || origin.origin === 'modified' });
+      const wf = OrchestratorModels.applyOrchestrator(written, orchestratorProvider(), { bundled: workflows.isBundledOrigin(origin.origin) });
       // #262: an agent's provider / model / effort with the inputs' defaults (they can be templates over them)
       const defaults = Object.fromEntries(Object.entries(wf.inputs || {}).filter(([, d]) => d?.default !== undefined).map(([k, d]) => [k, d.default]));
       const resolve = (v) => {

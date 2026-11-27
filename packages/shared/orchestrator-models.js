@@ -92,6 +92,11 @@
     if (!wf || orchestratorOf(provider) !== 'codex') return wf;
     if (!(bundled ?? followsOrchestrator(wf))) return wf;
     const out = JSON.parse(JSON.stringify(wf));
+    // the loader's non-enumerable fields (name, warnings) the JSON clone drops
+    for (const key of Object.getOwnPropertyNames(wf)) {
+      const desc = Object.getOwnPropertyDescriptor(wf, key);
+      if (desc && !desc.enumerable) Object.defineProperty(out, key, desc);
+    }
     addProviders(out);
     moveOrchestrator(out.orchestrator || (out.orchestrator = {}));
     for (const agent of Object.values(out.agents || {})) moveAgent(agent);

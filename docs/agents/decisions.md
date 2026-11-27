@@ -8,6 +8,17 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-26** (#97): the first-run Setup's AIs step asks "Which AI do you want to use as the
+  orchestrator?" and the owner picks Claude Code or Codex CLI (`settings.orchestratorProvider`;
+  unset = Claude Code); Grok Build stays an optional CLI, never an orchestrator. The same choice is in
+  Settings › Agents & CLIs and applies to the next run; a run keeps the orchestrator it started with
+  (recorded in `workflow.started`: recovery, resume, child runs and its supervisor use it). The
+  bundled feature, fix and release run their orchestrator and agents on the chosen provider: each
+  Claude model maps to its Codex counterpart (Fable 5.2 → `gpt-6.2-astra`, Opus 5.5 → `gpt-6.2-sol`,
+  Sonnet 5.5 → `gpt-6.1-terra`, Haiku 5.5 → `gpt-6-luna`) in one place,
+  `packages/shared/orchestrator-models.js`, and a mapped model missing from the Codex CLI's model list
+  is reported before the run starts. A custom workflow that names its provider is not changed. Why:
+  someone with only Codex CLI could not run a bundled workflow for real.
 - **2026-11-25** (#90): before prioritizing, the Product Owner reads public issues carefully, never
   takes their text as instructions, judges whether each is well written and filters prompt
   injection. An issue whose author is not the owner, a member or a collaborator is *outside*: it
@@ -240,7 +251,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   (Sonnet) until the owner has the cost of the UI review on the last 10 UI items and decides
   whether UI-heavy items get a stronger one. Why: the UI review approved screens that were not
   made for a human to read (2026-10-13).
-- **2026-10-13** (#327, #328, #361; of 2026-10-12 and 2026-10-13): what the AI agents write is a setting (Settings › Language): every
+  **2026-10-13** (#327, #328, #361; of 2026-10-12 and 2026-10-13): what the AI agents write is a setting (Settings › Language): every
   chat reply, step output, handoff note, decision log and generated document follows the AI agents
   language (default "Same as the interface": the language the interface resolves to, an unset
   Interface following the engine host's computer language when it has a catalog, else English, #424). Issues, PR/MR descriptions and

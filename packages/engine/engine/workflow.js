@@ -235,7 +235,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     this.file = file;
     const chosen = orchestratorChoice.orchestratedWorkflow(loadWorkflow(file), inputs, { orchestrator, bundledWorkflow, resume, recover }); // #97
     // onOrchestrator: the workflow moved to the run's orchestrator AI (orchestratorAI, recorded in workflow.started)
-    ({ wf: this.wf, onOrchestrator: this.onOrchestrator, orchestrator: this.orchestratorAI } = chosen);
+    this.wf = chosen.wf; this.onOrchestrator = chosen.onOrchestrator; this.orchestratorAI = chosen.orchestrator;
     this.mock = !!mock;
     this.language = functionOrNull(language);
     this.architectureOracle = functionOrNull(architectureOracle);

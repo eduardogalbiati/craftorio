@@ -3,6 +3,8 @@
 // (packages/engine/service/areas/settings.js envDetails / toolSignIn) find no such CLI until a simulated
 // Install of it (packages/engine/service/areas/cli-setup.js), which installs nothing and leaves the CLI
 // "installed, not signed in" for the re-check that follows. Outside simulation the hook does nothing.
+// #97 (features/97-orchestrator-ai-choice.feature): CRAFTORIO_E2E_CLI_READY=<id>[,<id>] makes a CLI
+// installed and signed in, CRAFTORIO_E2E_CLI_SIGNED_OUT=<id>[,<id>] installed but not signed in.
 
 const { missingIds, readyIds, signedOutIds } = require('../../engine/simulation');
 
