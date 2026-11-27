@@ -1,6 +1,6 @@
 /* global api, errMsg, esc, showToast, state, t */
 // The new-project wizard's last step, the review (#642, #669, mock-6), split out of project-wizard.js (its size cap).
-// window.ProjectWizardReview({ active, activity, column, costs, cur, jobOf, jobReason, kindField, platformOfRepo,
+// window.ProjectWizardReview({ activity, column, costs, cur, jobOf, jobReason, kindField, platformOfRepo,
 // profileOf, pushNotice, render, renderSoon, retryButton, spinner }) gives the wizard, over its own state (`cur()`):
 // - reviewStep(): wizard-review: the title row (the project's name, where it comes from), then two columns: the
 //   project (wizard-review-project: its code, its kind as tiles, its workflows) and what the analyses found
@@ -11,17 +11,19 @@
 // Uses app.js globals (api, errMsg, esc, showToast, state, t), window.OnboardingModel and window.ArchitectureFactsView.
 
 (function () {
-  window.ProjectWizardReview = function ({ active, activity, column, costs, cur, jobOf, jobReason, kindField, platformOfRepo, profileOf, pushNotice, render, renderSoon, retryButton, spinner }) {
+  window.ProjectWizardReview = function ({ activity, column, costs, cur, jobOf, jobReason, kindField, platformOfRepo, profileOf, pushNotice, render, renderSoon, retryButton, spinner }) {
     const M = window.OnboardingModel;
 
     // a section's state: ready (its analysis and read done), failed / skipped (its analysis answered without
-    // a result), later (the analyses were skipped in the wizard) or pending (still running or reading)
+    // a result), later (the analyses were skipped in the wizard) or pending (still running or reading); #102: a
+    // clone still running reads later too unless an analysis was asked for during it (`wanted`)
     function sectionState(job, read) {
       if (!job) return read ? 'ready' : 'pending';
       const s = jobOf(job).status;
       if (s === 'done') return read ? 'ready' : 'pending';
       if (s === 'failed' || s === 'skipped') return s;
-      return cur().model.analyzeLater && !active.includes(cur().onboarding?.status) ? 'later' : 'pending';
+      const ob = cur().onboarding;
+      return cur().model.analyzeLater && !ob?.wanted && ob?.status !== 'analyzing' ? 'later' : 'pending';
     }
 
     // a card of the review: its head (title, then #852 the running indicator beside its action), then its body once ready; #781: `pending`:

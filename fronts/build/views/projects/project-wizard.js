@@ -236,13 +236,14 @@
     } catch { return ''; }
   }
 
-  // mock-2's list under the field: the account's repositories on the picked provider; #848: the first five
-  // (API order, newest first) whose owner/name holds the text typed in the list's own filter box (case-insensitive)
+  // mock-2's list under the field: the account's repositories on the picked provider; #848: the first five (API order, newest first)
+  // whose owner/name holds the list's filter text (any case); #103: a pasted URL as its owner/name on the picked host (another: none)
   const repoUrl = (name) => `https://${(platformById(pickedProvider()) || platformById(window.Platforms?.DEFAULT_PLATFORM))?.host}/${name}`;
   function repoList() {
     const typed = cur.model.repository.trim().replace(/\.git$/, '');
-    const query = String(cur.repoFilter || '').trim().toLowerCase(); // the list's own filter box (wizard-repo-filter)
-    const all = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).filter((r) => String(r.name || '').toLowerCase().includes(query));
+    const text = String(cur.repoFilter || '').trim(); // the list's own filter box (wizard-repo-filter)
+    const url = window.Platforms?.parseRepoUrl?.(text), query = (url ?(url.host === platformById(pickedProvider())?.host ? url.path : null) : text.replace(/\/+$/, ''))?.toLowerCase() ?? null;
+    const all = cur.projectId || query === null ? [] : (cur.repos[pickedProvider()] || []).filter((r) => String(r.name || '').toLowerCase().includes(query));
     const repos = all.slice(0, 5);
     // the owner muted, the repository's own name leading the row
     const named = (name) => { const cut = String(name).lastIndexOf('/'); return `<span class="muted">${esc(String(name).slice(0, cut + 1))}</span>${esc(String(name).slice(cut + 1))}`; };
@@ -251,7 +252,7 @@
           <span class="text-cut" title="${esc(r.name)}">${named(r.name)}</span><span class="muted">${esc(meta(r))}</span></button></li>`;
     return repos.length ? `<ul class="wizard-repos" data-testid="wizard-repo-list" aria-label="${esc(t('onboarding.repo_list'))}">${repos.map(item).join('')}</ul>${
       all.length > 5 ? `<p class="muted small" data-testid="wizard-repo-more">${esc(t('onboarding.repo_list_more'))}</p>` : ''}`
-      : query && !cur.projectId && (cur.repos[pickedProvider()] || []).length ? `<p class="muted small" data-testid="wizard-repo-none">${esc(t('onboarding.repo_list_none'))}</p>` : '';
+      : text && !cur.projectId && (cur.repos[pickedProvider()] || []).length ? `<p class="muted small" data-testid="wizard-repo-none">${esc(t('onboarding.repo_list_none'))}</p>` : '';
   }
 
   // the badges and the list arrive after the step is drawn: only their own parts change (the caret stays)
@@ -501,7 +502,7 @@
   const jobOf = (id) => cur.onboarding?.jobs?.[id] || {};
   const jobDone = (id) => jobOf(id).status === 'done';
 
-  const review = window.ProjectWizardReview({ active: ACTIVE, activity, column, costs, cur: () => cur, jobOf: (id) => jobOf(id), jobReason, kindField, platformOfRepo, profileOf,
+  const review = window.ProjectWizardReview({ activity, column, costs, cur: () => cur, jobOf: (id) => jobOf(id), jobReason, kindField, platformOfRepo, profileOf,
     pushNotice, render: () => render(), renderSoon: () => renderSoon(), retryButton, spinner: SPINNER }); // the review step (project-wizard-review.js)
   const { createIssue, reviewStep } = review;
 
@@ -797,12 +798,14 @@
   }
 
   // Analyze the repository (only an import offers it); #74: before the analysis started it runs a failed profile
-  // too (Retry alone never pays)
+  // too (Retry alone never pays); #101: a refused start gives the step (and the saved picks) back as it was, the toast says why
   async function analyze() {
+    const before = { mode: cur.workflowsMode, later: cur.model.analyzeLater };
     cur.workflowsMode = 'analyze';
     cur.model = { ...cur.model, analyzeLater: false };
     const again = jobOf('profile').status === 'failed' && ['analyzing', 'analyzed'].includes(cur.onboarding?.status);
-    await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId)));
+    if (await call(() => (again ? api.retryOnboarding(cur.projectId) : api.analyzeOnboarding(cur.projectId))) || !cur) return;
+    cur.workflowsMode = before.mode; cur.model = { ...cur.model, analyzeLater: before.later }; render();
   }
 
   // a tile picked: a workflow's variant (step 3), the project's kind (the review; #735: as its select's change)
