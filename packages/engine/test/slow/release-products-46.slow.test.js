@@ -20,7 +20,8 @@ Object.assign(process.env, {
 });
 
 const WORKFLOW = path.join(__dirname, '..', '..', '..', '..', 'workflows', 'release.yaml');
-const LIMIT = { timeout: 60000 };
+// 2 minutes: a macOS CI runner took 86 s for one of these (v1.1.0's Deploy); Linux takes ~20 s
+const LIMIT = { timeout: 120000 };
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 const json = (o) => `${JSON.stringify(o, null, 2)}\n`;
