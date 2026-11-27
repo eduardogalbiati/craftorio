@@ -328,7 +328,13 @@ async function ensureWorkspace() {
     if (response === 0) return workspace.setupWorkspace(r.fallback);
     if (response === 2) return null;
     const dir = await pickWorkspaceDir();
-    if (dir) return workspace.setupWorkspace(dir);
+    if (!dir) continue;
+    try {
+      return workspace.setupWorkspace(dir, { lang });
+    } catch (e) {
+      // #106: a folder holding another project's files is refused, untouched: say why, ask again
+      await dialog.showMessageBox({ type: 'warning', title: t('dialog.workspace', {}, lang), message: e.message, noLink: true });
+    }
   }
 }
 

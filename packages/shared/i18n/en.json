@@ -2176,6 +2176,7 @@
   "dialog.workspace_folder": "Workspace folder",
   "dialog.workspace_gone": "The registered workspace folder no longer exists:\n{path}",
   "dialog.workspace_missing": "Workspace folder not found:\n{path}",
+  "dialog.workspace_not_empty": "This folder holds other files, so it can't be the workspace: pick an empty folder or a Craftorio workspace. Nothing was written into it.",
   "dialog.workspace_other": "Choose another folder…",
 
   "diff_viewer.after": "After",

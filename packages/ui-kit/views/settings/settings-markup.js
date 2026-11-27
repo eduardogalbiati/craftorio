@@ -24,7 +24,7 @@
               <h2 class="settings-title">${t('settings.tabs.general')}</h2>
               <div class="s-group">
                 <div class="s-row">
-                  <div class="s-label"><b>${t('settings.general.workspace')}</b><span>${t('settings.general.workspace_help')}</span><code id="set-ws-path"></code></div>
+                  <div class="s-label"><b>${t('settings.general.workspace')}</b><span>${t('settings.general.workspace_help')}</span><code id="set-ws-path" data-testid="settings-workspace-path"></code></div>
                   <div class="s-ctrl row"><button id="btn-ws-open" class="btn sm ghost">${t('settings.open')}</button><button id="btn-ws-change" class="btn sm">${t('settings.general.change')}</button></div>
                 </div>
                 <div class="s-row">
@@ -35,7 +35,7 @@
                   <div class="s-ctrl">${window.Select.markup(`id="set-time-zone" aria-label="${t('settings.time_zone.label')}" data-testid="settings-time-zone"`)}</div>
                 </div>
               </div>
-              <p id="ws-error" class="error small"></p>
+              <p id="ws-error" class="error small" role="alert" data-testid="workspace-folder-error"></p>
               <div id="set-language"></div>
               <h3 class="s-subtitle">${t('settings.backlog.title')}</h3>
               <div class="s-group">

@@ -2176,6 +2176,7 @@
   "dialog.workspace_folder": "Pasta do workspace",
   "dialog.workspace_gone": "A pasta do workspace registrada não existe mais:\n{path}",
   "dialog.workspace_missing": "Pasta do workspace não encontrada:\n{path}",
+  "dialog.workspace_not_empty": "Esta pasta tem outros arquivos, então não pode ser o workspace: escolha uma pasta vazia ou um workspace do Craftorio. Nada foi gravado nela.",
   "dialog.workspace_other": "Escolher outra pasta…",
 
   "diff_viewer.after": "Depois",

@@ -14,6 +14,8 @@
 // registry key HKCU\Software\MultiagentOrchestrator, ~/.multiagent-orchestrator.json and the default
 // folder ~/multiagent-workspace (registered under the new name when found).
 // If none of these exist, it is up to the UI to ask the user (create the default or pick another).
+// #106: a folder the user picks (Settings › Change…, the first start's "Choose another folder…") is
+// taken only when it is empty, does not exist yet or already is a workspace (workspaceFolderProblem).
 
 const fs = require('fs');
 const os = require('os');
@@ -22,6 +24,7 @@ const { execFile, execFileSync } = require('child_process');
 const { fileURLToPath } = require('url');
 const { resolveCommand } = require('../../engine/providers');
 const { simulationOnly } = require('../../engine/simulation');
+const I18n = require('@craftorio/shared/i18n');
 // the preferences (settings.json): settings.js, a low-level utility the engine may require too (#862), re-exported here
 const {
   DEFAULT_SETTINGS,
@@ -116,9 +119,34 @@ function resolveWorkspace({ store = defaultStore(), env = process.env, home = os
   return { dir: null, source: null, registered, fallback };
 }
 
-/** Creates the workspace structure and registers the path. */
-function setupWorkspace(dir, { store = defaultStore(), persist = true } = {}) {
+// #106: what marks a folder as a Craftorio workspace already (names from layout()), and the files the
+// OS leaves in any folder, which do not make it "another project's"
+const WORKSPACE_MARKS = ['index.db', 'runs', 'settings.json', 'workflows'];
+const OS_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
+
+/**
+ * #106: why `root` can't be the workspace, or null when it can: a folder that does not exist yet,
+ * an empty one or a Craftorio workspace is taken; one holding other files (another project) is not.
+ * The message is in the interface language (`lang`, else the current one).
+ */
+function workspaceFolderProblem(root, { lang } = {}) {
+  const refused = () => I18n.t('dialog.workspace_not_empty', {}, lang);
+  if (!isDir(root)) return fs.existsSync(root) ? refused() : null; // a file is no folder to seed
+  const names = fs.readdirSync(root).filter((n) => !OS_FILES.has(n));
+  if (!names.length) return null;
+  if (WORKSPACE_MARKS.some((m) => names.includes(m))) return null;
+  return refused();
+}
+
+/**
+ * Creates the workspace structure and registers the path. `check` (default: when the path is
+ * registered, i.e. a folder the user chose) refuses a folder holding other files before anything is
+ * written into it (#106): it throws, nothing is created, the path is not registered.
+ */
+function setupWorkspace(dir, { store = defaultStore(), persist = true, check = persist, lang } = {}) {
   const root = path.resolve(dir);
+  const problem = check ? workspaceFolderProblem(root, { lang }) : null;
+  if (problem) throw new Error(problem);
   const ws = layout(root);
   for (const d of [ws.root, ws.runs, ws.repos, ws.projects, ws.skills, ws.agents, ws.workflows]) fs.mkdirSync(d, { recursive: true });
   if (persist) store.set(root);
@@ -348,5 +376,6 @@ module.exports = {
   savedSettings,
   setupWorkspace,
   simulationWorkspace,
+  workspaceFolderProblem,
   writeSettings,
 };
