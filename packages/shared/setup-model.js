@@ -12,7 +12,9 @@
 // - missingLabel(missing): 'Missing Codex CLI' for a card or the Start panel ('' when nothing);
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
 // - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml);
-// - installHintText(tool): #110, a missing CLI's install prose in the interface language (setup.install_text.<id>).
+// - installHintText(tool): #110, a missing CLI's install prose in the interface language (setup.install_text.<id>);
+// - codexModelsWarning(tool): #111, { text, usable } when the Codex account (tool.models) lacks the models Codex runs
+//   on as the orchestrator (orchestrator-models.js codexFallbacks), else null.
 // The labels are in the interface language (#329, packages/shared/i18n.js); the states never change.
 // Browser: window.SetupModel; Node: module.exports (packages/engine/domains/workflow/workflow-requirements.js, the tests).
 (function (root) {
@@ -76,12 +78,27 @@
     return key ? t(key) : hint;
   }
 
+  // #111: the Codex card's warning when the account (tool.models, env:details) lacks a model Codex runs on as the
+  // orchestrator: { text, usable } (usable false: no model at all, Codex cannot be chosen); null for another CLI,
+  // no known list, or every mapped model offered
+  function codexModelsWarning(tool) {
+    const Orch = node ? require('./orchestrator-models') : root.OrchestratorModels;
+    const models = tool?.models;
+    if (tool?.id !== Orch.CODEX || !Array.isArray(models) || !models.length) return null;
+    const missing = Orch.codexFallbacks(models);
+    if (!missing.length) return null;
+    if (!missing.some((/** @type {{ use: string | null }} */ f) => f.use)) return { text: t('setup.codex_models_none'), usable: false };
+    const pairs = missing.map((/** @type {{ model: string, use: string | null }} */ f) => `${f.model} → ${f.use || '—'}`).join(', ');
+    return { text: t('setup.codex_models_fallback', { pairs }), usable: true };
+  }
+
   function visibleWorkflows(workflows, hidden) {
     const set = new Set(Array.isArray(hidden) ? hidden : []);
     return (workflows || []).filter((w) => !set.has(w.id));
   }
 
   const api = {
+    codexModelsWarning,
     installHintText,
     missingLabel,
     missingRequirements,

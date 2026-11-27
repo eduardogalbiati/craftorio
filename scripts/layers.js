@@ -33,6 +33,8 @@ const ROOT = path.join(__dirname, '..');
 // and packages/shared/ (area `utility`). A domain file that needs more is a domain module (area `root`).
 const ENGINE_ROOT_UTILITIES = [
   'packages/engine/domains/workspace/legacy-env.js',
+  'packages/engine/domains/cli/cli-config-dirs.js',
+  'packages/engine/domains/cli/cli-models-cache.js',
   'packages/engine/domains/evidence/coverage-summary.js',
   'packages/engine/domains/evidence/evidence.js',
   'packages/engine/domains/evidence/result-summary.js',

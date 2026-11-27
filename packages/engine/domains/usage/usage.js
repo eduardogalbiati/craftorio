@@ -16,6 +16,8 @@ const { installCommand } = require('../machine/install-commands');
 const { readRunSummary } = require('../run/run-record');
 const { runSummaries } = require('../run/runs');
 const registry = require('@craftorio/shared/providers');
+const I18n = require('@craftorio/shared/i18n');
+const OrchestratorModels = require('@craftorio/shared/orchestrator-models');
 const {
   isApprox,
   priceOf,
@@ -289,7 +291,9 @@ function preflight(wf, budget, resolveCommand, inputs = {}, { home } = {}) {
   return problems;
 }
 
-// #97: the agents' models a CLI's cached model list does not offer (a mapped Codex model the account lacks)
+// #97: the agents' models a CLI's cached model list does not offer (a mapped Codex model the account lacks);
+// #111: a Codex model with an offered fallback is not one (the run swaps it, orchestrator-choice.js
+// applyCodexFallback); the problem reads in the interface language
 function unavailableModels(wf, home) {
   const offered = new Map();
   const missing = new Map();
@@ -300,9 +304,11 @@ function unavailableModels(wf, home) {
     if (!meta || !model || model.includes('{{')) continue;
     if (!offered.has(meta.id)) offered.set(meta.id, new Set(cachedModels(meta.id, home).map((m) => m.id)));
     const list = offered.get(meta.id);
-    if (list.size && !list.has(model)) missing.set(model, meta);
+    if (!list.size || list.has(model)) continue;
+    if (meta.id === OrchestratorModels.CODEX && OrchestratorModels.codexFallback(model, [...list])) continue; // #111
+    missing.set(model, meta);
   }
-  return [...missing].map(([model, meta]) => `${meta.name} does not offer the model "${model}" to this account (not in its model list). Update the CLI or pick another orchestrator AI or model.`);
+  return [...missing].map(([model, meta]) => I18n.t('usage.model_not_offered', { name: meta.name, model }));
 }
 
 module.exports = {

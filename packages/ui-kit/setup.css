@@ -37,6 +37,9 @@ body.setup-open .term-dock { z-index: 11; }
 .setup-tool-detail > .setup-tool-account { font-family: inherit; font-size: 12px; }
 /* how to install a CLI without a one-line installer: prose, two lines at most */
 .setup-tool-detail.hint { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow: hidden; padding: 10px 0 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; font-family: inherit; font-size: 12px; line-height: 1.4; text-align: center; }
+/* #111: the Codex account lacks the orchestrator's models (also Settings › Agents & CLIs' orchestrator box) */
+.setup-models-warn { margin: 0; color: var(--amber); font-size: 12px; line-height: 1.4; text-align: center; overflow-wrap: anywhere; }
+.s-label .setup-models-warn { text-align: left; }
 .setup-tool-grow { flex: 1; }
 .setup-tool .btn { width: 100%; margin-top: 0; padding: 7px 14px; font-size: 13px; }
 /* #97 the orchestrator choice: the chosen AI card framed in the accent, its "Use as orchestrator" radio at the

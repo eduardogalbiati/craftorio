@@ -40,6 +40,7 @@ const CHECKED = [
   'packages/contract/page-globals.js',
   'packages/engine/domains/backlog/issue-author.js',
   'packages/engine/domains/chat/speech.js',
+  'packages/engine/domains/cli/cli-models-cache.js',
   'packages/engine/domains/po/po-mock-epics.js',
   'packages/engine/domains/po/po-outside.js',
   'packages/engine/domains/project/folder-import.js',

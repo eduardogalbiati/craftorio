@@ -5,7 +5,7 @@
 // their orchestrator and their agents on Codex, each Claude model replaced by its Codex model, and the
 // multi-model second reviewer (on Codex in the YAML) moves to Claude, a provider other than the
 // orchestrator's. A custom workflow keeps the providers it names.
-// - ORCHESTRATORS: the AIs that can lead a run (Grok Build is not one);
+// - ORCHESTRATORS: the AIs that can lead a run (Grok Build is not one); CODEX: Codex's id among them (#111);
 // - orchestratorOf(value): 'codex' for 'codex', else 'claude' (no setting, Grok, anything else);
 // - CODEX_MODEL_FOR: { <claude model>: <codex model> }; CODEX_LABEL_FOR: the Codex models' names;
 // - mapModel(model, provider): the model to run on with that orchestrator (unknown models unchanged);
@@ -13,7 +13,13 @@
 // - applyOrchestrator(wf, provider, { bundled }) -> the workflow to run: a new object with Codex, the
 //   same `wf` with Claude, no provider or a custom workflow (bundled false; default followsOrchestrator);
 // - mapRunInputs(wf, inputs, provider, { bundled }): a run's given values of a model input mapped the same way.
-// The Codex slugs must exist for the account: usage.preflight checks them against the CLI's model cache.
+// - #111 codexFallback(model, offered): the model a Codex agent runs on when the account (offered: the slugs of
+//   the CLI's model cache) lacks `model`: itself when offered; else the mapped models from its tier down
+//   (Astra > Sol > Terra > Luna, CODEX_LABEL_FOR's order), then any offered gpt-<version>-<tier> of its tier or
+//   below (highest tier, newest version first); null when none: never a model the account does not list.
+//   codexFallbacks(offered): [{ model, use }] for each mapped model the account lacks (use null: no fallback).
+// The run swaps a missing model for its fallback with a note (engine/run/orchestrator-choice.js applyCodexFallback);
+// usage.preflight refuses only a model with no fallback.
 // Browser: window.OrchestratorModels; Node: module.exports (workflow-requirements.js, workflow.js).
 (function (root) {
   const node = typeof module === 'object' && module.exports;
@@ -166,10 +172,50 @@
     return out;
   }
 
+  // #111: the tiers, highest first (CODEX_LABEL_FOR's keys are the mapped models in that order)
+  const MAPPED = Object.keys(CODEX_LABEL_FOR);
+  const TIERS = MAPPED.map((slug) => slug.split('-').pop());
+  /** @param {unknown} slug @returns {{ tier: number, version: number[] } | null} gpt-<version>-<tier> */
+  function tierOf(slug) {
+    const m = /^gpt-(\d+(?:\.\d+)*)-([a-z]+)$/.exec(String(slug || ''));
+    const tier = m ? TIERS.indexOf(m[2]) : -1;
+    return m && tier >= 0 ? { tier, version: m[1].split('.').map(Number) } : null;
+  }
+  /** @param {number[]} a @param {number[]} b newest first */
+  function newer(a, b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if ((b[i] || 0) !== (a[i] || 0)) return (b[i] || 0) - (a[i] || 0);
+    }
+    return 0;
+  }
+
+  /** @param {unknown} model @param {unknown} offered @returns {string | null} */
+  function codexFallback(model, offered) {
+    const list = Array.isArray(offered) ? offered.map(String) : [];
+    if (typeof model === 'string' && list.includes(model)) return model;
+    const own = tierOf(model);
+    if (!own) return null;
+    const mapped = MAPPED.slice(own.tier).find((slug) => list.includes(slug));
+    if (mapped) return mapped;
+    const best = list.map((slug) => ({ slug, at: tierOf(slug) }))
+      .filter((x) => x.at && x.at.tier >= own.tier)
+      .sort((a, b) => (a.at?.tier ?? 0) - (b.at?.tier ?? 0) || newer(a.at?.version || [], b.at?.version || []))[0];
+    return best ? best.slug : null;
+  }
+
+  /** @param {unknown} offered @returns {{ model: string, use: string | null }[]} */
+  function codexFallbacks(offered) {
+    const list = Array.isArray(offered) ? offered.map(String) : [];
+    return MAPPED.filter((slug) => !list.includes(slug)).map((model) => ({ model, use: codexFallback(model, list) }));
+  }
+
   const api = {
     applyOrchestrator,
+    CODEX,
     CODEX_LABEL_FOR,
     CODEX_MODEL_FOR,
+    codexFallback,
+    codexFallbacks,
     followsOrchestrator,
     mapModel,
     mapRunInputs,

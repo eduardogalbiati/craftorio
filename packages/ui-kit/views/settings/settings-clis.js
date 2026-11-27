@@ -15,6 +15,8 @@
 //   "Use as orchestrator" radios for Claude Code and Codex (SetupRows.orchestratorRadio, each in a label
 //   settings-orchestrator-<id>), the saved settings.orchestratorProvider checked, saved at once when it changes
 //   (the next run uses it; a running one keeps its own), then the workflows read again (Start's requirements).
+//   #111: the Codex row shows the Setup's models warning (settings-codex-models-warning, SetupRows.modelsWarning);
+//   with no usable model its radio is off.
 // - window.Settings.open(section, { highlight, onClose }): the deep link (the project wizard's Open Setup,
 //   fronts/build/views/projects/project-wizard.js): the Settings screen on that tab, the `highlight` CLI's row
 //   marked and scrolled to; the close button goes back to the screen it was opened from, then calls onClose.
@@ -94,7 +96,7 @@
     const row = (id) => {
       const tool = tools.find((x) => x.id === id) || { id, checking: true };
       const name = tool.name || window.SetupModel.toolName(id);
-      return `<div class="s-row"><div class="s-label"><b>${esc(name)}</b><span>${esc(window.SetupModel.statusBadge(tool).label)}</span></div>
+      return `<div class="s-row"><div class="s-label"><b>${esc(name)}</b><span>${esc(window.SetupModel.statusBadge(tool).label)}</span>${window.SetupRows.modelsWarning(tool, 'settings-codex-models-warning')}</div>
         <div class="s-ctrl">${window.SetupRows.orchestratorRadio(tool, saved, { testid: `settings-orchestrator-${id}` })}</div></div>`;
     };
     box.innerHTML = `<form class="settings-orchestrator-form" data-orchestrator-form><div class="s-row"><div class="s-label"><b>${esc(t('settings.agents.orchestrator'))}</b><span>${esc(t('settings.agents.orchestrator_help'))}</span></div></div>

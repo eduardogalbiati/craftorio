@@ -10,6 +10,8 @@ const os = require('os');
 const path = require('path');
 
 process.env.CRAFTORIO_MOCK_DELAY_SCALE = '0.02';
+// #111: an empty Codex home, so the run's model fallback never reads this machine's ~/.codex model list.
+process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'orch-97-codex-home-'));
 
 const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
 const choice = require('../../engine/run/orchestrator-choice');

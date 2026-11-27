@@ -6,6 +6,7 @@
 // run, a Claude model a template left on a Codex agent mapped to its counterpart; `orchestratorSession`
 // is the provider and model the orchestrator's session shows (the deterministic engine unless the run
 // moved to the chosen AI; a simulation keeps `mock` and names the provider it simulates).
+// #111: `applyCodexFallback` runs a Codex model the account does not offer on the closest offered one, with a note.
 // The run records its orchestrator AI in workflow.started (`startedFields`: orchestrator_ai, and
 // orchestrator_applied when the workflow moved to it); a recovered (#607) or resumed run keeps the one
 // its run recorded (`runOrchestrator`; a run from before #97 ran on claude), never the current setting:
@@ -16,6 +17,7 @@
 
 const OrchestratorModels = require('@craftorio/shared/orchestrator-models');
 const { render } = require('./templates');
+const { cachedModelList } = require('../../domains/cli/cli-models-cache');
 
 // the orchestrator AI a run's workflow.started recorded ('claude' for a run from before #97)
 const startedOrchestrator = (/** @type {any[]} */ events) => OrchestratorModels.orchestratorOf((events || []).find((e) => e?.type === 'workflow.started')?.orchestrator_ai);
@@ -57,6 +59,33 @@ function resolveAgentTemplates(/** @type {any} */ wf, /** @type {any} */ inputs,
   }
 }
 
+// #111: each Codex agent (and the orchestrator / supervisor on Codex) whose model the account does not offer
+// (offered: the slugs of the CLI's model cache, read from CODEX_HOME or ~/.codex when not given) runs on its
+// fallback (OrchestratorModels.codexFallback); returns one note per replacement, naming both models (the run
+// logs them: never a silent swap). An empty list (no cache: nothing known) or a model with no fallback changes
+// nothing: usage.preflight refuses the latter.
+function applyCodexFallback(/** @type {any} */ wf, offered = cachedModelList(OrchestratorModels.CODEX).map((/** @type {any} */ m) => m.id)) {
+  if (!Array.isArray(offered) || !offered.length) return [];
+  const CODEX = OrchestratorModels.CODEX;
+  const orch = wf.orchestrator || {};
+  const targets = [
+    ...Object.entries(wf.agents || {}).map(([name, a]) => ({ who: `Agent "${name}"`, block: a })),
+    { who: 'The orchestrator', block: orch },
+    { who: 'The supervisor', block: orch.supervisor },
+  ];
+  const notes = [];
+  for (const { who, block } of targets) {
+    if (!block || typeof block !== 'object' || block.provider !== CODEX || typeof block.model !== 'string') continue;
+    const model = block.model.trim();
+    if (!model || model.includes('{{') || offered.includes(model)) continue;
+    const use = OrchestratorModels.codexFallback(model, offered);
+    if (!use) continue;
+    block.model = use;
+    notes.push(`${who} runs on ${use} instead of ${model}: this Codex account does not offer ${model} (its model list).`);
+  }
+  return notes;
+}
+
 function orchestratorSession(/** @type {{ wf: any, onOrchestrator?: boolean, mock?: boolean }} */ run) {
   const orch = run.wf.orchestrator || {};
   if (!run.onOrchestrator || !orch.provider) return { provider: 'engine', model: 'engine (deterministic)' };
@@ -65,6 +94,7 @@ function orchestratorSession(/** @type {{ wf: any, onOrchestrator?: boolean, moc
 }
 
 module.exports = {
+  applyCodexFallback,
   orchestratedWorkflow,
   orchestratorSession,
   resolveAgentTemplates,

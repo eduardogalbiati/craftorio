@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { cliConfigDirs, cliSessionDirs } = require('./cli-config-dirs');
+const { cachedModelList } = require('./cli-models-cache');
 const registry = require('@craftorio/shared/providers');
 
 const HEAD_BYTES = 512 * 1024;
@@ -40,13 +41,9 @@ function cachedModels(provider, home) {
   return rawCachedModels(provider, home).map((m) => ({ ...m, efforts: byEffort(m.efforts) }));
 }
 
+// #111: the read itself lives in cli-models-cache.js (a utility the engine may require too)
 function rawCachedModels(provider, home) {
-  const cache = CLI_PROVIDERS[provider]?.modelsCache;
-  if (!cache) return [];
-  const cfg = cliConfigDirs(home);
-  let c = null;
-  try { c = JSON.parse(fs.readFileSync(path.join(cfg[provider], cache.file), 'utf8')); } catch { /* no cache yet */ }
-  return cache.models(c);
+  return CLI_PROVIDERS[provider] ? cachedModelList(provider, home) : [];
 }
 
 /** The models a provider's CLI offers (see cachedModels), else the built-in list. */

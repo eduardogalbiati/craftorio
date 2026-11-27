@@ -14,7 +14,9 @@
 //   radio (one group, off while that CLI is missing or signed out; Grok Build none), saved at once as
 //   settings.orchestratorProvider (the only ready AI is the default, saved once the CLIs are checked, and again
 //   by Finish), the workflows read again (their requirements follow it); the chosen card reads
-//   Required (SetupModel.requiredTools) and the missing note names it.
+//   Required (SetupModel.requiredTools) and the missing note names it. #111: the Codex card warns
+//   (setup-codex-models-warning, SetupModel.codexModelsWarning) when its account lacks the models Codex runs on and
+//   names the ones used instead; with no usable model its radio is off and it is never the default.
 // - First project: the projects, and New project opening the onboarding wizard (#643,
 //   the action openProjectWizard of fronts/build/views/projects/project-wizard.js, no button without
 //   it; opened by itself when there is none, over the Setup, which then leaves it the focus; the
@@ -132,16 +134,24 @@
   function orchestrator() {
     const saved = savedOrchestrator();
     const states = statesOf();
-    const ready = Orch().ORCHESTRATORS.filter((id) => states[id] === 'ready');
-    return ready.length === 1 && states[saved] !== 'ready' ? ready[0] : saved;
+    const ready = Orch().ORCHESTRATORS.filter((id) => states[id] === 'ready' && choosable((setup.tools || []).find((x) => x.id === id)));
+    return ready.length === 1 && !ready.includes(saved) ? ready[0] : saved;
+  }
+  // #111: a ready CLI that can lead a run (a Codex account with no usable model cannot)
+  const choosable = (tool) => window.SetupModel.codexModelsWarning(tool)?.usable !== false;
+  // #111: the Codex card's models warning (also Settings › Agents & CLIs'), in the interface language
+  function modelsWarning(tool, testid) {
+    const warning = window.SetupModel.codexModelsWarning(tool);
+    return warning ? `<p class="setup-models-warn" role="note" data-testid="${esc(testid)}">${esc(warning.text)}</p>` : '';
   }
   // One AI card's "Use as orchestrator" radio (also Settings › Agents & CLIs', window.SetupRows): one group
   // (name="orchestrator"; Settings' radios sit in their own <form>, another group), off until that CLI is
-  // installed and signed in; `testid`: the label's own test id
+  // installed and signed in (#111: and offers a model to run on); `testid`: the label's own test id
   function orchestratorRadio(tool, chosen, { testid = null } = {}) {
     if (!Orch().ORCHESTRATORS.includes(tool.id)) return '';
-    const ready = window.SetupModel.statusBadge(tool).state === 'ready';
-    const tip = ready ? '' : ` title="${esc(t('setup.orchestrator_not_ready', { name: tool.name || window.SetupModel.toolName(tool.id) }))}"`;
+    const installed = window.SetupModel.statusBadge(tool).state === 'ready';
+    const ready = installed && choosable(tool);
+    const tip = ready ? '' : ` title="${esc(installed ? window.SetupModel.codexModelsWarning(tool).text : t('setup.orchestrator_not_ready', { name: tool.name || window.SetupModel.toolName(tool.id) }))}"`;
     return `<label class="setup-orchestrator${ready ? '' : ' off'}"${testid ? ` data-testid="${esc(testid)}"` : ''}${tip}><input type="radio" name="orchestrator" value="${esc(tool.id)}" data-testid="setup-orchestrator-${esc(tool.id)}"${chosen === tool.id ? ' checked' : ''}${ready ? '' : ' disabled'}><span>${esc(t('setup.use_as_orchestrator'))}</span></label>`;
   }
 
@@ -216,6 +226,7 @@
         ${command ? `<code class="setup-cmd" title="${esc(command)}">${esc(command)}</code>` : ''}
         ${tool.output && badge.state !== 'ready' ? `<pre class="setup-out" data-testid="setup-cli-output">${esc(tool.output)}</pre>` : ''}
         ${tool.checking ? '' : actionButton(tool)}
+        ${modelsWarning(tool, 'setup-codex-models-warning')}
         ${orchestratorRadio(tool, chosen)}
       </div>`;
   }
@@ -435,6 +446,7 @@
     LOGOS,
     TOOL_IDS,
     cliRow,
+    modelsWarning,
     orchestratorRadio,
   };
 })();

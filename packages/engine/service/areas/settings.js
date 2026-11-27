@@ -3,6 +3,7 @@
 // (packages/engine/domains/machine/install-commands.js) or sign in (#319). Claude Code's sign-in is read from its credentials
 // (packages/engine/domains/cli/claude-auth.js), never by running it; a failed probe returns its last output lines (`output`).
 // accountStatus (#312): a provider account's folder, signed in or not, with its login command.
+// #111: an installed CLI that caches its model list (Codex) lists the account's models (`models`, slugs).
 
 const { resolveCommandAsync } = require('../../engine/providers');
 const {
@@ -15,6 +16,7 @@ const {
   installHintKey,
   signInCommands,
 } = require('../../domains/machine/install-commands');
+const { cachedModels } = require('../../domains/cli/cli-sessions');
 const providerAccounts = require('../../domains/cli/provider-accounts');
 const {
   simulatedInstallCommand,
@@ -58,7 +60,7 @@ module.exports = () => {
   async function envDetails() {
     // #398: the brew commands only with Homebrew (looked up on macOS only)
     const opts = { brew: process.platform === 'darwin' && !!(await resolveCommandAsync('brew')) };
-    return Promise.all(TOOLS.map(async (t) => {
+    const list = await Promise.all(TOOLS.map(async (t) => {
       const signInCommand = signInCommands()[t.id] || null;
       // #740: a CLI the E2E hook makes missing (simulation only): not found, then found and signed out
       const simulated = simulatedState(t.id);
@@ -82,6 +84,16 @@ module.exports = () => {
       }
       return out;
     }));
+    return list.map(withModels);
+  }
+
+  // #111: an installed CLI's entry gets the models its account offers (the CLI's model cache, cli-sessions.js
+  // cachedModels: Codex), so the Setup and Settings can warn when the orchestrator's models are missing; no
+  // `models` without a cache (nothing known)
+  function withModels(entry) {
+    if (!entry.path) return entry;
+    const models = cachedModels(entry.id).map((m) => m.id);
+    return models.length ? { ...entry, models } : entry;
   }
 
   // #312: the CLI's own sign-in probe (`codex login status`) run with the account's variable only:
