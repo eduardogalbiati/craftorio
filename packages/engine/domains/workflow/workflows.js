@@ -150,10 +150,25 @@ function editedWorkspaceCopy(names, [workspaceDir, bundledDir] = []) {
   return names.map((n) => path.basename(String(n || ''))).find((n) => ['modified', 'custom'].includes(status[n]?.origin)) || null;
 }
 
+// #97: is the file a run takes a bundled default (the app's copy, or the workspace's copy of one, edited or
+// not), whose providers follow the chosen orchestrator AI? false for a custom workspace workflow or one
+// from elsewhere (a project's repository); undefined when the file is not in either folder (a resume's copy:
+// the workflow's name decides, orchestrator-models.js followsOrchestrator).
+function isBundledWorkflowFile(file, workspaceDir, bundledDir = BUNDLED_WORKFLOWS_DIR) {
+  const dir = path.resolve(path.dirname(String(file || '')));
+  if (bundledDir && dir === path.resolve(bundledDir)) return true;
+  if (workspaceDir && dir === path.resolve(workspaceDir)) {
+    const origin = workflowStatus(bundledDir, workspaceDir)[path.basename(String(file))]?.origin;
+    return !!origin && origin !== 'custom';
+  }
+  return undefined;
+}
+
 module.exports = {
   addedGates,
   BUNDLED_WORKFLOWS_DIR,
   editedWorkspaceCopy,
+  isBundledWorkflowFile,
   isWorkflowFile,
   repositoryEntry,
   resolveWorkflow,

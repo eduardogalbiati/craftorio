@@ -41,6 +41,7 @@ const {
 const { ending } = require('@craftorio/shared/default-workflow');
 const chain = require('@craftorio/shared/chain-model');
 const Language = require('@craftorio/shared/language');
+const OrchestratorModels = require('@craftorio/shared/orchestrator-models');
 const { BUNDLED_SKILLS, methods: sessionsMethods } = require('./run/sessions');
 const { evalExpr, render, testsPlan } = require('./run/templates');
 const { GATE } = require('./run/field-rules');
@@ -225,11 +226,19 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
   //   turn's [Language] line and the output instruction follow it (packages/shared/language.js); null = English.
   // recover (#607): { runId, events, worktree } a run the app died in, continued in its own folder with
   //   its own id at its last finished turn (packages/engine/engine/run/resume.js seedRecovery); not a resume
-  constructor(/** @type {import('../../shared/types').RunOptions} */ { file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, serverForegroundMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts }) {
+  // orchestrator (#97): settings.orchestratorProvider ('claude' | 'codex'); with Codex, a bundled default
+  //   workflow runs its orchestrator and agents on Codex models (packages/shared/orchestrator-models.js).
+  // bundledWorkflow (#97): the file is a bundled default (or the owner's edit of one), not a custom or a
+  //   repository workflow; undefined = decided by the workflow's name (followsOrchestrator).
+  constructor(/** @type {import('../../shared/types').RunOptions} */ { file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, recover, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, serverForegroundMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard, agentOverrides, ownerCopy, fallbacks, accounts, accountCooldownMs, models, nightLimits, testWorkers, machine, architectureOracle, refactorPriorityOptions, language, ignoreInstallScripts, orchestrator, bundledWorkflow }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
-    this.wf = loadWorkflow(file);
+    const written = loadWorkflow(file);
+    const orchestratorOpts = { bundled: bundledWorkflow };
+    this.wf = OrchestratorModels.applyOrchestrator(written, orchestrator, orchestratorOpts);
+    const onOrchestrator = this.wf !== written; // #97: the workflow moved to the chosen orchestrator
+    this.onOrchestrator = onOrchestrator;
     this.mock = !!mock;
     this.language = functionOrNull(language);
     this.architectureOracle = functionOrNull(architectureOracle);
@@ -275,7 +284,7 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     // this.idleWarnMs, this.serverForegroundMs (#853)
     Object.assign(this, turnWatchLimits({ idleWarnMs, serverForegroundMs }));
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
-    this.inputs = this.resolveInputs(inputs || {});
+    this.inputs = this.resolveInputs(onOrchestrator ? OrchestratorModels.mapRunInputs(written, inputs || {}, orchestrator, orchestratorOpts) : inputs || {});
     this.then = startThen(this, then); // #631, #702
     this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
     this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
@@ -298,6 +307,8 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
       for (const k of ['provider', 'model', 'effort']) {
         if (typeof a[k] === 'string' && a[k].includes('{{')) a[k] = render(a[k], { inputs: this.inputs }).trim();
       }
+      // #97: a Claude model left by a template (a value saved before the choice) on its Codex counterpart
+      if (onOrchestrator && a.provider === 'codex') a.model = OrchestratorModels.mapModel(a.model, 'codex');
     }
     this.applyOwnerCopy(ownerCopy);
     this.applyAgentOverrides(agentOverrides);
@@ -454,15 +465,22 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
     return startStep({ steps: this.wf.steps, inputs: this.wf.inputs, values: this.inputs });
   }
 
+  // #97: the orchestrator's session shows the chosen orchestrator AI and its model when the run moved to
+  // it (a simulation keeps `mock` and names the provider it simulates); otherwise the deterministic engine
+  orchestratorSessionProvider() {
+    const orch = this.wf.orchestrator || {};
+    if (!this.onOrchestrator || !orch.provider) return { provider: 'engine', model: 'engine (deterministic)' };
+    const model = String(orch.model || '');
+    return this.mock ? { provider: 'mock', model, simulates: orch.provider } : { provider: orch.provider, model };
+  }
+
   async start() {
     // #607: a recovered run keeps its start
     this.startedAt = this.recovered?.startedAt || Date.now();
     this.status = 'running';
     this.recordStart();
     for (const n of this.notices) this.emitEvent('log', { level: n.level || 'info', message: n.message });
-    this.orchestrator = this.openSession({
-      agent: 'orchestrator', provider: 'engine', model: 'engine (deterministic)', parentId: null, stepId: null,
-    });
+    this.orchestrator = this.openSession({ agent: 'orchestrator', ...this.orchestratorSessionProvider(), parentId: null, stepId: null });
     this.setStatus(this.orchestrator, 'active');
     if (this.recovered) this.startRecovered();
 

@@ -30,6 +30,7 @@ const usage = require('@craftorio/engine/domains/usage/usage');
 const { resolveCommand } = require('@craftorio/engine/engine/providers');
 const {
   BUNDLED_WORKFLOWS_DIR,
+  isBundledWorkflowFile,
   resolveWorkflow,
   seedWorkflows,
 } = require('@craftorio/engine/domains/workflow/workflows');
@@ -118,6 +119,8 @@ const run = new WorkflowRun({
   // #862: the options Settings give an app run too (memory guard, idle warning, models, fallbacks,
   // accounts, language, test workers)
   ...runOptionsFromSettings({ settings, ws, mock: args.mock }),
+  // #97: a bundled default follows the chosen orchestrator AI (settings.orchestratorProvider)
+  bundledWorkflow: isBundledWorkflowFile(wfFile.file, ws.workflows),
   // orchestrator.worktree: one git worktree per run in <workspace>/worktrees (never in simulation)
   worktreesDir: args.mock ? null : ws.worktrees,
 });

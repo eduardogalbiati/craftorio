@@ -355,7 +355,7 @@ module.exports = (ctx) => {
     // #648: the edited copy's own file, not its name (an old name like writer-reviewer.yaml is an alias)
     if (edited && !resumed && !project.preferRepositoryWorkflows) return { file: path.join(ctx.ws.workflows, edited), dir: ctx.ws.workflows, fallback: false };
     const wf = loadRepositoryWorkflow(fromRepo.path, { accepted: fromRepo.accepted, policy: { tools: settings.repositoryWorkflowTools }, commit: fromRepo.commit });
-    return { file: fromRepo.path, fallback: false, ownerCopy: edited ? ownerCopy(path.join(ctx.ws.workflows, edited), wf) : null };
+    return { file: fromRepo.path, fallback: false, repository: true, ownerCopy: edited ? ownerCopy(path.join(ctx.ws.workflows, edited), wf) : null };
   }
 
   // #554: { agents: { <agent>: { provider?, model?, effort? } }, providers } of the owner's workspace
@@ -484,6 +484,8 @@ module.exports = (ctx) => {
         ignoreInstallScripts: installScriptsOff(project, fromUrl, notices),
         budget, prices: settings.prices, projectId, issues, resume, recover, attachments, mockSequences: mock ? mockSequences : null, then, from,
         agentOverrides, ownerCopy: wfFile.ownerCopy,
+        // #97: a bundled default follows the chosen orchestrator AI (runOptionsFromSettings' orchestrator)
+        bundledWorkflow: wfFile.repository || ctx.isRepositoryCopy?.(wfFile.file) ? false : workflows.isBundledWorkflowFile(wfFile.file, ws.workflows),
         // #862: the options Settings give every run (memory guard, idle warning, models, fallbacks,
         // accounts, language, test workers), shared with the CLI (scripts/run.js)
         ...runOptionsFromSettings({ settings, ws, mock }),

@@ -46,6 +46,7 @@ async function toolSignIn(id, env) {
   const tool = TOOLS.find((t) => t.id === id);
   // #740: a CLI the E2E hook makes missing (simulation only), until its simulated Install
   const simulated = simulatedState(id);
+  if (simulated === 'ready') return { installed: true, signedIn: true, account: 'simulated' }; // #97
   if (simulated) return { installed: simulated === 'installed', signedIn: false };
   const r = await resolveCommandAsync(id);
   if (!r) return { installed: false, signedIn: false };
@@ -62,6 +63,8 @@ module.exports = () => {
       // #740: a CLI the E2E hook makes missing (simulation only): not found, then found and signed out
       const simulated = simulatedState(t.id);
       if (simulated === 'missing') return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts) || simulatedInstallCommand(t.id), installHint: null, signInCommand };
+      // #97: a CLI the E2E hook makes ready: found and signed in
+      if (simulated === 'ready') return { id: t.id, name: t.name, path: `(simulated) ${t.id}`, version: `${t.id} (simulated)`, connected: true, auth: !!t.auth, account: 'simulated', signInCommand };
       if (simulated === 'installed') return { id: t.id, name: t.name, path: `(simulated) ${t.id}`, version: `${t.id} (simulated)`, connected: false, auth: !!t.auth, signInCommand };
       const r = await resolveCommandAsync(t.id); // #389: never blocks the main process
       if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts), installHint: installHint(t.id, process.platform, opts), installHintKey: installHintKey(t.id, process.platform, opts), signInCommand };

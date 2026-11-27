@@ -27,6 +27,7 @@ const {
   requiresProblem,
 } = require('../../domains/project/project-manifest');
 const compose = require('@craftorio/shared/workflow-compose');
+const OrchestratorModels = require('@craftorio/shared/orchestrator-models');
 const { workflowRequirements } = require('../../domains/workflow/workflow-requirements');
 
 // #488: an import by url gives up after this long, and refuses a body larger than a workflow can be
@@ -42,6 +43,8 @@ module.exports = (ctx) => {
   const { host } = ctx;
 
   const trustedFiles = () => workspace.readSettings(ctx.ws).trustedFiles || {};
+  // #97: the orchestrator AI chosen in the Setup or Settings (settings.orchestratorProvider)
+  const orchestratorProvider = () => workspace.readSettings(ctx.ws).orchestratorProvider;
   function isTrusted(file, trusted = trustedFiles()) {
     const fp = trusted[trustKey(file)];
     try { return !!fp && fingerprint(fs.readFileSync(path.join(ctx.ws.workflows, file), 'utf8')) === fp; } catch { return false; }
@@ -118,9 +121,12 @@ module.exports = (ctx) => {
   // One workflow file as the Workflows screen lists it; origin: where it comes from and its state
   function describe(src, file, origin) {
     try {
-      const wf = loadWorkflow(src);
+      const written = loadWorkflow(src);
       // the visual builder opens it only when it draws everything the workflow uses
-      const drawn = builder.fromWorkflow(wf).problems;
+      const drawn = builder.fromWorkflow(written).problems;
+      // #97: a bundled default (default or modified copy) shown on the chosen orchestrator AI's provider and
+      // models (agents, inputs, requirements), as its run will take it
+      const wf = OrchestratorModels.applyOrchestrator(written, orchestratorProvider(), { bundled: origin.origin === 'default' || origin.origin === 'modified' });
       // #262: an agent's provider / model / effort with the inputs' defaults (they can be templates over them)
       const defaults = Object.fromEntries(Object.entries(wf.inputs || {}).filter(([, d]) => d?.default !== undefined).map(([k, d]) => [k, d.default]));
       const resolve = (v) => {

@@ -792,7 +792,7 @@ function renderSessions() {
         <span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span>
       </div>
       <div class="badges">
-        <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span>
+        <span class="badge p-${esc(s.simulates || s.provider)}">${esc(s.simulates || s.provider)}</span>
         <span class="badge">${esc(s.model)}</span>${s.account ? `<span class="badge" data-testid="run-session-account">${esc(s.account)}</span>` : ''}
         ${isOrch ? '' : `<span class="badge">${s.turns || 0} ${I18n.t('run.turn_s')}</span>`}
       </div>
