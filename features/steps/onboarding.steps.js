@@ -2121,3 +2121,105 @@ Then('the review shows no analysis cost', async ({ e2e }) => {
   await expect(review(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(reviewCosts(e2e.window)).toHaveCount(0);
 });
+
+// ---- #107: a failed import says its own cause, in the interface's language, and leaves no project -----------------
+// What the screen exposes (to be added by #107): step 2's wizard-error (the existing failure box of an import) with
+// data-error="repo-not-found" | "repo-no-access" | "not-a-git-repo" (the codes the engine's start() answers, see
+// packages/engine/test/project/import-failure-107.test.js; besides today's "clone-failed" / no-network), its text
+// in the interface's language naming that cause; "credentials" only for repo-no-access. A failed import is not kept in
+// the Projects list (data-testid="project-card" of projects-screen).
+//
+// E2E HOOK THE DEVELOPER MUST ADD, read only when CRAFTORIO_SIMULATION_ONLY=1 (the access check of the simulated
+// onboarding, packages/engine/service/areas/project-onboarding.js / projects.checkAccess): CRAFTORIO_E2E_REPO_ACCESS=
+// not-found|no-access stands for git ls-remote and gh's answer on any http(s) repository URL, without the network:
+// not-found = the repository does not exist; no-access = it exists, private, and the account has no access to it.
+// A local folder (file:// URL) is never simulated: the real folder without .git fails as git does.
+const IMPORT_CAUSE = {
+  'the repository does not exist': 'repo-not-found',
+  'I have no access to the repository': 'repo-no-access',
+  'the folder is not a git repository': 'not-a-git-repo',
+};
+const importError = (page) => wizard(page).getByTestId('wizard-error');
+
+Given('the app is open where GitHub says the repository I import does not exist', async ({ e2e }) => {
+  await e2e.open({ env: { CRAFTORIO_E2E_REPO_ACCESS: 'not-found' } });
+});
+
+Given('the app is open where GitHub says the repository I import is private and I have no access to it', async ({ e2e }) => {
+  await e2e.open({ env: { CRAFTORIO_E2E_REPO_ACCESS: 'no-access' } });
+});
+
+// a folder with files and no .git, imported by its file:// URL as step 1's folder card does
+Given('a local folder that is not a git repository is ready to import', async ({ e2e }) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const folder = path.join(e2e.scratch, 'folders', 'not-a-repo');
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, 'README.md'), '# not a repository\n');
+  e2e.localRepo = pathToFileURL(folder).href;
+});
+
+Then('the wizard says the import failed because {string}', async ({ e2e }, cause) => {
+  const code = IMPORT_CAUSE[cause];
+  if (!code) throw new Error(`unknown cause "${cause}": one of ${Object.keys(IMPORT_CAUSE).join(', ')}`);
+  const error = importError(e2e.window);
+  await expect(error).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(error).toHaveAttribute('data-error', code);
+});
+
+Then("the wizard's import error reads {string}", async ({ e2e }, text) => {
+  const error = importError(e2e.window);
+  await expect(error).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(error).toContainText(new RegExp(escapeRe(text), 'i'));
+});
+
+Then("the wizard's import error does not read {string}", async ({ e2e }, text) => {
+  const error = importError(e2e.window);
+  await expect(error).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(error).not.toContainText(new RegExp(escapeRe(text), 'i'));
+});
+
+// the screen has loaded its cards (the demo workspace's "demo-app") before the absence is read
+Then('the Projects screen does not list the project {string}', async ({ e2e }, name) => {
+  const screen = e2e.window.getByTestId('projects-screen').filter({ visible: true }).first();
+  await expect(screen.getByTestId('project-card').filter({ hasText: 'demo-app' }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(screen.getByTestId('project-card').filter({ hasText: name })).toHaveCount(0);
+});
+
+// ---- #108: Create new project's name: required, and the folder it really gets ---------------------------------------
+// What the screen exposes: data-testid="wizard-name-required" (to be added by #108), the line under wizard-new-name
+// saying a name is required, shown while the name is empty (after it was touched), tied to the field with
+// aria-describedby; wizard-new-folder (exists) reads the folder the project will really get, the name's slug with
+// -2, -3… when a project already holds it (projects.createProject's id rule).
+const nameRequired = (page) => wizard(page).getByTestId('wizard-name-required');
+
+// a project with no repository, written with the engine's own functions (its folder <workspace>/projects/<slug>),
+// then the app reloads to read the project list again (as local-backlog.steps.js does)
+Given('the workspace has a project {string}', async ({ e2e }, name) => {
+  if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
+  const projects = require('@craftorio/engine/domains/project/projects');
+  const ws = require('@craftorio/engine/domains/workspace/workspace').setupWorkspace(path.join(e2e.scratch, 'workspace'), { persist: false });
+  await projects.createProject(ws.projects, { name, description: 'An existing project (simulated data)' });
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+When("I clear the new project's name", async ({ e2e }) => {
+  const field = wizard(e2e.window).getByTestId('wizard-new-name');
+  await field.click();
+  await field.press('ControlOrMeta+A');
+  await field.press('Backspace');
+  await expect(field).toHaveValue('');
+});
+
+Then('the wizard says under the project name that a name is required', async ({ e2e }) => {
+  const line = nameRequired(e2e.window);
+  await expect(line).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(line).toHaveText(/\S/);
+  const id = await line.getAttribute('id');
+  expect(id, 'the line has an id the field points to').toBeTruthy();
+  await expect(wizard(e2e.window).getByTestId('wizard-new-name')).toHaveAttribute('aria-describedby', new RegExp(`(^|\\s)${escapeRe(id)}(\\s|$)`));
+});
+
+Then('the wizard no longer says that a project name is required', async ({ e2e }) => {
+  await expect(nameRequired(e2e.window)).toBeHidden();
+});
