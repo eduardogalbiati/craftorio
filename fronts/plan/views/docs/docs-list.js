@@ -1,7 +1,9 @@
 // Documents screen (#647, #671, #650, views/docs/docs.js): the item's SDLC steps with their documents
 // and the markup of the list area: the Items rows (their stage chain, the pill of their latest
 // document, their actions, #671 mock-1; #12 the link to the issue their documents name in `issue:`
-// instead of "Create epic", and a Done badge, the row last, once the plan is built and the test passed) and the Intents tab (#650, spec R16: every
+// instead of "Create epic", no "Write the plan" once its issues are all closed, and a Done badge, the row
+// last, once the plan is built and the test passed or its epic is closed: the item's issueState/epicState
+// docs:list reads from the Backlog's synced issues) and the Intents tab (#650, spec R16: every
 // docs/work/<item>/intent.md with its status and its link back to the maintain.md that opened it).
 // Markup only, from the values docs.js passes; the clicks are docs.js's (data-docs-*). Uses app.js
 // globals (esc, t), DocsPanels.openLabel and DocModel.ACCEPTED. Browser: window.DocsList.
@@ -44,7 +46,8 @@
     const open = names.map((doc) => `<button type="button" class="btn sm ghost" data-docs-open="${esc(doc)}" data-item="${esc(it.item)}"${run(doc)}>${DocsPanels.openLabel(doc)}</button>`);
     if (intent?.status === 'accepted' && !spec) open.push(`<button type="button" class="btn sm primary" data-docs-write-spec data-item="${esc(it.item)}">${t('docs.write_the_spec')}</button>`);
     // #633 the plan (plan.md) is written from the signed-off spec, at its own gate
-    if (spec && signedOff(spec.status) && !names.includes('plan')) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
+    // #12 nor once the item's issues are all closed (built without a plan.md)
+    if (spec && signedOff(spec.status) && !names.includes('plan') && !issuesClosed(it)) open.push(`<button type="button" class="btn sm" data-testid="docs-write-plan" data-docs-write-plan data-item="${esc(it.item)}">${t('docs.write_the_plan')}</button>`);
     // #12 an item whose documents name its issue already has it: no second epic
     if (spec && signedOff(spec.status) && !issueOf(it)) open.push(`<button type="button" class="btn sm primary" data-docs-issues data-item="${esc(it.item)}">${t('docs.create_epic_and_phase_issues')}</button>`);
     return open.join('');
@@ -71,8 +74,20 @@
     return `<a class="docs-item-issue small" data-testid="docs-item-issue-link"${href ? ` href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(ref.text)}">${esc(label)}</a>`;
   }
 
-  // #12 a built plan whose test passed: the item is done
-  const isDone = (it) => it.docs.some((d) => d.doc === 'plan' && d.status === 'built') && it.docs.some((d) => d.doc === 'test' && d.status === 'passed');
+  // #12 the platform states docs:list adds from the Backlog's synced issues (issueState, epicState), unknown: open
+  const closed = (state) => state === 'closed';
+  // every issue the item names (its issue and the epic it names) is closed
+  const issuesClosed = (it) => {
+    const ref = issueOf(it);
+    return !!ref && closed(it.issueState) && (!ref.epic || closed(it.epicState));
+  };
+  // its epic is closed: the epic it names, else its issue (an item's own issue is its epic, "#625")
+  const epicClosed = (it) => {
+    const ref = issueOf(it);
+    return !!ref && closed(ref.epic ? it.epicState : it.issueState);
+  };
+  // #12 a built plan whose test passed, or a closed epic: the item is done
+  const isDone = (it) => epicClosed(it) || (it.docs.some((d) => d.doc === 'plan' && d.status === 'built') && it.docs.some((d) => d.doc === 'test' && d.status === 'passed'));
 
   // #671 the stage chain of a row, "Plan ✓ · Design": the steps up to the item's, done ones checked
   function stagesHtml(it) {

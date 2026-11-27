@@ -7,7 +7,8 @@
 // Where they are written (spec R11): with a runId, the write-doc run's worktree, on the run's branch
 // (`write-doc/<item>-<doc>-<runId>`, merged into the local base at the accept, merge: local); without
 // a worktree (a simulated run, a folder without git) and without a run, the project's folder. The
-// list adds the items of the write-doc runs in progress (their worktree's documents, with `runId`).
+// list adds the items of the write-doc runs in progress (their worktree's documents, with `runId`), and
+// (#12) the state of the issues their `issue:` names, from the project's synced Backlog.
 // The run's own steps are written here too, from its events, whether the screen is open or not: at
 // its first step the document's skeleton (a new item) and the run's base commit
 // (<runDir>/docs-base.json); at the end of `draft` the writer's draft, only when the run created the
@@ -20,6 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const docs = require('../domains/docs');
+const backlog = require('@craftorio/engine/domains/backlog/backlog');
 const projects = require('@craftorio/engine/domains/project/projects');
 const { clientError, gitOut } = require('@craftorio/engine/service/common');
 const schemas = require('@craftorio/engine/service/schemas');
@@ -73,7 +75,13 @@ module.exports = (ctx) => {
       const it = there || items.get(run.item) || { item: run.item, stage: run.doc, docs: [] };
       items.set(run.item, { ...it, runId: run.runId, runDoc: run.doc });
     }
-    return [...items.values()].sort((a, b) => a.item.localeCompare(b.item));
+    return docs.withIssueStates([...items.values()].sort((a, b) => a.item.localeCompare(b.item)), syncedBacklog(projectId));
+  }
+
+  // #12 the project's Backlog as last synced (closed issues included), null without one: the items' issue states
+  function syncedBacklog(projectId) {
+    if (!ctx.ws?.backlog) return null;
+    try { return backlog.readBacklog(ctx.ws.backlog, projectId); } catch { return null; }
   }
 
   // the run's first step: its branch, the skeleton of a new document and its base commit

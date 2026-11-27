@@ -6,6 +6,8 @@
 //   (a `not started` skeleton is not listed) (stage: the latest document's; title: the latest document's
 //   heading, #670; issue?: #12, the first document's `issue:` front matter, quotes dropped, when it names
 //   a `#N`); [] without docs/work;
+// - withIssueStates(items, backlog) (#12): the items with issueState / epicState, the states of the issue
+//   and of the epic their `issue:` names, from the Backlog's synced issues (no network call);
 // - readDoc(dir, { item, doc }) → { item, doc, status, source: { file, markdown }, translation: { file, markdown } | null };
 // - createDoc(dir, { item, doc, title, date }) → { item, doc, commit }: the playbook's skeleton of the
 //   document and its pt-BR translation (the sections of DocModel's lint, one line each to write), one
@@ -167,6 +169,30 @@ function listItems(dir) {
     if (docs.length) items.push({ item: entry.name, ...(title ? { title } : {}), stage, docs, ...(issue ? { issue } : {}), ...(maintain ? { maintain } : {}) });
   }
   return items.sort((a, b) => a.item.localeCompare(b.item));
+}
+
+// "owner/repo" of a repository URL or path (https://github.com/o/r.git, git@host:o/r), lower case
+const repoPath = (repo) => String(repo || '').trim().replace(/\.git$/i, '').split(/[/:]/).filter(Boolean).slice(-2).join('/').toLowerCase();
+
+// #12 the items with the platform state of the issue (issueState) and of the epic (epicState) their
+// `issue:` names, from the Backlog's synced issues (backlog.readBacklog: { repo, issues: [{ number, state }] },
+// closed ones included); a ref to another repository or not in the list gets no state (no network call)
+function withIssueStates(items, backlog) {
+  const issues = Array.isArray(backlog?.issues) ? backlog.issues : [];
+  if (!issues.length) return items;
+  const here = repoPath(backlog.repo);
+  const stateOf = (ref) => {
+    if (!ref || (ref.repo && repoPath(ref.repo) !== here)) return null;
+    const found = issues.find((i) => Number(i?.number) === ref.number);
+    return found?.state ? String(found.state).toLowerCase() : null;
+  };
+  return items.map((it) => {
+    const ref = it.issue ? DocModel.issueRef(it.issue) : null;
+    if (!ref) return it;
+    const issueState = stateOf(ref);
+    const epicState = ref.epic ? stateOf(ref.epic) : null;
+    return { ...it, ...(issueState ? { issueState } : {}), ...(epicState ? { epicState } : {}) };
+  });
 }
 
 function readDoc(dir, { item, doc }) {
@@ -486,5 +512,6 @@ module.exports = {
   recordIncident,
   undoChange,
   unreviewed,
+  withIssueStates,
   writePostMortem,
 };
