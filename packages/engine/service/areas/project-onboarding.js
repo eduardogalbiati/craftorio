@@ -98,7 +98,7 @@ function accessReason(access) {
 // #107: the answer to an import refused before anything is created (no project, no folder in repos/): no
 // projectId, its cause as the code (repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git), and
 // `cli` the check of gh / glab for the URL's provider (the wizard's warning shows next to the error)
-const refusedImport = (access, cli = null) => ({
+const refusedImport = (/** @type {any} */ access, /** @type {object | null} */ cli = null) => ({
   status: 'failed',
   code: access.cause || access.status,
   reason: accessReason(access),

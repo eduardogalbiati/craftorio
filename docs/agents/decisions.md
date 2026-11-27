@@ -106,7 +106,10 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   wizard (start, repository, analysis, review: `fronts/build/views/projects/project-wizard.js`),
   opened by Home's empty state, Projects › New project and the Setup's last step; Edit keeps the old
   dialog. The clone is a job of the engine (`cloning | ready | failed`, an access check first): a
-  refused access or a failed clone ends `failed` with a readable reason and Retry, never `ready`.
+  failed clone ends `failed` with a readable reason and Retry, never `ready`. #107 (2026-11-26,
+  replaces "a refused access ends failed"): an import the access check refuses makes nothing (no
+  project, no folder in `repos/`), because a broken project named after a wrong URL was left behind;
+  step 2 names the cause in the interface language, git's line as the detail.
   The free analyses (facts, what git tells of the Ways of working profile) run after the clone; the paid ones
   (the project map and, #74, the Oracle's turn on the profile fields git leaves open) only on the owner's
   click, their cost shown before it, and "analyze later" never calls a model. The progress tray stays when the wizard closes; Finish never waits for

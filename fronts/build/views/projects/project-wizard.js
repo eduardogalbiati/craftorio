@@ -137,7 +137,7 @@
     wizardOpen: () => !!cur && !root?.hidden, // #740: hidden while Settings › Agents & CLIs is open
   });
   // #740: the gh / glab error, Open Setup → Settings › Agents & CLIs (project-wizard-cli.js)
-  const { errorBlock, openSetup } = window.ProjectWizardCli({
+  const { errorBlock, openSetup, titleOf } = window.ProjectWizardCli({
     cur: () => cur,
     refresh: (checkAgain) => { tray.refresh(); if (checkAgain) loadAccounts(); },
     render: () => render(),
@@ -367,7 +367,8 @@
   const remoteProvider = () => cur.remoteProvider || signedIn()[0]?.provider || providers()[0];
   const newSlug = () => M.slugify(cur.model.name);
   // #108: the folder it really gets, <slug>-2… when a project (cur.taken, api.listProjects at open) holds the slug
-  const newFolder = () => `<workspace>/projects/${M.newProjectFolderName(cur.model.name, cur.taken)}`; // i18n-ignore
+  // a resumed project already has its folder (the taken list holds its own id)
+  const newFolder = () => `<workspace>/projects/${cur.projectId || M.newProjectFolderName(cur.model.name, cur.taken)}`; // i18n-ignore
   async function loadTaken() {
     const list = await Promise.resolve(api.listProjects?.()).catch(() => null);
     if (!cur || !Array.isArray(list)) return;
@@ -552,7 +553,7 @@
         <section class="wizard-body">${cur.exists ? resume.existsBody() : BODY[step]()}</section>
         <footer class="wizard-foot" data-testid="wizard-footer">${cur.exists ? back : foot}</footer>
       </div>`;
-    // #108: the live button too (typing updates it in place, so it never keeps a disabled state from another step)
+    // #108: a no-op in a real DOM; the unit tests' fake DOM keeps an element by id across innerHTML
     const nextBtn = /** @type {HTMLButtonElement | null} */ (showNext ? document.getElementById('wizard-next') : null);
     if (nextBtn) nextBtn.disabled = !(canNext() && !cur.busy);
     resume.save();
@@ -676,6 +677,18 @@
     }
   }
 
+  // step 2's Next answered: where the wizard goes from the engine's state
+  function begun(state, name) {
+    const refused = state?.status === 'failed' && !state.projectId;
+    // #107: the wizard was closed while the import was checked: its cause in a toast, nothing else to show
+    if (!cur) { if (refused) showToast(titleOf(state.code), state.reason || ''); return; }
+    // #107: an import refused before anything was made (no projectId): its cause shows on this step
+    if (refused) cur.onboarding = state;
+    // #741: a finished project of this repository: say it exists; an unfinished one resumes at its step
+    else if (state?.exists) cur.exists = state.projectId;
+    else resume.at(state, name);
+  }
+
   async function next() {
     if (!canNext()) return;
     // the folder card: Next asks for the folder, then step 2 with its URL (a cancelled pick stays here)
@@ -697,12 +710,7 @@
       if (creating) cur.creating = name;
       render();
       try {
-        const state = await begin();
-        // #107: an import refused before anything was made (no projectId): its cause shows on this step
-        if (state?.status === 'failed' && !state.projectId) cur.onboarding = state;
-        // #741: a finished project of this repository: say it exists; an unfinished one resumes at its step
-        else if (state?.exists) cur.exists = state.projectId;
-        else resume.at(state, name);
+        begun(await begin(), name);
       } catch (e) {
         showToast(t(creating ? 'onboarding.new_create_failed' : 'onboarding.start_failed'), errMsg(e));
       } finally {
@@ -778,6 +786,7 @@
       const repo = e.target.closest('[data-repo]').dataset.repo;
       // #739: the typed URL's rule; a name the owner typed stays
       cur.model = { ...cur.model, repository: repoUrl(repo), name: cur.nameTyped ? cur.model.name : M.displayNameFromUrl(repo) };
+      if (!cur.projectId) cur.onboarding = null; // #107: another repository after a refused import
       render();
       const nameField = /** @type {HTMLInputElement | null} */ (document.getElementById('wizard-name'));
       if (nameField) nameField.value = cur.model.name;
@@ -830,7 +839,7 @@
       await createIssue(Number(button.dataset.finding), button.dataset.prioritize !== undefined);
     }
     else if (act === 'next') await next();
-    else if (act === 'back') { cur.model = M.back(cur.model); render(); }
+    else if (act === 'back') { cur.model = M.back(cur.model); if (!cur.projectId) cur.onboarding = null; render(); } // #107: a refusal stays on step 2
     else if (await onFailureClick(act)) return;
     // #738: the fork suggestion's two choices; the answer (cloned, the fork chosen) moves on to analysis
     else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));

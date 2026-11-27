@@ -99,15 +99,18 @@ the left, the step's action on the right.
    shows a spinner (`wizard-spinner`) and "Cloning <name>…" (`aria-busy`), the fields read-only, no status card; the
    button is disabled only while `onboarding:start` is in flight, then a click goes on to the analysis step without
    waiting (#641: the clone keeps running); the clone done goes straight to the analysis step. The panel
-   (`wizard-panel`) has one fixed size on every step and state: its body scrolls. A refused access shows
-   `wizard-error` `data-error="no-access"` with Retry, Sign in and Edit the URL (`wizard-edit-repo`: a new import from
-   the same fields, the failed one stays in the tray); a failed clone, `data-error="clone-failed"`. A missing or
-   signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
+   (`wizard-panel`) has one fixed size on every step and state: its body scrolls. #107: a refused import makes
+   nothing (no project, no `repos/` folder): `onboarding:start` answers `failed`, no `projectId`, `code` the cause,
+   `reason` git's last line. `wizard-error` `data-error` = `repo-not-found` | `repo-no-access` (both with Sign in;
+   GitHub's "not found" may be a private repository) | `not-a-git-repo` (local origin only) | `no-git` | `no-network`,
+   titled in the interface language; typing, Back or another pick clears it; closed meanwhile, a toast. A failed
+   clone: `clone-failed`. A missing or signed-out gh / glab is a warning (`wizard-cli-warning`), the import goes on.
    **Create new** (#632, mock-3, step 2 with the Create card): on the left the name (`wizard-new-name`),
    what it starts with (`wizard-new-starts` radios: README and .gitignore with a first commit on `main`, or
    Empty, `git init` only), the private remote's checkbox (`wizard-new-remote`, unchecked, disabled without a
    signed-in gh / glab) with its platform (`wizard-new-remote-provider`) and hint (`wizard-new-remote-hint`),
-   and the folder `<workspace>/projects/<slug>` (`wizard-new-folder`, `slugify` of the onboarding model).
+   and the folder `<workspace>/projects/<folder>` (`wizard-new-folder`, #108: `newProjectFolderName`, the rule
+   `createProject` uses, over `projects:list`: `<slug>` or the first free `<slug>-2`…). Empty: `wizard-name-required`.
    On the right the four questions (`wizard-question` `data-question="mode | ci | release | kind"`, one
    `wizard-chip` per answer, `CREATE_ANSWERS` / `CREATE_DEFAULTS`). #57: `kind` (default frontend) is saved
    on the project: the review's Project kind opens on it, never on "Detect from the files". Next calls
@@ -186,11 +189,11 @@ and `pt-BR.json` (the same set in both); `apps/desktop/test/i18n-every-screen-33
 - Screenshots: `npm run screenshot -- --view onboarding --mode <start | repository | cloning |
   access-error | analysis | review>` (`scripts/screenshot/views/onboarding.js`): the wizard over Home in
   a new workspace, driven through its own controls. analysis and review import a local git repository
-  (file://, no network) and run the analyses simulated; cloning says `cloning` on the real
-  `onboarding:changed` channel for the project a failed import made (a local clone ends too fast).
+  (file://, no network) and run the analyses simulated; cloning stubs `onboarding:start` (a demo
+  project's clone running); access-error takes `--cause no-access | not-found` (hook `CRAFTORIO_E2E_REPO_ACCESS`).
   The imported repository has a manifest with `default` and `kinds` (#790, #791): `--mode analysis
   --click "[data-testid=wizard-workflows-choice-manual]"` shows the Default row.
 - E2E: `features/onboarding.feature` (steps in `features/steps/onboarding.steps.js` and
   `onboarding-journey.steps.js`), simulated: from the empty Home to the Next steps card, and the
-  no-access path with Edit the URL. `npm run test:e2e -- --grep @issue-644`.
+  no-access path with Edit the URL. `npm run test:e2e -- --grep @issue-644` (#107, #108: `--grep @issue-107`).
 - Spec and plan: `docs/work/first-project-onboarding/`; the decisions in `docs/agents/decisions.md` (#629).
