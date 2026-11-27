@@ -55,7 +55,8 @@ test('fetchIssues: the short ids gh / gl build the same CLI calls as github / gi
   assert.deepEqual(gh.calls, ['gh issue list --repo o/r --state all --limit 300 --json number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
   const gl = recorder();
   await fetchIssues({ platform: 'gl', repo: 'https://git.example.com/g/p', exec: gl.exec });
-  assert.deepEqual(gl.calls, ['glab issue list --repo https://git.example.com/g/p --all --per-page 100 --output json']);
+  // #90: then the project's members, whose access level gives each issue's author association
+  assert.deepEqual(gl.calls, ['glab issue list --repo https://git.example.com/g/p --all --per-page 100 --output json', 'glab api --hostname git.example.com --paginate projects/g%2Fp/members/all?per_page=100']);
 });
 
 test('index.html loads the adapters, then the registry, before every other shared script', () => {

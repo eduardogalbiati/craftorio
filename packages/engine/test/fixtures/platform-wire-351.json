@@ -13,6 +13,19 @@
         "300",
         "--json",
         "number,title,state,labels,url,author,assignees,body,createdAt,updatedAt"
+      ],
+      [
+        "gh",
+        "api",
+        "graphql",
+        "-f",
+        "query=query($owner:String!,$name:String!){repository(owner:$owner,name:$name){i12:issue(number:12){number authorAssociation}}}",
+        "-f",
+        "owner=o",
+        "-f",
+        "name=r",
+        "--jq",
+        "[.data.repository[] | select(. != null)]"
       ]
     ],
     "result": [
@@ -28,16 +41,18 @@
         ],
         "url": "https://github.com/o/r/issues/12",
         "author": "ana",
+        "authorAssociation": null,
         "assignees": [
           "bo"
         ],
         "body": "- [x] one\n- [ ] two",
+        "createdAt": "2026-01-02T00:00:00Z",
+        "updatedAt": "2026-01-03T00:00:00Z",
         "tasks": {
           "done": 1,
           "total": 2
         },
-        "createdAt": "2026-01-02T00:00:00Z",
-        "updatedAt": "2026-01-03T00:00:00Z"
+        "outside": true
       }
     ]
   },
@@ -72,6 +87,12 @@
         "100",
         "--output",
         "json"
+      ],
+      [
+        "glab",
+        "api",
+        "--paginate",
+        "projects/g%2Fsub%2Fp/members/all?per_page=100"
       ]
     ],
     "result": [
@@ -91,14 +112,11 @@
         ],
         "url": "https://gitlab.com/g/sub/p/-/issues/7",
         "author": "ana",
+        "authorAssociation": null,
         "assignees": [
           "bo"
         ],
         "body": "- [ ] one",
-        "tasks": {
-          "done": 0,
-          "total": 1
-        },
         "createdAt": "2026-01-02T00:00:00Z",
         "updatedAt": "2026-01-03T00:00:00Z",
         "groupEpic": {
@@ -106,7 +124,12 @@
           "title": "Group epic",
           "groupId": 44,
           "url": "https://gitlab.com/groups/g/-/epics/3"
-        }
+        },
+        "tasks": {
+          "done": 0,
+          "total": 1
+        },
+        "outside": true
       }
     ]
   },
@@ -123,6 +146,14 @@
         "100",
         "--output",
         "json"
+      ],
+      [
+        "glab",
+        "api",
+        "--hostname",
+        "git.example.com",
+        "--paginate",
+        "projects/g%2Fp/members/all?per_page=100"
       ]
     ],
     "result": []
@@ -158,16 +189,17 @@
       ],
       "url": "https://github.com/o/r/issues/12",
       "author": "ana",
+      "authorAssociation": null,
       "assignees": [
         "bo"
       ],
       "body": "- [x] one\n- [ ] two",
+      "createdAt": "2026-01-02T00:00:00Z",
+      "updatedAt": "2026-01-03T00:00:00Z",
       "tasks": {
         "done": 1,
         "total": 2
-      },
-      "createdAt": "2026-01-02T00:00:00Z",
-      "updatedAt": "2026-01-03T00:00:00Z"
+      }
     }
   },
   "gitlab: view an issue": {
@@ -199,14 +231,11 @@
       ],
       "url": "https://gitlab.com/g/sub/p/-/issues/7",
       "author": "ana",
+      "authorAssociation": null,
       "assignees": [
         "bo"
       ],
       "body": "- [ ] one",
-      "tasks": {
-        "done": 0,
-        "total": 1
-      },
       "createdAt": "2026-01-02T00:00:00Z",
       "updatedAt": "2026-01-03T00:00:00Z",
       "groupEpic": {
@@ -214,6 +243,10 @@
         "title": "Group epic",
         "groupId": 44,
         "url": "https://gitlab.com/groups/g/-/epics/3"
+      },
+      "tasks": {
+        "done": 0,
+        "total": 1
       }
     }
   },
@@ -914,16 +947,18 @@
           ],
           "url": "https://gitlab.com/g/sub/p/-/issues/7",
           "author": "ana",
+          "authorAssociation": null,
           "assignees": [
             "bo"
           ],
           "body": "- [ ] one",
+          "createdAt": "2026-01-02T00:00:00Z",
+          "updatedAt": "2026-01-03T00:00:00Z",
           "tasks": {
             "done": 0,
             "total": 1
           },
-          "createdAt": "2026-01-02T00:00:00Z",
-          "updatedAt": "2026-01-03T00:00:00Z",
+          "outside": true,
           "epic": "&3"
         },
         {
@@ -942,16 +977,18 @@
           ],
           "url": "https://gitlab.com/g/sub/p/-/issues/9",
           "author": "ana",
+          "authorAssociation": null,
           "assignees": [
             "bo"
           ],
           "body": "- [ ] one",
+          "createdAt": "2026-01-02T00:00:00Z",
+          "updatedAt": "2026-01-03T00:00:00Z",
           "tasks": {
             "done": 0,
             "total": 1
           },
-          "createdAt": "2026-01-02T00:00:00Z",
-          "updatedAt": "2026-01-03T00:00:00Z",
+          "outside": true,
           "isEpic": true
         }
       ],
