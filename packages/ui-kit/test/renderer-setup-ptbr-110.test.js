@@ -32,10 +32,11 @@ const WORKFLOWS = [
   { file: 'write-doc.yaml', name: 'write-doc', origin: 'bundled', category: 'build', requirements: { clis: ['claude', 'codex', 'git'], forge: false } },
 ];
 
-async function setupIn(lang) {
+async function setupIn(lang, extraApi = {}) {
   let saved = { setupDone: true, language: { interface: lang } };
   const app = loadApp({
     api: {
+      ...extraApi,
       getSettings: async () => JSON.parse(JSON.stringify(saved)),
       setSettings: async (patch) => { saved = { ...saved, ...JSON.parse(JSON.stringify(patch || {})) }; return JSON.parse(JSON.stringify(saved)); },
       listWorkflows: async () => JSON.parse(JSON.stringify(WORKFLOWS)),
@@ -45,6 +46,8 @@ async function setupIn(lang) {
     },
   });
   await app.boot();
+  // a confirmation before running a command (app.js confirmDialog) is accepted
+  app.run('confirmDialog = async () => true;');
   if (app.sandbox.I18n.getLanguage() !== lang) app.sandbox.I18n.setLanguage(lang);
   await app.run('window.Setup.open("agents")');
   await app.settle(20);
@@ -120,4 +123,66 @@ test('#110 Setup: an install started on Version control does not show its "Insta
   assert.equal(hasConsole(app), true, 'the panel shows on the step that started the install');
   await back(app);
   assert.equal(hasConsole(app), false, 'the panel of the Version control step\'s install leaks into the AIs step');
+});
+
+// the manual console's install prose (<code> of the cli-console, data-status="manual")
+function manualCode(app) {
+  const html = body(app);
+  const at = html.indexOf('data-testid="cli-console"');
+  assert.notEqual(at, -1, 'the console is drawn');
+  assert.match(html.slice(at, at + 300), /data-status="manual"/, 'the console is in its manual state');
+  const code = /<code class="setup-cmd"[^>]*>([\s\S]*?)<\/code>/.exec(html.slice(at));
+  assert.notEqual(code, null, 'the console shows what to install');
+  return text(code[1]);
+}
+
+test('#110 Setup in pt-BR: Grok Build\'s manual console (AIs step) shows its install prose in Portuguese', { timeout: 30000 }, async () => {
+  const app = await setupIn('pt-BR');
+  await install(app, 'grok');
+  const shown = manualCode(app);
+  for (const english of ['install Grok Build', 'which must be on the PATH', 'it lands in']) {
+    assert.equal(shown.includes(english), false, `"${english}" in: ${shown}`);
+  }
+  const pt = app.sandbox.I18n.t('setup.install_text.grok', null, 'pt-BR');
+  assert.equal(shown, pt);
+});
+
+test('#110 Setup in pt-BR: the GitLab CLI\'s manual console (Version control step) shows its install prose in Portuguese', { timeout: 30000 }, async () => {
+  const app = await setupIn('pt-BR');
+  await next(app);
+  await install(app, 'glab');
+  const shown = manualCode(app);
+  for (const english of ['install the GitLab CLI', 'distribution\'s package manager', 'or from https://']) {
+    assert.equal(shown.includes(english), false, `"${english}" in: ${shown}`);
+  }
+  const pt = app.sandbox.I18n.t('setup.install_text.glab', null, 'pt-BR');
+  assert.equal(shown, pt);
+});
+
+test('#110 Setup: an install started on the AIs step and updated after Next does not show its console on Version control', { timeout: 30000 }, async () => {
+  // the browser UI: ▶ Install runs on the engine (cli-setup:start), its updates come on api.onCliSetupChanged
+  const app = await setupIn('pt-BR', {
+    platform: 'browser',
+    cliSetupStart: async ({ id, action }) => ({ jobId: 'job-110', id, action, status: 'running', output: '' }),
+  });
+  const command = 'npm install -g @openai/codex';
+  await app.click('#setup-install-codex', {
+    dataset: { setupRun: command, cliId: 'codex', cliAction: 'install', testid: 'setup-install-codex' },
+    within: ['#setup-modal #setup-body'],
+  });
+  await app.settle(10);
+  assert.equal(app.callsTo('cliSetupStart').length, 1, 'the install runs on the engine');
+  assert.equal(hasConsole(app), true, 'the console shows on the step that started the install');
+  const before = title(app);
+  await next(app);
+  assert.notEqual(title(app), before, 'Next moved to Version control');
+  assert.equal(hasConsole(app), false, 'no console on Version control after Next');
+  const handlers = app.apiHandlers.onCliSetupChanged || [];
+  assert.equal(handlers.length > 0, true, 'the job is followed (api.onCliSetupChanged)');
+  for (const fn of handlers) fn({ jobId: 'job-110', id: 'codex', action: 'install', status: 'running', output: 'added 1 package\n' });
+  await app.settle(10);
+  assert.equal(hasConsole(app), false, 'the update of the AIs step\'s install moved its console onto Version control');
+  await back(app);
+  assert.equal(hasConsole(app), true, 'back on the AIs step, its install\'s console shows again');
+  assert.equal(body(app).includes('added 1 package'), true, 'with the update');
 });

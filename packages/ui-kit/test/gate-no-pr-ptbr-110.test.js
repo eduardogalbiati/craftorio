@@ -31,9 +31,9 @@ function gateRecord(file, id, ctx) {
   return JSON.parse(JSON.stringify(ev.payload));
 }
 
-async function drawn(language) {
+async function drawn(language, ctx = NO_PR) {
   I18n.setLanguage(language);
-  const record = gateRecord('feature.yaml', 'ci_failed', NO_PR);
+  const record = gateRecord('feature.yaml', 'ci_failed', ctx);
   const page = await loadPage();
   page.sandbox.I18n.setLanguage(language);
   const fire = (ev) => { for (const fn of page.handlers.onEvent || []) fn({ run_id: 'r1', ...ev }); };
@@ -62,4 +62,24 @@ test('#110 guard: in English the gate says no PR was opened, with git\'s reason'
   const shown = await drawn('en');
   assert.match(shown, /no PR was opened/);
   assert.equal(shown.includes('FAIL-110'), true, shown);
+});
+
+// CI (or git) said nothing: an empty failure_log, with and without the PR/MR
+const PR_URL = 'https://github.com/o/r/pull/110';
+const emptyLog = (prUrl) => ({ previous_step: 'ci', steps: { ci: { output: { ci_status: 'failed', pr_url: prUrl, failure_log: '' }, visits: 1 } } });
+const NOT_REPORTED = /\(none reported\)|\(no reason reported\)/;
+
+test('#110 pt-BR: the ci_failed gate with an empty failure log and no PR has no "(no reason reported)"', { timeout: 30000 }, async () => {
+  const shown = await drawn('pt-BR', emptyLog(''));
+  const match = NOT_REPORTED.exec(shown) || ENGLISH.exec(shown);
+  assert.equal(match === null ? '' : match[0], '', shown);
+  assert.equal(shown.includes('nenhum PR foi aberto'), true, shown);
+});
+
+test('#110 pt-BR: the ci_failed gate with an empty failure log and a PR has no "(none reported)"', { timeout: 30000 }, async () => {
+  const shown = await drawn('pt-BR', emptyLog(PR_URL));
+  const match = NOT_REPORTED.exec(shown) || /did not pass|Last error|Approve to check CI again/.exec(shown);
+  assert.equal(match === null ? '' : match[0], '', shown);
+  assert.equal(shown.includes('Último erro'), true, shown);
+  assert.equal(shown.includes(PR_URL), true, shown);
 });

@@ -61,3 +61,31 @@ test('#110 wizard in pt-BR: the push notice after a GitLab import has no English
   assert.equal(/credential helper|set the remote to its SSH URL|Check that your account|so git pushes with/.test(notice), false, notice);
   assert.equal(notice.includes('could not read Username'), true, notice);
 });
+
+// the engine's push check of a clone whose SSH remote names no host the app recognizes (an ssh config alias, a
+// repository path without an owner): git refuses the SSH key
+async function sshPushCheck(origin) {
+  const { checkPushAccess } = require('@craftorio/engine/engine/push-access');
+  return checkPushAccess('/tmp/clone', {
+    run: async (args) => {
+      if (args[0] === 'remote') return `${origin}\n`;
+      throw new Error('git@gitserver: Permission denied (publickey).\nfatal: Could not read from remote repository.');
+    },
+  });
+}
+
+for (const origin of ['git@gitserver:repo.git', 'git@myalias:o/r.git']) {
+  test(`#110 wizard in pt-BR: the push notice for an SSH remote with no recognizable host (${origin}) has no English fix line`, { timeout: 20000 }, async () => {
+    const check = await sshPushCheck(origin);
+    assert.equal(check.ok, false, 'the engine refuses the push');
+    const app = await W.atAnalysis();
+    app.sandbox.I18n.setLanguage('pt-BR');
+    await emit(app, { ...W.READY, pushCheck: check });
+    const notice = lineText(app, 'wizard-push-notice');
+    assert.notEqual(notice, '', 'the push notice is drawn');
+    const english = /SSH key is not accepted|add your SSH key|test it with|set the remote to its HTTPS URL|the host\b/.exec(notice);
+    assert.equal(english === null ? '' : english[0], '', notice);
+    assert.equal(notice.includes('A chave SSH do git não é aceita por'), true, notice);
+    assert.equal(notice.includes('Permission denied (publickey)'), true, notice);
+  });
+}
