@@ -259,8 +259,8 @@
         if (mode === 'issue') po.files = [];
         if (out.message?.mode === 'issue') po.mode = 'issue'; // #785: the PO took it as an issue to register
         // #149: the answer arrived while the owner was not looking at the drawer (nor the window's pane, #263)
-        if (!watching()) po.unread = true;
-        if (!watching()) po.unreadCount += 1;
+        if (!watching()) Object.assign(po, { unread: true, unreadCount: po.unreadCount + 1 });
+        if (out.message?.answer?.reviews?.length) window.BacklogActions.showData(await api.getBacklog(projectId)); // #90: the verdicts
       }
     } catch (e) {
       if (po.projectId === projectId) po.error = errMsg(e);

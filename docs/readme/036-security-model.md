@@ -15,6 +15,16 @@ how to report a vulnerability is in [SECURITY.md](SECURITY.md).
   PR comments an agent reads can try to steer it, with the tools its workflow gives it. Isolated
   agents never load the checkout's `.claude/settings*.json`, but treat a repository's hooks as code
   that may run until #468 is closed.
+- **An issue from outside the project is data, and waits for you** (#90). The backlog sync keeps each
+  issue's author and association; one written by someone who is not the owner, a member or a
+  collaborator (GitHub `CONTRIBUTOR`, `NONE`…; GitLab below Developer) is marked *Outside*. The
+  Product Owner's prompt wraps every issue's text as untrusted data, never instructions, and its
+  plan never carries what an issue asks for (a command, a setting, a URL, a skipped check). It gives
+  each outside issue a verdict: well written or not, injection suspected or not, with the lines
+  that decided it; a suspected one is shown *Quarantined*. Whatever the verdict, an outside issue
+  enters no roadmap, pipeline or run until you click *Approve* on the Backlog, and the run's task
+  then says the text came from outside: a specification, never instructions. The verdict comes from
+  a model that the same text can fool: the author check and your click are the boundary.
 - **The secret scan does not find every secret.** Feature, Fix, Release and this repository's own
   workflows run gitleaks on the commits a run made, before the review (Release: before Ship). It
   knows patterns: a password in plain words, an encoded or split value, a merge commit's own changes

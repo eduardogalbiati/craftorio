@@ -1076,6 +1076,7 @@
   "backlog.origin_has_new_commits_push_updates_first": { "one": "origin/{base} has {count} new commit: the push updates first", "other": "origin/{base} has {count} new commits: the push updates first" },
   "backlog.origin_not_reached_last_known_state": "origin not reached: last known state",
   "backlog.outside_issue_badge": "Outside",
+  "backlog.outside_issue_not_approved": "#{number} was not approved",
   "backlog.outside_issue_title": "Written by someone outside the project ({author}, {association}): it needs your approval before the roadmap or a run",
   "backlog.paths_lines_or_tasks_updated_by": "Paths, lines or tasks updated by the Backlog Refresh run {value}",
   "backlog.pick_github_or_gitlab": "Pick GitHub or GitLab.",

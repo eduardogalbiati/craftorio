@@ -291,6 +291,19 @@ module.exports = (ctx) => {
         return { results: [...own, ...results], backlog: current(id) };
       },
     },
+    // #90: the owner's Approve of an outside issue (the Backlog's button only: agents and the supervisor never call
+    // it); until then the issue enters no roadmap, pipeline or run, whatever the Product Owner's verdict
+    {
+      channel: 'backlog:approve-outside',
+      method: 'approveOutsideIssue',
+      params: ['projectId', 'number'],
+      schema: { params: args({ projectId: PROJECT_ID, number: ISSUE_NUMBER }, ['projectId', 'number']), result: shape({ backlog: BACKLOG }) },
+      fn: async ({ projectId, number }) => {
+        const id = project(projectId);
+        backlog.approveOutsideIssue(ctx.ws.backlog, id, Number(number), { at: new Date().toISOString() });
+        return { backlog: current(id) };
+      },
+    },
     // #35: the local backlog of a project with no remote (packages/engine/domains/backlog/local-backlog.js): New issue,
     // edit and close write to the workspace (simulation-only too: nothing leaves the machine); each answers the Backlog
     {

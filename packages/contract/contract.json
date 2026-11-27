@@ -1,5 +1,5 @@
 {
- "hash": "dce9053890d7",
+ "hash": "2c76a54d73f6",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -2123,6 +2123,52 @@
   {
    "channel": "auth:state",
    "method": "authState"
+  },
+  {
+   "channel": "backlog:approve-outside",
+   "method": "approveOutsideIssue",
+   "params": [
+    "projectId",
+    "number"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "projectId": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 200,
+       "pattern": "^(?!\\.\\.?$)[^\\\\/\\u0000]+$",
+       "title": "project id",
+       "description": "A project id (projects/<projectId>.json)."
+      },
+      "number": {
+       "type": [
+        "integer",
+        "string"
+       ],
+       "description": "An issue number (a string of digits is read as one)."
+      }
+     },
+     "required": [
+      "projectId",
+      "number"
+     ]
+    },
+    "result": {
+     "type": "object",
+     "properties": {
+      "backlog": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "description": "The Backlog: issues with their runs, the queue, the roadmap (null before the first sync)."
+      }
+     }
+    }
+   }
   },
   {
    "channel": "backlog:archive",
