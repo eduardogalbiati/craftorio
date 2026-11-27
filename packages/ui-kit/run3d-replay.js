@@ -25,11 +25,11 @@
   const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
   class Run3DPlayer {
-    /** `mainGates`: as Run3DModel (the human gates drawn before the run reaches them). */
-    constructor({ mainGates = [] } = {}) {
+    /** `mainGates`, `prices`: as Run3DModel (the human gates drawn before the run reaches them, the user's prices). */
+    constructor({ mainGates = [], prices } = {}) {
       const { Run3DModel } = lib();
-      this.head = new Run3DModel({ mainGates });
-      this.past = new Run3DModel();
+      this.head = new Run3DModel({ mainGates, prices });
+      this.past = new Run3DModel({ prices });
       this.past.floorOf = this.head;
       this.blank = this.past.dump();
       this.events = []; // every event applied to the head, in order

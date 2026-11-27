@@ -18,8 +18,10 @@
   const fmtSecs = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}m ${String(Math.round((ms % 60000) / 1000)).padStart(2, '0')}s` : `${Math.round((ms || 0) / 1000)}s`);
   const DOING = { thinking: 'is thinking', reading: 'is using a tool', writing: 'is writing' };
 
+  // a run's model, with the user's prices (Usage › Prices) as on the Run screen (#117)
+  const newModel = () => new RunChatModel({ prices: typeof state === 'undefined' ? null : state.usage?.prices });
   // openLogs / tails (#795): the orchestrator messages whose log tail is expanded, and the tails read
-  let chat = { model: new RunChatModel(), runId: null, live: false, follow: false, loading: false, buffer: [], openLogs: new Set(), tails: new Map() };
+  let chat = { model: newModel(), runId: null, live: false, follow: false, loading: false, buffer: [], openLogs: new Set(), tails: new Map() };
 
   // ---------------------------------------------------------------- avatars
   const isSupervisor = (agent) => /^_?supervisor$/.test(agent || '');
@@ -132,9 +134,8 @@
   // where it stopped: the gate left waiting, else the step it was at
   const stoppedStep = () => chat.model.pendingGates().at(-1)?.stepId || chat.model.run.stepId || null;
   const resumeButton = () => `<button type="button" class="btn sm primary" data-testid="runchat-resume" data-resume-at="${esc(stoppedStep() || '')}" title="${t('runchat.resume_the_run_where_it_stopped')}">${t('runchat.resume')}</button>`;
-  // #117: the run's total as on every screen (run-list.js runCostText): "unknown" with no price, "(partial)"
-  const usdText = (n, approx) => `${approx ? '≈ ' : ''}$${(Number(n) || 0).toFixed(2)}`;
-  const costText = (c) => runCostText({ usd: c.cost, approx: c.costApprox, unknown: c.costUnknown, partial: c.costPartial }, usdText);
+  // #117: the run's total as on every screen (run-list.js runCostText, usage-widget.js fmtUsd): "unknown" with no price, "(partial)"
+  const costText = (c) => runCostText({ usd: c.cost, approx: c.costApprox, unknown: c.costUnknown, partial: c.costPartial }, fmtUsd);
   // the chat's last message while the run is interrupted (drawn by draw, after the items)
   function interruptedHtml() {
     const r = chat.model.run;
@@ -388,7 +389,7 @@
   }
 
   function reset(runId) {
-    chat = { model: new RunChatModel(), runId, live: false, elsewhere: null, follow: chat.follow, loading: true, buffer: [], openLogs: new Set(), tails: new Map() };
+    chat = { model: newModel(), runId, live: false, elsewhere: null, follow: chat.follow, loading: true, buffer: [], openLogs: new Set(), tails: new Map() };
     $c('#rc-messages').innerHTML = '';
     $c('#rc-typing').innerHTML = '';
     delete $c('#rc-typing').dataset.key;

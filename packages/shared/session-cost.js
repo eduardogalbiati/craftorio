@@ -9,6 +9,7 @@
 // - #117: a session or turn whose cost the app does not know at all reads "unknown", never $0.00; a
 //   total that misses such a cost is `partial`.
 // sessionCost(s, prices) → US$ or null; runCost(sessions, prices) → { usd, approx, unknown, partial },
+// totalMarks(usd, missing) → { unknown, partial } (the chat and the 3D view's totals use it too),
 // `prices` null: only what was recorded; tokenPricedUsd(sessions, prices): what the prices add to that;
 // turnCost(ev, prices, model) → { usd, approx, unknown? }: the same rule on one turn's event. Sessions
 // come as snapshots (cost_usd, cost_estimate) or as the lists' views (costUsd, costEstimate).
@@ -60,13 +61,15 @@
   // account, or an unknown turn with no CLI figure): drawn "unknown"
   const unpriced = (s, prices = {}) => isApprox(s, prices) && !sessionCost(s, prices);
 
-  // { usd, approx, unknown, partial }: #117 `unknown` when no session has a cost and some has unpriced
-  // tokens (drawn "unknown", never $0.00); `partial` when the total misses such a session's cost
+  // #117: a total's marks when some of its costs are `missing`: `unknown` with nothing priced (drawn
+  // "unknown", never $0.00), `partial` when the total misses such a cost. The one rule of every screen.
+  const totalMarks = (usd, missing) => ({ unknown: !!missing && !usd, partial: !!missing && !!usd });
+
+  // { usd, approx, unknown, partial }: the marks of totalMarks over the sessions with unpriced tokens
   function runCost(sessions, /** @type {Record<string, any> | null} */ prices = {}) {
     const list = sessions || [];
     const usd = list.reduce((a, s) => a + (sessionCost(s, prices) || 0), 0);
-    const missing = list.some((s) => unpriced(s, prices));
-    return { usd, approx: list.some((s) => isApprox(s, prices)), unknown: missing && !usd, partial: missing && !!usd };
+    return { usd, approx: list.some((s) => isApprox(s, prices)), ...totalMarks(usd, list.some((s) => unpriced(s, prices))) };
   }
 
   const tokenPricedUsd = (sessions, prices = {}) => runCost(sessions, prices).usd - runCost(sessions, null).usd;
@@ -89,6 +92,7 @@
     sessionCost,
     tokenPricedUsd,
     tokensCost,
+    totalMarks,
     totalTokens,
     turnCost,
     unknownUsd,

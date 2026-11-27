@@ -23,6 +23,15 @@ import {
   tokOf, usd, useTick, view, wallMs,
 } from './view.js';
 
+// #117: what the kept turns cost (model.costMarks): "unknown" when none had a price, never $0.00;
+// the run's total also says when it is partial or approximate, as run-list.js runCostText does
+const costOf = (m, filter) => (m.costUnknown(filter) ? t('run_list.cost_unknown') : usd(m.cost(filter)));
+const totalOf = (m) => {
+  if (m.costUnknown()) return t('run_list.cost_unknown');
+  if (m.costPartial()) return `≈ ${usd(m.cost())} (${t('run_list.cost_partial')})`;
+  return `${m.costApprox() ? '≈ ' : ''}${usd(m.cost())}`;
+};
+
 const ICON = {
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   plus: 'M12 5v14M5 12h14', minus: 'M5 12h14', home: 'M4 11l8-7 8 7v9h-5v-6H9v6H4z', close: 'M6 6l12 12M18 6L6 18',
@@ -132,7 +141,7 @@ export function Kpis() {
       </div></div>
       <div className="r3d-kpi r3d-card" data-testid="run3d-card-cost"><i><Icon name="coin" /></i><div><label><T k="run3d.cost" /></label>
         <b>
-          {m.costUnknown() ? t('run_list.cost_unknown') : `${m.costApprox() ? '≈ ' : ''}${usd(m.cost())}`}
+          {totalOf(m)}
         </b>
         <em data-testid="run3d-cost-per-m">
           {perM == null ? '—' : t('run3d.cost_per_m', { cost: usd(perM) })}
@@ -192,7 +201,7 @@ export function Detail({ shown, onOpenGate, canAnswer }) {
           </dd>
           <dt><T k="run3d.cost" /></dt>
           <dd>
-            {usd(m.agentCost('supervisor'))}
+            {costOf(m, (x) => x.agent === 'supervisor')}
           </dd>
         </dl>
         {r?.busy && r.tool && <Note cls="live" head={t('run3d.now')}>{r.tool}</Note>}
@@ -292,7 +301,7 @@ export function Detail({ shown, onOpenGate, canAnswer }) {
       <dl className="r3d-rows">
         <dt><T k="run3d.cost" /></dt>
         <dd>
-          {st.kind === 'agent' ? usd(m.stepCost(st.id)) : t('run3d.no_model_call')}
+          {st.kind === 'agent' ? costOf(m, (x) => x.step === st.id) : t('run3d.no_model_call')}
         </dd>
         <dt>
           {tookLabel}
@@ -379,7 +388,7 @@ export function List({ shown, onSelect, query }) {
           </span>
           <span className="r3d-mini">
             <small>
-              {usd(m.agentCost(agent))}
+              {costOf(m, (x) => x.agent === agent)}
             </small>
           </span>
         </button>

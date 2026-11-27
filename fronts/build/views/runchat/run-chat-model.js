@@ -12,11 +12,10 @@
   // packages/shared/providers/, resolves both).
   const registry = typeof module === 'object' && module.exports ? require('@craftorio/shared/providers') : root.Providers;
   const cost = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/session-cost') : root.SessionCost);
-  // A run's total from its turns (#117): unknown when none had a price, partial when some had none
-  const missingCost = (usd, missing) => ({ unknown: !!missing && !usd, partial: !!missing && !!usd });
-  // a finished run's total (#72): its sessions', as on every screen; a summary without them: what it says
-  const endCost = (s, run) => {
-    const total = s.sessions?.length ? cost().runCost(s.sessions) : { usd: s.cost_usd ?? run.cost, approx: s.cost_approx || run.costApprox, ...missingCost(s.cost_usd ?? run.cost, run.costMissing) };
+  // a finished run's total (#72): its sessions', as on every screen (with the user's prices, Usage ›
+  // Prices); a summary without them: what it says, marked unknown / partial by SessionCost.totalMarks (#117)
+  const endCost = (s, run, prices) => {
+    const total = s.sessions?.length ? cost().runCost(s.sessions, prices) : { usd: s.cost_usd ?? run.cost, approx: s.cost_approx || run.costApprox, ...cost().totalMarks(s.cost_usd ?? run.cost, run.costMissing) };
     return { cost: total.usd, costApprox: !!total.approx, costUnknown: !!total.unknown, costPartial: !!total.partial };
   };
   // the CLI adapter named by an id, a type or a CLI name (a model name is not a provider), else null
@@ -133,7 +132,9 @@
     ? { type: String(input.subagent_type || 'general-purpose'), description: clip(String(input.description || ''), 200) } : null);
 
   class RunChatModel {
-    constructor() {
+    /** `prices`: the user's prices (settings.prices), which price a turn with no recorded cost (#117). */
+    constructor({ prices } = {}) {
+      this.prices = prices || {};
       this.items = [];
       this.byId = new Map();
       this.run = { id: null, workflow: '', status: null, cost: 0 };
@@ -282,11 +283,11 @@
       const s = ev.session ? { ...known, ...sessionInfo({ ...known, ...ev.session }) } : known;
       this.sessions.set(ev.session_id, s);
       this.active.delete(ev.session_id);
-      const { usd, approx, unknown } = cost().turnCost(ev, {}, s.model); // #72: a turn of unknown cost counts the CLI's figure, marked
+      const { usd, approx, unknown } = cost().turnCost(ev, this.prices, s.model); // #72: a turn of unknown cost counts the CLI's figure, marked
       this.run.cost += usd;
       this.run.costApprox ||= approx;
       this.run.costMissing ||= !!unknown; // #117
-      const total = missingCost(this.run.cost, this.run.costMissing);
+      const total = cost().totalMarks(this.run.cost, this.run.costMissing);
       Object.assign(this.run, { costUnknown: total.unknown, costPartial: total.partial });
       const t = this.turns.get(`${ev.session_id}:${ev.turn}`) || { activity: [] };
       this.turns.delete(`${ev.session_id}:${ev.turn}`);
@@ -572,7 +573,7 @@
       for (const it of this.machine.values()) { Object.assign(it, { state: ev.status === 'success' ? 'passed' : 'failed', finishedAt: ev.ts || null, waitingReason: null }); this.touch(it); }
       this.machine.clear();
       // tested (#396): 'not green' when the run went on without a green suite; 'no tests' (#71)
-      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), ...endCost(s, this.run), durationMs: s.duration_ms || 0, tested: s.tested || null });
+      this.add({ kind: 'end', ts: ev.ts, status: ev.status, error: String(ev.error || ''), ...endCost(s, this.run, this.prices), durationMs: s.duration_ms || 0, tested: s.tested || null });
     },
   };
 

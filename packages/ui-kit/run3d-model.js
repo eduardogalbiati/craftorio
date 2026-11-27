@@ -174,9 +174,11 @@
   // The model
   // ---------------------------------------------------------------------------------------------
   class Run3DModel {
-    /** `mainGates`: the human gates drawn before the run reaches them (the workflow's main path). */
-    constructor({ mainGates = [] } = {}) {
+    /** `mainGates`: the human gates drawn before the run reaches them (the workflow's main path);
+     *  `prices`: the user's prices (settings.prices), which price a turn with no recorded cost (#117). */
+    constructor({ mainGates = [], prices } = {}) {
       this.mainGates = new Set(mainGates);
+      this.prices = prices || {};
       this.seq = 0;
       this.version = 0;
       this.listeners = new Set();
@@ -370,8 +372,11 @@
     cost(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.cost : 0), 0); }
     /** #72: whether that includes a cost the app does not know (drawn "≈"). */
     costApprox(filter) { return this.spend.some((x) => x.approx && (!filter || filter(x))); }
-    /** #117: whether no kept turn had a price (drawn "unknown", never $0.00). */
-    costUnknown(filter) { return !this.cost(filter) && this.spend.some((x) => x.unknown && (!filter || filter(x))); }
+    /** #117: the kept turns' total marks (SessionCost.totalMarks): `unknown` when none had a price
+     *  (drawn "unknown", never $0.00), `partial` when some had none. */
+    costMarks(filter) { return SessionCost().totalMarks(this.cost(filter), this.spend.some((x) => x.unknown && (!filter || filter(x)))); }
+    costUnknown(filter) { return this.costMarks(filter).unknown; }
+    costPartial(filter) { return this.costMarks(filter).partial; }
     tokensOut(filter) { return this.spend.reduce((sum, x) => sum + (!filter || filter(x) ? x.out : 0), 0); }
     /** #833: the kept turns' tokens by kind, their total and the share of cache reads (0 with no tokens). */
     tokens(filter) {
@@ -383,7 +388,7 @@
     /** #833: the effective $/M over the four kinds (Analytics › Run's usdPerMTokens); null with no tokens yet. */
     usdPerMTokens(filter) {
       const { total } = this.tokens(filter);
-      return total ? this.cost(filter) / (total / 1e6) : null;
+      return total && !this.costUnknown(filter) ? this.cost(filter) / (total / 1e6) : null;
     }
     stepCost(id) { return this.cost((x) => x.step === id); }
     agentCost(agent) { return this.cost((x) => x.agent === agent); }
@@ -479,7 +484,7 @@
       const s = this.sessions[ev.session_id];
       if (!s) return false;
       const u = ev.usage || {};
-      const { usd, approx, unknown } = SessionCost().turnCost(ev, {}, s.model); // #72: a turn of unknown cost counts the CLI's figure, marked
+      const { usd, approx, unknown } = SessionCost().turnCost(ev, this.prices, s.model); // #72: a turn of unknown cost counts the CLI's figure, marked
       this.spend.push({ agent: isSupervisor(s.agent, ev.step_id) ? 'supervisor' : s.agent, step: baseOf(ev.step_id), cost: usd, approx, unknown: !!unknown, out: u.output || 0, tokens: tokensOf(u) });
       const r = this.robot(this.turnOf[ev.session_id]);
       if (r) Object.assign(r, { busy: false, doneAt: this.now, say: short(ev.text, 240) || r.say, tool: '' });

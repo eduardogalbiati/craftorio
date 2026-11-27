@@ -128,7 +128,7 @@
     }
     if (session.closed) return;
     const started = events.find((ev) => ev.type === 'workflow.started');
-    const player = new Run3DReplay.Run3DPlayer({ mainGates: mainGatesOf(started, session.workflows) });
+    const player = new Run3DReplay.Run3DPlayer({ mainGates: mainGatesOf(started, session.workflows), prices: state.usage?.prices });
     player.add([...events, ...session.buffer]);
     session.buffer = [];
     session.player = player;
