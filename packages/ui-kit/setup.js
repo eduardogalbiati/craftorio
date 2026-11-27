@@ -10,6 +10,10 @@
 //   (runSuggestedCommand, command-hint.js); a row re-checks when its terminal exits; disabled with
 //   a tooltip where no terminal can run it (canRunCommands). #740: in the browser UI the action runs on
 //   the engine's machine (SettingsClis.run, cli-setup:start) with its console under the rows.
+//   #97: the step asks which AI is the orchestrator: the Claude Code and Codex cards carry a "Use as orchestrator"
+//   radio (one group, off while that CLI is missing or signed out; Grok Build none), saved at once as
+//   settings.orchestratorProvider (and again by Finish: the only ready AI is the default); the chosen card reads
+//   Required (SetupModel.requiredTools) and the missing note names it.
 // - First project: the projects, and New project opening the onboarding wizard (#643,
 //   the action openProjectWizard of fronts/build/views/projects/project-wizard.js, no button without
 //   it; opened by itself when there is none, over the Setup, which then leaves it the focus; the
@@ -119,6 +123,33 @@
 
   // ---------- Agents ----------
   const statesOf = () => Object.fromEntries((setup.tools || []).map((t) => [t.id, window.SetupModel.statusBadge(t).state]));
+  // #97: the CLIs that can lead a run (Grok Build cannot)
+  const ORCHESTRATORS = ['claude', 'codex'];
+  // the Setup's orchestrator: the saved one (settings.orchestratorProvider, claude by default), unless it is not
+  // ready and the other one is the only one ready
+  function orchestrator() {
+    const saved = ORCHESTRATORS.includes(state.settings?.orchestratorProvider) ? state.settings.orchestratorProvider : 'claude';
+    const states = statesOf();
+    const ready = ORCHESTRATORS.filter((id) => states[id] === 'ready');
+    return ready.length === 1 && states[saved] !== 'ready' ? ready[0] : saved;
+  }
+  // One AI card's "Use as orchestrator" radio (also Settings › Agents & CLIs', window.SetupRows): one group
+  // (name="orchestrator"), off until that CLI is installed and signed in; `testid`: the label's own test id
+  function orchestratorRadio(tool, chosen, { testid = null } = {}) {
+    if (!ORCHESTRATORS.includes(tool.id)) return '';
+    const ready = window.SetupModel.statusBadge(tool).state === 'ready';
+    const tip = ready ? '' : ` title="${esc(t('setup.orchestrator_not_ready', { name: tool.name || window.SetupModel.toolName(tool.id) }))}"`;
+    return `<label class="setup-orchestrator${ready ? '' : ' off'}"${testid ? ` data-testid="${esc(testid)}"` : ''}${tip}><input type="radio" name="orchestrator" value="${esc(tool.id)}" data-testid="setup-orchestrator-${esc(tool.id)}"${chosen === tool.id ? ' checked' : ''}${ready ? '' : ' disabled'}><span>${esc(t('setup.use_as_orchestrator'))}</span></label>`;
+  }
+
+  async function saveOrchestrator(id) {
+    try {
+      state.settings = await api.setSettings({ orchestratorProvider: id });
+    } catch (e) { showToast(t('setup.save_failed'), errMsg(e)); return; }
+    if (!setup.open) return;
+    render();
+    $s(`[data-testid="setup-orchestrator-${id}"]`)?.focus({ preventScroll: true });
+  }
   const bundled = () => (state.workflows || []).filter((w) => !w.error && w.origin !== 'custom' && w.requirements);
 
   // #740: data-cli-id / data-cli-action name the engine's job (cli-setup:start) the button starts
@@ -137,7 +168,7 @@
   // a deep link was opened for (data-highlight on its row only).
   function cliRow(tool, { highlight = null } = {}) {
     const badge = window.SetupModel.statusBadge(tool);
-    const need = window.SetupModel.toolRequirement(tool.id);
+    const need = window.SetupModel.toolRequirement(tool.id, { orchestrator: state.settings?.orchestratorProvider });
     const detail = tool.checking ? '' : tool.path ? [tool.version, tool.account ? t('setup.account', { account: tool.account }) : ''].filter(Boolean).join(' · ')
       : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: window.SetupModel.installHintText(tool) }) : '';
     const command = !tool.checking && !tool.path ? tool.installCommand : !tool.checking && !tool.connected && tool.auth ? tool.signInCommand : null;
@@ -159,13 +190,14 @@
   // One CLI's card in the Setup's own steps: the same facts and action as its row, stacked.
   function cliCard(tool) {
     const badge = window.SetupModel.statusBadge(tool);
-    const required = window.SetupModel.toolRequirement(tool.id) === t('setup.required');
+    const chosen = orchestrator();
+    const required = window.SetupModel.toolRequirement(tool.id, { orchestrator: chosen }) === t('setup.required');
     const name = tool.name || window.SetupModel.toolName(tool.id);
     const detail = tool.checking ? '' : tool.path ? [tool.version, tool.account ? t('setup.account', { account: tool.account }) : ''].filter(Boolean).join(' · ')
       : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: window.SetupModel.installHintText(tool) }) : '';
     const command = !tool.checking && !tool.path ? tool.installCommand : !tool.checking && !tool.connected && tool.auth ? tool.signInCommand : null;
     return `
-      <div class="setup-tool" data-testid="setup-cli-${esc(tool.id)}" data-state="${badge.state}"${required ? ' data-required' : ''}>
+      <div class="setup-tool" data-testid="setup-cli-${esc(tool.id)}" data-state="${badge.state}"${required ? ' data-required' : ''}${chosen === tool.id ? ' data-orchestrator' : ''}>
         <div class="setup-tool-top">
           <span class="badge${required ? ' setup-required' : ''}">${esc(required ? t('setup.required') : t('setup.optional'))}</span>
           <span class="conn setup-conn ${badge.state === 'ready' ? 'on' : 'off'}" data-state="${badge.state}"><span class="conn-dot"></span>${esc(badge.label)}</span>
@@ -174,13 +206,19 @@
         <b class="setup-tool-name text-cut" title="${esc(name)}">${esc(name)}</b>
         <p class="setup-tool-what">${esc(t(`setup.what.${tool.id}`))}</p>
         <span class="setup-tool-grow"></span>
-        ${!detail ? '' : tool.path
-    ? `<span class="setup-tool-detail" title="${esc(detail)}">${tool.version ? `<span class="text-cut">${esc(tool.version)}</span>` : ''}${tool.account ? `<span class="text-cut setup-tool-account">${esc(t('setup.account', { account: tool.account }))}</span>` : ''}</span>`
-    : `<span class="setup-tool-detail hint text-cut" title="${esc(detail)}">${esc(detail)}</span>`}
+        ${cardDetail(tool, detail)}
         ${command ? `<code class="setup-cmd" title="${esc(command)}">${esc(command)}</code>` : ''}
         ${tool.output && badge.state !== 'ready' ? `<pre class="setup-out" data-testid="setup-cli-output">${esc(tool.output)}</pre>` : ''}
         ${tool.checking ? '' : actionButton(tool)}
+        ${orchestratorRadio(tool, chosen)}
       </div>`;
+  }
+
+  // A card's version and account (an installed CLI) or its install hint.
+  function cardDetail(tool, detail) {
+    if (!detail) return '';
+    if (!tool.path) return `<span class="setup-tool-detail hint text-cut" title="${esc(detail)}">${esc(detail)}</span>`;
+    return `<span class="setup-tool-detail" title="${esc(detail)}">${tool.version ? `<span class="text-cut">${esc(tool.version)}</span>` : ''}${tool.account ? `<span class="text-cut setup-tool-account">${esc(t('setup.account', { account: tool.account }))}</span>` : ''}</span>`;
   }
 
   // What will not work with the CLIs as they are (Next is allowed anyway).
@@ -189,7 +227,7 @@
     const states = statesOf();
     const blocked = bundled().filter((w) => window.SetupModel.missingRequirements(w.requirements, states).length);
     if (!blocked.length) return '';
-    const core = ['claude', 'git'].filter((id) => states[id] !== 'ready').map(window.SetupModel.toolName);
+    const core = window.SetupModel.requiredTools({ orchestrator: orchestrator() }).filter((id) => states[id] !== 'ready').map(window.SetupModel.toolName);
     const head = core.length ? t('setup.without_core', { names: core.join(t('setup.and')) }) : t('setup.not_ready', { names: blocked.map((w) => window.WorkflowInputs.humanize(w.name)).join(', ') });
     return `<p class="small warn-text setup-note" data-testid="setup-missing-note">${esc(head)} ${t('setup.come_back')}</p>`;
   }
@@ -308,12 +346,15 @@
     setup.open = false;
     document.getElementById('setup-modal').classList.add('hidden');
     document.body.classList.remove('setup-open');
+    // #97: its orchestrator radios share a name with Settings › Agents & CLIs': none left behind in the page
+    $s('#setup-body').innerHTML = '';
   }
 
   // #643: settings.hiddenWorkflows is never written here, an older workspace keeps what it hides
   async function finish() {
     try {
-      state.settings = await api.setSettings({ setupDone: true });
+      // #97: the orchestrator shown (the only ready AI when nothing was chosen) is the one the runs use
+      state.settings = await api.setSettings({ setupDone: true, orchestratorProvider: orchestrator() });
     } catch (e) { showToast(t('setup.save_setup_failed'), errMsg(e)); return; }
     close();
     // #846: the onboarding opened from here finished on its project's page, its analysis maybe still running
@@ -361,6 +402,10 @@
       if (e.target.closest('[data-setup-project]')) return newProject();
       return undefined;
     });
+    // #97: a new orchestrator (a click or the arrow keys), saved at once
+    body.addEventListener('change', (e) => {
+      if (e.target?.name === 'orchestrator' && e.target.type === 'radio' && !e.target.disabled) saveOrchestrator(e.target.value);
+    });
     $s('#setup-language-box').addEventListener('change', (e) => {
       if (e.target.matches('[data-setup-language]')) saveLanguage(e.target.value);
     });
@@ -375,5 +420,11 @@
 
   registerView({ id: 'setup', modals, mount });
   window.Setup = { isOpen: () => setup.open, open, skip };
-  window.SetupRows = { LOGOS, TOOL_IDS, cliRow }; // LOGOS: the project wizard's provider tiles too
+  window.SetupRows = { // LOGOS: the project wizard's provider tiles too
+    LOGOS,
+    ORCHESTRATORS,
+    TOOL_IDS,
+    cliRow,
+    orchestratorRadio,
+  };
 })();

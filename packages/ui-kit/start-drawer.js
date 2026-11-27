@@ -286,7 +286,7 @@ function renderEnvStatus() {
   const box = $('#env-status');
   const reqs = state.wf?.requirements;
   if (!reqs || typeof SetupModel === 'undefined') { box.innerHTML = ''; return; }
-  const badges = SetupModel.requirementBadges(reqs).map((b) => `<span class="badge">${esc(b)}</span>`).join('');
+  const badges = SetupModel.requirementBadges(reqs, { orchestrator: state.settings?.orchestratorProvider }).map((b) => `<span class="badge">${esc(b)}</span>`).join('');
   const missing = state.cliStates ? SetupModel.missingRequirements(reqs, state.cliStates) : [];
   const tool = (id) => (state.cliTools || []).find((t) => t.id === id);
   const action = (t) => {

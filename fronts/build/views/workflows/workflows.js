@@ -270,9 +270,9 @@ function workflowCard(w) {
     const role = i === 0 ? t('workflows.starts_it') : t('workflows.stage_of_total', { stage: i + 1, total: p.stages.length });
     return `<button class="link-btn" data-goto-pipe="${esc(p.file)}" title="${esc(`${p.name}: ${role}`)}">${esc(p.name)}</button> <span class="muted">(${role})</span>`;
   }).join(', ');
-  // #319: what it needs beyond Claude Code and Git (the Setup hides the unpicked ones)
+  // #319: what it needs beyond the orchestrator AI (#97) and Git (the Setup hides the unpicked ones)
   const model = typeof SetupModel === 'undefined' ? null : SetupModel;
-  const needs = (model ? model.requirementBadges(w.requirements) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
+  const needs = (model ? model.requirementBadges(w.requirements, { orchestrator: state.settings?.orchestratorProvider }) : []).map((b) => `<span class="badge" title="${t('workflows.the_clis_it_needs_with_its')}">${esc(b)}</span>`).join('');
   const repo = w.origin === 'repository';
   // #488: the YAML as it is on disk, as a file
   const download = `<button class="btn ghost sm" data-download data-testid="workflow-download" title="${t('workflows.download_tip')}">${t('workflows.download')}</button>`;

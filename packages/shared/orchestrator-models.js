@@ -92,38 +92,55 @@
     if (!wf || orchestratorOf(provider) !== 'codex') return wf;
     if (!(bundled ?? followsOrchestrator(wf))) return wf;
     const out = JSON.parse(JSON.stringify(wf));
-    const codexDef = registry()?.byId('codex')?.definition;
+    addProviders(out);
+    moveOrchestrator(out.orchestrator || (out.orchestrator = {}));
+    for (const agent of Object.values(out.agents || {})) moveAgent(agent);
+    for (const [key, def] of Object.entries(out.inputs || {})) out.inputs[key] = mapModelInput(def);
+    if (out.models && typeof out.models === 'object') mapModelLimits(out.models);
+    return out;
+  }
+
+  // the providers: blocks the moved agents run on (a copy of each adapter's definition)
+  /** @param {any} out */
+  function addProviders(out) {
     out.providers = { ...(out.providers || {}) };
-    if (!out.providers.codex && codexDef) out.providers.codex = JSON.parse(JSON.stringify(codexDef));
-    const claudeDef = registry()?.byId('claude')?.definition;
-    if (!out.providers.claude && claudeDef) out.providers.claude = JSON.parse(JSON.stringify(claudeDef));
-    const orch = out.orchestrator || (out.orchestrator = {});
+    for (const id of ['codex', 'claude']) {
+      const def = registry()?.byId(id)?.definition;
+      if (!out.providers[id] && def) out.providers[id] = JSON.parse(JSON.stringify(def));
+    }
+  }
+
+  /** @param {any} orch the workflow's orchestrator: block (changed) */
+  function moveOrchestrator(orch) {
     orch.provider = 'codex';
     orch.model = mapIn(orch.model || 'claude-sonnet-5-5', CODEX_MODEL_FOR);
-    if (orch.supervisor && typeof orch.supervisor === 'object') {
-      if (orch.supervisor.provider === 'claude') orch.supervisor.provider = 'codex';
-      if (orch.supervisor.model) orch.supervisor.model = mapIn(orch.supervisor.model, CODEX_MODEL_FOR);
+    const sup = orch.supervisor;
+    if (!sup || typeof sup !== 'object') return;
+    if (sup.provider === 'claude') sup.provider = 'codex';
+    if (sup.model) sup.model = mapIn(sup.model, CODEX_MODEL_FOR);
+  }
+
+  /** @param {any} agent an agent (changed): Claude to Codex, the multi-model Codex reviewer to Claude */
+  function moveAgent(agent) {
+    if (!agent || typeof agent !== 'object') return;
+    if (agent.provider === 'claude') {
+      agent.provider = 'codex';
+      agent.model = mapIn(agent.model, CODEX_MODEL_FOR);
+    } else if (agent.provider === 'codex') {
+      // the multi-model second reviewer: on a provider other than the orchestrator's
+      agent.provider = 'claude';
+      agent.model = mapIn(agent.model, CLAUDE_MODEL_FOR);
+      if (typeof agent.model === 'string' && !agent.model.startsWith('claude-')) agent.model = 'claude-haiku-5-5';
     }
-    for (const agent of Object.values(out.agents || {})) {
-      if (!agent || typeof agent !== 'object') continue;
-      if (agent.provider === 'claude') {
-        agent.provider = 'codex';
-        agent.model = mapIn(agent.model, CODEX_MODEL_FOR);
-      } else if (agent.provider === 'codex') {
-        // the multi-model second reviewer: on a provider other than the orchestrator's
-        agent.provider = 'claude';
-        agent.model = mapIn(agent.model, CLAUDE_MODEL_FOR);
-        if (typeof agent.model === 'string' && !agent.model.startsWith('claude-')) agent.model = 'claude-haiku-5-5';
-      }
+  }
+
+  // models: limits (Fable's timeout_factor) given to the Codex counterparts too
+  /** @param {Record<string, any>} models */
+  function mapModelLimits(models) {
+    for (const [model, limits] of Object.entries(models)) {
+      const codex = CODEX_MODEL_FOR[model];
+      if (codex && !models[codex]) models[codex] = limits;
     }
-    for (const [key, def] of Object.entries(out.inputs || {})) out.inputs[key] = mapModelInput(def);
-    if (out.models && typeof out.models === 'object') {
-      for (const [model, limits] of Object.entries(out.models)) {
-        const codex = CODEX_MODEL_FOR[model];
-        if (codex && !out.models[codex]) out.models[codex] = limits;
-      }
-    }
-    return out;
   }
 
   /**

@@ -144,6 +144,8 @@
                   <button type="button" id="btn-settings-clis-close" class="icon-btn" data-testid="settings-clis-close" aria-label="${t('settings.agents.close')}" title="${t('settings.agents.close')}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg></button>
                 </div>
                 <p class="muted small">${t('settings.agents.intro')}</p>
+                <!-- #97: which AI leads the runs (settings.orchestratorProvider), the Setup's radios -->
+                <div id="set-orchestrator" class="s-group settings-orchestrator" role="radiogroup" aria-label="${t('settings.agents.orchestrator')}" data-testid="settings-orchestrator"></div>
                 <div id="set-tools" class="s-group"><div class="s-row"><div class="s-label"><span>${t('settings.checking')}</span></div></div></div>
                 <div id="set-cli-console"></div>
                 <div class="row">

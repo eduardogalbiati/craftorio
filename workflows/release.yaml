@@ -1,5 +1,8 @@
 # =============================================================================
 # Workflow: Release (#260)
+# Orchestrator AI (#97): written for Claude; the AI chosen in the Setup or Settings › Agents & CLIs
+# (settings.orchestratorProvider) runs it: on Codex, the orchestrator and every agent move to Codex, each Claude
+# model replaced by its counterpart (packages/shared/orchestrator-models.js, the one mapping table).
 # -----------------------------------------------------------------------------
 #   version ──► unit (suite, no agent) ──(green)──► e2e (suite, no agent) ──(green)──► secret_scan ──► [review] ──► ship (you)
 #                 ▲   │                               │                                            ├─ Ship ─► push the local base + tag ─► end

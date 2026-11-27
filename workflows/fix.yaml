@@ -1,5 +1,8 @@
 # =============================================================================
 # Workflow: Fix (#630, spec R8)
+# Orchestrator AI (#97): written for Claude; the AI chosen in the Setup or Settings › Agents & CLIs
+# (settings.orchestratorProvider) runs it: on Codex, the orchestrator and every agent move to Codex, each Claude
+# model replaced by its counterpart (packages/shared/orchestrator-models.js, the one mapping table).
 #   reproduce ─► develop ─► rule_check ─► secret_scan ─► code_review ─► suite ─► verify_change ─┬─ Local:  merge: local ─► push_main ─► end
 #                                                                                └─ Remote: ci (PR + CI) ─► pr_monitor ─► end
 #   - reproduce (the developer): one command that shows the bug for the reported reason, a failing

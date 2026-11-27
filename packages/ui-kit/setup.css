@@ -39,6 +39,12 @@ body.setup-open .term-dock { z-index: 11; }
 .setup-tool-detail.hint { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow: hidden; padding: 10px 0 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; font-family: inherit; font-size: 12px; line-height: 1.4; text-align: center; }
 .setup-tool-grow { flex: 1; }
 .setup-tool .btn { width: 100%; margin-top: 0; padding: 7px 14px; font-size: 13px; }
+/* #97 the orchestrator choice: the chosen AI card framed in the accent, its "Use as orchestrator" radio at the
+   card's foot (also Settings › Agents & CLIs' rows); off (muted) while that CLI is not ready */
+.setup-tool[data-orchestrator] { border-color: rgba(124,156,255,.6); box-shadow: inset 0 0 0 1px rgba(124,156,255,.35); }
+.setup-orchestrator { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 24px; font-size: 13px; cursor: pointer; }
+.setup-orchestrator input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: inherit; }
+.setup-orchestrator.off { color: var(--muted); cursor: not-allowed; }
 @media (max-width: 640px) { .setup-tools, .setup-tools[data-count="4"] { grid-template-columns: minmax(0, 1fr); } }
 .setup-top { align-items: center; gap: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--border); }
 .setup-stepper { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }

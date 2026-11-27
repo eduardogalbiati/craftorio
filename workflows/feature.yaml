@@ -1,5 +1,9 @@
 # =============================================================================
 # Workflow: AI Development, local hero (tests first)
+# Orchestrator AI (#97): written for Claude; the AI chosen in the Setup or Settings › Agents & CLIs
+# (settings.orchestratorProvider) runs it: on Codex, the orchestrator and every agent move to Codex, each Claude
+# model replaced by its counterpart (packages/shared/orchestrator-models.js, the one mapping table), and the
+# Multi-model second reviewer moves to Claude, so it stays on another provider.
 # The local-hero pipeline with the tests written BEFORE the code (owner, 2026-10-03; option C of
 # reports/piramide-de-testes-com-agentes-2026-10-03.md, #220):
 #   acceptance_tests ─► red_check ─► warm_up ─► develop ─► rule_check ─► docs_check ─► code_review ─► suite ─► build ─► evidence ─► verify_change ─► local merge

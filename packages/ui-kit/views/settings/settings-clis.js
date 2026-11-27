@@ -11,6 +11,10 @@
 //   shows the install hint in the panel (data-status="manual"; #110: in the interface language,
 //   SetupModel.installHintText). When the job ends the row shows the CLI checked again (the job's `tool`). The
 //   desktop app keeps its terminal dock for a sign-in (interactive, on this computer).
+// - #97: above the rows, the orchestrator AI (#set-orchestrator, data-testid="settings-orchestrator"): the Setup's
+//   "Use as orchestrator" radios for Claude Code and Codex (SetupRows.orchestratorRadio, each in a label
+//   settings-orchestrator-<id>), the saved settings.orchestratorProvider checked, saved at once when it changes
+//   (the next run uses it; a running one keeps its own), then the workflows read again (Start's requirements).
 // - window.Settings.open(section, { highlight, onClose }): the deep link (the project wizard's Open Setup,
 //   fronts/build/views/projects/project-wizard.js): the Settings screen on that tab, the `highlight` CLI's row
 //   marked and scrolled to; the close button goes back to the screen it was opened from, then calls onClose.
@@ -76,6 +80,37 @@
     }
     const tools = clis.tools || window.SetupRows.TOOL_IDS.map((id) => ({ id, checking: true }));
     box.innerHTML = tools.map((tool) => window.SetupRows.cliRow(tool, { highlight: clis.highlight })).join('');
+    renderOrchestrator(tools);
+  }
+
+  // #97: the orchestrator AI, the saved one checked (claude when none), the Setup's radios (off while not ready)
+  function renderOrchestrator(tools) {
+    const box = $('#set-orchestrator');
+    if (!box) return;
+    const saved = state.settings?.orchestratorProvider === 'codex' ? 'codex' : 'claude';
+    const row = (id) => {
+      const tool = tools.find((x) => x.id === id) || { id, checking: true };
+      const name = tool.name || window.SetupModel.toolName(id);
+      return `<div class="s-row"><div class="s-label"><b>${esc(name)}</b><span>${esc(window.SetupModel.statusBadge(tool).label)}</span></div>
+        <div class="s-ctrl">${window.SetupRows.orchestratorRadio(tool, saved, { testid: `settings-orchestrator-${id}` })}</div></div>`;
+    };
+    box.innerHTML = `<div class="s-row"><div class="s-label"><b>${esc(t('settings.agents.orchestrator'))}</b><span>${esc(t('settings.agents.orchestrator_help'))}</span></div></div>
+      ${window.SetupRows.ORCHESTRATORS.map(row).join('')}`;
+  }
+
+  // a new orchestrator: saved at once, for the next run (a running one keeps its own); the Start panel's
+  // requirements follow it (workflows:list computes them on the saved orchestrator)
+  async function onOrchestratorChange(e) {
+    if (e.target?.name !== 'orchestrator' || e.target.type !== 'radio' || e.target.disabled) return;
+    try {
+      state.settings = await api.setSettings({ orchestratorProvider: e.target.value });
+    } catch (err) {
+      showToast(t('setup.save_failed'), errMsg(err));
+      return;
+    }
+    renderRows();
+    $(`#set-orchestrator [data-testid="setup-orchestrator-${e.target.value}"]`)?.focus({ preventScroll: true });
+    try { state.workflows = await api.listWorkflows(); } catch { /* the list stays */ }
   }
 
   function renderConsole() {
@@ -221,6 +256,8 @@
   function mount() {
     const box = $('#set-tools');
     if (box) box.onclick = onRowsClick;
+    const orchestrator = $('#set-orchestrator');
+    if (orchestrator) orchestrator.onchange = onOrchestratorChange;
     const closeBtn = $('#btn-settings-clis-close');
     if (closeBtn) closeBtn.onclick = close;
     watch();
