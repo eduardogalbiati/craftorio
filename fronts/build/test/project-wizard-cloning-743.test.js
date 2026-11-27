@@ -2,7 +2,8 @@
 // the real page (packages/ui-kit/test/renderer-app-harness.js, through project-wizard-helpers.js).
 // The contract assumed here:
 // - after Next on the repository step (the engine answered, the clone running) there is no import card
-//   (no data-testid / id / class "wizard-import-status", nor the "wizard-import" card): the step's action
+//   (no data-testid / id / class "wizard-import-status", nor the "wizard-import" card; since the layout rework
+//   of 2026-11-26 `.wizard-columns.wizard-import` is the import step's own two columns, not a card): the step's action
 //   button (data-testid="wizard-next") shows a spinner (an element with class "spinner") and reads
 //   "Cloning <name>…" (the tests render in en); #wizard-repo and #wizard-name are readonly or disabled;
 // - when onboarding:changed reports the clone done (status ready) the wizard goes straight to the analysis
@@ -18,7 +19,8 @@ const W = require('./project-wizard-helpers');
 
 /** Whether some markup holds the old import card. */
 const hasImportCard = (html) => !!H.findEl(String(html || ''), (e) => e.attrs['data-testid'] === 'wizard-import-status'
-  || e.attrs.id === 'wizard-import-status' || W.classesOf(e).includes('wizard-import-status') || W.classesOf(e).includes('wizard-import'));
+  || e.attrs.id === 'wizard-import-status' || W.classesOf(e).includes('wizard-import-status')
+  || (W.classesOf(e).includes('wizard-import') && (W.classesOf(e).includes('card') || !W.classesOf(e).includes('wizard-columns'))));
 
 async function importedRecorded(state) {
   let writes = [];

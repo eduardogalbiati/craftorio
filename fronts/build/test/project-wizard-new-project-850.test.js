@@ -4,16 +4,20 @@
 // project-wizard-helpers.js; the project page's Next steps as fronts/analyser/test/project-next-steps-744.test.js.
 //
 // The contract assumed here:
-// - step 3 of a new project: the "City and architecture" row (onboarding.job_projectMap) of wizard-cost is
-//   shown unticked (no checked checkbox), says why with the NEW key onboarding.job_projectMap_later_new (left
+// - step 3 of a new project (one screen per state since the layout rework of 2026-11-26): its workflows show at
+//   once and the jobs (wizard-cost) are not listed, so nothing is ticked and nothing says a cost; the jobs are
+//   listed only when one of them failed, and then the "City and architecture" row (onboarding.job_projectMap) is
+//   shown unticked (no checked checkbox), says why with the key onboarding.job_projectMap_later_new (left
 //   for later / not needed yet), and wizard-cost never says onboarding.cost_not_known; no wizard-skip button;
 // - OnboardingModel (packages/shared/onboarding-model.js) is the one source of truth: next() from the
 //   repository step of a new project (source 'new') lands on analysis with analyzeLater: true (an import keeps
 //   analyzeLater false);
-// - the Review of a new project never says onboarding.review_later, and its "How <name> is worked on" card says
+// - the Review of a new project never says onboarding.review_later, and its project card ("Code") says
 //   the step-2 answer (onboarding.new_mode_local / onboarding.new_mode_remote), never review_how_pending;
-// - step 3's profile line (data-testid="wizard-profile") of a new project says it comes from the answers
-//   (/answers/ in English, /respostas/ in pt-BR), never "from the git history"; an import still says git history;
+// - step 3 of a new project says its workflows come from the answers (/answers/ in English, /respostas/ in
+//   pt-BR: the line over the workflows, and the profile line data-testid="wizard-profile" when the jobs are
+//   listed), never "from the git history"; an import still says git history (its profile line while it analyses,
+//   the line over the workflows once analysed);
 // - the project page's Next steps: with a `release` workflow in the project's workflows, the release CI entry
 //   (next-step-release-ci) does not say onboarding.next_steps_release_ci_reason; without one it still does.
 const test = require('node:test');
@@ -92,6 +96,17 @@ async function newAtReview(opts) {
 }
 
 const costBlock = (app) => W.byTestId(W.wizardMarkup(app), 'wizard-cost');
+// a new project's jobs are listed only when one of them failed: the facts job here
+async function withFailedJob(app) {
+  const state = created();
+  state.jobs.facts = { status: 'failed', error: 'boom' };
+  await W.emit(app, state);
+  assert.ok(costBlock(app), 'the jobs are listed once one of them failed');
+  return app;
+}
+// the line over the workflow rows (the column's first paragraph)
+const workflowsLine = (app) => textOf(H.findEl(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-column')?.inner || '', (e) => e.name === 'p'));
+const checkedBoxes = (html) => H.findAll(html, (e) => (e.name === 'input' && e.attrs.type === 'checkbox') || e.attrs.role === 'checkbox').filter(isChecked);
 // the "City and architecture" row of step 3's jobs
 function cityRow(app, lang = 'en') {
   const title = catalog(lang)['onboarding.job_projectMap'];
@@ -101,11 +116,15 @@ const isChecked = (e) => 'checked' in e.attrs || e.attrs['aria-checked'] === 'tr
 
 // ---- a) step 3: the city analysis is left for later, not ticked and pending ---------------------------------
 
-test('#850 new project step 3: the City and architecture row is shown unticked', { timeout: 30000 }, async () => {
+test('#850 new project step 3: no analysis is listed, so none is ticked; listed (a job failed), the City and architecture row is shown unticked', { timeout: 30000 }, async () => {
   const app = await newAtAnalysis();
+  assert.equal(costBlock(app), null, 'no wizard-cost: the workflows show at once');
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-column')?.attrs['data-state'], 'analyzed');
+  assert.equal(checkedBoxes(W.wizardMarkup(app)).length, 0, 'no ticked box on step 3');
+  await withFailedJob(app);
   const row = cityRow(app);
   assert.ok(row, 'the "City and architecture" row on step 3');
-  const ticked = H.findAll(row.outer, (e) => (e.name === 'input' && e.attrs.type === 'checkbox') || e.attrs.role === 'checkbox').filter(isChecked);
+  const ticked = checkedBoxes(row.outer);
   assert.equal(ticked.length, 0, `ticked boxes in the row: ${ticked.map((e) => e.outer).join(' | ')}`);
 });
 
@@ -114,7 +133,7 @@ test('#850 new project step 3: the City and architecture row says why it is left
   const pt = catalog('pt-BR');
   assert.equal(typeof en['onboarding.job_projectMap_later_new'], 'string', 'en.json has onboarding.job_projectMap_later_new');
   assert.equal(typeof pt['onboarding.job_projectMap_later_new'], 'string', 'pt-BR.json has onboarding.job_projectMap_later_new');
-  const app = await newAtAnalysis();
+  const app = await withFailedJob(await newAtAnalysis());
   const said = textOf(cityRow(app));
   assert.equal(said.includes(en['onboarding.job_projectMap_later_new']), true, said);
 });
@@ -122,6 +141,10 @@ test('#850 new project step 3: the City and architecture row says why it is left
 test('#850 new project step 3: nothing reads "Not known yet" and there is no "Skip, analyze later"', { timeout: 30000 }, async () => {
   for (const lang of ['en', 'pt-BR']) {
     const app = await newAtAnalysis({ lang });
+    const said = H.visibleText(W.wizardMarkup(app));
+    assert.equal(said.includes(catalog(lang)['onboarding.cost_not_known']), false, `${lang}: ${said}`);
+    assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-skip'), null, `${lang}: no wizard-skip`);
+    await withFailedJob(app);
     const cost = textOf(costBlock(app));
     assert.equal(cost.includes(catalog(lang)['onboarding.cost_not_known']), false, `${lang}: ${cost}`);
     assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-skip'), null, `${lang}: no wizard-skip`);
@@ -130,8 +153,13 @@ test('#850 new project step 3: nothing reads "Not known yet" and there is no "Sk
 
 test('#74 new project step 3: its profile is its own answers, free and never estimated, and nothing says a cost beside the workflows', { timeout: 30000 }, async () => {
   const app = await newAtAnalysis();
+  assert.equal(costBlock(app), null, 'no cost box on a new project\'s step 3');
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-choice-cost') == null, true);
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-job-paid') == null, true);
+  await withFailedJob(app);
   const profile = H.findAll(costBlock(app).outer, (e) => e.name === 'li').find((li) => W.byTestId(li.outer, 'wizard-profile'));
   assert.equal(textOf(H.findEl(profile.outer, (e) => W.classesOf(e).includes('wizard-amount'))), 'free');
+  assert.equal(W.byTestId(profile.outer, 'wizard-job-paid') == null, true, 'no "AI" badge on its profile');
   assert.equal(app.callsTo('seedEstimate').length, 0);
   assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-choice-cost') == null, true);
 });
@@ -169,7 +197,7 @@ for (const [lang, mode, key] of [
   ['pt-BR', 'local', 'onboarding.new_mode_local'],
   ['en', 'remote', 'onboarding.new_mode_remote'],
 ]) {
-  test(`#850 new project Review (${lang}, ${mode}): "How it is worked on" says "${catalog(lang)[key]}", not the pending line`, { timeout: 30000 }, async () => {
+  test(`#850 new project Review (${lang}, ${mode}): the project's card says "${catalog(lang)[key]}", not the pending line`, { timeout: 30000 }, async () => {
     const app = await newAtReview({ lang, mode });
     const said = textOf(projectCard(app));
     assert.equal(said.includes(catalog(lang)['onboarding.review_how_pending']), false, said);
@@ -179,25 +207,38 @@ for (const [lang, mode, key] of [
 
 // ---- d) the profile line: from your answers (new), from the git history (import) ------------------------------
 
-test('#850 new project step 3: the profile line says it comes from the answers, not the git history (en)', { timeout: 30000 }, async () => {
+// the jobs are no longer listed on a new project's step 3: the line over its workflows says where they come from;
+// the profile line says the same when the jobs are listed (a job failed)
+test('#850 new project step 3: the workflows line and the profile line say they come from the answers, not the git history (en)', { timeout: 30000 }, async () => {
   const app = await newAtAnalysis();
+  assert.equal(workflowsLine(app), 'From your answers on step 2. Change any of them.');
+  assert.doesNotMatch(H.visibleText(W.wizardMarkup(app)), /git history/i);
+  await withFailedJob(app);
   const said = textOf(W.byTestId(W.wizardMarkup(app), 'wizard-profile'));
   assert.doesNotMatch(said, /git history/i);
   assert.match(said, /answers/i);
 });
 
-test('#850 new project step 3: the profile line says it comes from the answers, not the git history (pt-BR)', { timeout: 30000 }, async () => {
+test('#850 new project step 3: the workflows line and the profile line say they come from the answers, not the git history (pt-BR)', { timeout: 30000 }, async () => {
   const app = await newAtAnalysis({ lang: 'pt-BR' });
+  assert.equal(workflowsLine(app), catalog('pt-BR')['onboarding.workflows_line_new']);
+  assert.match(workflowsLine(app), /respostas/i);
+  assert.doesNotMatch(H.visibleText(W.wizardMarkup(app)), /histórico do git/i);
+  await withFailedJob(app);
   const said = textOf(W.byTestId(W.wizardMarkup(app), 'wizard-profile'));
   assert.doesNotMatch(said, /histórico do git/i);
   assert.match(said, /respostas/i);
 });
 
+// an import's jobs are listed while it analyses (Analyze with AI); once analysed, the line over the workflows says it
 test('#850 guard: an import\'s profile line still says it comes from the git history', { timeout: 30000 }, async () => {
   const app = await W.atAnalysis();
+  await W.defineWorkflows(app, 'analyze');
+  assert.match(textOf(W.byTestId(W.wizardMarkup(app), 'wizard-profile')), /git history/i);
   const profile = { mode: 'local', ci: 'none', tests: 'unit', testCommand: 'npm test', release: 'milestone' };
   await W.emit(app, { ...W.clone(W.READY), status: 'analyzing', jobs: W.jobs({ clone: { status: 'done' }, facts: { status: 'done' }, profile: { status: 'done', profile }, projectMap: { status: 'running' } }) });
-  assert.match(textOf(W.byTestId(W.wizardMarkup(app), 'wizard-profile')), /git history/i);
+  assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-workflows-column')?.attrs['data-state'], 'analyzed');
+  assert.equal(workflowsLine(app), 'Suggested from the git history. Change any of them.');
 });
 
 // ---- e) the project page's release CI step -----------------------------------------------------------------

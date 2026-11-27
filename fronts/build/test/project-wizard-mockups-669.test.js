@@ -10,19 +10,21 @@
 //   everything later." (no "New project" heading); in each card (wizard-source-import / wizard-source-new) an
 //   icon data-testid="wizard-card-icon" and three <li> bullets; Create new is enabled since #632 (no "soon"); the
 //   selected card has aria-pressed="true" and Import is selected when the wizard opens (mock-1);
-//   data-testid="wizard-other-sources" ("Other sources") with data-testid="wizard-source-git-url" (Any git URL:
-//   to step 2 and its URL field) and data-testid="wizard-source-folder" (A folder on this computer:
-//   api.pickFolder(), the existing folder pick of projects.js);
+//   data-testid="wizard-other-sources" ("Only have the address?") with data-testid="wizard-source-git-url" (Import
+//   from any git URL: to step 2 and its URL field); data-testid="wizard-source-folder" is the third card ("Use a
+//   local repository": selected by its click, Next then asks api.pickFolder(), the folder pick of projects.js);
 // - the footer: data-testid="wizard-footer" holding the navigation; at step 1 data-testid="wizard-cancel"
 //   (Cancel, closes the wizard) before wizard-next (Next); its rule in project-wizard.css draws a border-top;
-// - step 2 (mock-2): heading "Import a repository", labels "Repository" and "Project name", GitHub / GitLab
-//   buttons, Next reads "Next: clone and continue";
-// - step 3 (mock-4): "Analyze <name>", "Read-only. Nothing is written to the repository.", the rows Clone, Facts,
-//   Ways of working profile, City and architecture, Refactor backlog, "Real models · estimated total",
-//   "Suggested workflows", and in the footer "Analyze and continue";
-// - step 4 (mock-6): a card per the project (its name, "How <name> is worked on", "Workflows"), "City" with
-//   "Open the city", "Refactor backlog" with "<n> proposals · nothing added to the roadmap"; Back and Finish in
-//   the footer;
+// - step 2 (mock-2): heading "Import a repository", "Project name" first, then "Your repositories" (the GitHub /
+//   GitLab buttons) and the label "Or paste the URL of any git repository", Next reads "Next: clone and continue";
+// - step 3 (mock-4, one screen per state since the layout rework of 2026-11-26 and #100): "Workflows of <name>"
+//   and the question "How do you want to define the workflows?" over the two cards (Analyze with AI, with its
+//   cost; Define manually); no cost box and no "Skip, analyze later" (Define manually is the free way on, Continue
+//   waits for the workflows); once Analyze with AI is pressed: "The analysis only reads: nothing is written to the
+//   repository.", the rows Clone, Facts, Ways of working, City and architecture and "Cost of the AI analyses:";
+//   "Suggested workflows" (a heading for assistive tech), and in the footer Continue;
+// - step 4 (mock-6): the project's name as the step's title; its card with "Code" and "Workflows"; "City" with
+//   "Finish and open the city"; "Findings"; Back and Finish in the footer;
 // - Next steps (mock-7): "<name> is ready" in its head; entries next-step-refactors ("Add refactors to the
 //   roadmap", a checkbox per proposal, "File and add …"), next-step-idea ("Capture the first idea", "Open
 //   Inbox"), next-step-cadence ("Keep refactoring", "Add a refactor to the roadmap every 10 runs.", "Turn on"),
@@ -175,9 +177,12 @@ async function atAnalysis() {
   return app;
 }
 
+// #100: Continue waits for the workflows: defined by hand here (the engine's analysis is done, ANALYZED)
 async function atReview() {
   const app = await atAnalysis();
   await emit(app, ANALYZED);
+  assert.equal(isDisabled(byTestId(wizardMarkup(app), 'wizard-next')), true, 'Continue waits for the workflows');
+  await press(app, 'wizard-workflows-choice-manual');
   await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');
   await app.settle(20);
@@ -272,26 +277,42 @@ test('#669 step 1: Import is the selected card when the wizard opens (aria-press
   assert.equal(byTestId(markup, 'wizard-source-new')?.attrs['aria-pressed'] === 'true', false);
 });
 
-test('#669 step 1: "Other sources" under the cards with "Any git URL" and "A folder on this computer"', { timeout: 20000 }, async () => {
+// the folder became the third card (the owner's decision); the line under the cards keeps the git URL link
+test('#669 step 1: "Only have the address?" under the cards with "Import from any git URL"; the local repository is a card', { timeout: 20000 }, async () => {
   const app = await opened();
-  const other = byTestId(wizardMarkup(app), 'wizard-other-sources');
+  const markup = wizardMarkup(app);
+  const other = byTestId(markup, 'wizard-other-sources');
   assert.equal(other === null, false, 'data-testid="wizard-other-sources"');
-  assert.match(textOf(other), /Other sources/);
-  assert.equal(textOf(byTestId(other.outer, 'wizard-source-git-url')), 'Any git URL');
-  assert.equal(textOf(byTestId(other.outer, 'wizard-source-folder')), 'A folder on this computer');
+  assert.equal(textOf(other), 'Only have the address? Import from any git URL');
+  assert.equal(textOf(byTestId(other.outer, 'wizard-source-git-url')), 'Import from any git URL');
+  assert.equal(byTestId(other.outer, 'wizard-source-folder'), null, 'the folder is no longer a link of this line');
+  const folder = byTestId(markup, 'wizard-source-folder');
+  assert.equal(folder === null, false, 'data-testid="wizard-source-folder"');
+  assert.equal(folder.name, 'button');
+  assert.equal(textOf(folder).includes('Use a local repository'), true, textOf(folder));
+  assert.equal(textOf(folder).includes('A folder on this computer that is already a git repository.'), true, textOf(folder));
+  assert.equal(byTestId(folder.outer, 'wizard-card-icon') === null, false, 'its icon');
+  assert.equal(H.findAll(folder.inner, (e) => e.name === 'li').length, 3, 'its three bullets');
+  assert.equal(markup.indexOf(folder.outer) < markup.indexOf(other.outer), true, 'the cards, then the line');
 });
 
-test('#669 step 1: "Any git URL" goes to step 2 with the repository URL field', { timeout: 20000 }, async () => {
+test('#669 step 1: "Import from any git URL" goes to step 2 with the repository URL field', { timeout: 20000 }, async () => {
   const app = await opened();
   await press(app, 'wizard-source-git-url');
   assert.equal(currentStep(app), 'repository');
   assert.equal(byTestId(wizardMarkup(app), 'wizard-repo') === null, false, 'the URL field');
 });
 
-test('#669 step 1: "A folder on this computer" opens the local folder pick (api.pickFolder)', { timeout: 20000 }, async () => {
+test('#669 step 1: the "Use a local repository" card is selected by its click, and Next opens the local folder pick (api.pickFolder)', { timeout: 20000 }, async () => {
   const app = await opened();
   await press(app, 'wizard-source-folder');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-source-folder')?.attrs['aria-pressed'], 'true');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-source-import')?.attrs['aria-pressed'], 'false');
+  assert.equal(app.callsTo('pickFolder').length, 0, 'the pick waits for Next');
+  await press(app, 'wizard-next');
   assert.equal(app.callsTo('pickFolder').length, 1);
+  assert.equal(currentStep(app), 'repository', 'step 2 with the picked folder');
+  assert.equal(textOf(byTestId(wizardMarkup(app), 'wizard-folder-path')), 'C:\\code\\shop');
 });
 
 test('#669 step 1: the footer holds Cancel then Next', { timeout: 20000 }, async () => {
@@ -314,13 +335,22 @@ test('#669 step 1: Cancel closes the wizard', { timeout: 20000 }, async () => {
 
 // ---- step 2 (mock-2) --------------------------------------------------------------------------------
 
-test('#669 step 2: the heading "Import a repository" with the "Repository" and "Project name" fields', { timeout: 20000 }, async () => {
+test('#669 step 2: the heading "Import a repository" with "Project name" first, "Your repositories" and the URL field', { timeout: 20000 }, async () => {
   const app = await atRepository();
   const markup = wizardMarkup(app);
   assert.equal(headings(markup).includes('Import a repository'), true, `the headings: ${JSON.stringify(headings(markup))}`);
   const ls = labels(markup);
-  assert.equal(ls.some((l) => /^Repository\b(?! URL)/.test(l)), true, `a "Repository" label: ${JSON.stringify(ls)}`);
-  assert.equal(ls.some((l) => /^Project name/.test(l)), true, `a "Project name" label: ${JSON.stringify(ls)}`);
+  const name = ls.findIndex((l) => /^Project name/.test(l));
+  const url = ls.findIndex((l) => /^Or paste the URL of any git repository\b/.test(l));
+  assert.equal(name >= 0, true, `a "Project name" label: ${JSON.stringify(ls)}`);
+  assert.equal(url >= 0, true, `the repository URL's label: ${JSON.stringify(ls)}`);
+  assert.equal(name < url, true, 'the name first');
+  const picker = byTestId(markup, 'wizard-provider');
+  assert.equal(picker === null, false, 'data-testid="wizard-provider"');
+  const text = wizardText(app);
+  assert.equal(text.includes('Your repositories'), true, 'the list\'s label');
+  assert.equal(text.indexOf('Project name') < text.indexOf('Your repositories') && text.indexOf('Your repositories') < text.indexOf('Or paste the URL of any git repository'), true,
+    'the name, the account\'s repositories, then the URL');
 });
 
 test('#669 step 2: the GitHub / GitLab choice is shown as two buttons', { timeout: 20000 }, async () => {
@@ -381,28 +411,50 @@ for (const typed of ['file:///C:/code/shop', 'git@gitlab.com:acme/shop.git', 'ht
 
 // ---- step 3 (mock-4) --------------------------------------------------------------------------------
 
-test('#669 step 3: "Analyze <name>" and "Read-only. Nothing is written to the repository."', { timeout: 20000 }, async () => {
+test('#669 step 3: "Workflows of <name>", the question, and "The analysis only reads: nothing is written to the repository." while it analyses', { timeout: 20000 }, async () => {
   const app = await atAnalysis();
   const hs = headings(wizardMarkup(app));
-  assert.equal(hs.includes(`Analyze ${NAME}`), true, `the headings: ${JSON.stringify(hs)}`);
-  assert.equal(wizardText(app).includes('Read-only. Nothing is written to the repository.'), true);
+  assert.equal(hs.includes(`Workflows of ${NAME}`), true, `the headings: ${JSON.stringify(hs)}`);
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-workflows-column')?.attrs['data-state'], 'choose');
+  assert.equal(wizardText(app).includes('How do you want to define the workflows?'), true);
+  assert.equal(textOf(byTestId(wizardMarkup(app), 'wizard-workflows-choice-analyze')).startsWith('Analyze with AI'), true);
+  assert.equal(textOf(byTestId(wizardMarkup(app), 'wizard-workflows-choice-manual')).startsWith('Define manually'), true);
+  assert.equal(wizardText(app).includes('nothing is written to the repository'), false, 'not before the analysis is asked for');
+  await press(app, 'wizard-workflows-choice-analyze');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-workflows-column')?.attrs['data-state'], 'analyzing');
+  assert.equal(wizardText(app).includes('The analysis only reads: nothing is written to the repository.'), true);
 });
 
-// #730: no "Refactor backlog" (the Product Owner's ranking) any more
-test('#669 #730 step 3: the analyses listed are Clone, Facts, Ways of working profile, City and architecture', { timeout: 20000 }, async () => {
+// #730: no "Refactor backlog" (the Product Owner's ranking) any more; the rows show once the analysis is asked for
+test('#669 #730 step 3: the analyses listed are Clone, Facts, Ways of working, City and architecture', { timeout: 20000 }, async () => {
   const app = await atAnalysis();
-  const text = wizardText(app);
-  const missing = ['Clone', 'Facts', 'Ways of working profile', 'City and architecture'].filter((s) => !text.includes(s));
-  assert.deepEqual(missing, []);
-  assert.equal(text.includes('Refactor backlog'), false);
-});
-
-test('#669 step 3: the cost reads "Real models · estimated total" next to "Skip, analyze later"', { timeout: 20000 }, async () => {
-  const app = await atAnalysis();
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-cost'), null, 'no jobs before the analysis is asked for');
+  await press(app, 'wizard-workflows-choice-analyze');
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
   assert.equal(cost === null, false, 'data-testid="wizard-cost"');
-  assert.equal(textOf(cost).includes('Real models · estimated total'), true, textOf(cost));
-  assert.equal(textOf(byTestId(cost.outer, 'wizard-skip')), 'Skip, analyze later');
+  const titles = H.findAll(cost.inner, (e) => String(e.attrs.class || '').split(/\s+/).includes('wizard-job-title')).map((e) => H.visibleText(e.inner));
+  assert.deepEqual(titles, ['Clone', 'Facts', 'Ways of working', 'City and architecture']);
+  assert.equal(wizardText(app).includes('Refactor backlog'), false);
+});
+
+// #100 (the owner's decision): "Skip, analyze later" is gone, Define manually is the way on that runs nothing; the
+// cost box left the choice: the estimate is on the Analyze with AI card, the jobs' total shows while it analyses
+test('#669 #100 step 3: the cost is on "Analyze with AI", no "Skip, analyze later"; analysing reads "Cost of the AI analyses:"', { timeout: 20000 }, async () => {
+  const app = await atAnalysis();
+  const markup = wizardMarkup(app);
+  assert.equal(byTestId(markup, 'wizard-cost'), null, 'no cost box on the choice');
+  assert.equal(byTestId(markup, 'wizard-skip'), null, 'no Skip');
+  assert.equal(wizardText(app).includes('Skip, analyze later'), false);
+  const analyze = byTestId(markup, 'wizard-workflows-choice-analyze');
+  assert.match(textOf(byTestId(analyze.outer, 'wizard-workflows-choice-cost')), /^Cost: \S/);
+  assert.equal(textOf(byTestId(markup, 'wizard-workflows-choice-manual')).includes('Nothing runs now; you can analyze later.'), true);
+  assert.equal(isDisabled(byTestId(markup, 'wizard-next')), true, 'Continue waits for the workflows');
+  await press(app, 'wizard-workflows-choice-analyze');
+  const cost = byTestId(wizardMarkup(app), 'wizard-cost');
+  assert.equal(cost === null, false, 'data-testid="wizard-cost"');
+  assert.equal(textOf(cost).includes('Cost of the AI analyses:'), true, textOf(cost));
+  assert.equal(byTestId(cost.outer, 'wizard-cost-total') === null, false, 'its total');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-skip'), null, 'no Skip');
 });
 
 test('#669 step 3: the "Suggested workflows" column is shown', { timeout: 20000 }, async () => {
@@ -421,20 +473,25 @@ test('#669 step 3: the footer holds Back and Continue', { timeout: 20000 }, asyn
 
 // ---- step 4 (mock-6) --------------------------------------------------------------------------------
 
-test('#669 step 4: the project\'s card with its name, "How <name> is worked on" and "Workflows"', { timeout: 20000 }, async () => {
+// the name leads the step (its title); "How <name> is worked on" became the card's "Code" (the owner's decision)
+test('#669 step 4: the project\'s name as the title, and its card with "Code" and "Workflows"', { timeout: 20000 }, async () => {
   const app = await atReview();
-  const text = wizardText(app);
-  assert.equal(headings(wizardMarkup(app)).includes(NAME), true, `the headings: ${JSON.stringify(headings(wizardMarkup(app)))}`);
-  assert.equal(text.includes(`How ${NAME} is worked on`), true);
-  assert.equal(text.includes('Workflows'), true);
+  const markup = wizardMarkup(app);
+  const title = H.findEl(markup, (e) => e.attrs.id === 'project-wizard-title');
+  assert.equal(title?.name, 'h2');
+  assert.equal(textOf(title), NAME);
+  const project = byTestId(markup, 'wizard-review-project');
+  assert.equal(project === null, false, 'data-testid="wizard-review-project"');
+  assert.deepEqual(headings(project.outer), ['Code', 'Workflows']);
+  assert.equal(markup.indexOf(title.outer) < markup.indexOf(project.outer), true, 'the title, then the card');
 });
 
-test('#669 step 4: the "City" card with "Open the city"', { timeout: 20000 }, async () => {
+test('#669 step 4: the "City" card with "Finish and open the city"', { timeout: 20000 }, async () => {
   const app = await atReview();
   const city = byTestId(wizardMarkup(app), 'wizard-review-city');
   assert.equal(city === null, false, 'data-testid="wizard-review-city"');
   assert.equal(headings(city.outer).includes('City'), true, `the headings: ${JSON.stringify(headings(city.outer))}`);
-  assert.equal(buttons(city.outer).includes('Open the city'), true, `the buttons: ${JSON.stringify(buttons(city.outer))}`);
+  assert.equal(buttons(city.outer).includes('Finish and open the city'), true, `the buttons: ${JSON.stringify(buttons(city.outer))}`);
 });
 
 // #730: the refactor backlog became the Oracle's findings, each with Create issue
@@ -517,8 +574,8 @@ test('#669 i18n: the mockups\' new English strings are in en.json and translated
     'Add a project', 'A project is the code the agents work on. You can change everything later.',
     'Cloned into your workspace in the background', 'Its history shows how you work today', 'City and refactor backlog ready at the end',
     'A git repository in your workspace', 'Optionally a private GitHub repository', 'Three questions pick its workflows',
-    'Other sources', 'Any git URL', 'A folder on this computer',
-    'Next: clone and continue', 'Continue', 'Suggested workflows', 'Open the city',
+    'Only have the address?', 'Import from any git URL', 'Use a local repository',
+    'Next: clone and continue', 'Continue', 'Suggested workflows', 'Finish and open the city',
     'Capture the first idea', 'Keep refactoring', 'Set up release CI', 'Investigate screenshots', 'Add spike to roadmap',
   ];
   const problems = [];

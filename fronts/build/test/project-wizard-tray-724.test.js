@@ -5,13 +5,14 @@
 // - while the wizard is open, #onboarding-tray is hidden (its `hidden`, a hidden attribute or class)
 //   whatever the imports' states; the wizard shows the progress itself: a circular loading is an element
 //   with the class `spinner` (the app's existing one: backlog.css, wizard-workflows-spinner), in the
-//   footer's wizard-clone-progress while the clone runs and in each running job row (li.wizard-job);
+//   footer's wizard-clone-progress while the clone runs and in each running job row (li.wizard-job; the rows
+//   show once the analysis is asked for, Analyze with AI, since the layout rework of 2026-11-26);
 // - with the wizard closed, the tray lists the imports still running (a `spinner` in the tray-item) or
 //   failed (the reason, data-act="retry" calling api.retryOnboarding); a finished one (engine status
 //   `analyzed`) leaves the tray about 5 s later and shows the app's toast (#toast, packages/ui-kit/toast.js)
 //   "<name> imported" with the action button (data-toast-action) "Open the project"; no item left: the
 //   tray is hidden;
-// - onboarding.analysis_running no longer names the tray (en: "tray", pt-BR: "bandeja").
+// - what step 3 says while the analysis runs (onboarding.progress_label*) never names the tray (en: "tray", pt-BR: "bandeja").
 // The clock: the sandbox's setTimeout / setInterval of 1 s or more are held and run by advance(ms)
 // (as renderer-toast-action-281.test.js swaps sandbox.setTimeout); Date.now moves with it.
 const test = require('node:test');
@@ -112,6 +113,8 @@ test('#724 the wizard footer\'s clone progress shows a spinner and the project\'
 
 test('#724 on the analysis step a running job\'s row shows a spinner; done and waiting rows do not', async () => {
   const app = await W.atAnalysis();
+  assert.equal(H.findAll(W.wizardMarkup(app), (e) => e.name === 'li' && W.classesOf(e).includes('wizard-job')).length, 0, 'no job rows before the analysis is asked for');
+  await W.defineWorkflows(app, 'analyze'); // Analyze with AI: the jobs show
   await W.emit(app, W.ANALYZING); // facts running, the clone done, the rest waiting
   const rows = H.findAll(W.wizardMarkup(app), (e) => e.name === 'li' && W.classesOf(e).includes('wizard-job'));
   assert.equal(rows.length >= 2, true, 'the job rows (li.wizard-job)');
@@ -220,11 +223,16 @@ test('#724 an import finished while the wizard showed it gives no "imported" toa
 
 // ---- the words -----------------------------------------------------------------------------------
 
-test('#724 onboarding.analysis_running no longer mentions the tray (en "tray", pt-BR "bandeja")', () => {
-  const en = JSON.parse(fs.readFileSync(path.join(I18N, 'en.json'), 'utf8'))['onboarding.analysis_running'];
-  const pt = JSON.parse(fs.readFileSync(path.join(I18N, 'pt-BR.json'), 'utf8'))['onboarding.analysis_running'];
-  assert.equal(typeof en, 'string', 'en has onboarding.analysis_running');
-  assert.equal(typeof pt, 'string', 'pt-BR has onboarding.analysis_running');
-  assert.equal(/tray/i.test(en), false, `en: "${en}"`);
-  assert.equal(/bandeja/i.test(pt), false, `pt-BR: "${pt}"`);
+test('#724 what step 3 says while the analysis runs never mentions the tray (en "tray", pt-BR "bandeja")', () => {
+  // onboarding.analysis_running is gone with the layout rework of 2026-11-26: the progress label says it now
+  const en = JSON.parse(fs.readFileSync(path.join(I18N, 'en.json'), 'utf8'));
+  const pt = JSON.parse(fs.readFileSync(path.join(I18N, 'pt-BR.json'), 'utf8'));
+  for (const key of ['onboarding.progress_label', 'onboarding.progress_label_ready']) {
+    assert.equal(typeof en[key], 'string', `en has ${key}`);
+    assert.equal(typeof pt[key], 'string', `pt-BR has ${key}`);
+    assert.equal(/tray/i.test(en[key]), false, `en: "${en[key]}"`);
+    assert.equal(/bandeja/i.test(pt[key]), false, `pt-BR: "${pt[key]}"`);
+  }
+  assert.equal(en['onboarding.analysis_running'], undefined, 'en: the old sentence is gone');
+  assert.equal(pt['onboarding.analysis_running'], undefined, 'pt-BR: the old sentence is gone');
 });

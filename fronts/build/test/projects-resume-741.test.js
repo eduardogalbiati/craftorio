@@ -114,7 +114,7 @@ test('#741 the wizard saves again when a pick changes (Define manually)', async 
 test('#741 Finish tells the engine the onboarding is finished (finishOnboarding with the project)', async () => {
   const app = await booted();
   await importedToAnalysis(app);
-  await W.press(app, 'wizard-next'); // analyze later: the review
+  await W.toReview(app); // #100: the workflows defined by hand (analyze later), then Continue: the review
   await Promise.race([W.press(app, 'wizard-finish'), app.settle(60)]);
   assert.deepEqual(app.callsTo('finishOnboarding').map((args) => args[0]), [W.PID]);
 });

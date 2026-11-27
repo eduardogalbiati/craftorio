@@ -5,8 +5,9 @@
 //
 // Contract assumed here (the developer implements it):
 // - packages/shared/onboarding-model.js: "Create new project" asks a fourth question, `kind`:
-//   CREATE_ANSWERS.kind = ['frontend', 'full-stack', 'backend'] (the PROJECT_KINDS values, no "detect", no
-//   docs), CREATE_DEFAULTS.kind one of them.
+//   CREATE_ANSWERS.kind = ['full-stack', 'frontend', 'backend'] (the PROJECT_KINDS values, no "detect", no
+//   docs; full-stack first and the default since the wizard's layout rework, the owner's call),
+//   CREATE_DEFAULTS.kind one of them.
 // - onboarding:create's `answers.kind` is saved on the project record (`kind`, what runDefaultsWith reads as
 //   the owner's pick), changeable later with projects:update.
 // - Plain HTML: a project whose only file is index.html at the root is a frontend (#80's './').
@@ -73,8 +74,8 @@ const startsUiReviewer = (scope) => Boolean(evalExpr(stepOf('code_review').agent
 
 // ---- asked: "Create new project" asks the project's kind -------------------------------------------------
 
-test('#57 "Create new project" asks the kind: frontend, full-stack or backend (no "detect from the files")', () => {
-  assert.deepEqual(model().CREATE_ANSWERS.kind, ['frontend', 'full-stack', 'backend']);
+test('#57 "Create new project" asks the kind: full-stack, frontend or backend (no "detect from the files")', () => {
+  assert.deepEqual(model().CREATE_ANSWERS.kind, ['full-stack', 'frontend', 'backend']);
 });
 
 test('#57 "Create new project" has a kind picked by default, one of its answers', () => {

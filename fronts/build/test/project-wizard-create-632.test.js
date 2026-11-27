@@ -7,13 +7,17 @@
 // - Create, then Next (wizard-next): the create step (pill "2 Repository"; the pills read Start, Repository,
 //   Workflows, Review), heading "Create new project"; the name input data-testid="wizard-new-name"; the radios
 //   data-testid="wizard-new-starts" value="readme" (checked by default, "README and .gitignore", "A first commit
-//   on main.") / value="empty" ("Empty", "git init only."); the checkbox data-testid="wizard-new-remote"
+//   on main.") / value="empty" ("Empty", "No commits yet."); the checkbox data-testid="wizard-new-remote"
 //   (unchecked by default; disabled while api.onboardingAccounts reports no signed-in CLI) with the select
 //   data-testid="wizard-new-remote-provider" (GitHub, GitLab) and the hint data-testid="wizard-new-remote-hint"
 //   ("<account>/<slug>"); the folder line data-testid="wizard-new-folder" ("<workspace>/projects/<slug>");
 //   the groups data-testid="wizard-question" data-question="mode" | "ci" | "release", each with chips
-//   data-testid="wizard-chip" (aria-pressed="true" on the picked one), and the line "Change them any time in
-//   Ways of working. Setting up CI is offered as a next step."
+//   data-testid="wizard-chip" (aria-pressed="true" on the picked one).
+//   Layout rework of 2026-11-26 (the owner's decisions): each chip is a tile, a short title and one line (its
+//   visible text), the answer's whole label its aria-label; the questions read "How changes reach main", "CI
+//   (automatic builds and tests)", "How you release"; CI is None by default (was On releases) and the kind
+//   Full-stack (was Frontend); the closing line "Change them any time in Ways of working. Setting up CI is offered
+//   as a next step." is gone (its key onboarding.new_answers_line too).
 // - Next sends api.createOnboarding({ name, starts, remote: null | { provider }, answers: { mode, ci, release } })
 //   (the values of packages/shared/onboarding-model.js); never with an empty name.
 // The controls are driven like project-wizard-mockups-669.test.js's typeInto: a fake target carrying the
@@ -148,18 +152,20 @@ const question = (app, id) => H.findEl(wizardMarkup(app), (e) => e.attrs['data-t
 const chipsOf = (app, id) => allByTestId(question(app, id)?.outer || '', 'wizard-chip');
 const chipTexts = (app, id) => chipsOf(app, id).map((e) => H.visibleText(e.inner));
 const pressedOf = (app, id) => chipsOf(app, id).filter((e) => e.attrs['aria-pressed'] === 'true').map((e) => H.visibleText(e.inner));
+// a tile's accessible name: the answer's whole label
+const chipLabels = (app, id) => chipsOf(app, id).map((e) => e.attrs['aria-label']);
 
+// picks the chip whose whole label (its aria-label) is `label`
 async function pickChip(app, id, label) {
-  const chip = chipsOf(app, id).find((e) => H.visibleText(e.inner).startsWith(label));
+  const chip = chipsOf(app, id).find((e) => e.attrs['aria-label'] === label);
   assert.ok(chip, `the chip "${label}" of the question ${id}`);
   await clickRendered(app, chip, ['#project-wizard']);
   await app.settle(10);
 }
 
-// the chips read, in order, the expected labels (each chip's text starts with its label, a line may follow)
+// the chips read, in order, the expected tiles: each one's title, then its line
 function assertLabels(texts, expected) {
-  assert.equal(texts.length, expected.length, `the chips: ${JSON.stringify(texts)}`);
-  expected.forEach((label, i) => assert.equal(texts[i].startsWith(label), true, `chip ${i + 1} "${texts[i]}" starts with "${label}"`));
+  assert.deepEqual(texts, expected.map(([title, line]) => `${title} ${line}`));
 }
 
 async function opened(accounts = [GH_IN, GL_OUT]) {
@@ -252,7 +258,7 @@ test('#632 create step: "Starts with" offers README and .gitignore (checked) and
 test('#632 create step: the "Starts with" choices read as the mockup', { timeout: 20000 }, async () => {
   const app = await atCreate();
   const text = wizardText(app);
-  const missing = ['Starts with', 'README and .gitignore', 'A first commit on main.', 'Empty', 'git init only.'].filter((s) => !text.includes(s));
+  const missing = ['The repository starts with', 'README and .gitignore', 'A first commit on main.', 'Empty', 'No commits yet.'].filter((s) => !text.includes(s));
   assert.deepEqual(missing, []);
 });
 
@@ -293,54 +299,54 @@ test('#632 create step: the folder line reads <workspace>/projects/field-notes',
   assert.match(liveText(app, 'wizard-new-folder'), /<workspace>\/projects\/field-notes\b/);
 });
 
-test('#632 create step: "How will you work on it?" asks where changes land, CI and how you release', { timeout: 20000 }, async () => {
+test('#632 create step: "How will you work on it?" asks how changes reach main, CI and how you release', { timeout: 20000 }, async () => {
   const app = await atCreate();
   const groups = allByTestId(wizardMarkup(app), 'wizard-question').map((e) => e.attrs['data-question']);
   // #57: and the project's kind
   assert.deepEqual(groups, ['mode', 'ci', 'release', 'kind']);
   const text = wizardText(app);
-  const missing = ['How will you work on it?', 'Where changes land', 'CI', 'How you release'].filter((s) => !text.includes(s));
+  const missing = ['How will you work on it?', 'How changes reach main', 'CI (automatic builds and tests)', 'How you release'].filter((s) => !text.includes(s));
   assert.deepEqual(missing, []);
 });
 
-test('#632 create step: "Where changes land" offers Local and Local + remote', { timeout: 20000 }, async () => {
+test('#632 create step: "How changes reach main" offers Local and Pull requests', { timeout: 20000 }, async () => {
   const app = await atCreate();
-  assertLabels(chipTexts(app, 'mode'), ['Local', 'Local + remote']);
-  const text = H.visibleText(question(app, 'mode')?.inner || '');
-  assert.equal(text.includes('merge here, push main') && text.includes('pull requests on GitHub'), true, text);
+  assertLabels(chipTexts(app, 'mode'), [['Local', 'Merge here, then push main'], ['Pull requests', 'Review on the remote repository']]);
+  assert.deepEqual(chipLabels(app, 'mode'), ['Local merge, then push main', 'Pull requests on the remote repository']);
 });
 
-test('#632 create step: "CI" offers None, On releases and On pull requests and releases', { timeout: 20000 }, async () => {
+test('#632 create step: "CI" offers None, On releases and PRs and releases', { timeout: 20000 }, async () => {
   const app = await atCreate();
-  assertLabels(chipTexts(app, 'ci'), ['None', 'On releases', 'On pull requests and releases']);
-  assert.equal(H.visibleText(question(app, 'ci')?.inner || '').includes('build macOS, Linux, Windows'), true);
+  assertLabels(chipTexts(app, 'ci'), [['None', 'No CI for now'], ['On releases', 'macOS, Linux, Windows'], ['PRs and releases', 'Also on every PR']]);
+  assert.deepEqual(chipLabels(app, 'ci'), ['None', 'On releases: build macOS, Linux, Windows', 'On pull requests and releases']);
 });
 
 test('#632 create step: "How you release" offers Milestones (tags), Every merge, Release train, RC → stable', { timeout: 20000 }, async () => {
   const app = await atCreate();
-  assertLabels(chipTexts(app, 'release'), ['Milestones (tags)', 'Every merge', 'Release train', 'RC → stable']);
+  assertLabels(chipTexts(app, 'release'), [['Milestones', 'A tag when a milestone closes'], ['Every merge', 'Each change is a release'],
+    ['Release train', 'Fixed dates, with what\'s ready'], ['RC → stable', 'A test version before stable']]);
+  assert.deepEqual(chipLabels(app, 'release'), ['Milestones (tags)', 'Every merge', 'Release train', 'RC → stable']);
 });
 
-test('#632 create step: the picked chips by default are Local, On releases and Milestones (tags)', { timeout: 20000 }, async () => {
+test('#632 create step: the picked chips by default are Local, None (CI) and Milestones (tags)', { timeout: 20000 }, async () => {
   const app = await atCreate();
   const picked = ['mode', 'ci', 'release'].map((q) => pressedOf(app, q));
-  assert.deepEqual(picked.map((p) => p.length), [1, 1, 1], `the picked chips: ${JSON.stringify(picked)}`);
-  assert.equal(picked[0][0].startsWith('Local') && !picked[0][0].startsWith('Local +'), true, picked[0][0]);
-  assert.equal(picked[1][0].startsWith('On releases'), true, picked[1][0]);
-  assert.equal(picked[2][0].startsWith('Milestones (tags)'), true, picked[2][0]);
+  assert.deepEqual(picked, [['Local Merge here, then push main'], ['None No CI for now'], ['Milestones A tag when a milestone closes']]);
 });
 
-test('#632 create step: the line "Change them any time in Ways of working. Setting up CI is offered as a next step."', { timeout: 20000 }, async () => {
+// the closing line was removed with the layout rework (the owner's decision): the column ends with its questions
+test('#632 create step: no closing line "Change them any time in Ways of working. Setting up CI is offered as a next step."', { timeout: 20000 }, async () => {
   const app = await atCreate();
-  assert.equal(wizardText(app).includes('Change them any time in Ways of working. Setting up CI is offered as a next step.'), true);
+  const text = wizardText(app);
+  assert.equal(text.includes('Change them any time'), false, text);
+  assert.equal(text.includes('Setting up CI is offered as a next step'), false, text);
+  assert.equal(app.sandbox.I18n.t('onboarding.new_answers_line'), 'onboarding.new_answers_line', 'its key is gone from the catalog');
 });
 
 test('#632 create step: a click on a chip makes it the picked one of its question', { timeout: 20000 }, async () => {
   const app = await atCreate();
   await pickChip(app, 'ci', 'On pull requests and releases');
-  const picked = pressedOf(app, 'ci');
-  assert.equal(picked.length, 1, JSON.stringify(picked));
-  assert.equal(picked[0].startsWith('On pull requests and releases'), true, picked[0]);
+  assert.deepEqual(pressedOf(app, 'ci'), ['PRs and releases Also on every PR']);
 });
 
 // ---- Next: api.createOnboarding ---------------------------------------------------------------------
@@ -348,7 +354,7 @@ test('#632 create step: a click on a chip makes it the picked one of its questio
 test('#632 Next sends the name, README start, no remote and the default answers', { timeout: 20000 }, async () => {
   const app = await atCreate();
   await typeName(app, NAME);
-  assert.deepEqual(await sent(app), { name: 'Field Notes', starts: 'readme', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone', kind: 'frontend' } });
+  assert.deepEqual(await sent(app), { name: 'Field Notes', starts: 'readme', remote: null, answers: { mode: 'local', ci: 'none', release: 'milestone', kind: 'full-stack' } });
 });
 
 test('#632 Next with the private-repository box ticked sends remote { provider: github }', { timeout: 20000 }, async () => {
@@ -374,19 +380,20 @@ test('#632 Next with Empty picked sends starts: empty', { timeout: 20000 }, asyn
 });
 
 for (const [q, label, answers] of [
-  ['mode', 'Local + remote', { mode: 'remote', ci: 'release', release: 'milestone' }],
+  ['mode', 'Pull requests on the remote repository', { mode: 'remote', ci: 'none', release: 'milestone' }],
   ['ci', 'None', { mode: 'local', ci: 'none', release: 'milestone' }],
+  ['ci', 'On releases: build macOS, Linux, Windows', { mode: 'local', ci: 'release', release: 'milestone' }],
   ['ci', 'On pull requests and releases', { mode: 'local', ci: 'pr+release', release: 'milestone' }],
-  ['release', 'Every merge', { mode: 'local', ci: 'release', release: 'per-merge' }],
-  ['release', 'Release train', { mode: 'local', ci: 'release', release: 'train' }],
-  ['release', 'RC → stable', { mode: 'local', ci: 'release', release: 'rc-stable' }],
+  ['release', 'Every merge', { mode: 'local', ci: 'none', release: 'per-merge' }],
+  ['release', 'Release train', { mode: 'local', ci: 'none', release: 'train' }],
+  ['release', 'RC → stable', { mode: 'local', ci: 'none', release: 'rc-stable' }],
 ]) {
   test(`#632 Next after picking "${label}" sends the answers ${JSON.stringify(answers)}`, { timeout: 20000 }, async () => {
     const app = await atCreate();
     await typeName(app, NAME);
     await pickChip(app, q, label);
     // #57: the kind's default answer goes with them
-    assert.deepEqual((await sent(app)).answers, { ...answers, kind: 'frontend' });
+    assert.deepEqual((await sent(app)).answers, { ...answers, kind: 'full-stack' });
   });
 }
 

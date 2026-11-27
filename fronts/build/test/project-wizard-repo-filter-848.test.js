@@ -1,13 +1,18 @@
-// #848: the list under the repository field of the wizard's Repository step (Import a repository, GitHub)
+// #848: the list of the account's repositories on the wizard's Repository step (Import a repository, GitHub)
 // filters as the owner types. Acceptance tests, written before the code, on the real page
 // (packages/ui-kit/test/renderer-app-harness.js, through project-wizard-helpers.js).
+// Layout rework of 2026-11-26 (the owner's decision): "Your repositories" has its own filter box,
+// #wizard-repo-filter ("Filter by name"), above the list; the URL field (#wizard-repo, under the list) no longer
+// filters it: it only marks (aria-pressed) the listed repository its URL names.
 // The contract assumed here:
-// - typing in #wizard-repo (its input event, as W.typeInto fires it) lists the repositories whose
+// - typing in #wizard-repo-filter (its input event, as W.typeInto fires it) lists the repositories whose
 //   owner/name contains the typed text, case-insensitive, at most 5 (wizard-repo-list, items
-//   wizard-repo-option data-repo="owner/name"); a full owner/name or its https URL matches too;
-// - an empty field lists the first 5 repositories in the order api.onboardingRepos returned them;
-// - no match: no list at all, and Next still imports the typed URL (api.startOnboarding's `repo`);
-// - a click on a listed option fills the field (https://github.com/owner/name) and the name.
+//   wizard-repo-option data-repo="owner/name"; wizard-repo-more says so when more match); a full owner/name
+//   matches too;
+// - an empty filter lists the first 5 repositories in the order api.onboardingRepos returned them;
+// - no match: no list at all (wizard-repo-none says so); a URL typed in #wizard-repo that is none of the
+//   account's repositories is still imported by Next (api.startOnboarding's `repo`);
+// - a click on a listed option fills the URL field (https://github.com/owner/name) and the name.
 // What the list shows: the harness keeps #wizard-repo-slot as its own fake element, so a render of the
 // wizard (#project-wizard's innerHTML) and a write into the slot are both recorded, and the latest wins.
 const test = require('node:test');
@@ -63,6 +68,8 @@ async function atRepository() {
   return { app, listMarkup };
 }
 
+const FILTER = '#wizard-repo-filter';
+const pressedOf = (html) => H.findAll(html, (e) => e.attrs['data-testid'] === 'wizard-repo-option' && e.attrs['aria-pressed'] === 'true').map((e) => String(e.attrs['data-repo']));
 const listShown = (html) => !!H.findEl(html, (e) => e.attrs['data-testid'] === 'wizard-repo-list');
 const optionsOf = (html) => H.findAll(html, (e) => e.attrs['data-testid'] === 'wizard-repo-option').map((e) => String(e.attrs['data-repo']));
 
@@ -84,69 +91,94 @@ async function sent(app) {
 
 test('#848 typing part of a name in lowercase (freemy) lists FreeMyTvWebOS, even outside the 5 newest', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'freemy');
+  await W.typeInto(app, FILTER, 'freemy');
   assert.deepEqual(optionsOf(listMarkup()), [FREEMY]);
 });
 
 test('#848 the match is case-insensitive on the owner and the name (AI-MEM lists acme/ai-memory)', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'AI-MEM');
+  await W.typeInto(app, FILTER, 'AI-MEM');
   assert.deepEqual(optionsOf(listMarkup()), ['acme/ai-memory']);
 });
 
 test('#848 typing the owner lists only that owner\'s repositories', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'EduardoGalbiati');
+  await W.typeInto(app, FILTER, 'EduardoGalbiati');
   assert.deepEqual(optionsOf(listMarkup()), ['eduardogalbiati/multiagent', 'eduardogalbiati/pharmaged', 'eduardogalbiati/dotfiles', FREEMY]);
 });
 
 test('#848 the full owner/name lists that repository', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', FREEMY);
+  await W.typeInto(app, FILTER, FREEMY);
   assert.deepEqual(optionsOf(listMarkup()), [FREEMY]);
 });
 
-test('#848 the repository\'s https URL lists that repository', async () => {
+// the URL field no longer filters the list (the owner's decision): it marks the listed repository its URL names
+test('#848 the https URL of a listed repository, typed in the URL field, marks it in the list, which is not filtered', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', FREEMY_URL);
-  assert.deepEqual(optionsOf(listMarkup()), [FREEMY]);
+  assert.deepEqual(pressedOf(listMarkup()), []);
+  await W.typeInto(app, '#wizard-repo', 'https://github.com/acme/shop');
+  assert.deepEqual(optionsOf(listMarkup()), NAMES.slice(0, 5));
+  assert.deepEqual(pressedOf(listMarkup()), ['acme/shop']);
 });
 
-test('#848 a URL typed up to the owner (no slash after it) lists that owner\'s repositories', async () => {
+test('#848 a URL typed up to the owner (no slash after it) in the URL field leaves the list as it was, nothing marked', async () => {
   const { app, listMarkup } = await atRepository();
   await W.typeInto(app, '#wizard-repo', 'https://github.com/eduardogalbiati');
-  assert.deepEqual(optionsOf(listMarkup()), ['eduardogalbiati/multiagent', 'eduardogalbiati/pharmaged', 'eduardogalbiati/dotfiles', FREEMY]);
+  assert.deepEqual(optionsOf(listMarkup()), NAMES.slice(0, 5));
+  assert.deepEqual(pressedOf(listMarkup()), []);
+});
+
+test('#848 the URL field and the filter work together: the filter narrows the list, the URL marks its repository in it', async () => {
+  const { app, listMarkup } = await atRepository();
+  await W.typeInto(app, '#wizard-repo', FREEMY_URL);
+  assert.deepEqual(optionsOf(listMarkup()), NAMES.slice(0, 5), 'the URL alone filters nothing');
+  await W.typeInto(app, FILTER, 'freemy');
+  assert.deepEqual(optionsOf(listMarkup()), [FREEMY]);
+  assert.deepEqual(pressedOf(listMarkup()), [FREEMY]);
 });
 
 test('#848 at most 5 options when more repositories match', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'acme/'); // 6 repositories match
+  await W.typeInto(app, FILTER, 'acme/'); // 6 repositories match
   const shown = optionsOf(listMarkup());
   assert.equal(shown.length, 5);
   assert.equal(shown.filter((n) => n.startsWith('acme/')).length, 5);
+  const more = H.findEl(listMarkup(), (e) => e.attrs['data-testid'] === 'wizard-repo-more');
+  assert.equal(H.visibleText(more?.inner || ''), 'Only the 5 most recent are shown. Use the filter to find another.');
+});
+
+test('#848 5 or fewer matches: no "only the 5 most recent" line', async () => {
+  const { app, listMarkup } = await atRepository();
+  await W.typeInto(app, FILTER, 'eduardogalbiati/');
+  assert.equal(optionsOf(listMarkup()).length, 4);
+  assert.equal(H.findEl(listMarkup(), (e) => e.attrs['data-testid'] === 'wizard-repo-more'), null);
 });
 
 // ---- empty field ---------------------------------------------------------------------------------------
 
-test('#848 an empty field lists the first 5 repositories in the order the API returned them', async () => {
+test('#848 an empty filter lists the first 5 repositories in the order the API returned them', async () => {
   const { app, listMarkup } = await atRepository();
   assert.deepEqual(optionsOf(listMarkup()), NAMES.slice(0, 5));
 });
 
-test('#848 clearing the field after a filter lists the first 5 again', async () => {
+test('#848 clearing the filter lists the first 5 again', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'freemy');
-  await W.typeInto(app, '#wizard-repo', '');
+  await W.typeInto(app, FILTER, 'freemy');
+  assert.deepEqual(optionsOf(listMarkup()), [FREEMY]);
+  await W.typeInto(app, FILTER, '');
   assert.deepEqual(optionsOf(listMarkup()), NAMES.slice(0, 5));
 });
 
 // ---- no match ------------------------------------------------------------------------------------------
 
-test('#848 no matching repository: no list is rendered', async () => {
+test('#848 no matching repository: no list is rendered, a line says so', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'https://github.com/someone/unknown-thing');
+  await W.typeInto(app, FILTER, 'unknown-thing');
   assert.equal(listShown(listMarkup()), false);
   assert.equal(optionsOf(listMarkup()).length, 0);
+  const none = H.findEl(listMarkup(), (e) => e.attrs['data-testid'] === 'wizard-repo-none');
+  assert.equal(H.visibleText(none?.inner || ''), 'No repository with that name.');
 });
 
 test('#848 no matching repository: Next still imports the typed URL', async () => {
@@ -159,12 +191,11 @@ test('#848 no matching repository: Next still imports the typed URL', async () =
 
 test('#848 a click on a filtered option fills the field with its https URL and the name', async () => {
   const { app, listMarkup } = await atRepository();
-  await W.typeInto(app, '#wizard-repo', 'freemy');
+  await W.typeInto(app, FILTER, 'freemy');
   await pick(app, listMarkup(), FREEMY);
   const input = H.findEl(W.wizardMarkup(app), (e) => e.attrs.id === 'wizard-repo');
-  const live = String(W.existing(app, 'wizard-repo')?.value || '');
-  const shown = live && live !== 'freemy' ? live : String(input?.attrs.value || '');
-  assert.equal(shown, FREEMY_URL);
+  assert.equal(String(input?.attrs.value || ''), FREEMY_URL);
+  assert.deepEqual(pressedOf(W.wizardMarkup(app)), [FREEMY], 'the picked repository is marked, the filter kept');
   const { repo, name } = await sent(app);
   assert.equal(repo, FREEMY_URL);
   assert.equal(name, M.displayNameFromUrl(FREEMY));

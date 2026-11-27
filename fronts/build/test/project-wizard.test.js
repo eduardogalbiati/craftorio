@@ -27,10 +27,12 @@
 //   import goes on, no wizard-error, Next not disabled); each one shows the engine's reason and an
 //   action button (a <button> or a data-act); failures have data-act="retry" which calls
 //   api.retryOnboarding(projectId);
-// - step 3: data-testid="wizard-cost" with data-testid="wizard-cost-total" (visible text, never blank)
-//   and one element per paid part data-part="projectMap" (#730: no "ranking" part any more); the buttons
-//   data-testid="wizard-workflows-choice-analyze" (#725, api.analyzeOnboarding(projectId)) and data-testid="wizard-skip"
-//   (to step 'review', no analysis call);
+// - step 3 (one screen per state since the layout rework of 2026-11-26 and #100): before an analysis is asked
+//   for, the two buttons data-testid="wizard-workflows-choice-analyze" (#725, api.analyzeOnboarding(projectId))
+//   and data-testid="wizard-workflows-choice-manual", no data-testid="wizard-cost" and no "wizard-skip" (gone:
+//   Define manually, then Continue, goes to step 'review' with no analysis call; Continue is disabled until
+//   then); once asked for, data-testid="wizard-cost" with data-testid="wizard-cost-total" (visible text, never
+//   blank) and one element per paid part data-part="projectMap" (#730: no "ranking" part any more);
 // - the tray: one data-testid="tray-item" per project, data-project="<id>" data-status="<engine
 //   status>"; a failed item shows the reason and data-act="retry" (api.retryOnboarding(projectId)).
 // Harness equivalents: the fake DOM parses nothing, so buttons are found in the rendered markup and
@@ -276,8 +278,14 @@ test('#641 no gh CLI: a warning (cli-missing) with its reason and an action, and
 
 // ---- step 3: the analysis --------------------------------------------------------------------------
 
-test('#641 step 3 shows the cost total and its paid part before any analysis is started', async () => {
+// the cost box left the choice (the owner's decision): it shows with the jobs once the analysis is asked for
+test('#641 step 3 shows no cost box before any analysis is started, then the cost total and its paid part', async () => {
   const app = await atAnalysis();
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-cost'), null, 'no data-testid="wizard-cost" on the choice');
+  assert.ok(byTestId(wizardMarkup(app), 'wizard-workflows-choice-analyze'), 'Analyze with AI');
+  assert.ok(byTestId(wizardMarkup(app), 'wizard-workflows-choice-manual'), 'Define manually');
+  assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'nothing started yet');
+  await press(app, 'wizard-workflows-choice-analyze');
   const cost = byTestId(wizardMarkup(app), 'wizard-cost');
   assert.ok(cost, 'data-testid="wizard-cost"');
   const total = byTestId(cost.outer, 'wizard-cost-total');
@@ -285,7 +293,7 @@ test('#641 step 3 shows the cost total and its paid part before any analysis is 
   assert.notEqual(H.visibleText(total.inner), '', 'the total is never blank');
   assert.ok(H.findEl(cost.outer, (e) => e.attrs['data-part'] === 'projectMap'), 'the project map part');
   assert.ok(!H.findEl(cost.outer, (e) => e.attrs['data-part'] === 'ranking'), 'no refactor ranking part since #730');
-  assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'nothing started yet');
+  assert.equal(app.callsTo('analyzeOnboarding').length, 1, 'started by Analyze with AI only');
 });
 
 test('#641 Start analysis calls api.analyzeOnboarding(projectId)', async () => {
@@ -296,11 +304,20 @@ test('#641 Start analysis calls api.analyzeOnboarding(projectId)', async () => {
   assert.equal(calls[0][0], PID);
 });
 
-test('#641 "Skip, analyze later" goes to the review step without starting an analysis', async () => {
+// #100 (the owner's decision): "Skip, analyze later" is gone; the way on that starts nothing is Define manually,
+// then Continue, which waits for the workflows
+test('#641 #100 "Define manually", then Continue, goes to the review step without starting an analysis (no "Skip, analyze later")', async () => {
   const app = await atAnalysis();
-  await press(app, 'wizard-skip');
+  assert.equal(byTestId(wizardMarkup(app), 'wizard-skip'), null, 'no data-testid="wizard-skip"');
+  assert.equal('disabled' in byTestId(wizardMarkup(app), 'wizard-next').attrs, true, 'Continue waits for the workflows');
+  await press(app, 'wizard-next');
+  assert.equal(currentStep(app), 'analysis', 'a disabled Continue goes nowhere');
+  await press(app, 'wizard-workflows-choice-manual');
+  assert.equal('disabled' in byTestId(wizardMarkup(app), 'wizard-next').attrs, false, 'Continue once the workflows are defined');
+  await press(app, 'wizard-next');
   assert.equal(currentStep(app), 'review');
   assert.equal(app.callsTo('analyzeOnboarding').length, 0, 'no api.analyzeOnboarding call');
+  assert.equal(H.visibleText(wizardMarkup(app)).includes('The analyses were skipped: you can start them later.'), true, 'the review says the analyses were left for later');
 });
 
 // ---- the progress tray -----------------------------------------------------------------------------

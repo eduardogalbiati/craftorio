@@ -71,7 +71,7 @@
   // mock-2's toggle: the registry's platforms with a CLI (#351: no platform literal outside the adapters)
   const providers = () => (window.Platforms?.PLATFORMS || []).filter((p) => p.cli).map((p) => p.id);
   const svg = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  const ICON = { check: svg('M3.5 8.5l3 3 6-7'), download: svg('M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10'), plus: svg('M8 3v10M3 8h10') };
+  const ICON = { check: svg('M3.5 8.5l3 3 6-7'), download: svg('M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10'), plus: svg('M8 3v10M3 8h10'), folder: svg('M1.5 4.5v8h13V6h-6L7.5 4.5z') };
   // the engine's statuses past the clone: the repository step goes on to the analysis by itself
   const CLONED = ['ready', 'analyzing', 'analyzed'];
   const ACTIVE = ['cloning', 'analyzing'];
@@ -160,31 +160,48 @@
   }
 
   function startStep() {
-    const picked = (s) => (cur.model.source === s ? ' selected' : '');
+    // the folder card is an import too (its file:// URL): cur.fromFolder tells the two cards apart
+    const source = cur.model.source === 'new' ? 'new' : cur.fromFolder ? 'folder' : 'import';
+    const picked = (s) => (source === s ? ' selected' : '');
     return `<h2 id="project-wizard-title">${esc(t('onboarding.start_title'))}</h2>
       <p class="muted">${esc(t('onboarding.start_line'))}</p>
       <div class="wizard-sources">
-        <button type="button" class="card wizard-source${picked('new')}" data-act="source-new" data-testid="wizard-source-new" aria-pressed="${cur.model.source === 'new'}">
+        <button type="button" class="card wizard-source${picked('new')}" data-act="source-new" data-testid="wizard-source-new" aria-pressed="${source === 'new'}">
           ${sourceCard('new', ICON.plus, '')}
         </button>
-        <button type="button" class="card wizard-source${picked('import')}" data-act="source-import" data-testid="wizard-source-import" aria-pressed="${cur.model.source === 'import'}">
+        <button type="button" class="card wizard-source${picked('import')}" data-act="source-import" data-testid="wizard-source-import" aria-pressed="${source === 'import'}">
           ${sourceCard('import', ICON.download, '')}
+        </button>
+        <button type="button" class="card wizard-source${picked('folder')}" data-act="source-folder" data-testid="wizard-source-folder" aria-pressed="${source === 'folder'}">
+          ${sourceCard('folder', ICON.folder, '')}
         </button>
       </div>
       <p class="wizard-other muted" data-testid="wizard-other-sources">${esc(t('onboarding.other_sources'))}
-        <button type="button" class="link-btn" data-act="source-git-url" data-testid="wizard-source-git-url">${esc(t('onboarding.source_git_url'))}</button>
-        <span aria-hidden="true">·</span>
-        <button type="button" class="link-btn" data-act="source-folder" data-testid="wizard-source-folder">${esc(t('onboarding.source_folder'))}</button></p>`;
+        <button type="button" class="link-btn" data-act="source-git-url" data-testid="wizard-source-git-url">${esc(t('onboarding.source_git_url'))}</button></p>`;
   }
 
   // the provider: read from the URL, else the one picked on the toggle (GitHub by default)
   const pickedProvider = () => platformOfRepo(cur.model.repository)?.id || cur.provider || window.Platforms?.DEFAULT_PLATFORM || providers()[0];
 
-  // mock-2's GitHub / GitLab toggle: it follows the URL as it is typed (onInput) and picks the hint
+  // the platform's own mark (the Setup's logos, setup.js), else its initial
+  const providerLogo = (id) => window.SetupRows?.LOGOS?.[platformById(id)?.cli] || esc((platformById(id)?.label || id).slice(0, 1));
+  // a provider's sign-in line in its tile: the import's own check once the engine answered (its provider only),
+  // else gh / glab on this machine
+  function cliStatus(id) {
+    const o = cur.onboarding?.cli;
+    if (o) return o.provider === id ? cliBadge(o) : '';
+    const a = (cur.accounts || []).find((x) => x.provider === id);
+    return a ? accountBadge(a) : '';
+  }
+  // mock-2's GitHub / GitLab toggle as two tiles (logo, name, the CLI's sign-in): it follows the URL as it is
+  // typed (onInput) and picks the hint
   function providerToggle() {
     const on = pickedProvider();
-    const b = (id) => `<button type="button" class="${on === id ? 'active' : ''}" id="wizard-provider-${id}" data-act="provider" data-provider="${id}" aria-pressed="${on === id}">${esc(platformById(id)?.label || id)}</button>`;
-    return `<div class="seg wizard-provider" id="wizard-provider" data-testid="wizard-provider" role="group" aria-label="${esc(t('onboarding.provider_label'))}">${providers().map(b).join('')}</div>`;
+    const b = (id) => `<button type="button" class="wizard-provider-tile${on === id ? ' active' : ''}" id="wizard-provider-${id}" data-act="provider" data-provider="${id}" aria-pressed="${on === id}">
+          <span class="wizard-tile-icon wizard-provider-logo" data-logo="${esc(platformById(id)?.cli || id)}" aria-hidden="true">${providerLogo(id)}</span>
+          <span class="wizard-tile-title">${esc(platformById(id)?.label || id)}</span>
+          <span class="wizard-provider-status" id="wizard-cli-status-${id}">${cliStatus(id)}</span></button>`;
+    return `<div class="wizard-provider" id="wizard-provider" data-testid="wizard-provider" role="group" aria-label="${esc(t('onboarding.provider_label'))}">${providers().map(b).join('')}</div>`;
   }
 
   // the provider's CLI as the engine found it (gh signed in, glab missing…)
@@ -200,7 +217,6 @@
       : a.account ? 'onboarding.cli_signed_in_as' : 'onboarding.cli_ok';
     return `<span class="badge ${a.signedIn ? 'cli-ok' : 'cli-off'}" data-testid="wizard-cli-account" data-cli="${esc(a.cli || '')}">${esc(t(key, { cli: a.cli || '', account: a.account || '' }))}</span>`;
   }
-  const cliBadges = () => (cur.onboarding?.cli ? cliBadge(cur.onboarding.cli) : (cur.accounts || []).map(accountBadge).join(''));
 
   // "updated 2 days ago" in the interface's language
   function updatedAgo(iso) {
@@ -220,12 +236,17 @@
   const repoUrl = (name) => `https://${(platformById(pickedProvider()) || platformById(window.Platforms?.DEFAULT_PLATFORM))?.host}/${name}`;
   function repoList() {
     const typed = cur.model.repository.trim().replace(/\.git$/, '');
-    const query = (window.Platforms?.parseRepoUrl?.(typed)?.path || typed.replace(/^(?:[a-z][\w+.-]*:\/\/[^/]+|[^@\s/]+@[^:\s/]+:)\/?/i, '')).toLowerCase(); // a partial URL: its host goes
-    const repos = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).filter((r) => String(r.name || '').toLowerCase().includes(query)).slice(0, 5);
+    const query = String(cur.repoFilter || '').trim().toLowerCase(); // the list's own filter box (wizard-repo-filter)
+    const all = cur.projectId ? [] : (cur.repos[pickedProvider()] || []).filter((r) => String(r.name || '').toLowerCase().includes(query));
+    const repos = all.slice(0, 5);
+    // the owner muted, the repository's own name leading the row
+    const named = (name) => { const cut = String(name).lastIndexOf('/'); return `<span class="muted">${esc(String(name).slice(0, cut + 1))}</span>${esc(String(name).slice(cut + 1))}`; };
     const meta = (r) => [t(r.private ? 'onboarding.repo_private' : 'onboarding.repo_public'), updatedAgo(r.updatedAt)].filter(Boolean).join(' · ');
     const item = (r) => `<li><button type="button" class="wizard-repo-item" data-act="pick-repo" data-repo="${esc(r.name)}" data-testid="wizard-repo-option" aria-pressed="${typed === repoUrl(r.name)}">
-          <span class="text-cut" title="${esc(r.name)}">${esc(r.name)}</span><span class="muted">${esc(meta(r))}</span></button></li>`;
-    return repos.length ? `<ul class="wizard-repos" data-testid="wizard-repo-list" aria-label="${esc(t('onboarding.repo_list'))}">${repos.map(item).join('')}</ul>` : '';
+          <span class="text-cut" title="${esc(r.name)}">${named(r.name)}</span><span class="muted">${esc(meta(r))}</span></button></li>`;
+    return repos.length ? `<ul class="wizard-repos" data-testid="wizard-repo-list" aria-label="${esc(t('onboarding.repo_list'))}">${repos.map(item).join('')}</ul>${
+      all.length > 5 ? `<p class="muted small" data-testid="wizard-repo-more">${esc(t('onboarding.repo_list_more'))}</p>` : ''}`
+      : query && !cur.projectId && (cur.repos[pickedProvider()] || []).length ? `<p class="muted small" data-testid="wizard-repo-none">${esc(t('onboarding.repo_list_none'))}</p>` : '';
   }
 
   // the badges and the list arrive after the step is drawn: only their own parts change (the caret stays)
@@ -235,8 +256,7 @@
       if (document.activeElement?.id === 'wizard-new-name') refreshCreate(); else render();
       return;
     }
-    const badges = document.getElementById('wizard-cli-badges');
-    if (badges) badges.innerHTML = cliBadges();
+    for (const id of providers()) { const status = document.getElementById(`wizard-cli-status-${id}`); if (status) status.innerHTML = cliStatus(id); }
     repoSlot();
   }
   function repoSlot() { const slot = document.getElementById('wizard-repo-slot'); if (slot) slot.innerHTML = repoList(); }
@@ -265,26 +285,72 @@
   };
 
   // mock-2's line under the fields: where the engine clones the repository (its rule, OnboardingModel.repoNameFromUrl)
-  const cloneInto = () => (cur.model.repository.trim()
-    ? t('onboarding.clone_into', { folder: `<workspace>/repos/${M.repoNameFromUrl(typedRepo())}` }) : ''); // i18n-ignore
+  const cloneFolder = () => `<workspace>/repos/${M.repoNameFromUrl(typedRepo())}`; // i18n-ignore
+  const cloneInto = () => (cur.model.repository.trim() ? cloneFolder() : ''); // under its own label ("The copy goes to")
+
+  // a local folder as the repository (step 1's folder card, or an onboarding resumed on one), as a path people
+  // read; its file:// URL stays the repository
+  const pickedFolder = () => (/^file:\/\//i.test(cur.model.repository) ? windowsPath(decodeURI(cur.model.repository.replace(/^file:\/\//i, '')).replace(/^\/([A-Za-z]:)/, '$1')) : '');
+  // a Windows drive path with backslashes, as Explorer shows it
+  const windowsPath = (path) => (/^[A-Za-z]:/.test(path) ? path.replace(/\//g, '\\') : path);
+
+  // step 2 for a folder: its path and Change folder, without the GitHub / GitLab parts of an import
+  function folderStep(o, locked) {
+    const path = pickedFolder();
+    const into = cloneFolder();
+    return `<div class="wizard-columns">
+        <div class="wizard-column">
+          <h2 id="project-wizard-title">${esc(t('onboarding.folder_title'))}</h2>
+          <div class="wizard-fields">
+            <label class="wizard-field wizard-name-lead"><span>${esc(t('onboarding.name_label'))}</span>
+              <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}"${locked}></label>
+            <div class="wizard-field" role="group" aria-labelledby="wizard-folder-label"><span id="wizard-folder-label">${esc(t('onboarding.folder_label'))}</span>
+              <div class="wizard-folder">
+                <span class="wizard-folder-box">${ICON.folder}<code class="wizard-folder-path" data-testid="wizard-folder-path" title="${esc(path)}">${esc(path)}</code></span>
+                <button type="button" class="btn sm" data-act="pick-folder" data-testid="wizard-folder-change"${cur.projectId || cur.busy ? ' disabled' : ''}>${esc(t('onboarding.folder_change'))}</button>
+              </div>
+              <input id="wizard-repo" data-testid="wizard-repo" type="hidden" value="${esc(cur.model.repository)}">
+              <span class="muted small">${esc(t('onboarding.folder_help'))}</span></div>
+          </div>
+        </div>
+        <div class="wizard-column">
+          <h3>${esc(t('onboarding.folder_next_title'))}</h3>
+          <ul class="wizard-points">${[1, 2, 3].map((n) => `<li>${esc(t(`onboarding.folder_next_${n}`))}</li>`).join('')}</ul>
+          <div class="wizard-field"><span>${esc(t('onboarding.folder_into_label'))}</span>
+            <p class="mono wizard-work-model-path" id="wizard-clone-into" data-testid="wizard-clone-into" title="${esc(into)}">${esc(into)}</p></div>
+        </div>
+      </div>
+      ${o?.status === 'failed' ? errorBlock(o) : ''}
+      ${o ? cliWarning(o.cli) : ''}`;
+  }
 
   function repositoryStep() {
     const o = cur.onboarding;
     // #743: read-only from Next on (the access check and the clone are one wait, shown on the Next button)
     const locked = cur.projectId || cur.busy ? ' readonly' : '';
-    return `<div class="wizard-title-row">
-        <h2 id="project-wizard-title">${esc(t('onboarding.import_title'))}</h2>
-        <div class="wizard-title-side">${providerToggle()}<span class="wizard-cli-badges" id="wizard-cli-badges">${cliBadges()}</span></div>
+    if (pickedFolder()) return folderStep(o, locked);
+    return `<div class="wizard-columns wizard-import">
+        <div class="wizard-column">
+          <h2 id="project-wizard-title">${esc(t('onboarding.import_title'))}</h2>
+          <div class="wizard-fields">
+            <label class="wizard-field wizard-name-lead"><span>${esc(t('onboarding.name_label'))}</span>
+              <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}" placeholder="${esc(t('onboarding.name_placeholder_import'))}"${locked}></label>
+            <div class="wizard-field wizard-pick"><span>${esc(t('onboarding.repo_pick_label'))}</span>
+              <div class="wizard-pick-bar">${providerToggle()}
+                <input id="wizard-repo-filter" data-testid="wizard-repo-filter" type="text" spellcheck="false" value="${esc(cur.repoFilter || '')}" placeholder="${esc(t('onboarding.repo_filter'))}" aria-label="${esc(t('onboarding.repo_filter'))}"${cur.projectId ? ' disabled' : ''}></div>
+              <div id="wizard-repo-slot">${repoList()}</div></div>
+            <label class="wizard-field wizard-repo-url"><span>${esc(t('onboarding.repo_url_label'))}</span>
+              <input id="wizard-repo" data-testid="wizard-repo" type="text" spellcheck="false" value="${esc(cur.model.repository)}" placeholder="${esc(t(`onboarding.repo_placeholder_${pickedProvider()}`))}"${locked}>
+              <span class="muted small">${esc(t('onboarding.repo_help'))}</span></label>
+          </div>
+        </div>
+        <div class="wizard-column">
+          <h3>${esc(t('onboarding.folder_next_title'))}</h3>
+          <ul class="wizard-points">${[1, 2, 3].map((n) => `<li>${esc(t(`onboarding.import_next_${n}`))}</li>`).join('')}</ul>
+          <div class="wizard-field"><span>${esc(t('onboarding.folder_into_label'))}</span>
+            <p class="mono wizard-work-model-path" id="wizard-clone-into" data-testid="wizard-clone-into" data-empty="&lt;workspace&gt;/repos/…">${esc(cloneInto())}</p></div>
+        </div>
       </div>
-      <div class="wizard-fields">
-        <label class="wizard-field"><span>${esc(t('onboarding.repo_label'))}</span>
-          <input id="wizard-repo" data-testid="wizard-repo" type="text" spellcheck="false" value="${esc(cur.model.repository)}" placeholder="${esc(t(`onboarding.repo_placeholder_${pickedProvider()}`))}"${locked}>
-          <span class="muted small">${esc(t('onboarding.repo_help'))}</span></label>
-        <div id="wizard-repo-slot">${repoList()}</div>
-        <label class="wizard-field"><span>${esc(t('onboarding.name_label'))}</span>
-          <input id="wizard-name" data-testid="wizard-name" type="text" value="${esc(cur.model.name)}"${locked}></label>
-      </div>
-      <p class="mono muted small text-cut" id="wizard-clone-into" data-testid="wizard-clone-into">${esc(cloneInto())}</p>
       ${o?.status === 'failed' ? errorBlock(o) : ''}
       ${forkNotice(o)}
       ${o ? cliWarning(o.cli) : ''}`;
@@ -317,12 +383,28 @@
     return window.Select.markup(attrs, options, remoteProvider());
   }
 
-  // one question of the right column: its title and its chips, the picked one aria-pressed
+  // the answers' icons (16px strokes, as ICON), by question and value
+  const ANSWER_ICON = {
+    mode: { local: 'M2.5 3.5h11v7h-11zM1 13h14', remote: 'M4 5.5v5M5.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M13.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M12 10.5V7a2 2 0 0 0-2-2H7.5M9 3.5 7.5 5 9 6.5' },
+    ci: { none: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11M4.2 11.8l7.6-7.6', release: 'M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6', 'pr+release': 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11M5.5 8.2l1.8 1.8 3.4-3.8' },
+    release: { milestone: 'M2.5 2.5h5l6 6-5 5-6-6zM5.3 5.3h.01', 'per-merge': 'M6 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M6 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M13 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0M4.5 5.5v5M4.5 5.5c0 2.5 2 3.5 5.5 3.5', train: 'M3 3.5h10v9H3zM3 6.5h10M5.5 2v3M10.5 2v3', 'rc-stable': 'M2.5 8h7M7 4.5 10.5 8 7 11.5M13 4v8' },
+    kind: { frontend: 'M2 3.5h12v9H2zM2 6h12', 'full-stack': 'M8 2.5 2.5 5.5 8 8.5l5.5-3zM2.5 8 8 11l5.5-3M2.5 10.5 8 13.5l5.5-3', backend: 'M2.5 3h11v4h-11zM2.5 9h11v4h-11zM5 5h.01M5 11h.01' },
+  };
+
+  // one question of the right column: its title and its answers as tiles (an icon, a short title and one
+  // line on what it means), the picked one aria-pressed; a tile's accessible name is the answer's whole label
   function question(q, locked) {
-    const chip = (v) => `<button type="button" class="wizard-chip" data-act="answer" data-question="${q}" data-value="${esc(v)}" data-testid="wizard-chip" aria-pressed="${cur.answers[q] === v}"${locked}>${esc(answerLabel(q, v))}</button>`;
+    const tile = (v) => {
+      const key = `onboarding.tile_${q}_${String(v).replace(/[^a-z0-9]+/gi, '_')}`;
+      return `<button type="button" class="wizard-chip" data-act="answer" data-question="${q}" data-value="${esc(v)}" data-testid="wizard-chip" aria-label="${esc(answerLabel(q, v))}" aria-pressed="${cur.answers[q] === v}"${locked}>
+          <span class="wizard-tile-icon" aria-hidden="true">${ANSWER_ICON[q]?.[v] ? svg(ANSWER_ICON[q][v]) : ''}</span>
+          <span class="wizard-tile-title">${esc(t(key))}</span>
+          <span class="wizard-tile-text">${esc(t(`${key}_text`))}</span></button>`;
+    };
+    const answers = M.CREATE_ANSWERS[q];
     return `<div class="wizard-question" data-testid="wizard-question" data-question="${q}" role="group" aria-labelledby="wizard-question-${q}">
         <span class="wizard-question-title" id="wizard-question-${q}">${esc(t(`onboarding.new_${q}`))}</span>
-        <div class="wizard-chips">${M.CREATE_ANSWERS[q].map(chip).join('')}</div>
+        <div class="wizard-chips" data-count="${answers.length}">${answers.map(tile).join('')}</div>
       </div>`;
   }
 
@@ -334,8 +416,10 @@
     return `<div class="wizard-columns">
         <div class="wizard-column">
           <h2 id="project-wizard-title">${esc(t('onboarding.new_title'))}</h2>
-          <label class="wizard-field"><span>${esc(t('onboarding.name_label'))}</span>
+          <label class="wizard-field wizard-name-lead"><span>${esc(t('onboarding.name_label'))}</span>
             <input id="wizard-new-name" data-testid="wizard-new-name" type="text" value="${esc(cur.model.name)}"${cur.projectId ? ' readonly' : ''}></label>
+          <div class="wizard-field"><span>${esc(t('onboarding.new_folder_label'))}</span>
+            <p class="mono wizard-work-model-path" id="wizard-new-folder" data-testid="wizard-new-folder" title="${esc(newFolder())}">${esc(newFolder())}</p></div>
           <fieldset class="wizard-starts"><legend>${esc(t('onboarding.new_starts'))}</legend>${['readme', 'empty'].map(starts).join('')}</fieldset>
           <div class="wizard-remote">
             <label class="wizard-choice"><input type="checkbox" id="wizard-new-remote" data-testid="wizard-new-remote"${cur.remote ? ' checked' : ''}${locked || !signedIn().length ? ' disabled' : ''}>
@@ -343,13 +427,11 @@
             ${remoteSelect(locked)}
             <p class="muted small wizard-remote-hint" id="wizard-new-remote-hint" data-testid="wizard-new-remote-hint">${esc(remoteHint())}</p><p class="muted small" data-testid="wizard-no-remote-hint">${esc(t('onboarding.no_remote_hint'))}</p>
           </div>
-          <p class="mono muted small text-cut" id="wizard-new-folder" data-testid="wizard-new-folder" title="${esc(newFolder())}">${esc(newFolder())}</p>
           ${cur.onboarding ? remoteWarning(cur.onboarding.remote) : ''}
         </div>
         <div class="wizard-column">
           <h3>${esc(t('onboarding.new_questions'))}</h3>
           ${Object.keys(M.CREATE_ANSWERS).map((q) => question(q, locked)).join('')}
-          <p class="muted">${esc(t('onboarding.new_answers_line'))}</p>
         </div>
       </div>`;
   }
@@ -560,9 +642,9 @@
       : `<button type="button" class="btn" data-act="back" data-testid="wizard-back">${esc(t('onboarding.back'))}</button>`;
     // Finish never waits: not disabled by an analysis still running nor by a call in flight
     const finish = step === 'review' ? `<button type="button" class="btn primary" data-act="finish" data-testid="wizard-finish">${esc(t('onboarding.finish'))}</button>` : '';
-    // mock-4's footer: the clone's progress on the left, Back beside the step's action on the right
-    const foot = step === 'analysis' ? `${cur.model.source === 'new' ? '' : cloneProgress()}<span class="wizard-spacer"></span>${back}${next}`
-      : `${back}<span class="wizard-spacer"></span>${next}${finish}`;
+    // Cancel / Back beside the step's action on the right on every step, as the Setup's footer (mock-4: the
+    // clone's progress on the left)
+    const foot = `${step === 'analysis' && cur.model.source !== 'new' ? cloneProgress() : ''}<span class="wizard-spacer"></span>${back}${next}${finish}`;
     root.innerHTML = `<div class="wizard-panel wizard-at-${step}" data-testid="wizard-panel" tabindex="-1">
         <header class="wizard-head">
           ${stepper()}
@@ -694,6 +776,8 @@
 
   async function next() {
     if (!canNext()) return;
+    // the folder card: Next asks for the folder, then step 2 with its URL (a cancelled pick stays here)
+    if (cur.model.step === 'start' && cur.model.source !== 'new' && cur.fromFolder) { await fromFolder(); return; }
     if (cur.model.step === 'repository' && !cur.projectId) {
       const name = cur.model.name.trim();
       // #632: a new project is created (ready at once, its private remote only when ticked); else imported
@@ -737,7 +821,8 @@
   function toRepository(fields = {}) {
     cur.model = { ...cur.model, ...fields, source: 'import', step: 'repository' };
     render();
-    document.getElementById('wizard-repo')?.focus?.();
+    // a local folder has no URL field to type in: its name takes the focus
+    document.getElementById(pickedFolder() ? 'wizard-name' : 'wizard-repo')?.focus?.();
   }
 
   // a folder on this computer: its file:// URL (the engine clones it as any git URL) and its name
@@ -751,7 +836,7 @@
 
   // #632: the Create card and the chips of the create step's questions; true when it was one of them
   function onCreateClick(act, e) {
-    if (act === 'source-new') cur.model = { ...cur.model, source: 'new' };
+    if (act === 'source-new') { cur.model = { ...cur.model, source: 'new' }; cur.fromFolder = false; }
     else if (act === 'answer' && !cur.projectId) {
       const chip = e.target.closest('[data-question]');
       cur.answers = { ...cur.answers, [chip.dataset.question]: chip.dataset.value };
@@ -821,10 +906,11 @@
     const act = e.target?.closest?.('[data-act]')?.dataset.act;
     if (!act || !cur) return;
     if (act === 'close' || act === 'cancel') close();
-    else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; render(); }
+    else if (act === 'source-import') { cur.model = { ...cur.model, source: 'import' }; cur.fromFolder = false; render(); }
     else if (onCreateClick(act, e) || onRepoClick(act, e) || onLeaveClick(act, e)) return;
-    else if (act === 'source-git-url') toRepository();
-    else if (act === 'source-folder') await fromFolder();
+    else if (act === 'pick-folder') await fromFolder();
+    else if (act === 'source-git-url') { cur.fromFolder = false; toRepository(); }
+    else if (act === 'source-folder') { cur.model = { ...cur.model, source: 'import' }; cur.fromFolder = true; render(); }
     else if (act === 'create-issue') {
       const button = e.target.closest('[data-act]');
       await createIssue(Number(button.dataset.finding), button.dataset.prioritize !== undefined);
@@ -857,6 +943,7 @@
     if (e.target?.dataset?.testid === 'wizard-workflow-select') { cur.workflows = { ...cur.workflows, [e.target.dataset.workflowKind]: String(e.target.value || '') }; return; }
     if (workModel.onInput(e)) { render(); return; } // #633: the work model's radios
     if (onCreateInput(e, id)) return;
+    if (id === 'wizard-repo-filter') { cur.repoFilter = String(e.target.value || ''); repoSlot(); return; } // the list only: the caret stays
     if (id !== 'wizard-repo' && id !== 'wizard-name') return;
     const value = String(e.target.value || '');
     cur.model = { ...cur.model, [id === 'wizard-repo' ? 'repository' : 'name']: value };
@@ -867,7 +954,7 @@
       const nameField = /** @type {HTMLInputElement | null} */ (document.getElementById('wizard-name'));
       if (nameField) nameField.value = cur.model.name;
     }
-    if (id === 'wizard-repo') repoSlot(); // #848: the list under the field follows the typed text
+    if (id === 'wizard-repo') repoSlot(); // the list marks the repository the typed URL names
     // the provider toggle follows the URL (its buttons keep their place: the caret stays)
     const on = pickedProvider();
     for (const id of providers()) {

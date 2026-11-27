@@ -55,10 +55,13 @@
 .wizard-repos { list-style: none; margin: -6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); overflow: hidden; }
 .wizard-repos li + li { border-top: 1px solid var(--border); }
 .wizard-repo-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 30px; padding: 6px 10px; border: 0; border-radius: 0; background: none; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
-.wizard-repo-item:hover, .wizard-repo-item[aria-pressed="true"] { background: var(--panel); }
-.wizard-repo-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.wizard-repo-item:hover { background: var(--panel); }
+.wizard-repo-item[aria-pressed="true"] { background: rgba(124,156,255,.10); box-shadow: inset 2px 0 0 var(--accent); }
+.wizard-repo-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .wizard-repo-item .text-cut { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wizard-repo-item .muted { flex: none; font-size: 12px; }
+.wizard-repo-item > .muted { flex: none; font-size: 12px; }
+.wizard-repo-item .text-cut { font-weight: 600; }
+.wizard-repo-item .text-cut .muted { font-weight: 400; }
 
 /* #632: Create new project (mock-3): the radios and the box, each title over its line; the questions' chips */
 .wizard-starts { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -197,3 +200,129 @@ body:has(.drawer.open) .onboarding-tray:not([hidden]) { z-index: 4; }
 .tray-reason { margin: 0; color: var(--muted); }
 .tray-item .btn.small { align-self: flex-start; }
 .tray-dismiss { min-width: 24px; min-height: 24px; padding: 0 6px; }
+
+/* The wizard opens over the first-run Setup (packages/ui-kit/setup.css): the same shell, so the two read as one flow.
+   Head and footer inset 20px with their dividers, the Setup's step pills, a 20px step title, and on the first
+   step the source cards on the Setup's card surface. The panel keeps its one size (#743). */
+.wizard-panel { border-radius: 12px; }
+.wizard-head { margin: 0 20px; padding: 20px 0 12px; }
+.wizard-foot { margin: 0 20px; padding: 10px 0 20px; justify-content: flex-end; }
+.wizard-body { padding: 20px 20px 16px; }
+.wizard-step { gap: 7px; padding: 4px 12px 4px 4px; border-color: transparent; }
+.wizard-step-num { width: 20px; height: 20px; }
+.wizard-step[aria-current="step"] { border-color: rgba(124,156,255,.45); background: rgba(124,156,255,.14); font-weight: 400; }
+.wizard-step[aria-current="step"] .wizard-step-num { color: #0b0d12; }
+.wizard-step.done .wizard-step-num { background: rgba(74,222,128,.15); }
+.wizard-body h2 { font-size: 20px; }
+.wizard-body > h2 + p { margin-top: -6px; }
+.wizard-sources { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.wizard-source { padding: 16px; border-radius: var(--radius); background: var(--panel-2); }
+.wizard-card-icon { width: 44px; height: 44px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--border); }
+.wizard-card-title { font-size: 16px; }
+.wizard-points { font-size: 13px; gap: 4px; margin-top: 4px; }
+.wizard-close { width: 28px; height: 28px; padding: 0; border-color: transparent; color: var(--muted); }
+.wizard-close:hover:not(:disabled) { color: var(--text); }
+/* step 2 for a local repository: at the left its folder (a fixed value in a well, with Change folder) and the
+   project's name; at the right what Next does and where the clone goes */
+.wizard-folder { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.wizard-folder-box { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 8px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.wizard-folder-box svg { flex: none; margin-top: 2px; color: var(--muted); }
+.wizard-folder-path { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font-family: var(--mono); font-size: 12px; line-height: 20px; white-space: normal; overflow-wrap: anywhere; }
+.wizard-folder .btn { flex: none; white-space: nowrap; min-height: 34px; padding: 0 12px; font-size: 13px; }
+.wizard-column .wizard-points { font-size: 13px; line-height: 20px; gap: 8px; margin: 0 0 6px; color: var(--text); }
+.wizard-column .wizard-points li::marker { color: var(--muted); }
+.wizard-columns > .wizard-column > h3 { margin-top: 4px; }
+.wizard-column #wizard-clone-into, .wizard-column #wizard-new-folder { margin: 0; padding: 7px 9px; border-radius: 8px; background: var(--bg); font-size: 12px; line-height: 20px; white-space: normal; overflow-wrap: anywhere; }
+/* the project's name leads the local repository step: first, and a size up */
+.wizard-name-lead input { padding: 9px 11px; font-size: 15px; font-weight: 600; }
+/* the create step's left column: grouped blocks, body-weight option labels, and under the checkbox only the
+   hint that applies (the private repository's when ticked, else what a project without one gets) */
+.wizard-choice strong { font-weight: 400; color: var(--text); }
+.wizard-starts legend { margin-bottom: 4px; }
+.wizard-column > .wizard-starts { margin-top: 20px; }
+.wizard-column > .wizard-remote { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.wizard-remote { gap: 6px 8px; }
+.wizard-body .wizard-remote-hint, .wizard-body .wizard-remote [data-testid="wizard-no-remote-hint"] { flex-basis: 100%; margin: 0 0 0 24px; line-height: 18px; }
+.wizard-remote:has(#wizard-new-remote:checked) [data-testid="wizard-no-remote-hint"] { display: none; }
+.wizard-remote:has(#wizard-new-remote:not(:checked):not(:disabled)) #wizard-new-remote-hint { display: none; }
+/* the create step's questions: each answer a tile (icon, title, one line), the picked one in the accent, as the
+   Setup's cards; up to three in a row, four as two rows of two */
+.wizard-question { gap: 8px; }
+.wizard-column > .wizard-question + .wizard-question { margin-top: 10px; }
+.wizard-question .wizard-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wizard-question .wizard-chips[data-count="2"], .wizard-question .wizard-chips[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wizard-question .wizard-chip { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 8px; align-items: center; align-content: start; min-height: 0; max-width: none; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.wizard-question .wizard-chip:hover:not([disabled]) { border-color: var(--muted); }
+.wizard-question .wizard-chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: rgba(124,156,255,.10); color: var(--text); }
+.wizard-question .wizard-chip[disabled] { cursor: default; }
+.wizard-question .wizard-chip[disabled]:not([aria-pressed="true"]) { opacity: .5; }
+.wizard-tile-icon { grid-row: span 2; align-self: start; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); color: var(--muted); }
+.wizard-chip[aria-pressed="true"] .wizard-tile-icon { color: var(--accent); }
+.wizard-tile-title { font-size: 13px; font-weight: 600; }
+.wizard-tile-text { font-size: 12px; line-height: 16px; color: var(--muted); }
+/* a question's title leads its tiles */
+.wizard-question .wizard-question-title { font-size: 14px; font-weight: 600; color: var(--text); }
+/* the create step: the questions' column is the wider one (three tiles in a row keep their line on one line),
+   and its heading is a peer of the step's title */
+@media (min-width: 761px) {
+  .wizard-columns:has(> .wizard-column > .wizard-question) { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+}
+.wizard-columns > .wizard-column > h3:has(+ .wizard-question) { font-size: 20px; font-weight: 700; margin-top: 0; }
+/* the import step: two columns as its siblings (the form the wider one); the name first; under the URL field
+   the other way in, the account's repositories, with GitHub / GitLab as two tiles carrying the CLI's sign-in */
+@media (min-width: 761px) { .wizard-columns.wizard-import { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+.wizard-name-lead input::placeholder { font-weight: 400; }
+.wizard-pick { gap: 6px; margin-top: 4px; }
+.wizard-pick .wizard-repos { margin: 0; max-height: 156px; overflow-y: auto; }
+.wizard-provider { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.wizard-provider-tile { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 8px; align-items: center; align-content: start; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.wizard-provider-tile:hover { border-color: var(--muted); }
+.wizard-provider-tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: rgba(124,156,255,.10); }
+.wizard-provider-tile:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.wizard-provider-logo { color: var(--text); }
+.wizard-provider-logo[data-logo="glab"] { color: #fc6d26; }
+.wizard-provider-logo svg { width: 16px; height: 16px; }
+.wizard-provider-status { min-width: 0; min-height: 16px; }
+.wizard-provider-status .badge { display: block; padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wizard-provider-status .badge::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
+#wizard-clone-into:empty::before { content: attr(data-empty); color: var(--muted); }
+/* the import step's order: the repository leads (typed or picked), the name derived from it closes the column;
+   GitHub / GitLab are one-line tabs of the list, each with its CLI's sign-in */
+.wizard-provider { display: flex; gap: 6px; }
+.wizard-provider-tile { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; min-height: 32px; padding: 0 12px 0 8px; border-radius: 8px; background: none; color: var(--muted); }
+.wizard-provider-tile[aria-pressed="true"] { border-color: rgba(124,156,255,.45); box-shadow: none; background: rgba(124,156,255,.14); color: var(--text); }
+.wizard-provider-tile .wizard-tile-icon { flex: none; width: 20px; height: 20px; border: 0; background: none; }
+.wizard-provider-tile .wizard-tile-title { flex: none; }
+.wizard-provider-status { flex: 0 1 auto; min-height: 0; }
+.wizard-provider-status:empty { display: none; }
+.wizard-provider-status .badge { color: var(--muted); }
+.wizard-provider-status .badge.cli-ok::before { background: var(--green); }
+.wizard-provider-status .badge.cli-off::before { background: none; box-shadow: inset 0 0 0 1px var(--muted); }
+.wizard-repo-item { font-family: inherit; }
+.wizard-pick .wizard-repos { border-radius: 8px; }
+#wizard-repo-slot > p { margin-top: 6px; }
+.wizard-provider-tile .wizard-tile-icon { align-self: center; }
+/* the import step, as the owner asked: the name on top; "Your repositories" with its tabs, its own filter box and
+   the list; then the other way in, a pasted URL, under a divider */
+.wizard-pick { margin-top: 0; }
+.wizard-pick-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wizard-pick-bar .wizard-provider { flex: none; }
+.wizard-pick-bar #wizard-repo-filter { flex: 1 1 160px; min-width: 0; min-height: 32px; }
+.wizard-repo-url { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+/* the import step's polish: the picked row carries a check (a column kept on every row, so the dates stay aligned);
+   the filter box is the list's own header (a search glyph, joined to the list while there is one); the list keeps
+   the room of its five rows, so the URL block under it does not jump as the filter narrows it */
+.wizard-repo-item .text-cut { margin-right: auto; }
+.wizard-repo-item::after { content: ''; flex: none; width: 14px; height: 14px; background: transparent; -webkit-mask: var(--check-mark) center / contain no-repeat; mask: var(--check-mark) center / contain no-repeat; }
+.wizard-repo-item[aria-pressed="true"] { background: rgba(124,156,255,.16); box-shadow: none; }
+.wizard-repo-item[aria-pressed="true"]::after { background: var(--accent); }
+.wizard-repo-item[aria-pressed="true"] > .muted { color: var(--text); }
+.wizard-repo-item[aria-pressed="true"]:hover { background: rgba(124,156,255,.20); }
+.wizard-pick-bar { gap: 8px 6px; }
+.wizard-pick-bar #wizard-repo-filter { flex: 1 1 100%; padding-left: 32px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a91a3' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.5'/%3E%3Cpath d='M10.5 10.5L14 14'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 10px 50%; background-size: 14px 14px; }
+.wizard-pick:has(.wizard-repos) #wizard-repo-filter { border-radius: 8px 8px 0 0; }
+.wizard-pick:has(.wizard-repos) #wizard-repo-slot { margin-top: -7px; }
+.wizard-pick:has(.wizard-repos) .wizard-repos { border-radius: 0 0 8px 8px; }
+.wizard-pick-bar #wizard-repo-filter:focus { position: relative; z-index: 1; }
+.wizard-name-lead input::placeholder { font-weight: 400; font-size: 14px; color: var(--muted); opacity: .7; }
+#wizard-repo-slot:not(:empty) { min-height: 180px; }

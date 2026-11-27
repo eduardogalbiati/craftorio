@@ -5,7 +5,8 @@
 //
 // Contract assumed here:
 // - the create step shows a fourth question, wizard-question data-question="kind", its chips (wizard-chip
-//   data-question="kind") data-value="frontend" | "full-stack" | "backend" in that order
+//   data-question="kind") data-value="full-stack" | "frontend" | "backend" in that order (full-stack first and
+//   the default since the layout rework of 2026-11-26, the owner's call)
 //   (OnboardingModel.CREATE_ANSWERS.kind), one pressed by default (CREATE_DEFAULTS.kind), labels from the
 //   catalogs (en.json / pt-BR.json), never a raw key;
 // - Next sends api.createOnboarding({ ..., answers: { mode, ci, release, kind } });
@@ -87,9 +88,9 @@ test('#57 create step: the questions now ask the project\'s kind too', { timeout
   assert.equal(groups.includes('kind'), true, `the questions: ${groups.join(', ')}`);
 });
 
-test('#57 create step: the kind offers frontend, full-stack and backend, in that order', { timeout: 30000 }, async () => {
+test('#57 create step: the kind offers full-stack, frontend and backend, in that order', { timeout: 30000 }, async () => {
   const app = await atCreate();
-  assert.deepEqual(kindChips(app).map((e) => e.attrs['data-value']), ['frontend', 'full-stack', 'backend']);
+  assert.deepEqual(kindChips(app).map((e) => e.attrs['data-value']), ['full-stack', 'frontend', 'backend']);
 });
 
 test('#57 create step: the kind chips read words from the catalog, never a raw key', { timeout: 30000 }, async () => {
@@ -113,14 +114,14 @@ test('#57 Next sends the kind picked (backend)', { timeout: 30000 }, async () =>
 
 test('#57 the new project\'s review opens on the kind answered, with no "Detect from the files"', { timeout: 30000 }, async () => {
   const app = await atCreate();
-  await pickKind(app, 'full-stack');
+  await pickKind(app, 'frontend'); // not the default (full-stack since the layout rework)
   await sent(app);
   assert.equal(W.currentStep(app), 'analysis', 'the new project is on step 3');
   await W.press(app, 'wizard-next');
   await app.settle(20);
   assert.equal(W.currentStep(app), 'review');
   const options = kindOptions(app).map(textOf);
-  assert.deepEqual({ picked: pickedKind(app), detect: options.includes('Detect from the files') }, { picked: 'full-stack', detect: false }, options.join(' | '));
+  assert.deepEqual({ picked: pickedKind(app), detect: options.includes('Detect from the files') }, { picked: 'frontend', detect: false }, options.join(' | '));
   assert.equal(W.byTestId(W.wizardMarkup(app), 'wizard-kind-detected') === null, true, 'answered, not "Detected"');
 });
 
