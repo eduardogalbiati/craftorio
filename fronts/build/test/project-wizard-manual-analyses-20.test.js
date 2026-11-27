@@ -353,6 +353,22 @@ test('#101 Analyze with AI refused on the retry path (a failed profile while ana
   assert.equal(toastText(app).includes(REFUSAL), true, `the toast: "${toastText(app)}"`);
 });
 
+// the owner picks Define manually (offered on the failed rows) while the refused retry is still on its way: the
+// late refusal does not take the pick back
+test('#101 Define manually pressed while a retry is on its way, then the retry refused: the column stays manual', { timeout: 30000 }, async () => {
+  let refuse;
+  const app = await atAnalysis({ retryOnboarding: () => new Promise((_, reject) => { refuse = reject; }) });
+  await W.emit(app, stateWith('analyzing', { facts: { status: 'done' }, profile: { status: 'failed', error: 'boom' }, projectMap: { status: 'running' } }));
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  assert.equal(app.callsTo('retryOnboarding').length, 1, 'the click asked api.retryOnboarding');
+  await W.press(app, 'wizard-workflows-choice-manual');
+  assert.equal(columnState(app), 'manual', 'Define manually picked while the retry is on its way');
+  refuse(new Error(REFUSAL));
+  await app.settle(20);
+  assert.equal(columnState(app), 'manual', `wizard-workflows-column data-state: ${columnState(app)}`);
+  assert.equal(toastText(app).includes(REFUSAL), true, `the toast: "${toastText(app)}"`);
+});
+
 test('#101 Analyze with AI refused from the two choices: the last saved wizard has no workflowsMode analyze, analyzeLater false as before', { timeout: 30000 }, async () => {
   const app = await atAnalysis({ analyzeOnboarding: refused });
   await W.press(app, 'wizard-workflows-choice-analyze');

@@ -240,6 +240,9 @@ for (const [what, provider, text, expected] of [
   ['owner/name with a trailing slash', 'github', 'acme/app/', ['acme/app']],
   ['owner/name with spaces around it', 'github', '  acme/app  ', ['acme/app']],
   ['a URL of another host', 'github', 'https://example.com/acme/app', []],
+  ['a GitLab URL while GitHub is picked', 'github', 'https://gitlab.com/acme/app', []],
+  ['the SSH form of the GitHub URL', 'github', 'git@github.com:acme/app.git', ['acme/app']],
+  ['an owner with a trailing slash (the owner\'s repositories)', 'github', 'acme/', ['acme/app', 'acme/shop', 'acme/blog']],
 ]) {
   test(`#103 the filter, ${what} (${JSON.stringify(text)}): lists ${JSON.stringify(expected)}`, async () => {
     const { app, listMarkup } = await atRepositoryOn(provider);

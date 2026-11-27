@@ -40,7 +40,8 @@ Feature: The project wizard says plainly when an analysis did not start, and fin
     And the review shows no analysis running
 
   # The account's repositories are simulated (CRAFTORIO_E2E_GITHUB_REPOS, see onboarding.steps.js)
-  @issue-103
+  # @serial: the paste goes through the machine's clipboard, shared with every other scenario running at once
+  @issue-103 @serial
   Scenario Outline: Pasting a repository's GitHub URL in the repositories filter lists it, and the URL field stays empty
     Given the app is open where my GitHub account has the repositories:
       | repository             | updated    |
