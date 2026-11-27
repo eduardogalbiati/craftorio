@@ -10,6 +10,8 @@
 // a window of the report with its own counts (detected, repaired alone, waiting for you, cost).
 // #337: the turn-on form's "Limits tonight" group (Expand all limits, a multiplier, Customize rows),
 // the limits in force while the watch is on (nightwatch:limits), and the morning's runs past a day limit.
+// #110: every text in the interface language: the engine's English permission table through the catalog
+// (nightwatch.perm_<id>_label|does|undo, nightwatch.never_<id>, I18n.translated), the limits line, the kinds.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, fmtDur, dateOf, confirmDialog, showView).
 
@@ -27,10 +29,13 @@
   const localValue = (d) => TimeZone.inputValue(d, TimeZone.current());
   const defaultEnd = () => localValue(TimeZone.nextAt(7, 30, TimeZone.current()));
   const stat = (label, value, title = '', cls = '') => `<div class="u-stat${cls ? ` ${cls}` : ''}"${title ? ` title="${esc(title)}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
-  const KIND = {
-    'cost-gap': 'Cost gap', 'dispatch-idle': 'Dispatch idle', environment: 'Environment', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause', memory: 'Memory guard',
-    regression: 'Regression', repeat: 'Repeated failure', 'roadmap-empty': 'Roadmap empty', 'roadmap-paused': 'Roadmap paused', stalled: 'Stalled',
-  };
+  // #110: an engine id as a catalog key's tail (fresh-start → fresh_start)
+  const snake = (id) => String(id).replace(/-/g, '_');
+  const KINDS = ['cost-gap', 'dispatch-idle', 'environment', 'failed', 'interrupted', 'limit', 'memory', 'regression', 'repeat', 'roadmap-empty', 'roadmap-paused', 'stalled'];
+  const kindLabel = (k) => (KINDS.includes(k) ? I18n.t(`nightwatch.kind_${snake(k)}`) : k);
+  // #110: the engine's English permission table (night-watch.js PERMISSIONS / NEVER_ALLOWED) in the interface language
+  const permText = (x, part) => I18n.translated(`nightwatch.perm_${snake(x.id)}_${part}`, x[part]);
+  const neverText = (x) => I18n.translated(`nightwatch.never_${snake(x.id)}`, x.label);
   // #278: Self-healing (Settings › Execution › Oracle) keeps the watch on with no end time
   const healing = (w) => !!(w?.active && w.selfHealing);
   const openExecutionSettings = () => { showView('settings'); if (typeof showSettingsTab === 'function') showSettingsTab('execution'); };
@@ -49,28 +54,36 @@
     return { context: pick('context'), cost: pick('cost'), duration: pick('duration'), turns: Math.max(1, m || Number(v.turns) || 1), budget: pick('budget') };
   }
   // "×2 tonight: context 80M, cost US$ 240, duration 16h, turns ×2; nightly budget US$ 150"
-  function limitsSummary(day, t) {
-    if (!t) return 'Runs keep each workflow\'s limits';
-    const x = tonightValues(day, t);
-    const parts = [x.context && `context ${tokM(x.context)}`, x.cost && `cost ${dollars(x.cost)}`, x.duration && `duration ${hrs(x.duration)}`, `turns ×${x.turns}`].filter(Boolean);
-    return `${t.multiplier ? `×${t.multiplier}` : 'Custom'} tonight: ${parts.join(', ')}${x.budget ? `; nightly budget ${dollars(x.budget)}` : ''}`;
+  function limitsSummary(day, tonight) {
+    if (!tonight) return I18n.t('nightwatch.limits_keep_workflows');
+    const x = tonightValues(day, tonight);
+    const parts = [
+      x.context && I18n.t('nightwatch.limits_part_context', { value: tokM(x.context) }),
+      x.cost && I18n.t('nightwatch.limits_part_cost', { value: dollars(x.cost) }),
+      x.duration && I18n.t('nightwatch.limits_part_duration', { value: hrs(x.duration) }),
+      I18n.t('nightwatch.limits_part_turns', { value: x.turns }),
+    ].filter(Boolean);
+    const head = tonight.multiplier ? `×${tonight.multiplier}` : I18n.t('nightwatch.limits_custom');
+    return I18n.t('nightwatch.limits_tonight_line', { head, parts: parts.join(', ') }) + (x.budget ? I18n.t('nightwatch.limits_part_budget', { value: dollars(x.budget) }) : '');
   }
   const multiplierSelect = (value, placeholder = '') => `<select id="nw-limits-multiplier" data-testid="nw-limits-multiplier" aria-label="${t('nightwatch.multiplier_of_every_limit')}"${nw.limits?.saving || nw.form?.saving ? ' disabled' : ''}>
       ${placeholder ? `<option value="" selected disabled>${esc(placeholder)}</option>` : ''}${MULTIPLIERS.map((m) => `<option value="${m}"${!placeholder && Number(value) === m ? ' selected' : ''}>×${m}</option>`).join('')}
     </select>`;
   // Customize: one row per limit, the day value and tonight's (in M tokens, US$, hours, a factor, US$)
   const LIMIT_ROWS = [
-    { id: 'context', label: 'Context per run', unit: 'M tokens', day: (d) => (d.context ? tokM(d.context) : 'no limit'), shown: (x) => x.context / 1e6, sent: (n) => n * 1e6 },
-    { id: 'cost', label: 'Cost per run', unit: 'US$', day: (d) => (d.cost ? dollars(d.cost) : 'no limit'), shown: (x) => x.cost, sent: (n) => n },
-    { id: 'duration', label: 'Duration per run', unit: 'hours', day: (d) => (d.duration ? hrs(d.duration) : 'no limit'), shown: (x) => x.duration / 3600e3, sent: (n) => n * 3600e3 },
-    { id: 'turns', label: 'Agent turn timeouts', unit: '× each agent\'s own', day: () => '×1', shown: (x) => x.turns, sent: (n) => n },
-    { id: 'budget', label: 'Nightly budget', unit: 'US$', day: (d) => (d.budget ? dollars(d.budget) : 'none'), shown: (x) => x.budget || '', sent: (n) => n },
+  const noLimit = () => I18n.t('nightwatch.limit_none');
+  const LIMIT_ROWS = [
+    { id: 'context', label: () => I18n.t('nightwatch.limit_context'), unit: () => I18n.t('nightwatch.limit_unit_m_tokens'), day: (d) => (d.context ? tokM(d.context) : noLimit()), shown: (x) => x.context / 1e6, sent: (n) => n * 1e6 },
+    { id: 'cost', label: () => I18n.t('nightwatch.limit_cost'), unit: () => 'US$', day: (d) => (d.cost ? dollars(d.cost) : noLimit()), shown: (x) => x.cost, sent: (n) => n },
+    { id: 'duration', label: () => I18n.t('nightwatch.limit_duration'), unit: () => I18n.t('nightwatch.limit_unit_hours'), day: (d) => (d.duration ? hrs(d.duration) : noLimit()), shown: (x) => x.duration / 3600e3, sent: (n) => n * 3600e3 },
+    { id: 'turns', label: () => I18n.t('nightwatch.limit_turns'), unit: () => I18n.t('nightwatch.limit_unit_each_agent'), day: () => '×1', shown: (x) => x.turns, sent: (n) => n },
+    { id: 'budget', label: () => I18n.t('nightwatch.limit_budget'), unit: () => 'US$', day: (d) => (d.budget ? dollars(d.budget) : I18n.t('nightwatch.none')), shown: (x) => x.budget || '', sent: (n) => n },
   ];
   function limitRowsHtml(day, values, disabled) {
     const x = tonightValues(day, { values });
     return `<div class="nw-limit-rows">${LIMIT_ROWS.map((r) => `<div class="nw-limit-row" data-testid="nw-limits-row-${r.id}">
-        <label for="nw-lim-${r.id}">${esc(r.label)}</label><span class="muted small">${t('nightwatch.day')} ${esc(r.day(day))}</span>
-        <span class="row"><input type="number" class="s-num" id="nw-lim-${r.id}" data-nw-lim="${r.id}" min="0" step="any" value="${esc(r.shown(x) ? +Number(r.shown(x)).toFixed(2) : '')}"${disabled ? ' disabled' : ''} /><span class="muted small">${esc(r.unit)}</span></span>
+        <label for="nw-lim-${r.id}">${esc(r.label())}</label><span class="muted small">${t('nightwatch.day')} ${esc(r.day(day))}</span>
+        <span class="row"><input type="number" class="s-num" id="nw-lim-${r.id}" data-nw-lim="${r.id}" min="0" step="any" value="${esc(r.shown(x) ? +Number(r.shown(x)).toFixed(2) : '')}"${disabled ? ' disabled' : ''} /><span class="muted small">${esc(r.unit())}</span></span>
       </div>`).join('')}</div>`;
   }
   // the custom values from the rows' inputs (renderer units → tokens, US$, ms, factor, US$)
@@ -105,7 +118,7 @@
     const edit = nw.limits;
     return `<div class="nw-active-limits" data-testid="nw-active-limits">
         <div class="row"><b class="small">${I18n.t('nightwatch.limits_tonight')}</b>
-          ${multiplierSelect(t?.multiplier, t?.multiplier ? '' : t ? 'Custom' : 'Not expanded')}
+          ${multiplierSelect(t?.multiplier, t?.multiplier ? '' : t ? I18n.t('nightwatch.limits_custom') : I18n.t('nightwatch.limits_not_expanded'))}
           ${edit?.custom ? '' : `<button type="button" class="link-btn" id="nw-active-customize" data-testid="nw-limits-customize">${I18n.t('nightwatch.customize')}</button>`}</div>
         <div class="small nw-limits-line">${esc(limitsSummary(lim.day, t))}</div>
         ${!lim.day.budget ? `<p class="warn-text small nw-limits-warning" data-testid="nw-limits-warning">${I18n.t('nightwatch.no_nightly_budget_nothing_caps_tonight')}</p>` : ''}
@@ -219,12 +232,12 @@
     const p = s.permissions;
     const edit = nw.perms;
     const allowed = new Set(edit ? edit.allowed : p.allowed);
-    const rows = p.catalog.map((x) => `<label class="s-row nw-perm" data-testid="nw-perm">
+    const rows = p.catalog.map((x) => ({ ...x, label: permText(x, 'label'), does: permText(x, 'does'), undo: permText(x, 'undo') })).map((x) => `<label class="s-row nw-perm" data-testid="nw-perm">
         <div class="nw-perm-text"><b>${esc(x.label)}</b><div class="muted small nw-cut" data-testid="nw-perm-help" title="${esc(`${x.does} ${x.undo}`)}">${esc(x.does)}</div><div class="muted small nw-cut nw-undo" title="${esc(x.undo)}">↶ ${esc(x.undo)}</div></div>
         <input type="checkbox" class="nw-perm-check" data-perm="${esc(x.id)}"${allowed.has(x.id) ? ' checked' : ''}${edit?.saving ? ' disabled' : ''} />
       </label>`).join('');
-    const never = p.never.map((x) => `<span class="badge nw-never" title="${t('nightwatch.never_allowed_under_the_night_watch')}">🔒 ${esc(x.label)}</span>`).join('');
-    const saved = p.defaults ? 'Defaults: retry and refresh only.' : `Saved ${esc(dateOf(p.updatedAt))}.`;
+    const never = p.never.map((x) => `<span class="badge nw-never" title="${t('nightwatch.never_allowed_under_the_night_watch')}">🔒 ${esc(neverText(x))}</span>`).join('');
+    const saved = p.defaults ? t('nightwatch.permissions_defaults') : t('nightwatch.permissions_saved', { date: esc(dateOf(p.updatedAt)) });
     return `<div class="card nw-card" data-testid="nw-permissions">
       <div class="row nw-card-head"><h3>${t('nightwatch.what_the_oracle_may_do_without')}</h3><span class="muted small" title="${t('nightwatch.one_checklist_for_the_night_watch')}">${saved} ${t('nightwatch.an_item_gets_at_most_loopcap', { loopCap: s.loopCap })}</span></div>
       <div class="s-group nw-perms">${rows}</div>
@@ -238,10 +251,10 @@
   function summaryHtml(m) {
     const s = m.safety;
     const idle = m.idleHours;
-    const kinds = Object.entries(m.incidents.byKind).filter(([, n]) => n).map(([k, n]) => `${esc(KIND[k] || k)} <b>${n}</b>`).join('<span>·</span>') || t('nightwatch.none'); // i18n-ignore
+    const kinds = Object.entries(m.incidents.byKind).filter(([, n]) => n).map(([k, n]) => `${esc(kindLabel(k))} <b>${n}</b>`).join('<span>·</span>') || t('nightwatch.none'); // i18n-ignore
     // #278: a Self-healing day (a UTC day of the standing watch) leads with its own counts
     const sh = m.selfHealing;
-    const title = sh ? `Self-healing · ${m.window.ongoing ? 'today so far' : 'day'}` : m.window.ongoing ? 'Tonight so far' : 'Night';
+    const title = sh ? `${t('nightwatch.self_healing')} · ${m.window.ongoing ? t('nightwatch.today_so_far') : t('nightwatch.day').toLowerCase()}` : m.window.ongoing ? t('nightwatch.tonight_so_far') : t('nightwatch.night');
     return `<div class="card nw-card">
       <div class="row nw-card-head"><h3>${title} · ${esc(day(m.window.from))} ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</h3><span class="muted small">${hours(m.window.hours)} · ${sh ? t('nightwatch.the_utc_day_day', { day: esc(sh.day) }) : t('nightwatch.turned_on_by', { by: m.window.by ? esc(m.window.by) : t('nightwatch.the_owner') })}</span></div>
       ${s.alarm ? `<div class="nw-alarm" role="alert"><b>${t('nightwatch.safety_alarm')}</b> ${esc(m.summary.safety)}</div>` : ''}
@@ -260,7 +273,7 @@
         ${stat(t('nightwatch.ttr_median'), dur(m.ttr.median), t('nightwatch.time_to_resume_after_detection_whoever', { p90: dur(m.ttr.p90), ttrMs: dur(nw.report.baseline.ttrMs) }))}
         ${stat(t('nightwatch.hours_saved_est'), hours(m.hoursSaved), t('nightwatch.estimate_without_the_watch_each_block'))}
         ${stat(t('nightwatch.watch_cost'), usd(m.cost.watchUsd), t('nightwatch.value_tokens_perresolved_per_resolved_incident', { value: m.cost.watchTokens.toLocaleString('en-US'), perResolved: usd(m.cost.perResolved), runsUsd: usd(m.cost.runsUsd) }))}
-        ${stat(t('nightwatch.safety'), s.alarm ? 'ALARM' : 'OK', m.summary.safety, s.alarm ? 'nw-bad' : 'nw-good')}
+        ${stat(t('nightwatch.safety'), (s.alarm ? t('nightwatch.alarm') : t('nightwatch.ok')).toUpperCase(), m.summary.safety, s.alarm ? 'nw-bad' : 'nw-good')}
       </div>
       <div class="u-breakdown nw-facts">
         <span>${t('nightwatch.by_kind')} ${kinds}</span>
@@ -391,7 +404,7 @@
         } catch (err) { nw.form = { ...nw.form, saving: false, error: errMsg(err) }; }
         // #337: the watch is on: tonight's limits, when expanded (a refusal shows on the screen; the watch stays on)
         if (!nw.form && l?.expand) {
-          try { await api.setNightWatchLimits(l.custom ? { values: l.values } : { multiplier: l.multiplier }); } catch (err) { nw.error = `Limits tonight: ${errMsg(err)}`; }
+          try { await api.setNightWatchLimits(l.custom ? { values: l.values } : { multiplier: l.multiplier }); } catch (err) { nw.error = `${I18n.t('nightwatch.limits_tonight')}: ${errMsg(err)}`; }
         }
         await load();
       };

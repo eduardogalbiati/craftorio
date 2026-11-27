@@ -8,7 +8,8 @@
 // - missingRequirements(reqs, states): the CLI ids not 'ready', plus 'forge' when neither gh nor glab is;
 // - missingLabel(missing): 'Missing Codex CLI' for a card or the Start panel ('' when nothing);
 // - visibleWorkflows(workflows, hidden): the workflows not hidden from Start, order kept;
-// - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml).
+// - workflowId(file): the id hiddenWorkflows keeps (the file name without .yaml);
+// - installHintText(tool): #110, a missing CLI's install prose in the interface language (setup.install_text.<id>).
 // The labels are in the interface language (#329, packages/shared/i18n.js); the states never change.
 // Browser: window.SetupModel; Node: module.exports (packages/engine/domains/workflow/workflow-requirements.js, the tests).
 (function (root) {
@@ -56,12 +57,23 @@
     return t('setup.missing', { names: missing.map((id) => (id === 'forge' ? forge() : toolName(id))).join(', ') });
   }
 
+  // #110: the engine's English install prose (install-commands.js INSTALL_TEXT / MAC_NO_BREW_TEXT) in the interface
+  // language, found by the CLI's id when it is the catalog's English text; any other hint (a command) as it came.
+  const HINT_KEYS = ['setup.install_text', 'setup.install_text_mac'];
+  function installHintText(tool) {
+    const hint = tool?.installHint;
+    if (!hint) return '';
+    const key = HINT_KEYS.map((k) => `${k}.${tool.id}`).find((k) => t(k, null, 'en') === hint);
+    return key ? t(key) : hint;
+  }
+
   function visibleWorkflows(workflows, hidden) {
     const set = new Set(Array.isArray(hidden) ? hidden : []);
     return (workflows || []).filter((w) => !set.has(w.id));
   }
 
   const api = {
+    installHintText,
     missingLabel,
     missingRequirements,
     requirementBadges,

@@ -115,8 +115,9 @@ const DEFAULT_SETTINGS = {
   // the languages agents write in (#327, #328, packages/shared/language.js): `agents` for chat replies, prose
   // and documents ('interface' = Same as the interface), `issues` for issues, PR/MR descriptions and
   // commit messages; `interface` (#329, packages/shared/i18n.js), the app's own language, is unset until
-  // chosen: the computer's language when it has a catalog, else English
-  language: { agents: 'interface', issues: 'en' },
+  // chosen: the computer's language when it has a catalog, else English. #110: `issues` follows the interface by
+  // default too (it was English)
+  language: { agents: 'interface', issues: 'interface' },
 };
 
 // settings.json as saved: null when there is none, {} when it is not valid JSON

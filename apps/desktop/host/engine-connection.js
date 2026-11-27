@@ -2,7 +2,8 @@
 // window onto an engine another computer runs with `npm run serve` (e.g. over Tailscale), the
 // setting being per machine. Pure: no Electron and no network of its own (fetch is given), so the
 // rules are unit-tested (test/host/engine-connection.test.js); apps/desktop/host/engine-connection-window.js draws the
-// windows with them and apps/desktop/host/main.js decides at start.
+// windows with them and apps/desktop/host/main.js decides at start. #110: a test result names its catalog key
+// (messageKey, params) next to its English message, for the connection page's language.
 //
 //   parseAddress(text)          'host', 'host:port' or an http(s):// URL → { url, host, ... } (port 7300 by
 //                               default); a pasted `…/?token=<t>` URL from the server gives its token too
@@ -191,24 +192,29 @@ function decideMode({ connection, env = {} }) {
 
 // ---- the connection test ------------------------------------------------------------------
 
+// #110: { message (English), messageKey, params }: the page shows the catalog's text for the key in its language
 function unreachableMessage(e, parsed, timeoutMs) {
   const code = e?.cause?.code || e?.code || '';
   if (e?.name === 'TimeoutError' || e?.name === 'AbortError' || code === 'UND_ERR_CONNECT_TIMEOUT') {
-    return `No answer from ${parsed.host} in ${Math.round(timeoutMs / 1000)} s: is the engine running there (npm run serve) and is this computer on the same network (Tailscale)?`;
+    const seconds = Math.round(timeoutMs / 1000);
+    return { messageKey: 'connection.result_timeout', params: { host: parsed.host, seconds }, message: `No answer from ${parsed.host} in ${seconds} s: is the engine running there (npm run serve) and is this computer on the same network (Tailscale)?` };
   }
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
-    return `${parsed.hostname} was not found: check the name (on Tailscale, the machine's MagicDNS name or its 100.x address).`;
+    return { messageKey: 'connection.result_not_found', params: { hostname: parsed.hostname }, message: `${parsed.hostname} was not found: check the name (on Tailscale, the machine's MagicDNS name or its 100.x address).` };
   }
   if (code === 'ECONNREFUSED') {
-    return `${parsed.host} refused the connection: nothing listens on port ${parsed.port} there. Start the engine with npm run serve and a --host other than 127.0.0.1.`;
+    return { messageKey: 'connection.result_refused', params: { host: parsed.host, port: parsed.port }, message: `${parsed.host} refused the connection: nothing listens on port ${parsed.port} there. Start the engine with npm run serve and a --host other than 127.0.0.1.` };
   }
-  return `Could not reach ${parsed.host}: ${e?.cause?.message || e?.message || String(e)}`;
+  const error = e?.cause?.message || e?.message || String(e);
+  return { messageKey: 'connection.result_unreachable', params: { host: parsed.host, error }, message: `Could not reach ${parsed.host}: ${error}` };
 }
 
 /**
  * Asks the engine at `address` for GET /api/version with the token →
  *   { ok: true, url, host, app, contract, sameContract, message }
  *   { ok: false, reason: 'address' | 'token' | 'unreachable' | 'not-engine' | 'http', message, url?, status? }
+ * #110: `message` stays English; every answer but an address refusal also carries `messageKey` and `params`
+ * (connection.result_* in packages/shared/i18n), the text the connection page shows in its language.
  * `localContract`: this app's own contract; another one is a warning, not a failure (the remote
  * window shows the engine's own interface).
  */
@@ -217,7 +223,7 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
   if (parsed.error) return { ok: false, reason: 'address', message: parsed.error };
   const tok = String(token || parsed.token || '').trim();
   const where = { url: parsed.url, host: parsed.host };
-  if (!tok) return { ok: false, reason: 'token', ...where, message: 'Type the engine\'s token: CRAFTORIO_SERVER_TOKEN on the engine\'s computer, or the token= part of the URL it printed.' };
+  if (!tok) return { ok: false, reason: 'token', ...where, messageKey: 'connection.result_no_token', params: {}, message: 'Type the engine\'s token: CRAFTORIO_SERVER_TOKEN on the engine\'s computer, or the token= part of the URL it printed.' };
   let res;
   try {
     res = await fetchImpl(`${parsed.url}/api/version`, {
@@ -226,15 +232,19 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e) {
-    return { ok: false, reason: 'unreachable', ...where, message: unreachableMessage(e, parsed, timeoutMs) };
+    return { ok: false, reason: 'unreachable', ...where, ...unreachableMessage(e, parsed, timeoutMs) };
   }
-  if (res.status === 401) return { ok: false, reason: 'token', ...where, status: 401, message: `${parsed.host} refused the token: copy CRAFTORIO_SERVER_TOKEN from the engine's computer again.` };
+  const host = { host: parsed.host };
+  if (res.status === 401) return { ok: false, reason: 'token', ...where, status: 401, messageKey: 'connection.result_bad_token', params: host, message: `${parsed.host} refused the token: copy CRAFTORIO_SERVER_TOKEN from the engine's computer again.` };
   let body = null;
   try { body = await res.json(); } catch { /* not JSON: not an engine */ }
   if (res.status === 404 || (res.ok && (typeof body?.app !== 'string' || typeof body?.contract !== 'string'))) {
-    return { ok: false, reason: 'not-engine', ...where, status: res.status, message: `Something answers at ${parsed.host}, but not a Craftorio engine: check the port (npm run serve uses 7300).` };
+    return { ok: false, reason: 'not-engine', ...where, status: res.status, messageKey: 'connection.result_not_engine', params: host, message: `Something answers at ${parsed.host}, but not a Craftorio engine: check the port (npm run serve uses 7300).` };
   }
-  if (!res.ok) return { ok: false, reason: 'http', ...where, status: res.status, message: `${parsed.host} answered HTTP ${res.status}${body?.error ? `: ${body.error}` : '.'}` };
+  if (!res.ok) {
+    const detail = body?.error ? `: ${body.error}` : '.';
+    return { ok: false, reason: 'http', ...where, status: res.status, messageKey: 'connection.result_http', params: { ...host, status: res.status, detail }, message: `${parsed.host} answered HTTP ${res.status}${detail}` };
+  }
   const sameContract = !localContract || body.contract === localContract;
   return {
     ok: true,
@@ -242,6 +252,8 @@ async function testConnection({ address, token, fetch: fetchImpl = globalThis.fe
     app: body.app,
     contract: body.contract,
     sameContract,
+    messageKey: sameContract ? 'connection.result_connected' : 'connection.result_connected_other',
+    params: { app: body.app, contract: body.contract, local: localContract },
     message: sameContract
       ? `Connected: engine ${body.app} (interface ${body.contract}).`
       : `Connected: engine ${body.app} (interface ${body.contract}). It speaks another interface than this app (${localContract}): the window shows the engine's own interface, so it works; update one of them when you can.`,

@@ -3,11 +3,12 @@
 // "Same as the interface", settings.language.interface (#329), while unset the language the interface resolves
 // to on the engine host: its computer's language when it has a catalog, else English, set by the service
 // through setComputerLanguage (#424); English in the window) is what chat replies, the prose
-// of step outputs, handoff notes, decision logs and documents are written in; `issues` (English by
-// default) is what goes to the repository host: issues, comments, PR/MR descriptions, commit messages.
-// - LANGUAGES: [{ code, label }] for the Settings selects; SAME_AS_INTERFACE: the agents' default value;
-// - agentsLanguage(settings) / issuesLanguage(settings): the code each setting resolves to ('en' when
-//   unset or unknown); labelOf(code): its own name;
+// of step outputs, handoff notes, decision logs and documents are written in; `issues` (#110: 'interface' by
+// default too, resolved the same way; English before) is what goes to the repository host: issues, comments,
+// PR/MR descriptions, commit messages.
+// - LANGUAGES: [{ code, label }] for the Settings selects; SAME_AS_INTERFACE: both selects' default value;
+// - agentsLanguage(settings) / issuesLanguage(settings): the code each setting resolves to (unset: the
+//   interface's; 'en' when unknown); labelOf(code): its own name;
 // - languageLine(settings): the one [Language] line every agent turn gets (engine steps, the Oracle,
 //   the Product Owner, the Supervisor), what follows each language and what never changes (a short
 //   line when both are English); its text changes only with the setting, so the prompt cache holds;
@@ -40,15 +41,16 @@
   /** Sets the language an unset interface resolves to (the service, from host.locale through I18n.resolveLanguage). */
   const setComputerLanguage = (code) => { computer = codeOf(code); };
 
-  /** The AI agents' language code: "Same as the interface" is the saved interface language (#329), else the computer's (#424). */
-  const agentsLanguage = (settings) => {
-    const agents = settings?.language?.agents;
-    if (agents && agents !== SAME_AS_INTERFACE) return codeOf(agents);
+  // "Same as the interface" (or unset): the saved interface language (#329), else the computer's (#424)
+  const resolved = (value, settings) => {
+    if (value && value !== SAME_AS_INTERFACE) return codeOf(value);
     const chosen = settings?.language?.interface;
     return chosen ? codeOf(chosen) : computer;
   };
-  /** The issues' language code (its own setting, never the agents'). */
-  const issuesLanguage = (settings) => codeOf(settings?.language?.issues);
+  /** The AI agents' language code: "Same as the interface" is the saved interface language (#329), else the computer's (#424). */
+  const agentsLanguage = (settings) => resolved(settings?.language?.agents, settings);
+  /** The issues' language code: its own setting; #110: unset or "Same as the interface", resolved like the agents'. */
+  const issuesLanguage = (settings) => resolved(settings?.language?.issues, settings);
   const labelOf = (code) => (LANGUAGES.find((l) => l.code === code) || LANGUAGES[0]).label;
 
   // English everywhere: a short line, the prompts' own English texts already say the rest (the develop

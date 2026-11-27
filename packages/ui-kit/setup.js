@@ -25,6 +25,9 @@
 // Interface language select above the stepper opens on the interface language (the saved one, else
 // the computer's when it has a catalog, else English), saves settings.language.interface and redraws
 // the app in it (interface-language.js); the dialog repaints its texts on I18n.onChange.
+// #110: a missing CLI's install prose in the interface language (SetupModel.installHintText), the workflows that
+// will not run by name (WorkflowInputs.humanize, never their ids), and an install's console only on the step that
+// started it (setup.jobStep).
 
 (function () {
   const STEPS = [
@@ -55,6 +58,8 @@
     open: false,
     tools: null,       // env:details, null while checking
     onboarded: false,  // #846: First project opened the onboarding wizard
+    job: null,         // #740: the install / sign-in job its console shows
+    jobStep: null,     // #110: the id of the step that started it (its console shows there only)
   };
   const $s = (sel) => document.querySelector(`#setup-modal ${sel}`);
 
@@ -134,7 +139,7 @@
     const badge = window.SetupModel.statusBadge(tool);
     const need = window.SetupModel.toolRequirement(tool.id);
     const detail = tool.checking ? '' : tool.path ? [tool.version, tool.account ? t('setup.account', { account: tool.account }) : ''].filter(Boolean).join(' · ')
-      : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: tool.installHint }) : '';
+      : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: window.SetupModel.installHintText(tool) }) : '';
     const command = !tool.checking && !tool.path ? tool.installCommand : !tool.checking && !tool.connected && tool.auth ? tool.signInCommand : null;
     return `
       <div class="s-row setup-cli${highlight && tool.id === highlight ? ' highlight' : ''}" data-testid="setup-cli-${esc(tool.id)}"${highlight && tool.id === highlight ? ' data-highlight' : ''}>
@@ -157,7 +162,7 @@
     const required = window.SetupModel.toolRequirement(tool.id) === t('setup.required');
     const name = tool.name || window.SetupModel.toolName(tool.id);
     const detail = tool.checking ? '' : tool.path ? [tool.version, tool.account ? t('setup.account', { account: tool.account }) : ''].filter(Boolean).join(' · ')
-      : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: tool.installHint }) : '';
+      : !tool.installCommand && tool.installHint ? t('setup.install_hint', { hint: window.SetupModel.installHintText(tool) }) : '';
     const command = !tool.checking && !tool.path ? tool.installCommand : !tool.checking && !tool.connected && tool.auth ? tool.signInCommand : null;
     return `
       <div class="setup-tool" data-testid="setup-cli-${esc(tool.id)}" data-state="${badge.state}"${required ? ' data-required' : ''}>
@@ -185,7 +190,7 @@
     const blocked = bundled().filter((w) => window.SetupModel.missingRequirements(w.requirements, states).length);
     if (!blocked.length) return '';
     const core = ['claude', 'git'].filter((id) => states[id] !== 'ready').map(window.SetupModel.toolName);
-    const head = core.length ? t('setup.without_core', { names: core.join(t('setup.and')) }) : t('setup.not_ready', { names: blocked.map((w) => w.name).join(', ') });
+    const head = core.length ? t('setup.without_core', { names: core.join(t('setup.and')) }) : t('setup.not_ready', { names: blocked.map((w) => window.WorkflowInputs.humanize(w.name)).join(', ') });
     return `<p class="small warn-text setup-note" data-testid="setup-missing-note">${esc(head)} ${t('setup.come_back')}</p>`;
   }
 
@@ -195,7 +200,7 @@
     const tools = setup.tools ? ids.map((id) => setup.tools.find((tool) => tool.id === id)).filter(Boolean) : ids.map((id) => ({ id, checking: true }));
     return `
       <div class="setup-tools" data-count="${tools.length}">${tools.map(cliCard).join('')}</div>
-      ${setup.job && window.SettingsClis ? window.SettingsClis.consoleHtml(setup.job) : ''}
+      ${setup.job && setup.jobStep === stepId && window.SettingsClis ? window.SettingsClis.consoleHtml(setup.job) : ''}
       ${agentsNote()}`;
   }
   // the AIs step lets nobody past it without one AI CLI ready: Next is off and there is no Skip
@@ -217,6 +222,8 @@
     // its console under the rows; the CLIs are checked again when it ends
     // a CLI without an install command (data-install-hint): its instructions, on every platform
     if ((api.platform === 'browser' || btn.dataset.installHint) && window.SettingsClis) {
+      // #110: its console shows on the step that started it only
+      setup.jobStep = STEPS[setup.step].id;
       await window.SettingsClis.run(btn.dataset.cliId, btn.dataset.cliAction, {
         hint: btn.dataset.installHint,
         onChange: (job) => {

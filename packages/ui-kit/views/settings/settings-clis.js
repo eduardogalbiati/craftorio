@@ -8,7 +8,8 @@
 //   (data-testid="cli-console", data-state running | ended), with a sign-in's one-time code
 //   (cli-setup-device-code) and its URL as a link, or, for a sign-in that needs a terminal on the server,
 //   what to run there. A CLI without a one-line installer here (glab on Linux) starts no job: its ▶ Install
-//   shows the install hint in the panel (data-status="manual"). When the job ends the row shows the CLI checked again (the job's `tool`). The
+//   shows the install hint in the panel (data-status="manual"; #110: in the interface language,
+//   SetupModel.installHintText). When the job ends the row shows the CLI checked again (the job's `tool`). The
 //   desktop app keeps its terminal dock for a sign-in (interactive, on this computer).
 // - window.Settings.open(section, { highlight, onClose }): the deep link (the project wizard's Open Setup,
 //   fronts/build/views/projects/project-wizard.js): the Settings screen on that tab, the `highlight` CLI's row
@@ -47,6 +48,8 @@
     const what = job.action === 'login' ? t('settings.clis.signing_in') : t('settings.clis.installing');
     const status = (STATUS[job.status] || STATUS.failed)();
     const tone = job.status === 'failed' ? ' warn' : '';
+    // #110: the manual state's install prose in the interface language
+    const hint = window.SetupModel.installHintText({ id: job.id, installHint: job.command || '' });
     const device = job.deviceCode || job.url ? `
       <div class="cli-device">
         ${job.deviceCode ? `<span class="muted small">${t('settings.clis.device_code')}</span> <b class="cli-device-code" data-testid="cli-setup-device-code">${esc(job.deviceCode)}</b>` : ''}
@@ -54,7 +57,7 @@
       </div>` : '';
     const manual = job.status === 'manual' ? `
       <p class="small">${t(job.action === 'install' ? 'settings.clis.manual_install' : 'settings.clis.manual')}</p>
-      <code class="setup-cmd" title="${esc(job.command || '')}">${esc(job.command || '')}</code>` : '';
+      <code class="setup-cmd" title="${esc(hint)}">${esc(hint)}</code>` : '';
     return `
       <div class="cli-console" data-testid="cli-console" data-state="${ended(job) ? 'ended' : 'running'}" data-status="${esc(job.status)}" role="status" aria-live="polite">
         <div class="row cli-console-head"><b>${esc(name)}</b><code>${esc(job.id)}</code><span class="muted small">${esc(what)}</span><span class="spacer"></span><span class="badge${tone}">${esc(status)}</span></div>

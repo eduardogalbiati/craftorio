@@ -8,8 +8,8 @@
 // plain-http address outside loopback and Tailscale shows "Allow an insecure connection", and its
 // warning every time it is checked (#480). Its texts are connection.* keys of the catalog (#329, window.I18n): the language
 // the engine's page asked for (?lang=, remembered for the next time), else the one this computer's
-// app last showed, else the computer's; the main process's messages (test results, failures) stay
-// English, like the engine's errors.
+// app last showed, else the computer's; the main process's messages (failures) stay English, like the
+// engine's errors; #110: a test result that names its catalog key (messageKey, params) shows that text.
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const api = window.connection;
@@ -52,10 +52,13 @@
     el.dataset.kind = kind || '';
   }
 
+  // #110: a test result in the page's language when the main process names its catalog key
+  const resultText = (r) => (r.messageKey ? I18n.translated(r.messageKey, r.message, r.params) : r.message);
+
   function showResult(r) {
     if (!r) return setResult('');
-    if (r.ok) return setResult(r.message, r.sameContract ? 'ok' : 'warn');
-    return setResult(r.message, 'error');
+    if (r.ok) return setResult(resultText(r), r.sameContract ? 'ok' : 'warn');
+    return setResult(resultText(r), 'error');
   }
 
   // the language the engine's page asked for (?lang=), kept for the page's next opening
@@ -160,7 +163,7 @@
     const r = await api.save(mode, address, token, $('#cn-insecure').checked);
     if (r.test) showResult(r.test);
     if (!r.saved) return;
-    if (r.restarting) setResult(`${r.test?.ok ? `${r.test.message} ` : ''}${t('connection.restarting')}`, 'ok');
+    if (r.restarting) setResult(`${r.test?.ok ? `${resultText(r.test)} ` : ''}${t('connection.restarting')}`, 'ok');
     else { await load(); setResult(t('connection.saved'), 'ok'); }
   });
 
