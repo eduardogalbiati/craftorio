@@ -11,7 +11,8 @@
 // sessionCost(s, prices) → US$ or null; runCost(sessions, prices) → { usd, approx, unknown, partial },
 // totalMarks(usd, missing) → { unknown, partial } (the chat and the 3D view's totals use it too),
 // `prices` null: only what was recorded; tokenPricedUsd(sessions, prices): what the prices add to that;
-// turnCost(ev, prices, model) → { usd, approx, unknown? }: the same rule on one turn's event. Sessions
+// turnCost(ev, prices, model) → { usd, approx, unknown? }: the same rule on one turn's event,
+// turnResult(ev, prices, model) → { cost, unknown? }: a turn's cost for the Run screen. Sessions
 // come as snapshots (cost_usd, cost_estimate) or as the lists' views (costUsd, costEstimate).
 // Browser: window.SessionCost; Node: module.exports.
 (function (root) {
@@ -85,6 +86,13 @@
     return { usd: Number(unknown ? ev.cli_cost_usd : ev.cost_usd) || 0, approx: unknown || none, ...(none ? { unknown: true } : {}) };
   }
 
+  // The Run screen's turn result: { cost, unknown? }; the recorded cost, else the turn priced by
+  // turnCost; an unknown turn (cost_source unknown, or no price) has cost null and the unknown mark
+  function turnResult(ev, prices = {}, model = ev.session?.model) {
+    const unknown = ev.cost_source === 'unknown' || !!turnCost(ev, prices, model).unknown;
+    return { cost: ev.cost_usd ?? (unknown ? null : turnCost(ev, prices, model).usd), ...(unknown ? { unknown: true } : {}) };
+  }
+
   const api = {
     isApprox,
     priceOf,
@@ -95,6 +103,7 @@
     totalMarks,
     totalTokens,
     turnCost,
+    turnResult,
     unknownUsd,
   };
   if (node) module.exports = api;

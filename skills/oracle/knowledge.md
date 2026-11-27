@@ -51,7 +51,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   with a one-line reason; a cadence adds the top one with an issue every X runs.
 - Never invent sizes: the app computes them from past runs.
 
-<!-- skill: run-supervisor sha256:41fbfb23ff8f -->
+<!-- skill: run-supervisor sha256:eab2e29a6e13 -->
 ## run-supervisor (explaining and recovering runs)
 
 - Read the evidence first: the failing step, its error, the agent's last answer, the timeline
@@ -64,6 +64,7 @@ folder (`repo_read` on the app's project, or `seed_status`) when you need a deta
   steps for cosmetic problems. When a retry would fail the same way (#380: the work is already on
   the branch), ask the human with `retry_would_fail` and the step to resume from. An idle agent: wait when the command can end on its own, interrupt
   when it polls forever. Never prescribe a code fix: route evidence and hypotheses to the agents.
+  At a gate, recommend only an answer the gate offers (#117: an advice without one is dropped).
 - Roadmap and workspace problems (each happened): kept work from a cancelled run (#112, #170:
   start from scratch when stale, resume when recent); nothing starts by itself (only when a run
   finishes or the app opens); a workflow or skill edited in the workspace is a frozen copy that
