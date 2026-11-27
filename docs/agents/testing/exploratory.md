@@ -10,7 +10,7 @@ Run them before each release push, on the local main with everything merged, and
 
 ## Safety rules
 
-- **The test app only.** Never open, close or change the owner's own app, the engine server in WSL (port 7300), the workspace `multiagent-workspace` or `HKCU\Software\Craftorio`. The test app has its own workspace and data folder (`CRAFTORIO_WORKSPACE`, `CRAFTORIO_USER_DATA`).
+- **The test app only.** Never open, close or change the owner's own app, the engine server in WSL (port 7300), the owner's workspace or `HKCU\Software\Craftorio`. The test app has its own workspace and data folder (`CRAFTORIO_WORKSPACE`, `CRAFTORIO_USER_DATA`).
 - **Ask before closing a window** the battery did not open itself.
 - **Fake secrets only.** The secret-scan test uses a made-up token (e.g. `ghp_` plus random letters).
 - **Nothing leaves the computer.** No push, no issue, no comment without the owner's yes. PR mode uses a local bare copy.
@@ -20,7 +20,7 @@ Run them before each release push, on the local main with everything merged, and
 
 ## Isolated environment
 
-1. **Windows:** a clean clone of the version under test (`C:\Users\Eduardo\craftorio-xt-win`), `npm install`, the app opened with `npm start` and new `CRAFTORIO_WORKSPACE` and `CRAFTORIO_USER_DATA` folders; when a release has packages, the extracted `.zip` too.
+1. **Windows:** a clean clone of the version under test (e.g. `%USERPROFILE%\craftorio-xt-win`), `npm install`, the app opened with `npm start` and new `CRAFTORIO_WORKSPACE` and `CRAFTORIO_USER_DATA` folders; when a release has packages, the extracted `.zip` too.
 2. **WSL (Linux):** a worktree of the local main (`~/craftorio-xt`), the app on a virtual display (Xvfb) with a remote-debugging port, with its own workspace and data folder.
 3. **A real first start:** the data folder starts empty, so the app opens the Setup as for a new user.
 4. **Test projects:** created from scratch in new folders (below).
