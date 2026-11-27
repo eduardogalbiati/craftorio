@@ -2834,6 +2834,7 @@
   "engine.develop_not_committed": "The developer did not commit: {cause}",
   "engine.develop_not_committed_detached": "the run's worktree is not on a branch (detached HEAD)",
   "engine.develop_not_committed_dirty": "uncommitted changes in {files}",
+  "engine.develop_not_committed_dirty_more": "uncommitted changes in {files} and {count} more",
   "engine.memory_killed": "The memory guard stopped `{command}` (pid {pid}) at {used} GB: over the limit of {limit} GB per process{again}.",
   "engine.memory_killed_again": " (stopped {count} times in {step})",
   "engine.secret_found_developer": "Back to the developer",

@@ -38,6 +38,7 @@ const capabilities = require('../capabilities');
 const checkStep = require('../check-step');
 const { foundChecks } = require('../check-tools');
 const depsCache = require('../deps-cache');
+const testPaths = require('../test-paths');
 const { scratchWorkspace } = require('../../domains/local/local-preview');
 const { render } = require('./templates');
 const {
@@ -425,44 +426,42 @@ const methods = {
   async checkDeveloperCommit(step, output) {
     const wt = this.worktree;
     if (step.id !== 'develop' || step.agents || !wt || !output || typeof output !== 'object') return output;
-    const agent = this.wf.agents?.[step.agent];
-    const caps = step.capabilities || agent?.capabilities;
-    if (caps && !capabilities.writes(capabilities.normalize(caps))) return output;
+    // the step's effective capabilities, as the turn got them (sessions.js: defaults, agent, step on top)
+    const agent = { ...(this.wf.defaults || {}), ...(this.wf.agents?.[step.agent] || {}) };
+    const caps = capabilities.merge(agent.capabilities, step.capabilities);
+    if (caps && !capabilities.writes(caps)) return output;
     const branch = await currentBranch(wt.dir);
     let cause = null;
-    let key = null;
-    let params = {};
+    let shown = null;
     if (!branch) {
       cause = 'the run\'s worktree is not on a branch (detached HEAD)';
-      key = 'engine.develop_not_committed_detached';
+      shown = I18n.t('engine.develop_not_committed_detached');
     } else {
-      const status = await git(['status', '--porcelain'], wt.dir).catch(() => '');
-      const files = status.split('\n').map((l) => l.slice(3).trim()).filter(Boolean);
+      // a git error (a lock, a timeout) fails the step: it is not a clean worktree
+      const top = await git(['rev-parse', '--show-toplevel'], wt.dir);
+      const files = (await testPaths.localChanges(top)).sort();
       if (files.length) {
-        const shown = files.length > 10 ? `${files.slice(0, 10).join(', ')} and ${files.length - 10} more` : files.join(', ');
-        cause = `uncommitted changes in ${shown}`;
-        key = 'engine.develop_not_committed_dirty';
-        params = { files: shown };
+        const first = files.slice(0, 10).join(', ');
+        const more = files.length - 10;
+        cause = `uncommitted changes in ${first}${more > 0 ? ` and ${more} more` : ''}`;
+        shown = more > 0
+          ? I18n.t('engine.develop_not_committed_dirty_more', { files: first, count: more })
+          : I18n.t('engine.develop_not_committed_dirty', { files: first });
       }
     }
     if (!cause) return 'branch' in output ? { ...output, branch } : output;
-    const message = `The developer did not commit: ${cause}`;
     // shown on screen: in the interface language (#330)
-    this.emitEvent('log', { level: 'error', kind: 'develop_not_committed', step_id: step.id, message: I18n.t('engine.develop_not_committed', { cause: I18n.t(key, params) }) });
-    throw new Error(message);
+    this.emitEvent('log', { level: 'error', kind: 'develop_not_committed', step_id: step.id, message: I18n.t('engine.develop_not_committed', { cause: shown }) });
+    throw new Error(`The developer did not commit: ${cause}`);
   },
 
-  // #116: an agent step's answer after checkDeveloperCommit, as { output, error }: output undefined with the
-  // step's error when the turn failed or the developer did not commit. A question to the owner (#567,
-  // ask_human) is not a finished turn: not checked.
-  async checkedAgentOutput(step, output) {
-    if (output === undefined) return { output, error: new Error(this.lastStepError || `Step "${step.id}" failed.`) };
-    if (step.ask_human && String(output?.needs_human?.question || '').trim()) return { output, error: null };
-    try {
-      return { output: await this.checkDeveloperCommit(step, output), error: null };
-    } catch (e) {
-      return { output: undefined, error: e };
-    }
+  // #116: an agent step's answer after checkDeveloperCommit (throws when the developer did not commit, so the
+  // step's normal failure path runs: the on-call supervisor, then on_error). No answer (a failed turn) and a
+  // question to the owner (#567, ask_human: not a finished turn) are not checked.
+  async committedOutput(step, output) {
+    if (output === undefined) return output;
+    if (step.ask_human && String(output?.needs_human?.question || '').trim()) return output;
+    return this.checkDeveloperCommit(step, output);
   },
 
   // The run's base branch, local and remote: commits reachable from it are not the agent's.

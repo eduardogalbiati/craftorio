@@ -90,9 +90,12 @@ async function commitRange(dir, { since, refs = [] }) {
  * @param {string} dir
  * @param {{ head: string, not: string[] }} range
  */
-async function commitCount(dir, { head, not }) {
-  return Number(await git(['rev-list', '--count', head, ...(not.length ? ['--not', ...not] : [])], dir)) || 0;
+async function commitCount(dir, range) {
+  return Number(await git(['rev-list', '--count', ...rangeArgs(range)], dir)) || 0;
 }
+
+// The commits of a range as git log / rev-list arguments: the count and the scan read the same ones
+const rangeArgs = ({ head, not }) => [head, ...(not.length ? ['--not', ...not] : [])];
 
 // A .gitleaksignore's entries with the comment lines above them, their reason
 function entriesOf(text) {
@@ -193,7 +196,7 @@ async function scanSecrets({ dir, file, range, env, signal }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-scan-'));
   const report = path.join(tmp, 'report.json');
   try {
-    const commits = [range.head, ...(range.not.length ? ['--not', ...range.not] : [])];
+    const commits = rangeArgs(range);
     const ended = await runGitleaks(file, [
       'git',
       // without --log-opts gitleaks reads every branch

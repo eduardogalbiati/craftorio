@@ -2834,6 +2834,7 @@
   "engine.develop_not_committed": "O desenvolvedor não fez commit: {cause}",
   "engine.develop_not_committed_detached": "o worktree da execução não está em um branch (HEAD destacado)",
   "engine.develop_not_committed_dirty": "mudanças sem commit em {files}",
+  "engine.develop_not_committed_dirty_more": "mudanças sem commit em {files} e mais {count}",
   "engine.memory_killed": "A guarda de memória parou `{command}` (pid {pid}) em {used} GB: acima do limite de {limit} GB por processo{again}.",
   "engine.memory_killed_again": " (parado {count} vezes em {step})",
   "engine.secret_found_developer": "Voltar para o desenvolvedor",

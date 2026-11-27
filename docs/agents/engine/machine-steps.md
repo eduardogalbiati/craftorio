@@ -169,7 +169,7 @@ The steps without an agent besides the suite (the SDLC post-flow's `record_docs`
   ignored, config, message, round }`: `ignored` are the `.gitleaksignore` entries the run adds (with their
   reason), `config` says it changed `.gitleaks.toml`, both for the review's prompt. `fail` also when one
   of those files is changed and not committed. `skipped` (off, not installed, no checkout, a simulation
-  without the base) and `error` (gitleaks failed, the range cannot be read) say "Secrets not scanned";
+  without the base, a range with no commit of the run's own: never a pass, #116) and `error` (gitleaks failed, the range cannot be read) say "Secrets not scanned";
   only a whole scan with an empty report passes. feature, fix and the AI Development heroes run it as
   the last agent-less step before the owner's gate or the review, release before the review of the Ship
   gate (`fragments/secret-scan-pipeline.yaml`): a finding goes back to the developer at most twice

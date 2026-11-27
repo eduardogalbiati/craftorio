@@ -38,6 +38,7 @@ const {
   splitValues,
 } = require('../language-skills');
 const sessionCache = require('../../domains/session/session-cache');
+const { isUnder } = require('../worktree');
 const { render } = require('./templates');
 const {
   parseDuration,
@@ -469,8 +470,7 @@ const methods = {
     const instructionsExcludes = this.workspaceExcludes(session, own);
     // #116: a linked worktree's git metadata lives outside its folder; a sandboxed writer must reach it to commit
     const wt = this.worktree;
-    const inside = (d) => wt?.dir && !path.relative(wt.dir, d).startsWith('..') && !path.isAbsolute(path.relative(wt.dir, d));
-    const writableRoots = [...new Set([wt?.gitDir, wt?.commonDir].filter((d) => d && !inside(d)))];
+    const writableRoots = [...new Set([wt?.gitDir, wt?.commonDir].filter((d) => d && !(wt.dir && isUnder(wt.dir, d))))];
     const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv, instructionsFile, instructionsExcludes, writableRoots });
     // #302: only a CLI with a request limit per turn can stop a turn after n requests (claude --max-turns)
     const enforced = budget && !!registry.byType(providerType)?.requestLimit;

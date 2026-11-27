@@ -132,4 +132,10 @@ fields (references between steps, agents, transitions, groups) are the named rul
   untracked files, only those still different from the snapshot). Any → `tests.refused` event + warn, the turn
   is sent back with the list (`testsRefusedPrompt`), twice at most, then it throws (supervisor / `on_error`).
   Not a git work tree → no check. Claude also gets `--disallowedTools Edit(<glob>)`.
+- A writing `develop` step (#116, `checkDeveloperCommit` in `run/checkout.js`, any provider): after the turn the
+  run's worktree must be on a branch with nothing uncommitted (modified or untracked, `testPaths.localChanges`);
+  otherwise the step throws "The developer did not commit: <cause>" (the log line in the interface language), which
+  takes the step's normal failure path (on-call supervisor, then `on_error`), before review, verify or merge. When
+  it passes, `output.branch` is the worktree's real branch (git), never the agent's text. Read-only agents, fan-out
+  steps, a question to the owner (`ask_human`) and runs without a worktree are not checked.
 - `providers.<p>.skill_args` (claude `--add-dir {{ skill_dir }}`), `prompt_file_arg` (grok).

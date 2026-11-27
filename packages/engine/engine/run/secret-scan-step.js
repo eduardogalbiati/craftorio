@@ -17,7 +17,7 @@ const methods = {
   // `type: secret_scan` (#49): gitleaks on the run's own commits (packages/engine/engine/secret-scan.js), real in
   // a simulation too. `enabled`: a template, the input that turns it off ('off'); `since`: a template, the tag a
   // release scans from (empty: the whole history). Output: { kind: 'secret_scan', status: pass | fail | skipped | error, findings: [{ rule, file,
-  // line, commit }], ignored, config, message, round }: skipped (off, no gitleaks, no checkout) and error (gitleaks
+  // line, commit }], ignored, config, message, round }: skipped (off, no gitleaks, no checkout, no commit of the run's own, #116) and error (gitleaks
   // failed) both say "Secrets not scanned"; a simulation without the base's commits is skipped, a real run is an error.
   async runSecretScanStep(step, st) {
     const output = { kind: 'secret_scan', round: st.visits, findings: [], ignored: [], config: [], ...(await this.secretScan(step)) };

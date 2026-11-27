@@ -677,14 +677,16 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
       await this.depsBeforeStep(step);
       const slow = this.watchSlowStep(step, st);
       try {
-        output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
+        const answer = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
+        // #116: a develop step that left nothing committed fails here, before review, verify or merge
+        output = await this.committedOutput(step, answer);
       } catch (e) {
         this.lastStepError = e.message;
         if (this.endsRun(e)) throw e;
         // the AI supervisor may fix the output, retry with an instruction, or go to an allowed step
         const r = e.idleInterrupt ? this.idleRetry(step, st, e) : await this.superviseFailure(step, st, e);
         if (r?.output) {
-          output = r.output;
+          output = await this.committedOutput(step, r.output);
         } else if (r?.goto) {
           st.output = { error: e.message, supervisor: r.decision };
           this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output: st.output, duration_ms: Date.now() - t0, error: true });
@@ -698,11 +700,8 @@ class WorkflowRun extends /** @type {new () => EventEmitter & RunParts} */ (/** 
         if (this.worktree && !this.abort.signal.aborted) await this.prepareDeps('worktree', this.ctx.worktree_dir, `step ${step.id}`).catch(() => {});
         this.decideTestCommand(this.ctx.worktree_dir, undefined, step.id);
       }
-      // #116: a develop step that left nothing committed fails here, before review, verify or merge
-      const checked = await this.checkedAgentOutput(step, output);
-      output = checked.output;
       if (output === undefined) {
-        const e = checked.error;
+        const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
         // `on_error: <step>`: a failing step (agent error, invalid output) does not end the run;
         // its output becomes { error } and the flow goes to that step.
         if (!step.on_error) throw e;
