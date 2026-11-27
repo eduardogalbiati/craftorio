@@ -334,7 +334,7 @@ not allowed, or a fourth watch action on one item, `LOOP_CAP`; anything content 
 never in the Oracle's. Under the Night watch, what the owner runs or leaves waiting is in the night
 log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the AI agents language
 and its issue drafts in the issues language, as each turn's Language line names them (Settings ›
-Language, #327, #328; English by default; skill `oracle`).
+Language, #327, #328; the interface language by default, #424, #110; skill `oracle`).
 
 ## Outside sessions: the control channel (#336)
 

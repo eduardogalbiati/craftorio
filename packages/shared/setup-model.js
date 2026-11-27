@@ -58,11 +58,13 @@
   }
 
   // #110: the engine's English install prose (install-commands.js INSTALL_TEXT / MAC_NO_BREW_TEXT) in the interface
-  // language, found by the CLI's id when it is the catalog's English text; any other hint (a command) as it came.
+  // language: by the key the engine names (`installHintKey`), else (a hint without one, e.g. a manual job's) found by
+  // the CLI's id when it is the catalog's English text; any other hint (a command) as it came.
   const HINT_KEYS = ['setup.install_text', 'setup.install_text_mac'];
   function installHintText(tool) {
     const hint = tool?.installHint;
     if (!hint) return '';
+    if (tool.installHintKey) return t(tool.installHintKey) === tool.installHintKey ? hint : t(tool.installHintKey);
     const key = HINT_KEYS.map((k) => `${k}.${tool.id}`).find((k) => t(k, null, 'en') === hint);
     return key ? t(key) : hint;
   }

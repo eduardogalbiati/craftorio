@@ -21,6 +21,8 @@
   // #735: the steps and agents the run's (resolved) inputs rule out, dimmed on the floor like on the run screen
   const RunPlan = typeof module === 'object' && module.exports ? require('@craftorio/shared/run-plan.js') : root.RunPlan;
   const SessionCost = () => (typeof module === 'object' && module.exports ? require('@craftorio/shared/session-cost') : root.SessionCost);
+  // #110: an engine message with a catalog key (message_key, message_params) reads in the interface language
+  const translated = (key, fallback, params) => (typeof module === 'object' && module.exports ? require('@craftorio/shared/i18n') : root.I18n)?.translated(key, fallback, params) ?? fallback;
   function notApplyingOf(steps, inputs) {
     if (!RunPlan || !inputs) return {};
     const declared = Object.fromEntries(Object.keys(inputs).map((k) => [k, {}]));
@@ -78,7 +80,8 @@
         .map(([agent, r]) => `${agent}: ${String(r.verdict).replace(/_/g, ' ')}, ${(r.findings || []).length} finding(s)`).join('; ');
     }
     if (o.error) return String(o.error);
-    return o.summary || o.message || o.claim || Object.values(o).find((v) => typeof v === 'string') || '';
+    const message = o.message && o.message_key ? translated(o.message_key, o.message, o.message_params) : o.message;
+    return o.summary || message || o.claim || Object.values(o).find((v) => typeof v === 'string') || '';
   }
 
   const DETAIL_KEYS = ['description', 'file_path', 'pattern', 'command', 'prompt', 'query'];

@@ -34,7 +34,7 @@ const methods = {
     if (step.enabled != null && /^(off|false|no)$/i.test(given('enabled'))) return skipped('turned off for this run', 'secret_scan_off');
     if (!worktree || !fs.existsSync(worktree)) return skipped('the run has no checkout', 'secret_scan_no_checkout');
     const file = await secretScan.findGitleaks();
-    if (!file) return { status: 'skipped', message: secretScan.notInstalledMessage(), ...said('secret_scan_not_installed') };
+    if (!file) return { status: 'skipped', message: secretScan.notInstalledMessage(), ...secretScan.notInstalledKey() };
     let dir;
     let range;
     try {

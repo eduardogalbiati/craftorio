@@ -2830,6 +2830,7 @@
   "engine.secret_scan_failed": "Segredos não verificados: o gitleaks falhou ({error}).",
   "engine.secret_scan_no_checkout": "Segredos não verificados: a execução não tem checkout.",
   "engine.secret_scan_not_installed": "Segredos não verificados: o gitleaks não está instalado.",
+  "engine.secret_scan_not_installed_hint": "Segredos não verificados: o gitleaks não está instalado ({hint}).",
   "engine.secret_scan_off": "Segredos não verificados: desligado nesta execução.",
   "engine.suite_could_not_run": "A suíte não pôde rodar: {reason}",
   "engine.suite_no_command": "não há comando de teste: defina a entrada test_command do workflow",

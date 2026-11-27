@@ -65,6 +65,14 @@ function installHint(id, platform = process.platform, opts = {}) {
   return installCommand(id, platform, opts) || (platform === 'darwin' && MAC_NO_BREW_TEXT[id]) || INSTALL_TEXT[id] || null;
 }
 
+// #110: the catalog key of installHint's prose (setup.install_text.<id> / setup.install_text_mac.<id>, in
+// packages/shared/i18n), so a screen shows it in the interface language; null for a command (shown as it is).
+function installHintKey(id, platform = process.platform, opts = {}) {
+  if (installCommand(id, platform, opts)) return null;
+  if (platform === 'darwin' && MAC_NO_BREW_TEXT[id]) return `setup.install_text_mac.${id}`;
+  return INSTALL_TEXT[id] ? `setup.install_text.${id}` : null;
+}
+
 // The sign-in command of each CLI with an account (#319: the first-run Setup's ▶ Sign in, run in a
 // command terminal like the install commands). Claude Code opens its interactive /login; the same
 // on every platform.
@@ -82,6 +90,7 @@ module.exports = {
   installCommand,
   installCommands,
   installHint,
+  installHintKey,
   setBrewLookup,
   signInCommands,
 };

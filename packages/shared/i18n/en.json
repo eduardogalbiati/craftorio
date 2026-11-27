@@ -2830,6 +2830,7 @@
   "engine.secret_scan_failed": "Secrets not scanned: gitleaks failed ({error}).",
   "engine.secret_scan_no_checkout": "Secrets not scanned: the run has no checkout.",
   "engine.secret_scan_not_installed": "Secrets not scanned: gitleaks is not installed.",
+  "engine.secret_scan_not_installed_hint": "Secrets not scanned: gitleaks is not installed ({hint}).",
   "engine.secret_scan_off": "Secrets not scanned: turned off for this run.",
   "engine.suite_could_not_run": "The suite could not run: {reason}",
   "engine.suite_no_command": "no test command: set the workflow's test_command input",

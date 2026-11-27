@@ -19,7 +19,7 @@
 //   'failed' | 'analyzed' | 'manual', from the owner's choice and the profile job; FAILURE_CODES: the
 //   codes of a failed job the engine knows (failureOf in project-onboarding.js) and the wizard words;
 // - #781 analysisPhases({ job, interview }): step 3's activity lines from the profile job and
-//   workflowInterviewState's answer: [{ id: 'git' | 'files', state, found }, { id: 'oracle', state, reading, since }],
+//   workflowInterviewState's answer: [{ id: 'git' | 'files', state, found }, { id: 'oracle', state, reading, tool, since }],
 //   state an ActivityLine state (not-needed → skipped);
 // - costSummary(analyses): { total, parts: [{ id, estimate }], unknown: [id] } for the checked
 //   [{ id, estimate, checked }]; a missing estimate is null (unknown), never $0;
@@ -226,7 +226,7 @@
     return [
       { id: 'git', state: states[0], found: known?.git?.found || null },
       { id: 'files', state: states[1], found: known?.files?.found || null },
-      { id: 'oracle', state: states[2], reading: known?.oracle?.reading || null, since: known?.oracle?.since || null },
+      { id: 'oracle', state: states[2], reading: known?.oracle?.reading || null, tool: known?.oracle?.tool || null, since: known?.oracle?.since || null },
     ];
   }
 

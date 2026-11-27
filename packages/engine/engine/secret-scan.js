@@ -46,6 +46,13 @@ function notInstalledMessage() {
   return `${NOT_SCANNED}: gitleaks is not installed${hint ? ` (${hint})` : ''}.`;
 }
 
+/** #110: the catalog key of notInstalledMessage(), the install hint as a parameter when there is one. */
+function notInstalledKey() {
+  const hint = installHint('gitleaks');
+  return hint ? { message_key: 'engine.secret_scan_not_installed_hint', message_params: { hint } }
+    : { message_key: 'engine.secret_scan_not_installed', message_params: {} };
+}
+
 /**
  * The commits to scan, as `{ head, not, from }`: `not` are the refs whose commits are not the run's, `from`
  * the commit the entries of the run are compared with ('' = the whole history). `since` (a tag, '' = the
@@ -203,6 +210,7 @@ module.exports = {
   findingsPrompt,
   newEntries,
   NOT_SCANNED,
+  notInstalledKey,
   notInstalledMessage,
   reviewPrompt,
   scanSecrets,

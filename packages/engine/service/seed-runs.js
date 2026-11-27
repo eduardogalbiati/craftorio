@@ -68,6 +68,13 @@ function readingOf(it) {
   return `${it.name || ''} ${on}`.trim() || null;
 }
 
+// #110: a tool call as { name, input } with only the input's short targets (cut like `last`)
+const TOOL_INPUT_KEYS = ['command', 'description', 'file_path', 'path', 'pattern', 'query', 'url'];
+function toolOfItem(it) {
+  const input = Object.fromEntries(TOOL_INPUT_KEYS.filter((k) => typeof it.input?.[k] === 'string').map((k) => [k, it.input[k].slice(0, PROGRESS_TEXT)]));
+  return { name: String(it.name || ''), input };
+}
+
 // A recorded tool's command, through the shell (the owner wrote it), in the project's folder → stdout
 const runTool = (command, { cwd }) => new Promise((resolve, reject) => {
   execShell(command, { cwd, timeout: TOOL_TIMEOUT_MS, maxBuffer: MAX_OUTPUT, windowsHide: true }, (err, out, errOut) => {
@@ -108,7 +115,7 @@ function estimateSeed(ctx, p, seedId, { free = false, others = false } = {}) {
   return { costUsd: est ? est.usd : null, free: false, basis: est ? est.basis : 0 };
 }
 
-/** The run of a seed in progress on a project ({ since, items, last } copy, or null) and its last error. */
+/** The run of a seed in progress on a project ({ since, items, last, tool } copy, or null) and its last error. */
 function runState(ctx, p, seedId) {
   const { running, errors } = stateOf(ctx);
   const now = running.get(key(p, seedId));
@@ -134,6 +141,8 @@ async function runSeed(ctx, { project: p, seed, mock }) {
       now.items++;
       const reading = readingOf(it); // #781: the wizard's Oracle line says it
       if (reading) now.last = String(reading).slice(0, PROGRESS_TEXT);
+      // #110: the tool call itself, so the wizard words it (LiveTurn.stepLabel) without guessing it from `last`
+      if (reading) now.tool = it.kind === 'tool_call' ? toolOfItem(it) : null;
     };
     return await oracleSeeds.runSeed({
       root: seedsRoot(ctx), project: p, seed, mock: simulated, head, onItem,

@@ -237,7 +237,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   chat reply, step output, handoff note, decision log and generated document follows the AI agents
   language (default "Same as the interface": the language the interface resolves to, an unset
   Interface following the engine host's computer language when it has a catalog, else English, #424). Issues, PR/MR descriptions and
-  commit messages follow a separate issues language (default English), and so do Findings' "File as
+  commit messages follow a separate issues language (default "Same as the interface" since #110, was English), and so do Findings' "File as
   issue" and the epic body line (one place: `packages/shared/language.js`). JSON keys and enum values,
   paths, branches, labels, `- [ ]`, `#n` and closing keywords never change; the source, the bundled
   workflows and skills, logs and tests stay English. Grill me's questions come from the clarity

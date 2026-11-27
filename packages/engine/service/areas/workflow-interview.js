@@ -279,7 +279,7 @@ module.exports = (ctx) => {
     const at = phases.get(p.id);
     if (!at) return state;
     const { running } = state;
-    const oracle = at.oracle.status === 'running' && running ? { status: 'running', since: running.since, reading: running.last } : at.oracle;
+    const oracle = at.oracle.status === 'running' && running ? { status: 'running', since: running.since, reading: running.last, tool: running.tool || null } : at.oracle;
     return { ...state, phases: { ...at, oracle } };
   }
 

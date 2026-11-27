@@ -80,6 +80,6 @@ The owner sees them at a gate; the closes are applied only when they approve.
 `issues` (one entry per open issue reviewed, `current` ones included, with `updated_at` exactly as
 the platform gave it), `scope` and `report` (Markdown for the owner: counts per verdict, the issues
 changed and why, the scope proposals, what you could not decide). The report is in the AI agents
-language and every issue edit in the issues language, as the Language line names them (English
-when unset); an edit adds to an issue in that language and never rewrites existing text only to
+language and every issue edit in the issues language, as the Language line names them (the
+interface language when unset); an edit adds to an issue in that language and never rewrites existing text only to
 translate it. Keys and verdict values stay as named here.

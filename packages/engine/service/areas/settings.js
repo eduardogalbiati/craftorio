@@ -12,6 +12,7 @@ const {
 const {
   installCommand,
   installHint,
+  installHintKey,
   signInCommands,
 } = require('../../domains/machine/install-commands');
 const providerAccounts = require('../../domains/cli/provider-accounts');
@@ -63,7 +64,7 @@ module.exports = () => {
       if (simulated === 'missing') return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts) || simulatedInstallCommand(t.id), installHint: null, signInCommand };
       if (simulated === 'installed') return { id: t.id, name: t.name, path: `(simulated) ${t.id}`, version: `${t.id} (simulated)`, connected: false, auth: !!t.auth, signInCommand };
       const r = await resolveCommandAsync(t.id); // #389: never blocks the main process
-      if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts), installHint: installHint(t.id, process.platform, opts), signInCommand };
+      if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id, process.platform, opts), installHint: installHint(t.id, process.platform, opts), installHintKey: installHintKey(t.id, process.platform, opts), signInCommand };
       const v = await runTool(r.file, t.args);
       const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!(t.auth || (t.signedIn && v.ok)), signInCommand };
       if (!v.ok) out.output = lastLines(v.out);
