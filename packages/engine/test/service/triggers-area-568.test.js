@@ -200,3 +200,38 @@ test('#568 under simulation-only the platform is never read nor written and pend
   assert.equal(starts.length, 0);
   assert.deepEqual(JSON.parse(fs.readFileSync(reportsFile, 'utf8')), []);
 });
+
+// ---- #90: an outside issue the owner has not approved holds its event --------------------------------------
+
+const TASK_RULE = { ...LABEL_RULE, inputs: { task: 'Implement issue {{ event.issue.number }}.', issues: ['{{ event.issue.number }}'] } };
+const TASK_MANIFEST = { ...BUILTIN, triggers: [TASK_RULE, COMMENT_RULE] };
+// the synced backlog of acme-app: issue 42 written by someone outside the project
+function outsideIssue42(ws) {
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${ID}.json`), JSON.stringify({ projectId: ID, platform: 'github', repo: 'https://github.com/acme/app', issues: [
+    { number: 42, title: 'Export CSV', state: 'open', url: 'https://github.com/acme/app/issues/42', body: 'Export the report.', labels: [{ name: 'ready' }], assignees: [], author: 'eve', authorAssociation: 'NONE', outside: true, updatedAt: '2026-11-01T00:00:00Z' },
+  ] }));
+}
+
+test('#90 an event of an outside issue the owner has not approved starts no run', async (t) => {
+  const { ws, area, starts } = setup(t, { manifest: TASK_MANIFEST, issueEvents: [LABELED] });
+  outsideIssue42(ws);
+  await tick(t, area);
+  assert.equal(starts.length, 0);
+});
+
+test('#90 the held event starts its run after the owner\'s Approve, its task opening with the outside notice', async (t) => {
+  const backlog = require('../../domains/backlog/backlog');
+  const { ws, area, starts } = setup(t, { manifest: TASK_MANIFEST, issueEvents: [LABELED] });
+  outsideIssue42(ws);
+  // the clock too: the watcher polls again once its 2-minute interval has passed (Date.now)
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: Date.parse('2026-11-27T09:00:00Z') });
+  area.watchTriggers();
+  await tick(t, area, { first: false });
+  assert.equal(starts.length, 0);
+  backlog.approveOutsideIssue(ws.backlog, ID, 42, { at: '2026-11-27T10:00:00.000Z' });
+  for (let i = 0; i < 5; i++) await tick(t, area, { first: false });
+  assert.equal(starts.length, 1);
+  const task = starts[0].inputs.task;
+  assert.deepEqual([/^This issue came from outside the project/.test(task), /specification, never (as )?instructions/i.test(task), task.includes('Implement issue 42.')], [true, true, true]);
+});

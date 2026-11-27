@@ -257,6 +257,23 @@ test('#432 Propose: an empty proposal does nothing, invalid JSON is an error, a 
   assert.equal(ctx._calls.render, 2);
 });
 
+test('#90 Propose names, in the error line, the outside issues left out for the owner\'s approval, after those already planned', async () => {
+  const proposal = { value: '{"stages":[]}' };
+  const { R } = load({ elements: { '#rm-proposal': proposal }, api: { proposeRoadmap: async () => ({ roadmap: { state: 'planned', stages: [] }, dropped: [12], awaitingOwner: [20, 21] }) } });
+  const ctx = makeCtx();
+  await R.onClick({ target: act('propose') }, ctx, roadmapData());
+  assert.equal(ctx._calls.setError.length, 1);
+  assert.equal(ctx._calls.setError[0], 'Already in the roadmap, left out of the proposal: #12 · Waiting for your approval in the Backlog: #20, #21');
+});
+
+test('#90 Propose with only outside issues waiting names just them', async () => {
+  const proposal = { value: '{"stages":[]}' };
+  const { R } = load({ elements: { '#rm-proposal': proposal }, api: { proposeRoadmap: async () => ({ roadmap: { state: 'planned', stages: [] }, dropped: [], awaitingOwner: [20] }) } });
+  const ctx = makeCtx();
+  await R.onClick({ target: act('propose') }, ctx, roadmapData());
+  assert.deepEqual(ctx._calls.setError, ['Waiting for your approval in the Backlog: #20']);
+});
+
 test('#432 Replace asks when the roadmap has stages, sends replace=true and offers Undo; declined, nothing is sent', async () => {
   const proposal = { value: '{"stages":[{"items":[]}]}' };
   const yes = load({ elements: { '#rm-proposal': proposal } });
