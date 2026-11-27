@@ -83,6 +83,8 @@ test('#352 the change adds no function above the limit to the exception list (en
     'packages/engine/engine/screenshot-step.js:captureScreenshots',
     // #695: moved from scripts/layers.js (same function, same complexity) to be shared by the engine
     'packages/engine/engine/source-text.js:withoutComments',
+    // #109: moved from suite-step.js (same function, same complexity) next to the cargo test reader
+    'packages/engine/engine/suite-failures.js:parseFailures',
     'packages/engine/engine/suite-step.js:checkOnBase',
     'packages/engine/engine/suite-step.js:parseFailures',
     'packages/engine/engine/suite-step.js:runSuite',
