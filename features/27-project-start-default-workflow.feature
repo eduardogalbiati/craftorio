@@ -33,7 +33,7 @@ Feature: Start workflow on a project opens the Start panel on the project's defa
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "default-27"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page of "default-27" is open

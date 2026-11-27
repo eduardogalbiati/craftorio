@@ -56,7 +56,7 @@ Feature: A project whose dependencies were never installed says so once, plainly
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "deps-30"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     When I finish the wizard
     Then the project page of "deps-30" is open

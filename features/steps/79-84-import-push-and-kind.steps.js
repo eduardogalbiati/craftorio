@@ -12,9 +12,9 @@
 //   "no PR was opened: <reason>" (data-testid="run-gate", existing), never "CI on  did not pass";
 // - #84 data-testid="wizard-clone-into" (existing): the Repository step's line naming where the clone goes,
 //   "<workspace>/repos/<folder>"; a local folder path's clone folder is its own folder's name;
-// - #84 data-testid="wizard-kind-select" (existing) in the review: a docs-only repository does not open on
-//   "backend"; it opens on a documentation kind, or on no kind with a line or option that says it was not
-//   detected and asks the owner to choose one.
+// - #84 data-testid="wizard-kind-tile" in the review (the select wizard-kind-select is not shown): a docs-only
+//   repository does not open on "backend"; it opens on a documentation kind, or on no kind, the tile "Detect from
+//   the files" picked.
 //
 // E2E HOOKS THE DEVELOPER MUST ADD, read only when CRAFTORIO_SIMULATION_ONLY=1:
 // - CRAFTORIO_E2E_GIT_PUSH=0: the import's push check of the clone fails as git does without credentials (gh,
@@ -141,22 +141,39 @@ Then('the workspace has the repository cloned into the folder {string}', async (
   expect(others, `no other clone folder ending in -${folder}`).toEqual([]);
 });
 
+// The review's Project type: the kinds are tiles (data-testid="wizard-kind-tile", data-value="<kind>", its title the
+// kind's whole label such as "Backend (no UI)", the picked one aria-pressed="true"; "Detect from the files",
+// data-value="", only while no kind is known). The select (wizard-kind-select) stays in the DOM, not shown, with the
+// same options and the same pick.
 const kindSelect = (page) => review(page).getByTestId('wizard-kind-select');
-const selectedKindLabel = (page) => kindSelect(page).evaluate((el) => (el.selectedOptions?.[0]?.textContent ?? el.textContent ?? '').trim());
+const kindTiles = (page) => review(page).getByTestId('wizard-kind-tile');
+const tileLabels = (tiles) => tiles.evaluateAll((els) => els.map((el) => (el.getAttribute('title') || '').trim()));
+const kindTile = (page, label) => kindTiles(page).and(review(page).locator(`[title="${label}"]`));
+// the picked tile's label ('' while none is picked); the select, not shown, must agree with it
+async function selectedKindLabel(page) {
+  const picked = await tileLabels(review(page).locator('[data-testid="wizard-kind-tile"][aria-pressed="true"]'));
+  const selected = await kindSelect(page).evaluate((el) => (el.selectedOptions?.[0]?.textContent ?? el.textContent ?? '').trim());
+  if (picked.length !== 1 || picked[0] !== selected) return `tiles: ${JSON.stringify(picked)}, select: ${JSON.stringify(selected)}`;
+  return picked[0];
+}
 
 Then("the review's Project type is not {string}", async ({ e2e }, label) => {
-  const select = kindSelect(e2e.window);
-  await expect(select).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(kindTiles(e2e.window).first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect.poll(() => selectedKindLabel(e2e.window), { timeout: LOAD_TIMEOUT }).toMatch(/^(?!tiles: )/);
   await expect.poll(() => selectedKindLabel(e2e.window), { timeout: LOAD_TIMEOUT }).not.toBe(label);
+  await expect(kindTile(e2e.window, label)).not.toHaveAttribute('aria-pressed', 'true');
   await expect(review(e2e.window).getByTestId('wizard-kind-detected').filter({ hasText: label })).toHaveCount(0);
 });
 
-// a documentation kind picked (or detected), or no kind with the words "not detected" / "choose" next to it
+// a documentation kind picked (or detected), or no kind with the words "not detected" / "choose" next to it (the
+// field: its title line with the "Detected: …" mark, and its tiles)
 Then("the review's Project type reads documentation or asks me to choose one", async ({ e2e }) => {
   const page = e2e.window;
-  const field = kindSelect(page).locator('xpath=..');
+  await expect(kindTiles(page).first()).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  const field = kindSelect(page).locator('xpath=ancestor::div[1]');
   await expect.poll(async () => {
     const picked = await selectedKindLabel(page);
+    if (picked.startsWith('tiles: ')) return false;
     const around = await field.innerText();
     return /document|docs/i.test(picked) || /not detected|choose/i.test(`${picked}\n${around}`);
   }, { message: 'the Project type reads documentation, or says it was not detected and asks to choose', timeout: LOAD_TIMEOUT }).toBe(true);
@@ -164,36 +181,36 @@ Then("the review's Project type reads documentation or asks me to choose one", a
 
 // ---- #57: a new project asks its kind, an import keeps "Detect from the files" ---------------------------------
 // Steps of features/850-851-852-project-wizard-step3-review.feature's @issue-57 scenarios, written before the code.
-// - data-testid="wizard-kind-select" (existing, a native <select>, aria-label "Kind of project") in the review:
-//   for a new project its options are the kinds (Frontend, Full-stack, Backend (no UI)...) with no
-//   "Detect from the files" (onboarding.kind_detect); for an import whose kind is not known yet it keeps that
-//   option, picked. The kind picked is saved on the project at Finish (the project's `kind`).
-
-const kindOptionLabels = (page) => kindSelect(page).locator('option').evaluateAll((els) => els.map((el) => (el.textContent || '').trim()));
+// For a new project the tiles are the kinds (Frontend, Full-stack, Backend (no UI)...) with no "Detect from the
+// files" (onboarding.kind_detect); for an import whose kind is not known yet that tile is there, picked. The kind
+// picked is saved on the project at Finish (the project's `kind`).
 
 Then("the review's Project type offers {string}, {string} and {string}", async ({ e2e }, a, b, c) => {
   const page = e2e.window;
-  await expect(kindSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(kindTiles(page).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   for (const label of [a, b, c]) {
-    await expect.poll(() => kindOptionLabels(page), { message: `the Project type offers "${label}"`, timeout: LOAD_TIMEOUT }).toContain(label);
+    await expect.poll(() => tileLabels(kindTiles(page)), { message: `the Project type offers "${label}"`, timeout: LOAD_TIMEOUT }).toContain(label);
+    await expect(kindTile(page, label)).toBeVisible();
+    await expect(kindTile(page, label)).toBeEnabled();
   }
 });
 
 Then("the review's Project type does not offer {string}", async ({ e2e }, label) => {
   const page = e2e.window;
-  await expect(kindSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
-  expect(await kindOptionLabels(page), `the Project type's options`).not.toContain(label);
+  await expect(kindTiles(page).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await tileLabels(kindTiles(page)), `the Project type's tiles`).not.toContain(label);
+  expect(await kindSelect(page).locator('option').evaluateAll((els) => els.map((el) => (el.textContent || '').trim())), `the Project type's options`).not.toContain(label);
 });
 
 Then("the review's Project type has {string} picked", async ({ e2e }, label) => {
   const page = e2e.window;
-  await expect(kindSelect(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(kindTiles(page).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect.poll(() => selectedKindLabel(page), { message: `the Project type has "${label}" picked`, timeout: LOAD_TIMEOUT }).toBe(label);
 });
 
 When("I pick {string} as the review's Project type", async ({ e2e }, label) => {
-  const select = kindSelect(e2e.window);
-  await expect(select).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await select.selectOption({ label });
+  const tile = kindTile(e2e.window, label);
+  await expect(tile).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await tile.click();
   await expect.poll(() => selectedKindLabel(e2e.window), { timeout: LOAD_TIMEOUT }).toBe(label);
 });

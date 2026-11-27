@@ -1,8 +1,10 @@
 Feature: The project wizard's step 3 and review say what really happens
-  A new project with the Local way of working leaves the city analysis for later and says why, and its
-  review shows the answer given, not "the analyses were skipped" (#850). Step 3 starts on the Light work
-  model, marked Recommended, and shows where the files live only for a model that writes files; "Analyze
-  the repository" is the recommended choice (#851). While the project map still runs, the review's City
+  A new project with the Local way of working leaves the city analysis for later and says why (on the review's
+  City card: its step 3 lists the workflows, no analysis), and its review shows the answer given, not "the
+  analyses were skipped" (#850). Step 3's workflows come with the Light work model, picked and marked
+  Recommended; Standard and Full are shown as "Coming soon" and cannot be picked yet (owner's decision,
+  2026-11-26), so where the files live is not shown; "Analyze with AI" is the recommended choice (#851). While
+  the project map still runs, the review's City
   and Findings cards both say so, the city can still be opened, and the languages have a placeholder
   until the facts are read (#852). A new project has no files to detect its kind from: its review asks the kind
   (Frontend, Full-stack or Backend) with no "Detect from the files", an import keeps that option, and the kind
@@ -14,20 +16,23 @@ Feature: The project wizard's step 3 and review say what really happens
     Given the app is open
     When I open the project wizard
     And I choose to create a new project in the wizard
-    And I answer "Local: merge here, push main" to "Where changes land" in the wizard
+    And I answer "Local merge, then push main" to "How changes reach main" in the wizard
     And I name the new project "Garden Log"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard's "project map" analysis is left for later, saying why
+    And the wizard's step 3 lists the workflows and no analysis
     And the wizard offers no "Skip, analyze later" button
     When I go to the next step of the wizard
     Then the wizard is on its "review" step
-    And the review's project card says "Local: merge here, push main"
+    And the review's "City" card says its analysis is left for later, and where to start it
+    And the review's project card says "Local merge, then push main"
     And the review does not say "The analyses were skipped: you can start them later."
     And the review does not say "Read by the Ways of working profile when it is done."
 
+  # The work model shows with the workflows' rows (here defined manually). Standard and Full are "Coming soon"
+  # (owner's decision, 2026-11-26): they cannot be picked, so "where the files live" never shows.
   @issue-851
-  Scenario: Step 3 starts on the recommended Light work model, and where the files live shows once Standard is picked
+  Scenario: Step 3's workflows come with the recommended Light work model picked, Standard and Full coming soon, and no files block
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
@@ -35,23 +40,25 @@ Feature: The project wizard's step 3 and review say what really happens
     And I enter the local repository and the project name "light-851"
     And I go to the next step of the wizard
     Then the wizard is on its "analysis" step
-    And the wizard has the "Light" work model picked
+    When I choose "Define manually" in the wizard's suggested workflows
+    Then the wizard has the "Light" work model picked
     And the "Light" work model is labelled "Recommended"
     And the wizard does not show where the files live
-    When I pick the "Standard" work model in the wizard
-    Then the wizard has the "Standard" work model picked
-    And the wizard's work model files live "In the repository" in "docs/work/<item>/" as "intent.md", "spec.md" and "plan.md"
+    And the "Standard" work model cannot be picked yet, marked "Coming soon"
+    And the "Full" work model cannot be picked yet, marked "Coming soon"
+    And the wizard has the "Light" work model picked
+    And the wizard does not show where the files live
 
   @issue-851
-  Scenario: Analyze the repository is the recommended choice of the suggested workflows
+  Scenario: Analyze with AI is the recommended choice of the suggested workflows
     Given the app is open
     And a local git repository with some code is ready to import
     When I open the project wizard
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "analyze-851"
     And I go to the next step of the wizard
-    Then the wizard's suggested workflows offer "Analyze the repository" and "Define manually" and no workflow yet
-    And the wizard's "Analyze the repository" choice is labelled "Recommended"
+    Then the wizard's suggested workflows offer "Analyze with AI" and "Define manually" and no workflow yet
+    And the wizard's "Analyze with AI" choice is labelled "Recommended"
 
   # The simulated project map and facts jobs are held running (CRAFTORIO_E2E_ONBOARDING_HOLD=facts,projectMap,
   # see onboarding.steps.js), so the review is reached while they still run
@@ -69,7 +76,7 @@ Feature: The project wizard's step 3 and review say what really happens
     Then the wizard is on its "review" step
     And the review's "City" card shows it is still running
     And the review's "Findings" card shows it is still running
-    And the review's City card still offers "Open the city"
+    And the review's City card still offers "Finish and open the city"
     And the review's project card shows a placeholder for the languages
 
   # A new project has no files yet: the review's Project kind (wizard-kind-select) asks, it does not detect
@@ -95,7 +102,7 @@ Feature: The project wizard's step 3 and review say what really happens
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "import-57"
     And I go to the next step of the wizard
-    And I skip the analysis for later
+    And I define the workflows manually and continue, leaving the analysis for later
     Then the wizard is on its "review" step
     And the review's Project type has "Detect from the files" picked
 

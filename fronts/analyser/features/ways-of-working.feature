@@ -65,7 +65,7 @@ Feature: A project's ways of working, from an interview
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "wow-733"
     And I go to the next step of the wizard
-    And I choose "Analyze the repository" in the wizard's suggested workflows
+    And I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard shows the ways of working profile
     And the wizard's suggested workflows are not dimmed
     When I go to the next step of the wizard
@@ -116,7 +116,7 @@ Feature: A project's ways of working, from an interview
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "notests-844"
     And I go to the next step of the wizard
-    And I choose "Analyze the repository" in the wizard's suggested workflows
+    And I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard shows the ways of working profile
     And the wizard's suggested workflows are not dimmed
     And the wizard's ways of working profile says no tests were found or leaves the tests open
@@ -137,7 +137,7 @@ Feature: A project's ways of working, from an interview
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "mixed-844"
     And I go to the next step of the wizard
-    And I choose "Analyze the repository" in the wizard's suggested workflows
+    And I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard shows the ways of working profile
     And the wizard's suggested workflows are not dimmed
     And the wizard's "ways of working profile" shows none of these English texts:
@@ -160,7 +160,7 @@ Feature: A project's ways of working, from an interview
     And I choose to import a repository in the wizard
     And I enter the local repository and the project name "pulls-844"
     And I go to the next step of the wizard
-    And I choose "Analyze the repository" in the wizard's suggested workflows
+    And I choose "Analyze with AI" in the wizard's suggested workflows
     Then the wizard shows the ways of working profile
     And the wizard's suggested workflows are not dimmed
     When I go to the next step of the wizard

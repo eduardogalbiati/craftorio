@@ -9,7 +9,13 @@
 // - wizard-repo, wizard-name: step 2's inputs; wizard-provider; wizard-import-status;
 // - wizard-error (data-error="no-access" | "clone-failed"), with a role="button" named /Retry/;
 //   wizard-cli-warning (gh / glab missing: a warning, the import goes on);
-// - wizard-cost, wizard-cost-total and its part data-part="projectMap" (#730: no "ranking"); wizard-analyze, wizard-skip;
+// - step 3 (layout rework and #100, 2026-11-26): wizard-analysis data-state="choose|analyzing|failed|analyzed|manual",
+//   one screen per state. choose: only wizard-workflows-choice-analyze ("Analyze with AI", with
+//   wizard-workflows-choice-cost) and wizard-workflows-choice-manual; wizard-next ("Continue") is disabled until the
+//   workflows are defined and never starts the analysis; there is no wizard-skip. The jobs (wizard-cost,
+//   wizard-cost-total, data-part="profile|projectMap", #730: no "ranking") are listed only while the analysis runs or
+//   after a job failed. analyzed / manual: the rows, each row's choices as wizard-workflow-tile buttons (its
+//   wizard-workflow-select not shown), then wizard-work-model;
 // - data-testid="onboarding-tray": the progress tray, outside the wizard; each project a
 //   data-testid="tray-item" with data-status="cloning|analyzing|ready|analyzed|failed", holding the
 //   project's name, and when failed the reason in words and a role="button" named /Retry/.
@@ -256,6 +262,14 @@ When('I enter the local repository and the project name {string}', async ({ e2e 
   await enterRepository(e2e.window, e2e.localRepo, name);
 });
 
+// The local repository by its folder's plain path (no file:// URL), in the URL field: step 2 stays the import's
+// own screen, with the provider's parts (#738's fork notice). A file:// URL turns step 2 into the local-repository
+// screen (the folder, Change folder), which has none of them
+When('I enter the path of the local repository and the project name {string}', async ({ e2e }, name) => {
+  if (!e2e.localRepo) throw new Error('no local repository: use "a local git repository is ready to import" first');
+  await enterRepository(e2e.window, require('url').fileURLToPath(e2e.localRepo), name);
+});
+
 When('I go to the next step of the wizard', async ({ e2e }) => {
   await wizard(e2e.window).getByTestId('wizard-next').click();
 });
@@ -283,26 +297,39 @@ Then('the progress tray shows the project {string} as {word}', async ({ e2e }, n
   await expect(trayItem(e2e.window, name)).toHaveAttribute('data-status', status, { timeout: IMPORT_TIMEOUT });
 });
 
-// #730: the project map is the only paid part (no refactor ranking)
-Then('the wizard shows the analysis cost in total and for the project map', async ({ e2e }) => {
-  const cost = wizard(e2e.window).getByTestId('wizard-cost');
-  await expect(cost).toBeVisible();
-  await expect(cost.getByTestId('wizard-cost-total')).toContainText(AMOUNT);
-  const row = cost.locator('[data-part="projectMap"]');
-  await expect(row, "the cost's project map part").toBeVisible();
-  await expect(row).toContainText(AMOUNT);
+// Before the analysis is asked for, step 3 is only its two choices (wizard-analysis data-state="choose"): what the
+// analysis may cost is said once, on the Analyze with AI card (wizard-workflows-choice-cost, "Cost: <estimate>");
+// the jobs with each part's amount (wizard-cost) show only while the analysis runs or after a job failed
+const choiceCost = (page) => wizard(page).getByTestId('wizard-workflows-choice-analyze').getByTestId('wizard-workflows-choice-cost');
+
+Then('the wizard says what the analysis may cost before anything starts', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(choiceCost(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(choiceCost(page)).toContainText(AMOUNT);
+  await expect(wizard(page).getByTestId('wizard-cost'), 'no job list before the analysis is asked for').toHaveCount(0);
 });
 
 Then('the wizard offers to start the analysis', async ({ e2e }) => {
-  // #725: the analysis starts from the workflows column's "Analyze the repository" choice
+  // #725: the analysis starts from the workflows column's "Analyze with AI" choice
   // ("Analyze and continue", wizard-analyze, is gone).
   const analyze = wizard(e2e.window).getByTestId('wizard-workflows-choice-analyze');
   await expect(analyze).toBeEnabled();
-  await expect(analyze).toContainText(/Analyze the repository/i);
+  await expect(analyze).toContainText(/Analyze with AI/i);
 });
 
-When('I skip the analysis for later', async ({ e2e }) => {
-  await wizard(e2e.window).getByTestId('wizard-skip').click();
+// #100: "Skip, analyze later" (wizard-skip) is gone. The free way past step 3 is Define manually (nothing runs),
+// then Continue: the review is reached with the analyses left for later
+When('I define the workflows manually and continue, leaving the analysis for later', async ({ e2e }) => {
+  const page = e2e.window;
+  const w = wizard(page);
+  const manual = w.getByTestId('wizard-workflows-choice-manual');
+  await expect(manual).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(w.getByTestId('wizard-skip'), 'no "Skip, analyze later"').toHaveCount(0);
+  await manual.click();
+  await expect(w.getByTestId('wizard-workflows-column')).toHaveAttribute('data-state', 'manual');
+  const next = w.getByTestId('wizard-footer').getByTestId('wizard-next');
+  await expect(next).toBeEnabled();
+  await next.click();
 });
 
 // a confirm, if closing asks one, is accepted (the import goes on in the tray either way)
@@ -384,22 +411,38 @@ Then("the wizard's {string} card can be chosen", async ({ e2e }, title) => {
   await expect(card).not.toContainText(/\bsoon\b/i);
 });
 
-Then('the wizard offers the other sources {string} and {string}', async ({ e2e }, a, b) => {
-  await expect(otherSources(e2e.window)).toContainText('Other sources');
-  for (const name of [a, b]) await expect(otherSource(e2e.window, name), `the other source "${name}"`).toBeVisible();
+// The one other source left under the cards: a link for who only has the repository's address (the folder on
+// this computer is the third card, wizard-source-folder: picked, Next asks for the folder)
+Then('the wizard asks {string} and offers the other source {string}', async ({ e2e }, question, name) => {
+  await expect(otherSources(e2e.window)).toContainText(question);
+  await expect(otherSource(e2e.window, name), `the other source "${name}"`).toBeVisible();
+  await expect(otherSources(e2e.window).getByRole('button').or(otherSources(e2e.window).getByRole('link'))).toHaveCount(1);
 });
 
-Then("the wizard's footer has {string} on the left and {string} on the right", async ({ e2e }, left, right) => {
+// a click picks the card (aria-pressed), the only one picked; the step stays put until Next
+When("I pick the wizard's {string} card", async ({ e2e }, title) => {
+  const page = e2e.window;
+  const card = sourceCard(page, title);
+  await card.click();
+  await expect(card).toHaveAttribute('aria-pressed', 'true');
+  await expect(wizard(page).locator('[data-testid^="wizard-source-"][aria-pressed="true"]')).toHaveCount(1);
+  await expect(currentStep(page)).toHaveAttribute('data-step', 'start');
+});
+
+// the footer's buttons sit together at the right on every step, the step's action last
+Then("the wizard's footer has {string} then {string}, together on the right", async ({ e2e }, first, second) => {
   const page = e2e.window;
   const bar = footer(page);
-  const leftButton = bar.getByRole('button', { name: left, exact: true });
-  const rightButton = bar.getByRole('button', { name: right, exact: true });
-  await expect(leftButton).toBeVisible();
-  await expect(rightButton).toBeVisible();
-  const [box, l, r] = await Promise.all([bar.boundingBox(), leftButton.boundingBox(), rightButton.boundingBox()]);
+  const firstButton = bar.getByRole('button', { name: first, exact: true });
+  const secondButton = bar.getByRole('button', { name: second, exact: true });
+  await expect(firstButton).toBeVisible();
+  await expect(secondButton).toBeVisible();
+  const [box, a, b] = await Promise.all([bar.boundingBox(), firstButton.boundingBox(), secondButton.boundingBox()]);
   const middle = box.x + box.width / 2;
-  expect(l.x + l.width, `"${left}" in the footer's left half`).toBeLessThanOrEqual(middle);
-  expect(r.x, `"${right}" in the footer's right half`).toBeGreaterThanOrEqual(middle);
+  expect(a.x, `"${first}" in the footer's right half`).toBeGreaterThanOrEqual(middle);
+  expect(b.x, `"${second}" after "${first}"`).toBeGreaterThanOrEqual(a.x + a.width);
+  expect(b.x - (a.x + a.width), `"${first}" and "${second}" side by side`).toBeLessThanOrEqual(24);
+  expect(box.x + box.width - (b.x + b.width), `"${second}" at the footer's right edge`).toBeLessThanOrEqual(48);
 });
 
 When('I choose the other source {string} in the wizard', async ({ e2e }, name) => {
@@ -533,14 +576,29 @@ Then('each suggested workflow shows why it is suggested', async ({ e2e }) => {
   }
 });
 
+// a row's choices are tiles (wizard-workflow-tile, the picked one aria-pressed="true"); the row's
+// wizard-workflow-select stays in the DOM, not shown, and follows the tiles
 Then('I can change the suggested {string} workflow', async ({ e2e }, kind) => {
   const row = wizard(e2e.window).locator(`[data-testid="wizard-workflow"][data-kind="${kind}"]`);
   await expect(row).toHaveCount(1);
+  const tiles = row.getByTestId('wizard-workflow-tile');
+  await expect(tiles.first(), `the choices of the "${kind}" workflow`).toBeVisible();
+  expect(await tiles.count(), `more than one choice for the "${kind}" workflow`).toBeGreaterThan(1);
+  for (const tile of await tiles.all()) await expect(tile).toBeEnabled();
+  await expect(row.locator('[data-testid="wizard-workflow-tile"][aria-pressed="true"]'), `one choice picked for the "${kind}" workflow`).toHaveCount(1);
   await expect(row.getByTestId('wizard-workflow-select'), `the selector of the "${kind}" workflow`).toBeEnabled();
 });
 
+// The profile's line (wizard-profile) is the profile job's row, listed only while the analysis runs. Once analyzed,
+// what the profile found shows with the workflows it gives: the way of working on the lead line
+// (wizard-way-of-working data-mode="local|remote|fork") and each row's reason
 Then('the wizard shows the ways of working profile', async ({ e2e }) => {
-  await expect(wizard(e2e.window).getByTestId('wizard-profile')).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  const column = workflowsColumn(e2e.window);
+  await expect(column).toHaveAttribute('data-state', 'analyzed', { timeout: IMPORT_TIMEOUT });
+  const way = column.getByTestId('wizard-way-of-working');
+  await expect(way).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(way).toHaveAttribute('data-mode', /^(local|remote|fork)$/);
+  await expect(way).toHaveText(/\S/);
 });
 
 // ---- #632: Create new project (docs/work/first-project-onboarding/images/mock-3.jpg, spec R4 / D5 B) ------
@@ -554,9 +612,9 @@ Then('the wizard shows the ways of working profile', async ({ e2e }) => {
 // The repository is made in the scratch workspace (CRAFTORIO_WORKSPACE, features/support/app.js).
 
 const question = (page, title) => wizard(page).getByTestId('wizard-question').filter({ hasText: title });
-// the chip whose text starts with the label: "Local" never matches "Local + remote"
-const chip = (page, title, label) => question(page, title).getByRole('button')
-  .filter({ hasText: new RegExp(`^\\s*${escapeRe(label)}(?!\\s*\\+)`) });
+// an answer is a tile (wizard-chip: an icon, a short title, one line) whose accessible name is the answer's whole
+// label ("Local merge, then push main")
+const chip = (page, title, label) => question(page, title).getByRole('button', { name: label, exact: true });
 const workspaceFolder = (e2e, rel) => {
   if (!e2e.scratch) throw new Error('no scratch folder: open the app first');
   return path.join(e2e.scratch, 'workspace', ...rel.split('/'));
@@ -668,7 +726,7 @@ const jobId = (words) => {
   if (!id) throw new Error(`unknown analysis "${words}": one of ${Object.keys(ONBOARDING_JOB).join(', ')}`);
   return id;
 };
-const WORKFLOW_CHOICE = { 'Analyze the repository': 'wizard-workflows-choice-analyze', 'Define manually': 'wizard-workflows-choice-manual' };
+const WORKFLOW_CHOICE = { 'Analyze with AI': 'wizard-workflows-choice-analyze', 'Define manually': 'wizard-workflows-choice-manual' };
 const choiceTestid = (label) => {
   const id = WORKFLOW_CHOICE[label];
   if (!id) throw new Error(`unknown choice "${label}": one of ${Object.keys(WORKFLOW_CHOICE).join(', ')}`);
@@ -710,8 +768,11 @@ When("I choose {string} in the wizard's suggested workflows", async ({ e2e }, la
 
 // #781: the "ways of working" job is held before it reads anything, so the git history's line runs and the
 // other two wait (OnboardingModel.analysisPhases: a running job with no interview yet)
-Then("the wizard's suggested workflows are dimmed under the analysis phases, with no spinner", async ({ e2e }) => {
+// While the profile job runs (wizard-analysis data-state="analyzing") the rows wait in the DOM (aria-busy, inert),
+// not shown: the column shows the analysis phases, and wizard-cost the progress and the jobs
+Then("the wizard's suggested workflows wait, not shown, under the analysis phases, with no spinner", async ({ e2e }) => {
   const column = workflowsColumn(e2e.window);
+  await expect(column).toHaveAttribute('data-state', 'analyzing');
   const analyzing = column.getByTestId('wizard-workflows-analyzing');
   await expect(analyzing).toBeVisible();
   await expect(analyzing).toHaveRole('status');
@@ -728,8 +789,24 @@ Then("the wizard's suggested workflows are dimmed under the analysis phases, wit
   await expect(oracle).toContainText(/Oracle/);
   await expect(column.locator('.spinner'), 'no spinner in the column').toHaveCount(0);
   const rows = column.getByTestId('wizard-workflows-rows');
-  await expect(rows).toBeVisible();
+  await expect(rows).toHaveCount(1);
   await expect(rows).toHaveAttribute('aria-busy', 'true');
+  await expect(rows, 'the rows are not shown while the analysis runs').toBeHidden();
+  // the progress of the analysis, over its jobs
+  const cost = wizard(e2e.window).getByTestId('wizard-cost');
+  await expect(cost.getByTestId('wizard-progress')).toBeVisible();
+  await expect(cost.locator('[data-part="profile"]')).toBeVisible();
+  await expect(cost.locator('[data-part="projectMap"]')).toBeVisible();
+});
+
+// #100: Continue waits for the workflows to be defined, by hand or by the analysis: disabled on the two choices
+Then('the wizard does not let me continue before the workflows are defined', async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(workflowsColumn(page)).toHaveAttribute('data-state', /^(choose|failed)$/, { timeout: IMPORT_TIMEOUT });
+  const next = footer(page).getByTestId('wizard-next');
+  await expect(next).toBeVisible();
+  await expect(next).toContainText(/Continue/i);
+  await expect(next).toBeDisabled();
 });
 
 Then("the wizard's suggested workflows are not dimmed", async ({ e2e }) => {
@@ -814,7 +891,8 @@ function inLanguage(english, language) {
 const workflowRow = (page, kind) => wizard(page).locator(`[data-testid="wizard-workflow"][data-kind="${kind}"]`);
 const WIZARD_PART = {
   'suggested workflows': (page) => workflowsColumn(page),
-  'ways of working profile': (page) => wizard(page).getByTestId('wizard-profile'),
+  // what step 3 shows of the profile once analyzed: the way of working (the profile's mode) on the lead line
+  'ways of working profile': (page) => wizard(page).getByTestId('wizard-way-of-working'),
   // #23: step 4, the review (its cards, the language legend, the idea's help line)
   review: (page) => review(page),
 };
@@ -830,9 +908,11 @@ async function expectNoEnglishTexts(el, table, what) {
   }, { message: `English texts left in ${what}`, timeout: LOAD_TIMEOUT }).toEqual([]);
 }
 
-// every row (feature, fix, release, CI) once analyzed: its "Why" label, a separate element in bold and the
-// accent colour, then the reason's own text
-Then('every suggested workflow shows a highlighted {string} label', async ({ e2e }, label) => {
+// every row (feature, fix, release, CI) once analyzed: its "Why" label, an element of its own before the reason's
+// text. The layout rework (2026-11-26, project-wizard.css `.wizard-analysis .wizard-workflow-why`) took its accent
+// colour and bold away (#726 had asked for them): it now reads in the reason's muted colour, set apart by a
+// heavier weight only, which is what is checked
+Then('every suggested workflow shows its {string} label, set apart from the reason', async ({ e2e }, label) => {
   const page = e2e.window;
   const rows = workflowRows(page);
   await expect(rows).toHaveCount(4, { timeout: IMPORT_TIMEOUT });
@@ -844,16 +924,11 @@ Then('every suggested workflow shows a highlighted {string} label', async ({ e2e
     await expect(why, `the "${kind}" workflow's label`).toBeVisible();
     await expect(why, `the "${kind}" workflow's label`).toHaveText(label);
     const look = await why.evaluate((el) => {
-      const probe = document.createElement('span');
-      probe.style.color = 'var(--accent)';
-      el.parentElement.appendChild(probe);
-      const accent = getComputedStyle(probe).color;
-      probe.remove();
-      const s = getComputedStyle(el);
-      return { color: s.color, weight: Number(s.fontWeight) || (s.fontWeight === 'bold' ? 700 : 400), accent };
+      const weightOf = (x) => { const w = getComputedStyle(x).fontWeight; return Number(w) || (w === 'bold' ? 700 : 400); };
+      return { own: el.children.length === 0 && el.parentElement !== null, weight: weightOf(el), around: weightOf(el.parentElement) };
     });
-    expect(look.color, `the "${kind}" workflow's label in the accent colour`).toBe(look.accent);
-    expect(look.weight, `the "${kind}" workflow's label in bold`).toBeGreaterThanOrEqual(600);
+    expect(look.own, `the "${kind}" workflow's label is an element of its own`).toBe(true);
+    expect(look.weight, `the "${kind}" workflow's label heavier than its reason's text`).toBeGreaterThan(look.around);
     const reason = (await row.getByTestId('wizard-workflow-reason').innerText()).replace(label, '').trim();
     expect(reason, `the "${kind}" workflow's reason after its label`).toMatch(/\S/);
   }
@@ -888,13 +963,20 @@ Then('the Next steps card offers to install the dependencies with {string}', asy
   await expect(entry.getByRole('button').first()).toBeEnabled();
 });
 
+// A row's choices are tiles (wizard-workflow-tile data-value="<variant>", its title the choice's whole label, the
+// picked one aria-pressed="true"); the row's select (wizard-workflow-select) is not shown and follows the pick
+const workflowTiles = (page, kind) => workflowRow(page, kind).getByTestId('wizard-workflow-tile');
+const pickedTile = (page, kind) => workflowRow(page, kind).locator('[data-testid="wizard-workflow-tile"][aria-pressed="true"]');
+
 When('I pick {string} for the suggested {string} workflow', async ({ e2e }, label, kind) => {
-  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
-  await expect(select).toBeEnabled({ timeout: IMPORT_TIMEOUT });
-  const value = await select.evaluate((el, l) => [...el.options].find((o) => o.textContent.trim() === l)?.value ?? null, label);
-  if (value == null) throw new Error(`the "${kind}" workflow's selector offers no "${label}"`);
-  await select.selectOption(value);
-  await expect(select).toHaveValue(value);
+  const page = e2e.window;
+  const tiles = workflowTiles(page, kind);
+  await expect(tiles.first()).toBeEnabled({ timeout: IMPORT_TIMEOUT });
+  const value = await tiles.evaluateAll((els, l) => els.find((el) => (el.getAttribute('title') || '').trim() === l)?.getAttribute('data-value') ?? null, label);
+  if (value == null) throw new Error(`the "${kind}" workflow offers no "${label}"`);
+  await workflowRow(page, kind).locator(`[data-testid="wizard-workflow-tile"][data-value="${value}"]`).click();
+  await expect(pickedTile(page, kind)).toHaveAttribute('data-value', value);
+  await expect(workflowRow(page, kind).getByTestId('wizard-workflow-select')).toHaveValue(value);
   e2e.workflowPicks = { ...(e2e.workflowPicks || {}), [kind]: { label, value } };
 });
 
@@ -912,10 +994,12 @@ When('the interface language is switched to {string} while the wizard stays open
 Then('the suggested {string} workflow still has {string} picked, read in {string}', async ({ e2e }, kind, label, language) => {
   const pick = e2e.workflowPicks?.[kind];
   if (!pick || pick.label !== label) throw new Error(`no "${label}" was picked for the "${kind}" workflow: use "I pick {string} for the suggested {string} workflow" first`);
-  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
-  await expect(select).toHaveValue(pick.value, { timeout: LOAD_TIMEOUT });
+  const tile = pickedTile(e2e.window, kind);
+  await expect(tile).toHaveAttribute('data-value', pick.value, { timeout: LOAD_TIMEOUT });
   const texts = inLanguage(label, language);
-  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*(${texts.map(escapeRe).join('|')})\\s*$`), { timeout: LOAD_TIMEOUT });
+  await expect(tile).toHaveAttribute('title', new RegExp(`^\\s*(${texts.map(escapeRe).join('|')})\\s*$`), { timeout: LOAD_TIMEOUT });
+  await expect(tile).toBeVisible();
+  await expect(workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select')).toHaveValue(pick.value);
 });
 
 // #741: the wizard reopened on an unfinished onboarding (its Continue, or New project with the same URL)
@@ -923,9 +1007,11 @@ Then('the suggested {string} workflow still has {string} picked, read in {string
 Then('the suggested {string} workflow still has {string} picked', async ({ e2e }, kind, label) => {
   const pick = e2e.workflowPicks?.[kind];
   if (!pick || pick.label !== label) throw new Error(`no "${label}" was picked for the "${kind}" workflow: use "I pick {string} for the suggested {string} workflow" first`);
-  const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
-  await expect(select).toHaveValue(pick.value, { timeout: IMPORT_TIMEOUT });
-  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+  const tile = pickedTile(e2e.window, kind);
+  await expect(tile).toHaveAttribute('data-value', pick.value, { timeout: IMPORT_TIMEOUT });
+  await expect(tile).toHaveAttribute('title', new RegExp(`^\\s*${escapeRe(label)}\\s*$`));
+  await expect(tile).toBeVisible();
+  await expect(workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select')).toHaveValue(pick.value);
 });
 
 // ---- #724: the tray never covers the wizard; #739: the name from the URL; #743: cloning in place ---------
@@ -989,6 +1075,16 @@ Then('the wizard shows the import of {string} as {word}', async ({ e2e }, name, 
   await expect(progress).toBeVisible({ timeout: IMPORT_TIMEOUT });
   await expect(progress).toContainText(name);
   await expect(progress).toHaveAttribute('data-status', status, { timeout: IMPORT_TIMEOUT });
+});
+
+// The footer's clone progress is for a clone still running or failed: once done it keeps its place and its state
+// (data-status="done", "Clone of <name>") but is not shown any more
+Then('the wizard has the import of {string} done, its progress no longer shown', async ({ e2e }, name) => {
+  const progress = footer(e2e.window).getByTestId('wizard-clone-progress');
+  await expect(progress).toHaveAttribute('data-status', 'done', { timeout: IMPORT_TIMEOUT });
+  await expect(progress).toContainText(name);
+  await expect(progress).toBeHidden();
+  await expect(footer(e2e.window).getByTestId('wizard-spinner')).toHaveCount(0);
 });
 
 // the step's action (Next / the cloning state) is on screen and the topmost element at its centre is
@@ -1055,8 +1151,9 @@ Then('the wizard has the size I noted', async ({ e2e }) => {
   if (!e2e.wizardSize) throw new Error('no size noted: use "I note the wizard\'s size" first');
   // the panel is drawn again on each step change: wait for it before measuring
   await expect(panel(e2e.window)).toBeVisible();
-  const box = await panel(e2e.window).boundingBox();
-  expect(box, 'the wizard panel is on screen').not.toBeNull();
+  // a redraw between the check above and the measure leaves no box for a moment: measure until there is one
+  let box = null;
+  await expect.poll(async () => { box = await panel(e2e.window).boundingBox(); return box !== null; }, { message: 'the wizard panel is on screen' }).toBe(true);
   expect(Math.abs(box.width - e2e.wizardSize.width), `the width ${box.width} vs ${e2e.wizardSize.width}`).toBeLessThanOrEqual(SIZE_TOLERANCE);
   expect(Math.abs(box.height - e2e.wizardSize.height), `the height ${box.height} vs ${e2e.wizardSize.height}`).toBeLessThanOrEqual(SIZE_TOLERANCE);
 });
@@ -1071,7 +1168,14 @@ Then("the wizard's action button shows a spinner and {string}", async ({ e2e }, 
 Then('the wizard shows no import status card and its repository fields are read-only', async ({ e2e }) => {
   const w = wizard(e2e.window);
   await expect(w.getByTestId('wizard-import-status')).toHaveCount(0);
-  await expect(w.getByTestId('wizard-repo')).not.toBeEditable();
+  const repo = w.getByTestId('wizard-repo');
+  await expect(repo).toHaveCount(1);
+  if ((await repo.getAttribute('type')) === 'hidden') {
+    // a local repository (file://): step 2 shows its folder (wizard-folder-path) instead of a URL field, and
+    // Change folder (wizard-folder-change) is off from Next on
+    await expect(w.getByTestId('wizard-folder-path')).toBeVisible();
+    await expect(w.getByTestId('wizard-folder-change')).toBeDisabled();
+  } else await expect(repo).not.toBeEditable();
   await expect(w.getByTestId('wizard-name')).not.toBeEditable();
 });
 
@@ -1147,12 +1251,24 @@ Then("the wizard's {string} analysis gives a reason that mentions {string}", asy
 const REVIEW_FINDING_BUTTONS = { 'Create issue': 'wizard-review-create-issue', 'Create issue and prioritize': 'wizard-review-create-issue-prioritize' };
 const reviewFindings = (page) => review(page).getByTestId('wizard-review-findings').getByTestId('wizard-review-finding');
 
+// Step 3 lists its jobs (wizard-cost) only while the analysis runs or after a job failed: whatever it shows, no
+// part is a ranking and no word of one is said; when the jobs are listed, the project map is one of them
 Then("the wizard's analysis has no refactor ranking row", async ({ e2e }) => {
-  const cost = wizard(e2e.window).getByTestId('wizard-cost');
-  await expect(cost).toBeVisible({ timeout: IMPORT_TIMEOUT });
-  await expect(cost.locator('[data-part="projectMap"]'), 'the project map row').toBeVisible();
-  await expect(cost.locator('[data-part="ranking"]'), 'no ranking row').toHaveCount(0);
-  await expect(cost.getByText(/ranking|Product Owner/i), 'no word of a ranking').toHaveCount(0);
+  const w = wizard(e2e.window);
+  await expect(workflowsColumn(e2e.window)).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(w.locator('[data-part="ranking"]'), 'no ranking row').toHaveCount(0);
+  await expect(w.getByText(/ranking|Product Owner/i), 'no word of a ranking').toHaveCount(0);
+  const jobs = w.getByTestId('wizard-cost').getByRole('listitem');
+  if (await jobs.count()) await expect(w.getByTestId('wizard-cost').locator('[data-part="projectMap"]'), 'the project map row').toBeVisible();
+});
+
+// the review's costs (wizard-review-costs): one line per analysis that ran, the project map among them, no ranking
+Then("the review's analysis costs list the project map and no refactor ranking", async ({ e2e }) => {
+  const costs = review(e2e.window).getByTestId('wizard-review-costs');
+  await expect(costs).toBeVisible({ timeout: ANALYSIS_TIMEOUT });
+  await expect(costs.locator('[data-part="projectMap"]'), 'the project map line').toBeVisible();
+  await expect(costs.locator('[data-part="ranking"]'), 'no ranking line').toHaveCount(0);
+  await expect(costs.getByText(/ranking|Product Owner/i), 'no word of a ranking').toHaveCount(0);
 });
 
 Then("the review lists the Oracle's findings, each with {string} and {string}", async ({ e2e }, a, b) => {
@@ -1316,11 +1432,28 @@ const workModel = (page) => wizard(page).getByTestId('wizard-work-model');
 const workModelFiles = (page) => wizard(page).getByTestId('wizard-work-model-files');
 const workModelRadio = (page, model) => workModel(page).getByTestId(`wizard-work-model-${String(model).trim().toLowerCase()}`);
 
-Then('the wizard shows how work on {string} is documented', async ({ e2e }, name) => {
+// The section shows with the workflows' rows (step 3's analyzed / manual states), under them
+Then('the wizard shows how the work is documented', async ({ e2e }) => {
   const section = workModel(e2e.window);
   await expect(section).toBeVisible({ timeout: IMPORT_TIMEOUT });
-  await expect(section.getByRole('heading', { name: `How work on ${name} is documented` })).toBeVisible();
-  await expect(section).toContainText('Each step leaves a file the next step reads, and a person approves it.');
+  await expect(section.getByRole('heading', { name: 'How the work is documented' })).toBeVisible();
+  await expect(section).toContainText('How much each step writes down for the next one to read and a person to approve.');
+});
+
+// Owner's decision (2026-11-26): Standard and Full are not ready: their tiles are shown, disabled, marked
+// "Coming soon" (wizard-work-model-soon, inside the model's <label>), and a click picks nothing
+Then('the {string} work model cannot be picked yet, marked {string}', async ({ e2e }, model, label) => {
+  const page = e2e.window;
+  const radio = workModelRadio(page, model);
+  await expect(radio).toHaveCount(1, { timeout: IMPORT_TIMEOUT });
+  await expect(radio).toBeDisabled();
+  await expect(radio).not.toBeChecked();
+  const tag = radio.locator('xpath=ancestor::label[1]').getByTestId('wizard-work-model-soon');
+  await expect(tag).toBeVisible();
+  await expect(tag).toHaveText(label);
+  // a click on its tile changes nothing
+  await radio.locator('xpath=ancestor::label[1]').click({ force: true });
+  await expect(radio).not.toBeChecked();
 });
 
 // a table of | model | description |, in the order shown
@@ -1408,6 +1541,11 @@ Then("the review's Project type opens on {string}, marked as detected", async ({
   await expect(select).toHaveValue(kind, { timeout: ANALYSIS_TIMEOUT });
   await expect(select.getByRole('option', { name: /Detect from the files/i, includeHidden: true }), 'nothing left to detect').toHaveCount(0);
   await expect(review(e2e.window).getByTestId('wizard-kind-detected')).toContainText(new RegExp(`Detected:\\s*${escapeRe(kind)}`, 'i'));
+  // the kinds are tiles (wizard-kind-tile; the select is not shown): the detected one is the picked tile, and no
+  // tile offers to detect
+  const tiles = review(e2e.window).getByTestId('wizard-kind-tile');
+  await expect(review(e2e.window).locator('[data-testid="wizard-kind-tile"][aria-pressed="true"]')).toHaveAttribute('data-value', kind);
+  await expect(tiles.filter({ hasText: /Detect from the files/i }), 'no tile left to detect').toHaveCount(0);
 });
 
 Then("the review's Backlog card ends with {string}", async ({ e2e }, text) => {
@@ -1461,6 +1599,24 @@ const repoOptions = (page) => wizard(page).getByTestId('wizard-repo-list').getBy
 Given('the app is open where my GitHub account has the repositories:', async ({ e2e }, table) => {
   const repos = table.hashes().map((r) => ({ name: String(r.repository).trim(), private: false, updatedAt: `${String(r.updated).trim()}T10:00:00Z` }));
   await e2e.open({ env: { CRAFTORIO_E2E_GITHUB_REPOS: JSON.stringify(repos) } });
+});
+
+// The list has its own filter box (wizard-repo-filter, "Filter by name"): the URL field (wizard-repo) no longer
+// filters it. Typed key by key, as the owner does (what the box held is replaced)
+When('I filter my repositories by {string} in the wizard', async ({ e2e }, text) => {
+  const box = wizard(e2e.window).getByTestId('wizard-repo-filter');
+  await expect(box).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await box.clear();
+  await box.pressSequentially(text);
+  await expect(box).toHaveValue(text);
+});
+
+When('I clear the repository filter in the wizard', async ({ e2e }) => {
+  const box = wizard(e2e.window).getByTestId('wizard-repo-filter');
+  await box.click();
+  await box.press('ControlOrMeta+A');
+  await box.press('Backspace');
+  await expect(box).toHaveValue('');
 });
 
 When('I clear the repository field in the wizard', async ({ e2e }) => {
@@ -1581,10 +1737,14 @@ Then("the review's Backlog card lists no issue", async ({ e2e }) => {
 //   (pt-BR "Aceitar os workflows do repositório"), shown until the repository's workflows are accepted.
 const defaultAwaiting = (page) => wizard(page).getByTestId('wizard-default-awaiting-acceptance').filter({ visible: true });
 
+// Step 3 says it with the workflows' rows (not on the two choices): in the Default row, in its hint's place, the
+// row's select naming the workflow; the review says it under the project's workflows, naming the workflow itself
 Then("the wizard says the default workflow {string} must be reviewed and accepted before it runs, offering {string}", async ({ e2e }, name, label) => {
   const notice = defaultAwaiting(e2e.window);
   await expect(notice).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(notice).toContainText(name);
+  const row = wizard(e2e.window).locator('[data-testid="wizard-workflow"][data-kind="default"]').filter({ has: e2e.window.getByTestId('wizard-default-awaiting-acceptance') });
+  if (await row.count()) await expect(row.getByTestId('wizard-workflow-select'), 'the Default row names the workflow').toHaveValue(name);
+  else await expect(notice).toContainText(name);
   await expect(notice).toContainText(/accept/i);
   const action = notice.getByRole('link', { name: label, exact: true }).or(notice.getByRole('button', { name: label, exact: true }));
   await expect(action.first()).toBeVisible();
@@ -1605,17 +1765,27 @@ Then("the Next steps card no longer asks to accept the repository's workflows", 
 // The ways of working profile (wizard-profile) of a repository with no test command and no test file says so ("No
 // tests found") or leaves the tests open, never "Unit tests"; the release row's selector (wizard-workflow
 // data-kind="release", wizard-workflow-select) shows the release style the project is saved with.
+// Once analyzed the profile's own line is not printed (see "the wizard shows the ways of working profile"): what it
+// found about the tests is said by the workflows it gives. Their reasons say no test was found (or leave the tests
+// open), the Fix row's choices are the ones without a unit test ("… · Code only"), and nothing says "Unit tests"
 Then("the wizard's ways of working profile says no tests were found or leaves the tests open", async ({ e2e }) => {
-  const profile = wizard(e2e.window).getByTestId('wizard-profile');
-  await expect(profile).toBeVisible({ timeout: IMPORT_TIMEOUT });
-  await expect(profile).toContainText(/no tests( were)? found|tests?\b[^·]*\bopen\b|tests?\s*\?/i, { timeout: IMPORT_TIMEOUT });
-  await expect(profile).not.toContainText(/unit tests|unit and e2e/i);
+  const page = e2e.window;
+  const column = workflowsColumn(page);
+  await expect(column).toHaveAttribute('data-state', 'analyzed', { timeout: IMPORT_TIMEOUT });
+  await expect(column).toContainText(/no tests?( command or test file)?( was| were)? found|tests?\b[^·]*\bopen\b|tests?\s*\?/i, { timeout: IMPORT_TIMEOUT });
+  await expect(column).not.toContainText(/unit tests|unit and e2e/i);
+  const fix = await workflowTiles(page, 'fix').evaluateAll((els) => els.map((el) => el.getAttribute('title') || ''));
+  expect(fix.length, 'the choices of the fix workflow').toBeGreaterThan(0);
+  expect(fix.filter((label) => /\bunit\b/i.test(label)), 'no fix choice promises a unit test').toEqual([]);
 });
 
 Then('the suggested {string} workflow has {string} picked', async ({ e2e }, kind, label) => {
+  const tile = pickedTile(e2e.window, kind);
+  await expect(tile).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(tile).toHaveAttribute('title', new RegExp(`^\\s*${escapeRe(label)}\\s*$`), { timeout: IMPORT_TIMEOUT });
+  // the row's select, not shown, has the same pick
   const select = workflowRow(e2e.window, kind).getByTestId('wizard-workflow-select');
-  await expect(select).toBeVisible({ timeout: IMPORT_TIMEOUT });
-  await expect(select.locator('option:checked')).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`), { timeout: IMPORT_TIMEOUT });
+  await expect(select).toHaveValue(await tile.getAttribute('data-value'));
 });
 
 // ---- #850 #851 #852: step 3 and the review ------------------------------------------------------------------------
@@ -1640,6 +1810,21 @@ Then("the wizard's {string} analysis is left for later, saying why", async ({ e2
   const later = jobRow(e2e.window, words).getByTestId(`wizard-job-later-${jobId(words)}`);
   await expect(later).toBeVisible({ timeout: IMPORT_TIMEOUT });
   await expect(later).toHaveText(/\S/);
+});
+
+// A new project's step 3 opens on its workflows' rows with no job list (wizard-cost): what is left for later is
+// said on the review, whose City and Findings cards are data-state="later" with the reason in words
+Then("the wizard's step 3 lists the workflows and no analysis", async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(workflowsColumn(page).getByTestId('wizard-workflows-rows')).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(workflowRows(page).first()).toBeVisible();
+  await expect(wizard(page).getByTestId('wizard-cost'), 'no job list on a new project').toHaveCount(0);
+});
+
+Then("the review's {string} card says its analysis is left for later, and where to start it", async ({ e2e }, name) => {
+  const card = reviewCard(e2e.window, name);
+  await expect(card).toHaveAttribute('data-state', 'later', { timeout: LOAD_TIMEOUT });
+  await expect(card).toContainText("Not analyzed yet: start the analysis from the project's page.");
 });
 
 Then('the wizard offers no {string} button', async ({ e2e }, label) => {
@@ -1752,9 +1937,10 @@ Then("the wizard's suggested workflows do not say {string}", async ({ e2e }, tex
 
 // every row of step 3's left column runs, is done, failed saying why, or is left for later saying why: none stays
 // "waiting" with nothing said (checked over a few seconds, so a row that only starts late is not a failure)
+// (a new project's step 3 lists no job at all: then none waits)
 Then("no analysis of the wizard is left waiting without saying why", async ({ e2e }) => {
   const rows = wizard(e2e.window).getByTestId('wizard-cost').getByRole('listitem');
-  await expect(rows.first()).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(workflowsColumn(e2e.window).getByTestId('wizard-workflows-rows')).toBeVisible({ timeout: IMPORT_TIMEOUT });
   await expect.poll(async () => {
     const silent = [];
     for (const row of await rows.all()) {
@@ -1903,6 +2089,20 @@ Then("the wizard's {string} analysis does not say {string}", async ({ e2e }, wor
   const row = jobRow(e2e.window, words);
   await expect(row).toBeVisible({ timeout: IMPORT_TIMEOUT });
   await expect(row).not.toContainText(text);
+});
+
+// Before anything runs the estimate is one amount, on the Analyze with AI card ("Cost: $1.16"): the sum of what
+// its analyses may cost (the profile's Oracle turn included); each part's amount shows on the review
+Then("the wizard's {string} choice says it may cost {string}", async ({ e2e }, choice, amount) => {
+  const cost = workflowsColumn(e2e.window).getByTestId(choiceTestid(choice)).getByTestId('wizard-workflows-choice-cost');
+  await expect(cost).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(cost).toHaveText(amountText(amount), { timeout: LOAD_TIMEOUT });
+});
+
+Then("the wizard's {string} choice does not say {string}", async ({ e2e }, choice, text) => {
+  const card = workflowsColumn(e2e.window).getByTestId(choiceTestid(choice));
+  await expect(card.getByTestId('wizard-workflows-choice-cost')).toBeVisible({ timeout: IMPORT_TIMEOUT });
+  await expect(card).not.toContainText(text);
 });
 
 Then("the wizard's estimated total is {string}", async ({ e2e }, amount) => {
