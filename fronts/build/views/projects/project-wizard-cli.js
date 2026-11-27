@@ -5,7 +5,8 @@
 // - errorBlock(o): wizard-error data-error="no-access" | "clone-failed" | "failed" with the engine's reason,
 //   Retry, Sign in (no-access with a known provider) and Edit the URL (no-access on the repository step);
 //   #107: "repo-not-found" | "repo-no-access" | "not-a-git-repo" (an import that made no project, Edit the URL
-//   too) each titled by its own message in the interface language;
+//   too) each titled by its own message in the interface language (git's line below it), Sign in for the first
+//   two; titleOf(code) that title (the toast of a refusal that comes back after the wizard closed);
 //   (the CLI warning, wizard-cli-warning, is the column module's cliWarning: project-wizard-workflows.js);
 // - openSetup(): Open Setup and Sign in open Settings › Agents & CLIs (window.Settings.open, settings-clis.js)
 //   with the warned CLI highlighted, never the first-run Setup. The wizard is only hidden (its state kept) and
@@ -17,7 +18,8 @@
     const platformOfRepo = (url) => window.Platforms?.platformOfRepoUrl?.(url) || null;
     const platformById = (id) => window.Platforms?.findPlatform?.(id) || null;
 
-    // the title of each code (#107: an import refused before anything was made names its cause), 'onboarding.failed' else
+    // the title of each code (#107: an import refused before anything was made names its cause), 'onboarding.failed' else.
+    // 'no-access' is a project's failed state of the engine before #107 (the wizard's tests still pin its markup)
     const TITLES = {
       'clone-failed': 'onboarding.clone_failed',
       'no-access': 'onboarding.no_access',
@@ -25,7 +27,9 @@
       'repo-no-access': 'onboarding.import_repo_no_access',
       'repo-not-found': 'onboarding.import_repo_not_found',
     };
-    const NO_ACCESS = ['no-access', 'repo-no-access'];
+    // the codes a sign-in may fix (#107: GitHub answers "not found" for a private repository the account cannot see)
+    const NO_ACCESS = ['no-access', 'repo-no-access', 'repo-not-found'];
+    const titleOf = (code) => t(TITLES[code] || 'onboarding.failed');
 
     function errorBlock(o) {
       const code = o.code || 'failed';
@@ -36,7 +40,7 @@
       const edit = (code === 'no-access' || !cur().projectId) && cur().model.step === 'repository'
         ? `<button type="button" class="btn ghost" data-act="edit-repo" data-testid="wizard-edit-repo">${esc(t('onboarding.edit_repo'))}</button>` : '';
       return `<div class="wizard-alert error" role="alert" data-testid="wizard-error" data-error="${esc(code)}">
-          <strong>${esc(t(TITLES[code] || 'onboarding.failed'))}</strong>
+          <strong>${esc(titleOf(code))}</strong>
           <p>${esc(o.reason || t('onboarding.no_reason'))}</p>
           <p class="muted small">${esc(t(NO_ACCESS.includes(code) ? 'onboarding.no_access_hint' : 'onboarding.failed_hint'))}</p>
           <div class="wizard-actions"><button type="button" class="btn primary" data-act="retry">${esc(t('onboarding.retry'))}</button>${signIn}${edit}</div>
@@ -63,6 +67,6 @@
       });
     }
 
-    return { errorBlock, openSetup };
+    return { errorBlock, openSetup, titleOf };
   };
 })();

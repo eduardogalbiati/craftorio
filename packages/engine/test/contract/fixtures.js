@@ -56,10 +56,11 @@ async function archivedCard(client) {
   return state;
 }
 
-// #640: an onboarding whose repository no git reaches (a missing local folder): failed, nothing cloned
+// #640: a repository no git reaches (a missing local folder); #107: its import creates nothing
 const UNREACHABLE_REPO = require('path').join(__dirname, 'no-such-repository');
+// an onboarding with a project: a new one (#632, git init only, no remote; nothing cloned)
 async function onboarding(client) {
-  const s = await client.call('onboarding:start', { name: unique('Contract onboarding'), repo: UNREACHABLE_REPO });
+  const s = await client.call('onboarding:create', { name: unique('Contract onboarding'), starts: 'empty', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone' } });
   return { projectId: s.projectId };
 }
 
@@ -285,7 +286,7 @@ module.exports = {
   'nightwatch:state': { arg: null },
   'notifications:list': { arg: {}, invalid: { arg: { limit: 'ten' } } },
   'notifications:read': { arg: { ids: [] }, invalid: { arg: { ids: 'all' } } },
-  // #640: a repository no git reaches: the onboarding ends failed (no-access) and nothing is cloned
+  // the onboarding of a new project (the fixture `onboarding`): ready, nothing cloned
   'onboarding:analyze': { setup: onboarding, arg: ({ projectId }) => ({ projectId }), invalid: BAD_PROJECT },
   // #632: a new project, git init only, no remote
   'onboarding:create': { arg: () => ({ name: unique('Contract create'), starts: 'empty', remote: null, answers: { mode: 'local', ci: 'release', release: 'milestone' } }), invalid: { arg: { name: 42 } } },

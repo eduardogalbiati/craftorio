@@ -49,6 +49,7 @@ const { readManifest } = require('./project-manifest');
 // #633: the work models a project may keep
 const {
   WORK_MODELS,
+  newProjectFolderName,
   slugify,
 } = require('@craftorio/shared/onboarding-model');
 const { findPlatform } = require('@craftorio/shared/platforms');
@@ -107,7 +108,8 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
   return job;
 }
 
-// a new record's status: ready without a clone; #640: failed with the access check's reason, never cloned
+// a new record's status: ready without a clone; failed with a caller's cloneError, never cloned (retryClone clones
+// it; #107: the onboarding no longer saves a refused access check, it creates nothing)
 const cloneState = (cloned, cloneError) => (!cloned ? { status: 'ready' } : cloneError ? { status: 'failed', cloneError: String(cloneError) } : { status: 'cloning' });
 
 /** #640: the clone job this process runs for the project (a promise that never rejects), null when none runs. */
@@ -175,8 +177,8 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
   if (!name) throw new Error('Enter the project name.');
   fs.mkdirSync(dir, { recursive: true });
 
-  let id = slugify(name);
-  for (let i = 2; fs.existsSync(metaFile(dir, id)); i++) id = `${slugify(name)}-${i}`;
+  // #108: the one rule the wizard shows too (slug, or the first free <slug>-2, -3…)
+  const id = newProjectFolderName(name, fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)));
 
   const resolved = await repoAndSource(data.repo, git);
   const { source } = resolved;
@@ -223,8 +225,9 @@ async function retryClone(dir, id, { git = execGit } = {}) {
 
 /**
  * #639: whether `repo` can be cloned, from `git ls-remote` (never clones); 'no-git' when git is not installed.
- * #107: a refused one says its `cause`: 'not-a-git-repo' (a folder without git), 'repo-not-found' (no repository at
- * the URL), else 'repo-no-access' (a private repository the credentials cannot read).
+ * #107: a refused one says its `cause`: 'not-a-git-repo' (a folder on this computer without git), 'repo-not-found'
+ * (git found no repository at the URL: it does not exist, or the account cannot see it), else 'repo-no-access'
+ * (the credentials were refused: a private repository, or a wrong URL asked without credentials).
  * @returns {Promise<{ status: 'reachable' | 'no-access' | 'no-network' | 'no-git', cause?: 'not-a-git-repo' | 'repo-not-found' | 'repo-no-access', message?: string }>}
  */
 async function checkAccess(repo, { git = lsRemote } = {}) {
@@ -236,11 +239,15 @@ async function checkAccess(repo, { git = lsRemote } = {}) {
     if (e?.code === 'ENOENT') return { status: 'no-git', message };
     // the network first: an SSH host that cannot be resolved also says "Could not read from remote repository"
     if (e?.code === 'ETIMEDOUT' || /Could not resolve host|Failed to connect|Couldn't connect|Connection (timed out|refused)|timed out|Network is unreachable|No such host/i.test(message)) return { status: 'no-network', message };
-    const cause = /does not appear to be a git repository|not a git repository/i.test(message) ? 'not-a-git-repo'
-      : /not found/i.test(message) ? 'repo-not-found' : 'repo-no-access';
+    // not-a-git-repo only for a folder on this computer (an SSH URL with a wrong path says the same words)
+    const cause = localOrigin(repo) && /does not appear to be a git repository|not a git repository/i.test(message) ? 'not-a-git-repo'
+      : /not found|does not appear to be a git repository/i.test(message) ? 'repo-not-found' : 'repo-no-access';
     return { status: 'no-access', cause, message };
   }
 }
+
+// #107: a file:// URL or a path (no scheme, not user@host:path): a folder on this computer
+const localOrigin = (repo) => /^file:\/\//i.test(String(repo || '').trim()) || !/^[a-z][a-z0-9+.-]*:\/\/|^[^@\s/]+@[^:\s]+:/i.test(String(repo || '').trim());
 
 // #639: git ls-remote with the allowlisted environment of the platform CLIs (their tokens), no prompt;
 // the SSH agent's socket passes too, so an SSH URL the clone (full environment) reaches answers 'reachable'

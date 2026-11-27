@@ -12,7 +12,7 @@
 // project's real report is its map, done and not paid twice). The project map takes the
 // machine-wide slot SLOT (packages/engine/engine/machine-slot.js), so it waits for
 // other heavy work on the machine. The state of each project is kept in memory:
-//   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: no-access | clone-failed,
+//   { projectId, status: cloning | ready | analyzing | analyzed | failed, code?: clone-failed,
 //     reason?, wanted? (#74: analyze asked during the clone, runs when it ends),
 //     jobs: { clone, facts, profile, projectMap: { status: waiting | running | done | failed | skipped, error?, costUsd? } },
 //     #725: a failed job is { status: 'failed', error (the full error), code: cli-missing | invalid-ranking |
@@ -26,11 +26,12 @@
 // .gitignore in a first commit, then its private remote only when asked and gh / glab is signed in (`remote`);
 // it is ready at once, nothing is cloned, and the three answers are its profile (jobs.profile.profile); its
 // state also has the project's `name`, so the wizard follows it (remote: creating) before create() answers.
-// and every change is pushed as `onboarding:changed` (channels/onboarding.js). A refused access check or
-// a failed clone ends `failed` with a readable reason (#107: a refused access check creates no project at all:
-// start answers { status: 'failed', code: repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git,
-// reason } with no projectId; CRAFTORIO_E2E_REPO_ACCESS stands for git's answer in a simulated run); onboardingRetry runs again what failed (the
-// access check and the clone, a failed job) and always checks gh / glab again. A project removed while
+// and every change is pushed as `onboarding:changed` (channels/onboarding.js). A failed clone ends `failed`
+// with a readable reason. #107: a refused access check creates no project at all: start answers { status: 'failed',
+// code: repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git, reason (git's own last line for the
+// first three, the wizard words the cause), cli (gh / glab of the URL's provider) } with no projectId;
+// CRAFTORIO_E2E_REPO_ACCESS stands for git's answer in a simulated run. onboardingRetry runs again what failed (the
+// clone, a failed job) and always checks gh / glab again. A project removed while
 // its jobs run loses its state; no error of a job escapes the chain.
 // #741: the wizard's own state is saved with the project's record, `onboarding: { step, picks, finished }`
 // (saveWizard on every change of the wizard, finish on Finish; status() answers it as `wizard`), so it outlives
@@ -80,29 +81,29 @@ const SLOT = slots.ANALYSIS_SLOT;
 const JOBS = ['clone', 'facts', 'profile', 'projectMap'];
 const PAID = ['projectMap'];
 
-// a readable reason for an access check that did not reach the repository; #107: by its cause (never
-// "credentials" for a repository that does not exist or a folder without git)
+// the reason of an access check that did not reach the repository: git's own last line; no-git and no-network
+// (no message of their own in the wizard) lead with a sentence. #107: the three causes (repo-not-found |
+// repo-no-access | not-a-git-repo) are worded by the wizard in the interface language, git's line is the detail
 const ACCESS_LEADS = {
   'no-git': 'Git is not installed, so the repository cannot be cloned. Install git and retry.',
   'no-network': 'The repository could not be reached: check the network connection and retry.',
-  'not-a-git-repo': 'The folder is not a git repository: pick a folder with git in it, or import its URL.',
-  'repo-not-found': 'No repository was found at this URL: check the owner and the name, then import again.',
 };
 function accessReason(access) {
   const detail = String(access.message || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-1)[0] || '';
-  const lead = ACCESS_LEADS[access.status] || ACCESS_LEADS[access.cause]
-    || 'The repository could not be reached with your credentials: check the URL, or sign in with access to it, and retry.';
+  const lead = ACCESS_LEADS[access.status];
+  if (!lead) return detail || undefined;
   return detail ? `${lead} (${detail})` : lead;
 }
 
 // #107: the answer to an import refused before anything is created (no project, no folder in repos/): no
-// projectId, its cause as the code (repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git)
-const refusedImport = (access) => ({
+// projectId, its cause as the code (repo-not-found | repo-no-access | not-a-git-repo | no-network | no-git), and
+// `cli` the check of gh / glab for the URL's provider (the wizard's warning shows next to the error)
+const refusedImport = (access, cli = null) => ({
   status: 'failed',
   code: access.cause || access.status,
   reason: accessReason(access),
   jobs: { ...Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), clone: { status: 'skipped' } },
-  cli: null,
+  cli,
 });
 
 // #107: the E2E hook of a simulated run (features/steps/onboarding.steps.js): CRAFTORIO_E2E_REPO_ACCESS=not-found |
@@ -489,6 +490,13 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return w.cli;
   }
 
+  // #107: gh / glab for a refused import's provider (no project to follow: checked once, answered with the refusal)
+  function refusedCli(repo) {
+    const provider = providerOf(repo);
+    if (!provider) return Promise.resolve(null);
+    return Promise.resolve().then(() => cli(provider)).then((found) => cliState(provider, found), () => cliState(provider, null));
+  }
+
   // waits for the clone (and the CLI check), then ready with the free part, or failed with the clone's reason
   async function follow(id) {
     try {
@@ -540,10 +548,6 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     follow(id);
   }
 
-  function noAccess(id, access) {
-    change(id, { status: 'failed', code: 'no-access', reason: accessReason(access) }, { clone: { status: 'skipped' } });
-  }
-
   /**
    * Checks the access, creates the project and starts its clone; never waits for the clone. #741: the
    * repository of an existing project creates nothing: its onboarding not finished resumes (that project's
@@ -561,7 +565,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     const access = await projects.checkAccess(repo, { git: e2eAccessGit(repo) || git });
     // #107: a repository that cannot be imported creates nothing; the wizard words the cause. #640: a
     // folder of repos/ that already is its clone still imports (offline too)
-    if (access.status !== 'reachable' && !cloneFolder(repo, reposDir).existing) return refusedImport(access);
+    if (access.status !== 'reachable' && !cloneFolder(repo, reposDir).existing) return refusedImport(access, await refusedCli(repo));
     const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir });
     projects.updateProject(projectsDir, p.id, { onboarding: { step: 'repository', picks: {}, finished: false } });
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
@@ -727,7 +731,7 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     return status(projectId);
   }
 
-  /** Runs again what failed: the access check and the clone, or the failed jobs; checks gh / glab again. */
+  /** Runs again what failed: the clone, or the failed jobs; checks gh / glab again. */
   async function retry(projectId) {
     const s = states.get(projectId);
     if (!s) throw clientError(`No onboarding runs for the project ${projectId}.`);
@@ -736,13 +740,8 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
     checkCli(projectId, p.repo);
     if (s.status === 'failed') {
       // a project already cloned (its folder was kept) goes on without the access check and the clone
-      if (p.status !== 'ready') {
-        if (s.code === 'no-access') {
-          const access = await projects.checkAccess(p.source || p.repo, { git });
-          if (access.status !== 'reachable') { noAccess(projectId, access); return status(projectId); }
-        }
-        await projects.retryClone(projectsDir, projectId, { git });
-      }
+      // (#107: a refused access check never made a project, so there is no access check to run again)
+      if (p.status !== 'ready') await projects.retryClone(projectsDir, projectId, { git });
       cloning(projectId);
     } else if (['ready', 'analyzing', 'analyzed'].includes(s.status)) {
       // #725: each part on its own: a failed profile runs again while the paid part still runs, and the
