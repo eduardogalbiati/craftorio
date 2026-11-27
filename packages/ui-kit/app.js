@@ -653,7 +653,7 @@ const RUN_EVENT_REDUCERS = {
   'session.updated': takeSnapshot,
   'step.started': (v, ev) => {
     const s = v.steps.get(ev.step_id);
-    if (s) { s.status = 'running'; s.visits = ev.visit; }
+    if (s) Object.assign(s, { status: 'running', visits: ev.visit, supervisor: null }); // #124: a new visit forgets the last answer
     orch(ev, `▶ step ${ev.step_id} (visit ${ev.visit})`, 'transition');
   },
   'step.finished': (v, ev) => {
