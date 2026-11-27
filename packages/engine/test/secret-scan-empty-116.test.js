@@ -4,7 +4,7 @@
 // Seam: the bundled fix workflow's secret_scan step on a small run state (helpers/fake-gitleaks.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { commit, installGitleaks, plainGit, project, scan } = require('./helpers/fake-gitleaks');
+const { commit, git, installGitleaks, plainGit, project, scan } = require('./helpers/fake-gitleaks');
 
 plainGit();
 const LIMIT = { timeout: 120000 };
@@ -16,6 +16,18 @@ test('#116 scan: a run with no commit of its own says there is nothing to scan, 
   assert.notEqual(out.status, 'pass', out.message);
   assert.doesNotMatch(out.message, /No secret found/i);
   assert.match(out.message, /nothing to scan|no commits?\b/i);
+});
+
+test('#116 scan: a release whose last tag is at HEAD (since, zero commits) is skipped with nothing to scan', LIMIT, async (t) => {
+  const { calls } = installGitleaks(t);
+  const where = project(t);
+  git(where.repo, 'tag', 'engine-v1.0.0', 'main');
+  const steps = { version: { output: { kind: 'release_version', status: 'written', version: '1.1.0', product: 'engine', tag_prefix: 'engine-v', tag: 'engine-v1.1.0', folder: 'packages/engine', previous_version: 'engine-v1.0.0' }, visits: 1 } };
+  const { out } = await scan(t, 'release', where, { steps });
+  assert.equal(out.status, 'skipped', out.message);
+  assert.equal(out.message_key, 'engine.secret_scan_no_commits');
+  assert.match(out.message, /nothing to scan/i);
+  assert.equal(calls().length, 0, 'gitleaks is not called over zero commits');
 });
 
 test('#116 scan: a run with one commit still passes when it holds no secret', LIMIT, async (t) => {
