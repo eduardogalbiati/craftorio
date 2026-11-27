@@ -31,7 +31,8 @@ const PROJECT = { id: 'p1', name: 'Shop', folder: 'C:/p/shop', exists: true };
 const WORKFLOWS = [
   { file: 'analyze-project.yaml', name: 'analyze-project', description: 'Analyze a project', category: 'analysis', inputs: { project_dir: { type: 'path', label: 'Project' } } },
 ];
-const TITLES = { agents: 'Connect your AIs', versioning: 'Connect version control', project: 'Add your first project' };
+// #97: the AIs step's title became the orchestrator question (its stepper name stays "Connect your AIs")
+const TITLES = { agents: 'Which AI do you want to use as the orchestrator?', versioning: 'Connect version control', project: 'Add your first project' };
 // what env:details answers: an AI CLI and Git ready, so Next is enabled on both CLI steps
 const TOOLS = [
   { id: 'claude', name: 'Claude Code', path: 'C:/bin/claude.cmd', connected: true },
