@@ -906,12 +906,10 @@ function renderDetail() {
   if (atBottom) box.scrollTop = box.scrollHeight;
 }
 
-// #117: a session whose turns count reasoning tokens but stream no thinking (Codex reports only the
-// count) says so once, instead of showing nothing
+// #117: reasoning tokens counted but no thinking streamed (Codex reports only the count): say so once
 function reasoningNote(s) {
   const turns = [...s.turnLog.values()];
-  const reasoning = turns.reduce((a, x) => a + (Number(x.result?.usage?.reasoning) || 0), 0);
-  if (!reasoning || turns.some((x) => (x.items || []).some((it) => it.kind === 'thinking'))) return '';
+  if (!turns.some((x) => Number(x.result?.usage?.reasoning) > 0) || turns.some((x) => (x.items || []).some((it) => it.kind === 'thinking'))) return '';
   return `<p class="muted small" data-testid="session-reasoning-note">${t('run.reasoning_not_shown')}</p>`;
 }
 
