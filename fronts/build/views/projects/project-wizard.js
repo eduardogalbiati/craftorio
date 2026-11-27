@@ -13,7 +13,8 @@
 //   the footer over a divider (wizard-footer). The steps: start ("Add a project": wizard-source-import, selected
 //   when the wizard opens, and wizard-source-new (#632: Create new project, below), each with its
 //   wizard-card-icon and three points; wizard-other-sources with wizard-source-git-url, step 2's URL field,
-//   and wizard-source-folder, api.pickFolder() then step 2 with the folder's file:// URL), repository (the
+//   and wizard-source-folder, api.pickFolder() then step 2 with the folder's file:// URL and #98 wizard-folder-state
+//   data-state, project-wizard-folder.js: any folder, a plain one gets a new repository from a copy), repository (the
 //   GitHub / GitLab toggle #wizard-provider read from the URL, the gh / glab badges wizard-cli-account
 //   data-cli (api.onboardingAccounts when the wizard opens; the import's own check once the engine answered),
 //   #wizard-repo with the signed-in account's repositories under it (wizard-repo-list, api.onboardingRepos:
@@ -101,13 +102,14 @@
   // #725: Continue on the analysis step never waits for the analysis (running, done or failed); #100: it waits for
   // the workflows to be defined, by hand or by the analysis (a new project's rows show at once)
   const canNext = () => (cur.model.step === 'analysis' ? M.canGoNext(cur.model) && column.defined()
-    : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy);
+    : M.canGoNext(cur.model) && cur.onboarding?.status !== 'failed' && !cur.busy && !(pickedFolder() && localFolder.blocks()));
   // #738: the fork notice's two choices, each one engine call; the answer moves on to analysis
   // #79: push-fix, the push notice's setup-git button
   const FORK_CALLS = { 'fork-create': 'forkOnboarding', 'push-fix': 'setupGitOnboarding', 'work-locally': 'workLocallyOnboarding' };
   const activity = window.ProjectWizardActivity({ cur: () => cur, jobOf: (id) => jobOf(id), loadReview: () => loadReview(), platformLabel: (id) => platformById(id)?.label || id, renderSoon: () => renderSoon() }); // #781
   const column = window.ProjectWizardColumn({ cur: () => cur, jobOf: (id) => jobOf(id), costHint: () => costs.estimateText(), icons: () => ANSWER_ICON, phasesHtml: activity.analysisPhases, renderSoon: () => renderSoon() });
   const workModel = window.ProjectWizardWorkModel({ cur: () => cur, recommended: column.recommended }); // #633: step 3's work model section
+  const localFolder = window.ProjectWizardFolder({ cur: () => cur, render: () => render() }); // #98: what the picked folder is
   const resume = window.ProjectWizardResume({ close: () => close(), cur: () => cur, names, remember: (s) => remember(s), render: () => render(), toAnalysis: () => toAnalysis() });
   const {
     jobReason,
@@ -288,12 +290,12 @@
                 <button type="button" class="btn sm" data-act="pick-folder" data-testid="wizard-folder-change"${cur.projectId || cur.busy ? ' disabled' : ''}>${esc(t('onboarding.folder_change'))}</button>
               </div>
               <input id="wizard-repo" data-testid="wizard-repo" type="hidden" value="${esc(cur.model.repository)}">
-              <span class="muted small">${esc(t('onboarding.folder_help'))}</span></div>
+              ${localFolder.stateLine()}</div>
           </div>
         </div>
         <div class="wizard-column">
           <h3>${esc(t('onboarding.folder_next_title'))}</h3>
-          <ul class="wizard-points">${[1, 2, 3].map((n) => `<li>${esc(t(`onboarding.folder_next_${n}`))}</li>`).join('')}</ul>
+          <ul class="wizard-points">${localFolder.pointKeys().map((key) => `<li>${esc(t(key))}</li>`).join('')}</ul>
           <div class="wizard-field"><span>${esc(t('onboarding.folder_into_label'))}</span>
             <p class="mono wizard-work-model-path" id="wizard-clone-into" data-testid="wizard-clone-into" title="${esc(into)}">${esc(into)}</p></div>
         </div>
@@ -508,9 +510,9 @@
     const showNext = step !== 'review';
     // #632: a new project is not cloned (mock-3's plain Next)
     const nextLabel = step === 'analysis' ? 'onboarding.continue'
-      : step === 'repository' && cur.model.source !== 'new' ? 'onboarding.next_clone' : 'onboarding.next';
+      : step === 'repository' && cur.model.source !== 'new' ? (pickedFolder() ? localFolder.nextKey() : 'onboarding.next_clone') : 'onboarding.next';
     const cloning = cloningInPlace();
-    const nextText = cloning ? `${SPINNER('wizard-spinner')}${esc(t('onboarding.cloning_wait', { name: cur.model.name.trim() }))}` : esc(t(nextLabel));
+    const nextText = cloning ? `${SPINNER('wizard-spinner')}${esc(t(pickedFolder() ? localFolder.waitKey() : 'onboarding.cloning_wait', { name: cur.model.name.trim() }))}` : esc(t(nextLabel));
     const next = showNext ? `<button type="button" class="btn primary" id="wizard-next" data-act="next" data-testid="wizard-next"${cloning ? ' aria-busy="true"' : ''}${canNext() && !cur.busy ? '' : ' disabled'}>${nextText}</button>` : '';
     const back = step === 'start'
       ? `<button type="button" class="btn" data-act="cancel" data-testid="wizard-cancel">${esc(t('onboarding.cancel'))}</button>`
@@ -711,12 +713,13 @@
     document.getElementById(pickedFolder() ? 'wizard-name' : 'wizard-repo')?.focus?.();
   }
 
-  // a folder on this computer: its file:// URL (the engine clones it as any git URL) and its name
+  // a folder on this computer: its file:// URL (a repository is cloned, #98: a plain folder copied) and its name
   async function fromFolder() {
     const folder = await api.pickFolder();
     if (!folder || !cur) return;
     const slashed = String(folder).replace(/\\/g, '/');
     const url = `file://${slashed.startsWith('/') ? '' : '/'}${encodeURI(slashed)}`;
+    localFolder.inspect(url);
     toRepository({ repository: url, name: cur.model.name || slashed.split('/').filter(Boolean).pop() || '' });
   }
 

@@ -290,7 +290,7 @@ test('#669 step 1: "Only have the address?" under the cards with "Import from an
   assert.equal(folder === null, false, 'data-testid="wizard-source-folder"');
   assert.equal(folder.name, 'button');
   assert.equal(textOf(folder).includes('Use a local repository'), true, textOf(folder));
-  assert.equal(textOf(folder).includes('A folder on this computer that is already a git repository.'), true, textOf(folder));
+  assert.equal(textOf(folder).includes('A folder on this computer: a git repository or plain files.'), true, textOf(folder));
   assert.equal(byTestId(folder.outer, 'wizard-card-icon') === null, false, 'its icon');
   assert.equal(H.findAll(folder.inner, (e) => e.name === 'li').length, 3, 'its three bullets');
   assert.equal(markup.indexOf(folder.outer) < markup.indexOf(other.outer), true, 'the cards, then the line');

@@ -23,6 +23,8 @@
 // #633: `workModel` (light / standard / full, spec R9), how work on the project is documented, picked at onboarding.
 // #105: a folder on this computer given as a file:// URL is the clone's `source` (the clone's origin, where a run
 // pushes), not the project's repository: `repo` is the folder's own origin when it is a git URL, else none (local backlog).
+// #98: `fromFiles` (a plain folder, or a repository without a commit): the job makes the project's repository from a
+// copy of the folder's files (folder-import.js) instead of a clone; it has no origin, so nothing is pushed to the folder.
 
 const fs = require('fs');
 const path = require('path');
@@ -45,6 +47,11 @@ const {
   projectDefault,
 } = require('@craftorio/shared/default-workflow');
 const { readManifest } = require('./project-manifest');
+// #98: a plain folder's import (a new repository from a copy of its files) and its size limit
+const {
+  commitFolderFiles,
+  FOLDER_IMPORT_LIMIT_BYTES,
+} = require('./folder-import');
 // #632: a project's id, the rule the onboarding wizard shows too (re-exported for agents, skills, discovery);
 // #633: the work models a project may keep
 const {
@@ -86,9 +93,14 @@ function startClone(dir, id, { git, defaultWorkflow = null }) {
   const job = (async () => {
     try {
       const p = JSON.parse(fs.readFileSync(metaFile(dir, id), 'utf8'));
-      // #79: cloned with the URL runs can push with (SSH when the platform CLI's protocol is ssh); #105: from the folder
-      const { url } = await pushableUrl(p.source || p.repo);
-      await git(['clone', url, p.folder], path.dirname(p.folder));
+      if (p.fromFiles) {
+        // #98: a plain folder (or a repository without a commit): a new repository from a copy of its files
+        await commitFolderFiles(fileURLToPath(p.source), p.folder, { git });
+      } else {
+        // #79: cloned with the URL runs can push with (SSH when the platform CLI's protocol is ssh); #105: from the folder
+        const { url } = await pushableUrl(p.source || p.repo);
+        await git(['clone', url, p.folder], path.dirname(p.folder));
+      }
       const patch = { status: 'ready', cloneError: null };
       if (!cleanWorkflows(p.workflows).length) {
         const manifest = await projectManifest({ folder: p.folder });
@@ -128,6 +140,13 @@ function listProjects(dir) {
 
 const notEmpty = (folder) => isDir(folder) && fs.readdirSync(folder).length > 0;
 
+// #98: a copy of a folder's files goes to an empty folder: `dir`, else its first free sibling <dir>-2, -3…
+function freeFolder(dir) {
+  let free = dir;
+  for (let i = 2; notEmpty(free); i++) free = `${dir}-${i}`;
+  return free;
+}
+
 // createProject's folder: its parent for a clone (the folder itself empty or missing), else the folder
 // (#632 fresh: empty or missing) → the repository, read from the folder's origin when none was given
 async function prepareFolder(folder, { repo, cloned, fresh, git }) {
@@ -146,6 +165,8 @@ async function prepareFolder(folder, { repo, cloned, fresh, git }) {
 async function folderRemote(source, git) {
   let folder;
   try { folder = fileURLToPath(source); } catch { return null; }
+  // #98: only the folder's own git (a plain folder inside another repository has no remote of its own)
+  if (!fs.existsSync(path.join(folder, '.git'))) return null;
   const origin = await git(['remote', 'get-url', 'origin'], folder).then((s) => String(s || '').trim(), () => '');
   return origin && isGitUrl(origin) ? withoutCredentials(origin) : null;
 }
@@ -162,6 +183,13 @@ async function repoAndSource(given, git) {
   return { repo: await folderRemote(repo, git), source: repo };
 }
 
+// createProject's folder: the given one, else (#84) the clone's own name in reposDir, or its free sibling (name-2…)
+// when that folder holds something else; #98: a copy of a folder's files needs an empty one (freeFolder)
+function projectFolder(given, { from, reposDir, fallback, fromFiles }) {
+  const defaultFolder = from && reposDir ? cloneFolder(from, reposDir).dir : fallback;
+  return path.resolve(String(given || '').trim() || (fromFiles ? freeFolder(defaultFolder) : defaultFolder));
+}
+
 /**
  * Creates a project. If `repo` is given and the folder is not a git repository, it returns at once
  * with status 'cloning' and clones the repository into it in the background (the folder must be
@@ -170,9 +198,10 @@ async function repoAndSource(given, git) {
  * @param {{ git?: Function, reposDir?: string, cloneError?: string }} opts reposDir: <workspace>/repos;
  *   cloneError (#640, the access check refused the repository): the project is saved 'failed' with
  *   that reason and nothing is cloned (retryClone clones it); fresh (#632, a new project): its folder must be
- *   empty or not exist
+ *   empty or not exist; fromFiles (#98, a file:// plain folder or repository without a commit): the job makes a new
+ *   repository from a copy of its files (folder-import.js commitFolderFiles) instead of cloning it
  */
-async function createProject(dir, data, /** @type {{ git?: typeof execGit, reposDir?: string | null, cloneError?: string | null, fresh?: boolean }} */ { git = execGit, reposDir = null, cloneError = null, fresh = false } = {}) {
+async function createProject(dir, data, /** @type {{ git?: typeof execGit, reposDir?: string | null, cloneError?: string | null, fresh?: boolean, fromFiles?: boolean }} */ { git = execGit, reposDir = null, cloneError = null, fresh = false, fromFiles = false } = {}) {
   const name = String(data.name || '').trim();
   if (!name) throw new Error('Enter the project name.');
   fs.mkdirSync(dir, { recursive: true });
@@ -184,11 +213,9 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
   const { source } = resolved;
   let { repo } = resolved;
   const from = source || repo;
-  // #84: the clone's own name, or its free sibling (name-2…) when that folder holds something else
-  const defaultFolder = from && reposDir ? cloneFolder(from, reposDir).dir : path.join(dir, id);
-  const folder = path.resolve(data.folder?.trim() || defaultFolder);
+  const folder = projectFolder(data.folder, { from, reposDir, fallback: path.join(dir, id), fromFiles });
 
-  const cloned = !!from && !isDir(path.join(folder, '.git'));
+  const cloned = !!from && (fromFiles || !isDir(path.join(folder, '.git')));
   const prepared = await prepareFolder(folder, { repo: from, cloned, fresh, git });
   if (!source) repo = prepared;
 
@@ -205,7 +232,7 @@ async function createProject(dir, data, /** @type {{ git?: typeof execGit, repos
   // #745: the platform the wizard picked for a host its URL does not name; #735: the confirmed kind
   const platform = cleanPlatform(data.platform);
   const kind = cleanKind(data.kind);
-  const project = { name, description: data.description?.trim() || '', folder, repo, ...(source ? { source } : {}), ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), ...(workflowKinds ? { workflowKinds } : {}), createdAt: new Date().toISOString() };
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(source ? { source } : {}), ...(fromFiles && source ? { fromFiles: true } : {}), ...(platform ? { platform } : {}), ...(kind ? { kind } : {}), ...cloneState(cloned, cloneError), ...(localPreview ? { localPreview } : {}), ...(ignoreInstallScripts ? { ignoreInstallScripts } : {}), ...(data.preferRepositoryWorkflows === true ? { preferRepositoryWorkflows: true } : {}), ...(workflows.length ? { workflows } : {}), ...(defaultWorkflow ? { defaultWorkflow } : {}), ...(workflowKinds ? { workflowKinds } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   if (project.status === 'cloning') startClone(dir, id, { git, defaultWorkflow: data.defaultWorkflow });
   return readProject(dir, id);
@@ -515,6 +542,7 @@ module.exports = {
   checkAccess,
   cloneJob,
   createProject,
+  FOLDER_IMPORT_LIMIT_BYTES,
   folderChanges,
   listProjects,
   ownedFolder,

@@ -73,6 +73,7 @@ var api;
 /** @type {PageFunction} */ var ProjectWizardCli;
 /** @type {PageFunction} */ var ProjectWizardColumn;
 /** @type {PageFunction} */ var ProjectWizardCosts;
+/** @type {PageFunction} */ var ProjectWizardFolder;
 /** @type {PageFunction} */ var ProjectWizardRepos;
 /** @type {PageFunction} */ var ProjectWizardReview;
 /** @type {any} */ var SetupRows;

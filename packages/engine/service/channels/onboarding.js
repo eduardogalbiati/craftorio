@@ -5,6 +5,7 @@
 // #632: onboarding:create makes a new project instead of importing one (mock-3).
 // #741: onboarding:save-wizard / onboarding:finish keep the wizard's step and picks with the project.
 // #30: onboarding:install-deps installs a clone's missing dependencies (the project page's Next steps).
+// #98: onboarding:inspect-folder says what a folder picked in the wizard is (a repository is cloned, a plain one copied).
 
 const {
   args,
@@ -29,6 +30,8 @@ module.exports = (ctx) => [
   // commit on main), its private remote only when asked and gh / glab is signed in; ready at once, no clone;
   // #57: answers.kind is saved on the project as the owner's pick
   { channel: 'onboarding:create', method: 'createOnboarding', params: 'data', schema: { params: args({ name: text(200, 'The project name.'), starts: text(10, 'What the project starts with: readme or empty.'), remote: described(OPTIONS, 'The private remote to create: null, or { provider: github or gitlab }.'), answers: shape({ mode: STRING, ci: STRING, release: STRING, kind: STRING }) }, ['name']), result: OBJECT }, fn: (data) => ctx.onboardingCreate(data) },
+  // #98: what a picked folder is: repository | empty-repository | plain | missing | unreadable (no workspace needed)
+  { channel: 'onboarding:inspect-folder', method: 'inspectOnboardingFolder', params: ['folder'], schema: { params: args({ folder: text(2000, 'The folder: a path or its file:// URL.') }, ['folder']), result: shape({ state: STRING }, ['state']) }, fn: (opts) => ctx.onboardingInspectFolder(opts) },
   { channel: 'onboarding:status', method: 'onboardingStatus', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingStatus(opts) },
   // the paid part (the project map: the city plan and the Oracle's report), only on the owner's click
   { channel: 'onboarding:analyze', method: 'analyzeOnboarding', params: ['projectId'], schema: { params: ON_PROJECT, result: OBJECT }, fn: (opts) => ctx.onboardingAnalyze(opts) },

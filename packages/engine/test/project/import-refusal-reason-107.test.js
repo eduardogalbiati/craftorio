@@ -8,7 +8,6 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { pathToFileURL } = require('url');
 
 const { createOnboarding } = require('../../service/areas/project-onboarding');
 const projects = require('../../domains/project/projects');
@@ -97,17 +96,17 @@ test('#107 start: an SSH URL with no repository answers repo-not-found with a fa
   assert.deepEqual(entries(reposDir), []);
 });
 
-for (const [title, repoOf] of [['file:// URL', (f) => pathToFileURL(f).href], ['plain path', (f) => f]]) {
-  test(`#107 start (real git): a folder without git by its ${title} answers not-a-git-repo, git's fatal: line, no hint line`, { timeout: 30000 }, async (t) => {
-    const { ob, projectsDir } = setup(t);
-    const s = await ob.start({ name: 'Notes', repo: repoOf(plainFolder(t)) });
-    assert.equal(s.status, 'failed', JSON.stringify(s));
-    assert.equal(s.code, 'not-a-git-repo', JSON.stringify(s));
-    assert.match(String(s.reason), GIT_LINE, `the reason: ${s.reason}`);
-    assert.doesNotMatch(String(s.reason), HINTS, `the reason: ${s.reason}`);
-    assert.deepEqual(projects.listProjects(projectsDir).map((p) => p.id), []);
-  });
-}
+// #98: a plain folder by its file:// URL (what the wizard sends) is imported with a first commit
+// (project-onboarding-local-folder-98.test.js); a plain path still goes through checkAccess.
+test("#107 start (real git): a folder without git by its plain path answers not-a-git-repo, git's fatal: line, no hint line", { timeout: 30000 }, async (t) => {
+  const { ob, projectsDir } = setup(t);
+  const s = await ob.start({ name: 'Notes', repo: plainFolder(t) });
+  assert.equal(s.status, 'failed', JSON.stringify(s));
+  assert.equal(s.code, 'not-a-git-repo', JSON.stringify(s));
+  assert.match(String(s.reason), GIT_LINE, `the reason: ${s.reason}`);
+  assert.doesNotMatch(String(s.reason), HINTS, `the reason: ${s.reason}`);
+  assert.deepEqual(projects.listProjects(projectsDir).map((p) => p.id), []);
+});
 
 // ---- start: the refusal carries gh / glab of the URL's provider -------------------------------------------------
 

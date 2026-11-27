@@ -32,6 +32,7 @@ const CONFIGS = ['jsconfig.json', 'jsconfig.pages.json'];
 const CHECKED = [
   'fronts/ai/views/oracle/oracle.js',
   'fronts/build/views/backlog/backlog-roadmap.js',
+  'fronts/build/views/projects/project-wizard-folder.js',
   'fronts/build/views/projects/project-wizard-repos.js',
   'fronts/build/views/projects/project-wizard.js',
   'fronts/build/views/supervisor/supervisor.js',
@@ -41,6 +42,7 @@ const CHECKED = [
   'packages/engine/domains/chat/speech.js',
   'packages/engine/domains/po/po-mock-epics.js',
   'packages/engine/domains/po/po-outside.js',
+  'packages/engine/domains/project/folder-import.js',
   'packages/engine/domains/project/project-map.js',
   'packages/engine/domains/roadmap/roadmap-status.js',
   'packages/engine/domains/roadmap/roadmap.js',

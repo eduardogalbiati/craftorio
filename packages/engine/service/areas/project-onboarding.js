@@ -43,6 +43,8 @@
 // #472) in the clone through `install` (default: deps-cache.js runCommand).
 // #105: a folder imported by its file:// URL (the project's `source`): gh / glab follow its real remote (`repo`),
 // no push permission or push check is read (its runs push to the folder), and with no remote the profile is local.
+// #98: a plain file:// folder (or a repository without a commit) imports as a copy of its files with one first commit
+// (folder-import.js planFolderImport; folderLimitBytes refuses a large one: folder-too-large); inspectFolder answers the wizard.
 
 const fs = require('fs');
 const path = require('path');
@@ -54,6 +56,7 @@ const agents = require('../../domains/agents/agents');
 const arch = require('../../domains/oracle/oracle-architecture');
 const depsCache = require('../../engine/deps-cache');
 const { oneLine } = require('../../engine/gate-summary');
+const folderImport = require('../../domains/project/folder-import');
 const issues = require('../../domains/backlog/issues');
 const { identityArgs } = require('../../engine/worktree');
 const projectMap = require('../../domains/project/project-map');
@@ -345,7 +348,7 @@ async function forkRemoteOf(forkUrl, repo) {
 }
 
 const README = (name) => `# ${name}\n`;
-const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Store', 'Thumbs.db', 'dist/', 'build/', 'coverage/', '*.log', ''].join('\n');
+const GITIGNORE = folderImport.NEW_PROJECT_GITIGNORE;
 
 /** @typedef {{ ok: boolean, url?: string | null, error?: string }} RemoteAnswer */
 
@@ -359,13 +362,14 @@ const GITIGNORE = ['node_modules/', '.env', '.env.*', '!.env.example', '.DS_Stor
  * a new project's private repository (default: gh / glab, machineRemote); #30: install(cmd, args, { cwd }) →
  * { code, output } runs the dependency install (default: deps-cache.js runCommand); #74: savedMap(project) →
  * { costUsd } | null, the project map an earlier process saved (default: none); #79: pushCheck(folder) → { ok, reason?,
- * fix?, setupGit? }, whether the clone can push (default: machinePushCheck).
+ * fix?, setupGit? }, whether the clone can push (default: machinePushCheck); #98: folderLimitBytes, the largest folder
+ * imported as a copy of its files (default: projects.FOLDER_IMPORT_LIMIT_BYTES).
  * @param {{ projectsDir: string, reposDir: string, git?: typeof execGit, cli?: typeof machineCli, jobs: any, slotsDir?: string,
  *   emit?: (event: string, state: any) => void, pollMs?: number, remote?: (provider: string, spec: { name: string, folder: string }) => Promise<RemoteAnswer>,
  *   platformCli?: typeof machinePlatformCli, install?: typeof depsCache.runCommand, savedMap?: (project: any) => any,
- *   pushCheck?: typeof machinePushCheck }} options
+ *   pushCheck?: typeof machinePushCheck, folderLimitBytes?: number }} options
  */
-function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts), savedMap = () => null, pushCheck = machinePushCheck }) {
+function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineCli, jobs, slotsDir, emit = () => {}, pollMs, remote = machineRemote, platformCli = machinePlatformCli, install = (cmd, args, opts) => depsCache.runCommand(cmd, args, opts), savedMap = () => null, pushCheck = machinePushCheck, folderLimitBytes = projects.FOLDER_IMPORT_LIMIT_BYTES }) {
   const states = new Map();
   // per project: { wanted (analyze was asked during the clone), asked (the paid part was started), facts (the
   // facts job's promise), free, paid (the running parts), cli }
@@ -573,11 +577,14 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
       if (!existing.onboarding || existing.onboarding.finished) return { exists: true, finished: true, projectId: existing.id };
       return status(existing.id);
     }
-    const access = await projects.checkAccess(repo, { git: e2eAccessGit(repo) || git });
+    // #98: a plain folder (or a repository without a commit) is copied, never checked as a clone (refused when too large)
+    const plan = await folderImport.planFolderImport(repo, { git, limit: folderLimitBytes });
+    if (plan?.refused) return refusedImport(plan.refused);
+    const access = plan ? null : await projects.checkAccess(repo, { git: e2eAccessGit(repo) || git });
     // #107: a repository that cannot be imported creates nothing; the wizard words the cause. #640: a
     // folder of repos/ that already is its clone still imports (offline too)
-    if (access.status !== 'reachable' && !cloneFolder(repo, reposDir).existing) return refusedImport(access, await refusedCli(repo));
-    const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir });
+    if (access && access.status !== 'reachable' && !cloneFolder(repo, reposDir).existing) return refusedImport(access, await refusedCli(repo));
+    const p = await projects.createProject(projectsDir, { name, repo }, { git, reposDir, fromFiles: !!plan });
     projects.updateProject(projectsDir, p.id, { onboarding: { step: 'repository', picks: {}, finished: false } });
     states.set(p.id, { projectId: p.id, status: 'cloning', jobs: Object.fromEntries(JOBS.map((j) => [j, { status: 'waiting' }])), cli: null });
     // #738: read before the profile job, so its mode already says fork; #105: a folder's runs push to the folder
@@ -929,6 +936,8 @@ module.exports = (ctx) => {
     onboardingCreate: (data) => onboarding().create(data),
     onboardingFinish: ({ projectId }) => onboarding().finish(projectId),
     onboardingFork: ({ projectId }) => onboarding().fork(projectId),
+    // #98: what a picked folder is (no workspace needed)
+    onboardingInspectFolder: (/** @type {{ folder?: string }} */ { folder } = {}) => folderImport.inspectFolder(folder),
     onboardingInstallDeps: ({ projectId }) => onboarding().installDeps(projectId),
     onboardingRepos: (/** @type {{ provider?: string }} */ { provider } = {}) => machineRepos(provider),
     onboardingRetry: ({ projectId }) => onboarding().retry(projectId),
@@ -943,6 +952,7 @@ module.exports = (ctx) => {
 module.exports.cliAccounts = cliAccounts;
 module.exports.createOnboarding = createOnboarding;
 module.exports.E2E_LOGIN = E2E_LOGIN;
+module.exports.inspectFolder = folderImport.inspectFolder;
 module.exports.machinePlatformCli = machinePlatformCli;
 module.exports.machineRemote = machineRemote;
 module.exports.machineRepos = machineRepos;

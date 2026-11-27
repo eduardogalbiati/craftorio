@@ -22,6 +22,7 @@
     // 'no-access' is a project's failed state of the engine before #107 (the wizard's tests still pin its markup)
     const TITLES = {
       'clone-failed': 'onboarding.clone_failed',
+      'folder-too-large': 'onboarding.import_folder_too_large', // #98: a folder over the engine's copy limit (its reason names it)
       'no-access': 'onboarding.no_access',
       'not-a-git-repo': 'onboarding.import_not_a_git_repo',
       'repo-no-access': 'onboarding.import_repo_no_access',

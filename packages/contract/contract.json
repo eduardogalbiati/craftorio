@@ -1,5 +1,5 @@
 {
- "hash": "2c76a54d73f6",
+ "hash": "0999bda6aa73",
  "entries": [
   {
    "send": "agents-window:agent",
@@ -9295,6 +9295,39 @@
     },
     "result": {
      "type": "object"
+    }
+   }
+  },
+  {
+   "channel": "onboarding:inspect-folder",
+   "method": "inspectOnboardingFolder",
+   "params": [
+    "folder"
+   ],
+   "schema": {
+    "params": {
+     "type": "object",
+     "properties": {
+      "folder": {
+       "type": "string",
+       "maxLength": 2000,
+       "description": "The folder: a path or its file:// URL."
+      }
+     },
+     "required": [
+      "folder"
+     ]
+    },
+    "result": {
+     "type": "object",
+     "properties": {
+      "state": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "state"
+     ]
     }
    }
   },
