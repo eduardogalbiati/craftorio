@@ -803,6 +803,8 @@ function backlogState(data) {
     projectId: data.projectId,
     roadmap: {
       state: r.state || null, updatedAt: r.updatedAt || null, scope: r.scope || null, pausedBy: r.pausedBy || null, error: r.error || null,
+      // #128: a real start the memory guard holds (only in memory, never in roadmap.json)
+      memoryHold: r.memoryHold || null,
       shape: r.shape || stagesShape(r.stages),
       stages: (r.stages || []).map((s) => ({ id: s.id, pause: s.pause || null, items: (s.items || []).map(item) })),
     },

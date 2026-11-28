@@ -75,6 +75,7 @@
         scope: lr.scope,
         pausedBy: lr.pausedBy,
         error: lr.error,
+        memoryHold: lr.memoryHold, // #128
         stages: r.stages.map((s) => {
           const merged = s.items.map((x) => {
             const { run, status, runId, runs, waiting, actualUsd, actualApprox, pr, tested } = items.get(x.id);

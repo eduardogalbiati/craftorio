@@ -441,13 +441,20 @@ module.exports = (ctx) => {
   }
 
   // #128: a real start held for memory leaves its reason on the roadmap, with one notification per
-  // wait (not one per retry); true when the start waits
-  async function heldForMemory(projectId) {
+  // wait (not one per retry); true when the start waits. `pass` records a hold in this dispatch.
+  async function heldForMemory(projectId, pass) {
     const why = await ctx.memoryHold();
     if (!why) return false;
     if (!memoryHolds.has(projectId)) ctx.notify({ kind: 'run', event: 'failed', title: 'Waiting for memory', body: why.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
     memoryHolds.set(projectId, why);
+    pass.held = true;
     return true;
+  }
+
+  // #128: a dispatch where no real start was held for memory ends the wait (the item started, was
+  // removed or disabled, or a slot was taken first): the reason goes, the next wait notifies again
+  function endMemoryPass(projectId, pass) {
+    if (!pass.held) memoryHolds.delete(projectId);
   }
 
   async function advanceRoadmap(projectId) {
@@ -484,6 +491,7 @@ module.exports = (ctx) => {
     // whose release shipped meanwhile lets the next stage start in the same dispatch
     if (release && await ctx.roadmapRelease(projectId, roadmap, release)) roadmapAgain = true;
     const basesChecked = new Map(); // #805: a stage's items on one base fetch once
+    const memoryPass = { held: false };
     for (const item of start) {
       // a slot may have been taken by the previous start
       if (ctx.slotProblem({ mock: mockOf(item), projectId })) break;
@@ -491,8 +499,7 @@ module.exports = (ctx) => {
       // nor a gate): the roadmap pauses with the next stage's estimate, the owner raises or resumes
       if (!mockOf(item) && budgetStop(projectId, item, roadmap)) break;
       // #276: low memory holds a real start (not an error of the item): a timer dispatches again once it recovers
-      if (!mockOf(item) && await heldForMemory(projectId)) break;
-      memoryHolds.delete(projectId);
+      if (!mockOf(item) && await heldForMemory(projectId, memoryPass)) break;
       try {
         const project = projects.readProject(ws.projects, projectId);
         const wf = loadWorkflow(ctx.projectWorkflowFile(projectId, item.workflow));
@@ -534,6 +541,7 @@ module.exports = (ctx) => {
         break;
       }
     }
+    endMemoryPass(projectId, memoryPass);
     if (basesChecked.size) baseChoices.delete(projectId);
   }
 
