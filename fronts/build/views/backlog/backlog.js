@@ -1276,6 +1276,10 @@
       local ? t('backlog.local_backlog_description') : where,
     ].filter(Boolean).join(' ');
     $b('#bl-kept').textContent = t(local ? 'backlog.local_backlog_folder' : 'backlog.the_last_sync_is_kept_in');
+    // the Roadmap's header says what the screen is, not where the Backlog's sync is kept; there the roadmap's own
+    // Resume is the one accent button, so Sync is a plain one
+    for (const id of ['#bl-kept', '#backlog-dir']) $b(id).hidden = !!roadmap;
+    $b('#btn-bl-sync').classList.toggle('primary', !roadmap);
   }
 
   function renderPlatform() {

@@ -192,8 +192,8 @@ test('#272 a fix round shows "round 2" on the card (outside the steps popover)',
   assert.match(cardText(second), /round 2|×2/);
 });
 
-test('#272 a fix round says why it loops ("fix round after review") and keeps the run link', async () => {
+test('#272 a fix round says why it loops ("Review asked for fixes · round 2", the row\'s line) and keeps the run link', async () => {
   const { second } = await fixRound();
-  assert.match(cardText(second), /fix round after (code )?review/i);
+  assert.match(cardText(second), /(code )?review asked for fixes · round 2/i);
   assert.ok(H.findEl(H.itemEl(second, 'a').outer, (e) => e.attrs['data-run'] === 'run-9'), 'the card still opens run-9');
 });

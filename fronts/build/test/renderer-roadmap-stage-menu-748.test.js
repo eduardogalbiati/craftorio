@@ -102,6 +102,7 @@ function loadPage(data, { confirm = true } = {}) {
   vm.runInContext(H.read('workflow-inputs.js'), sandbox);
   if (H.exists('estimates.js')) vm.runInContext(H.read('estimates.js'), sandbox);
   if (H.exists('menu.js')) vm.runInContext(H.read('menu.js'), sandbox, { filename: 'menu.js' });
+  vm.runInContext(H.read('views', 'backlog', 'backlog-roadmap-meters.js'), sandbox); // the meters, the timer and the Progress cell (split out on 2026-11-27)
   vm.runInContext(H.read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   const R = sandbox.BacklogRoadmap;
   const doc = dom.document;
@@ -217,7 +218,7 @@ test('#748 a disabled stage\'s menu: its groups in order, with dividers between 
   const menu = await openStageMenu(page, 1);
   assert.deepEqual(rows(menu), [
     'Enable', 'Run this stage', '|', 'Stop when finished', 'Stop now', '|', 'Release after this stage', '|',
-    'Move up', 'Move down', '|', 'Add note', '|', 'Remove from roadmap',
+    'Move up', 'Move down', '|', 'Show the stage on the map', 'Add note', '|', 'Remove from roadmap', // the map entry: 2026-11-27, out of the head
   ]);
 });
 
@@ -226,7 +227,7 @@ test('#748 a running stage\'s menu (with a note): Disable and Edit note in the s
   const menu = await openStageMenu(page, 1);
   assert.deepEqual(rows(menu), [
     'Disable', 'Run this stage', '|', 'Stop when finished', 'Stop now', '|', 'Release after this stage', '|',
-    'Move up', 'Move down', '|', 'Edit note', '|', 'Remove from roadmap',
+    'Move up', 'Move down', '|', 'Show the stage on the map', 'Edit note', '|', 'Remove from roadmap',
   ]);
 });
 
@@ -237,7 +238,7 @@ test('#748 a disabled stage\'s menu in Brazilian Portuguese', async (t) => {
   const menu = await openStageMenu(page, 1);
   assert.deepEqual(rows(menu), [
     'Ativar', 'Executar esta etapa', '|', 'Parar após finalizar', 'Parar agora', '|', 'Release após esse stage', '|',
-    'Mover para cima', 'Mover para baixo', '|', 'Adicionar nota', '|', 'Remover do roadmap',
+    'Mover para cima', 'Mover para baixo', '|', 'Mostrar a etapa no mapa', 'Adicionar nota', '|', 'Remover do roadmap',
   ]);
 });
 

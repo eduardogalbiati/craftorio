@@ -31,6 +31,7 @@ const CONFIGS = ['jsconfig.json', 'jsconfig.pages.json'];
 // files that opted in with // @ts-check (sorted, one per line)
 const CHECKED = [
   'fronts/ai/views/oracle/oracle.js',
+  'fronts/build/views/backlog/backlog-roadmap-meters.js',
   'fronts/build/views/backlog/backlog-roadmap.js',
   'fronts/build/views/projects/project-wizard.js',
   'fronts/build/views/supervisor/supervisor.js',

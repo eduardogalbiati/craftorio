@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
+const { openRow } = require('../../../../features/support/roadmap-row');
 
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -54,6 +55,7 @@ When('I edit the inputs of the roadmap item {string}', async ({ e2e }, title) =>
   const item = roadmapItem(e2e.window, title);
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
   await item.scrollIntoViewIfNeeded();
+  await openRow(item, LOAD_TIMEOUT); // Edit is in the item's open row (features/support/roadmap-row.js)
   await item.getByRole('button', { name: /^(Edit|Editar)$/ }).click();
   await expect(editForm(e2e.window, title)).toBeVisible();
 });
@@ -65,7 +67,8 @@ When('I save the inputs of the roadmap item {string}', async ({ e2e }, title) =>
 });
 
 Then('the roadmap item {string} shows the input {string}', async ({ e2e }, title, text) => {
-  const pill = roadmapItem(e2e.window, title).getByTestId('input-pill').filter({ hasText: text });
+  const item = await openRow(roadmapItem(e2e.window, title), LOAD_TIMEOUT); // the inputs are in the item's open row
+  const pill = item.getByTestId('input-pill').filter({ hasText: text });
   await expect(pill.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 

@@ -21,6 +21,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
+const { openRow } = require('../../../../features/support/roadmap-row');
 const workflows = require('../../../../features/support/workflows');
 
 const LOAD_TIMEOUT = 30000;
@@ -117,13 +118,13 @@ Then('no run of the workflow {string} has started', async ({ e2e }, name) => {
 // ---- the Test run on the card ---------------------------------------------------------------------
 
 Then('the roadmap item {string} shows its Test run', async ({ e2e }, title) => {
-  const chip = roadmapItem(e2e.window, title).getByTestId('roadmap-test-run');
+  const chip = (await openRow(roadmapItem(e2e.window, title), RUN_TIMEOUT)).getByTestId('roadmap-test-run'); // in the item's open row
   await expect(chip).toBeVisible({ timeout: RUN_TIMEOUT });
   await expect(chip).toHaveAttribute('data-run', /\S/);
 });
 
 When('I open the Test run of the roadmap item {string}', async ({ e2e }, title) => {
-  const chip = roadmapItem(e2e.window, title).getByTestId('roadmap-test-run');
+  const chip = (await openRow(roadmapItem(e2e.window, title), RUN_TIMEOUT)).getByTestId('roadmap-test-run');
   await expect(chip).toBeVisible({ timeout: RUN_TIMEOUT });
   await chip.click();
 });

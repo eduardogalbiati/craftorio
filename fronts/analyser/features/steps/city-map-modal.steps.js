@@ -84,7 +84,7 @@ Then('the Roadmap still shows the stage {string}', async ({ e2e }, stageName) =>
   // the stage's name is the value of its "Stage name" input, which hasText does not read
   const stage = e2e.window.getByTestId('roadmap-stage').filter({ has: e2e.window.locator(`input[value="${stageName}"]`) }).first();
   await expect(stage).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(stage.getByTestId('show-stage-on-map')).toBeVisible();
+  await expect(stage.getByTestId('roadmap-stage-menu')).toBeVisible(); // its ⋮ menu, where "Show the stage on the map" is
 });
 
 Then('the Backlog list still shows the issue {string}', async ({ e2e }, title) => {

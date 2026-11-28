@@ -165,6 +165,7 @@ function loadRoadmap() {
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('menu.js'), sandbox); // the shared menu (#748)
+  vm.runInContext(read('views', 'backlog', 'backlog-roadmap-meters.js'), sandbox); // the meters, the timer and the Progress cell (split out on 2026-11-27)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }
@@ -221,17 +222,16 @@ function roadmapItem(run = {}) {
 
 function roadmapProgress(item) {
   const html = loadRoadmap().html({ roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] }, () => {}, { showAll: true });
-  const at = html.indexOf('class="rm-progress');
-  assert.ok(at >= 0, 'the run\'s progress ring is rendered');
-  // from the ring's opening tag to the item's meta row (its own opening tag left out)
-  const start = html.lastIndexOf('<', at);
-  const meta = html.indexOf('class="rm-meta"', at);
-  return { html, block: html.slice(start, meta < 0 ? undefined : html.lastIndexOf('<', meta)) };
+  const at = html.indexOf('data-testid="roadmap-item"');
+  assert.ok(at >= 0 && html.includes('data-testid="roadmap-ring"'), 'the run\'s row is rendered, with its progress ring');
+  // the row with its open panel: from its opening tag to the end of its group
+  return { html, block: html.slice(html.lastIndexOf('<', at), html.indexOf('</section>', at)) };
 }
 
+// the step the run is at, beside its percent in the open row's Progress meter
 const stepText = (block) => {
-  const m = /<div\b[^>]*class="rm-progress-text"[^>]*>([\s\S]*?)<\/div>/.exec(block);
-  assert.ok(m, 'the current step text (.rm-progress-text) is rendered');
+  const m = /data-testid="roadmap-progress-step">([^<]*)</.exec(block);
+  assert.ok(m, 'the current step (roadmap-progress-step) is rendered');
   return visibleText(m[1]);
 };
 
@@ -240,7 +240,7 @@ const stepText = (block) => {
 test('#245 roadmap card: the run\'s current step reads "Acceptance tests", not "acceptance_tests"', () => {
   const { block } = roadmapProgress(roadmapItem());
   assert.match(stepText(block), /Acceptance tests/);
-  assert.doesNotMatch(visibleText(block), /acceptance_tests/, 'no snake_case id in the card\'s visible text (step text, popover chips, "Now:" line)');
+  assert.doesNotMatch(visibleText(block), /acceptance_tests/, 'no snake_case id in the row\'s visible text (its line, its stations, the open row\'s step)');
 });
 
 test('#245 roadmap card: the id acceptance_tests is still there for debugging, in a tooltip only', () => {
@@ -255,9 +255,11 @@ test('#245 roadmap card: the YAML\'s display carried by the run (stepNames, from
   assert.doesNotMatch(visibleText(block), /acceptance_tests|Acceptance tests/);
 });
 
-test('#245 roadmap card: a run that failed at red_check reads "Failed at Red check"', () => {
+test('#245 roadmap card: a run that failed at red_check reads "Failed", "at Red check"', () => {
   const { block } = roadmapProgress(roadmapItem({ status: 'failed', progress: [trail('acceptance_tests', 'done', 'test_writer'), trail('red_check', 'failed', null, { type: 'suite' })] }));
-  assert.match(stepText(block), /Failed at Red check/);
+  assert.match(block, /data-testid="status-label">Failed</); // the pill of the station it failed at
+  assert.match(stepText(block), /^at Red check$/);
+  assert.match(tooltipText(block), /Failed at Red check \(red_check\)/);
   assert.doesNotMatch(visibleText(block), /red_check|acceptance_tests/);
 });
 

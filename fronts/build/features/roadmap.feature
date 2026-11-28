@@ -260,7 +260,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    Then the roadmap item "Run reports" offers "Ask the Oracle about this failure" beside Retry and Skip
+    Then the roadmap item "Run reports" offers Retry and Skip, and "Ask the Oracle about this failure" in its open row
     When I click "Ask the Oracle about this failure" on the roadmap item "Run reports"
     Then the Oracle drawer opens
     And the Oracle's context chip names the run of the roadmap item "Run reports"

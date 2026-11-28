@@ -17,7 +17,8 @@ const { withI18n } = require('@craftorio/shared/test/i18n-sandbox.js');
 
 // a module by its page-relative name, whichever layer holds it; a shared module by its path from the page folder
 const read = (...p) => fs.readFileSync(p[0].startsWith('..') ? path.join(__dirname, '..', '..', '..', 'apps', 'desktop', 'renderer', ...p) : require('../../../scripts/source-tree').pageFile(path.join(__dirname, '..', '..', '..'), p.join('/')), 'utf8');
-const roadmapSrc = read('views', 'backlog', 'backlog-roadmap.js');
+// the meters, the timer and the Progress cell (split out on 2026-11-27), then the screen
+const roadmapSrc = ['backlog-roadmap-meters.js', 'backlog-roadmap.js'].map((f) => read('views', 'backlog', f)).join('\n');
 const backlogSrc = read('views', 'backlog', 'backlog.js');
 const MODULES = ['status-pill.js', 'estimates.js', '../../../packages/shared/run-progress-model.js', '../../../packages/shared/default-workflow.js', '../../../packages/shared/roadmap-model.js', '../../../packages/shared/run-inputs.js', 'workflow-inputs.js'].map((f) => read(f));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

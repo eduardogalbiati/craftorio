@@ -441,7 +441,7 @@ test('#750 pt-BR catalog has the header\'s words as values', () => {
 test('#750 every catalog key the roadmap view and its base check card use is in en.json and pt-BR.json', () => {
   const en = catalog('en');
   const pt = catalog('pt-BR');
-  const src = ['backlog-roadmap.js', 'backlog-live.js'].map((f) => fs.readFileSync(path.join(ROOT, 'fronts', 'build', 'views', 'backlog', f), 'utf8')).join('\n');
+  const src = ['backlog-roadmap.js', 'backlog-roadmap-meters.js', 'backlog-live.js'].map((f) => fs.readFileSync(path.join(ROOT, 'fronts', 'build', 'views', 'backlog', f), 'utf8')).join('\n');
   const keys = [...new Set([...src.matchAll(/\bt\(\s*'([a-z_]+\.[a-z0-9_]+)'/g)].map((m) => m[1]))];
   assert.ok(keys.length > 0);
   assert.deepEqual(keys.filter((k) => !(k in en) || !(k in pt)), []);

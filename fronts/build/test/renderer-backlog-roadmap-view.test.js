@@ -64,6 +64,7 @@ function loadRoadmap({ listWorkflows } = {}) {
   // #215's shared estimate rules; missing before the change (the tests then fail on their assertions)
   if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('menu.js'), sandbox); // the shared menu (#748)
+  vm.runInContext(read('views', 'backlog', 'backlog-roadmap-meters.js'), sandbox); // the meters, the timer and the Progress cell (split out on 2026-11-27)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }
