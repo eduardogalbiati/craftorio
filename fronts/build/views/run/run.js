@@ -1,7 +1,9 @@
 /* global api */
 // Run screen (Run Details): its first row is the tab row (#410: the Chat | Details | 3D tabs, the
-// run's status and id, its actions on the right with "+ When it finishes…", then Pause and Stop, #412:
-// renderRunTabRow, renderRunSummary), then the run's failure banner, its chain banner below the row
+// run's title, workflow and status, its actions on the right with "+ When it finishes…", then Pause and Stop, #412:
+// renderRunTabRow, renderRunTitle, renderRunSummary; the redesign of 2026-11-28: at most two actions as buttons,
+// runActionPlan, the rest in the row's ⋮ menu), under it the run's stations, time, cost and id
+// (renderRunProgressRow), then the run's failure banner (where it stopped, Resume from step…), its chain banner below the row
 // (#134: renderChainBanner, only when there is a chain, its editor or linked runs), the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
 // (inputs, supervisor, watch, resume, the run that resumed it: #384, Save to issue, Review changes: the diff viewer, #118,
@@ -29,13 +31,15 @@ function renderRunGates() {
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
-    // the choices, then "Interact with Oracle" at the end of the row (#183)
+    // the choices as cards, each saying what it does (redesign 2026-11-28: gateChoiceButtonHtml, the help that
+    // gateButtonsHelpHtml listed under them), then "Interact with Oracle" at the end of the row (#183)
     const buttons = (g.choices
-      ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''} data-testid="run-gate-choice">${esc(c.label)}</button>`).join('')
-      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || t('run.reject'))}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || t('common.approve'))}</button>`)
+      ? gateChoices(g).map((c, i) => gateChoiceButtonHtml({ label: c.label, help: c.intent ? '' : gateHelpOf(g, c.id), primary: i === 0, attrs: `data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''} data-testid="run-gate-choice"` })).join('')
+      : gateChoiceButtonHtml({ label: g.reject?.label || t('run.reject'), help: gateHelpOf(g, false), attrs: 'data-testid="run-gate-choice" data-answer="false"' })
+        + gateChoiceButtonHtml({ label: g.approve?.label || t('common.approve'), help: gateHelpOf(g, true), primary: true, attrs: 'data-testid="run-gate-choice" data-answer="true"' }))
       + (window.GateOracle?.gateOracleButtonHtml(g) || '');
-    const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || t('run.instructions_optional'))}</label>
-      <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
+    // the text field: open when optional; closed until "Ask for changes" (an answer that needs it) is clicked
+    const field = gateFeedbackHtml(g, { textareaClass: 'run-gate-feedback', rows: 3, fallback: t('run.instructions_optional') });
     // a report (#290: the release summary) leads, as Markdown, above the rest of the message
     const parts = typeof gateReportParts === 'function' ? gateReportParts(g) : { reportHtml: '', message: g.message || '' };
     const message = `${parts.reportHtml}<pre class="run-gate-message" data-testid="run-gate-message">${esc(parts.message)}</pre>`;
@@ -43,7 +47,7 @@ function renderRunGates() {
     const envText = typeof gateEnvironmentText === 'function' ? gateEnvironmentText(g) : '';
     const card = envText ? `<p class="gate-card-what" data-testid="check-environment-message">${esc(envText)}</p>` : gateCardHtml(g.run_id, g, message) || message;
     const main = `<div class="run-gate-head"><b>${t('run.approval_required')}</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
-      ${card}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
+      ${card}${gateToolsHtml(g)}<div class="row gate-choices run-gate-actions">${buttons}</div>${field}`;
     const side = gateSideHtml(g);
     const rec = g.brief?.recommendation?.answer;
     return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-testid="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"${rec ? ` data-recommend="${esc(rec)}"` : ''}>${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
@@ -60,9 +64,12 @@ function renderRunGates() {
 function onRunGateClick(e) {
   const tool = e.target.closest('[data-gate-tool]');
   if (tool) { onGateTool(e, tool.closest('.run-gate')?.dataset.run); return; }
+  if (e.target.closest('[data-gate-feedback-cancel]')) { gateCloseFeedback(e.target.closest('.run-gate')); return; }
   const b = e.target.closest('button[data-answer], button[data-choice]');
   const card = b?.closest('.run-gate');
   if (!card) return;
+  // redesign (2026-11-28): "Ask for changes" first opens the request field; its Send answers the gate
+  if (gateOpenFeedback(card, b)) return;
   const answer = b.dataset.choice !== undefined ? b.dataset.choice : b.dataset.answer === 'true';
   const text = card.querySelector('.run-gate-feedback');
   if (b.dataset.needsText && !text?.value.trim()) { showToast(t('run.write_your_request_first'), t('run.textcontent_sends_the_text_to_the', { textContent: b.textContent })); text?.focus({ preventScroll: true }); return; }
@@ -145,18 +152,6 @@ function renderRunScreen() {
   runArtifactsPanel()?.setRun(state.runId);
   if (state.tab === 'detail') renderDetail();
   else if (state.tab === 'events') renderEvents();
-}
-
-// The tab row's status pill and id (#412: they left the top bar), its Stop and Pause (run-controls.js).
-function renderRunTabRow() {
-  const r = state.run;
-  const pill = $('#run-screen-status');
-  const st = r?.status || 'idle';
-  pill.className = `pill pill-${st}`;
-  pill.dataset.status = st;
-  pill.textContent = statusLabel(r);
-  $('#run-screen-id').textContent = r?.id || '';
-  renderRunControls(r);
 }
 
 function liveDuration(s) {
@@ -262,6 +257,10 @@ function askResumed(r) {
   });
 }
 
+// the inputs the Workflow panel shows without unfolding "Inputs (n)" (redesign 2026-11-28), and whether the owner
+// left that fold open (one choice for every run, kept while the app runs)
+const RUN_KEY_INPUTS = ['validation', 'mode', 'review'];
+let runInputsOpen = false;
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
@@ -274,35 +273,33 @@ function renderRunSummary() {
   // (task, paths, numbers) as key / value
   const wf = (state.workflows || []).find((w) => w.file === r.file || w.name === r.workflow) || null;
   const isChoice = (k) => Array.isArray(wf?.inputs?.[k]?.enum) || wf?.inputs?.[k]?.type === 'boolean';
-  const pills = WorkflowInputs.inputPills(wf, Object.fromEntries(all.filter(([k]) => isChoice(k))), { defaults: true });
+  // the redesign (2026-11-28, the owner's choice): three choices show (RUN_KEY_INPUTS: validation, mode, review),
+  // the others and the free inputs fold under "Inputs (n)", open or closed as the owner left it (runInputsOpen)
+  const choices = all.filter(([k]) => isChoice(k));
+  const keyPills = WorkflowInputs.inputPills(wf, Object.fromEntries(choices.filter(([k]) => RUN_KEY_INPUTS.includes(k))), { defaults: true });
+  const pills = WorkflowInputs.inputPills(wf, Object.fromEntries(choices.filter(([k]) => !RUN_KEY_INPUTS.includes(k))), { defaults: true });
   const inputs = all.filter(([k]) => !isChoice(k));
+  const folded = all.filter(([k]) => !RUN_KEY_INPUTS.includes(k)).length;
   // an accepted Write & Review run started from an issue: Save to issue, now or later (#103)
   const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? issuesOfRun(r)[0] : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
+  // the redesign (2026-11-28): the title, its PR and the workflow lead the tab row (renderRunTitle)
+  renderRunTitle(r);
   const html = `
-    <div class="run-summary-name"><b>${runTitleHtml(r)}</b>${StatusPill.resumedLink(resumedOfRun.get(r.id)?.by)} ${prBadge(r)}${testedPillHtml(r)}</div>
-    <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ` · <span title="${t('run.opened_from_its_recorded_events_nothing')}">${t('run.read_only')}</span>` : ''}</div>
     ${r.project ? `<div class="small">${t('run.project')} <b>${esc(r.project)}</b></div>` : ''}
     ${(r.issueSaves || []).map((s) => `<div class="small" title="${t('run.the_accepted_document_was_saved_to')}">${t('run.saved_to_issue')} <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? t('run.as_a_comment') : t('run.description_replaced')} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="${t('run.time_the_run_waited_for_your')}">${t('run.waiting_for_you_at_gates')} <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
     ${suiteCardsHtml(r.id, window.runStepNames?.(r) ?? r.stepNames)}
     ${scratchHtml(r.id)}
+    ${keyPills ? `<div class="run-input-pills run-key-inputs" data-testid="run-key-inputs">${keyPills}</div>` : ''}
+    ${folded ? `<details class="run-inputs-more" data-testid="run-inputs-more"${runInputsOpen ? ' open' : ''}><summary class="small">${t('run.inputs_count', { count: folded })}</summary>
     ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
-    <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
+    <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl></details>` : ''}
     ${inputImagesHtml()}
     ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}`;
-  // #410: the run's actions sit on the tab row, on the right; "+ When it finishes…" first while it goes without a chain
-  const chainLink = r.status === 'running' && !r.chain?.then && !selectedView().past
-    ? `<button type="button" class="link-btn small" data-chain="edit" title="${t('run.start_a_workflow_when_this_run')}">${t('run.when_it_finishes')}</button>` : '';
-  const actionsHtml = `${chainLink}
-      <button class="btn sm ghost sup-btn" id="btn-run-sup" title="${t('run.ask_the_ai_supervisor_to_explain')}"><span class="sup-mark">◆</span> ${t('run.ask_the_supervisor')}</button>
-      ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> ${t('run.watch')}</button>` : ''}
-      ${canResume(r) ? `<button class="btn sm ghost" id="btn-run-resume" title="${t('run.start_a_new_run_from_a')}">${t('run.resume_from_step')}</button>` : ''}
-      ${hasChanges(r.id) ? `<button class="btn sm ghost" id="btn-run-diff" title="${t('run.the_files_this_run_changed_on')}">${t('run.review_changes')}</button>` : ''}
-      ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="${t('run.save_the_accepted_document_to_its')}">${t('run.save_to_issue_number', { number: esc(saveIssue.number) })}</button>` : ''}
-      <button class="btn sm ghost" id="btn-run-analytics" title="${t('run.its_timeline_cost_and_tokens_per')}">${t('run.open_in_analytics')}</button>
-      ${replayMapHtml(r)}${releaseMapHtml(r)}`;
+  // the tab row's actions (run-header.js runActionsHtml: at most two buttons, the rest in its ⋮ menu)
+  const actionsHtml = runActionsHtml(r, saveIssue);
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
   const row = $('#run-actions');
@@ -311,6 +308,8 @@ function renderRunSummary() {
   if (box._html === html || box.querySelector('.run-title-input') === document.activeElement) return;
   box._html = html;
   box.innerHTML = html;
+  const more = box.querySelector('.run-inputs-more');
+  if (more) more.ontoggle = () => { runInputsOpen = more.open; };
   mountInputImages(box);
   // the test writer's E2E scenarios (#143): local-hero has no merge approval to show them at
   if (window.mountGateScenarios) window.mountGateScenarios(box);
@@ -329,19 +328,6 @@ function renderRunSummary() {
     if ($('#btn-run-save-issue')) {
       $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
     }
-  }
-
-  // Replay on the map (#374): a finished run of a project plays its agents' files over the city
-  function replayMapHtml(run) {
-    if (!run.projectId || run.status === 'running' || !window.ProjectCityAgents) return '';
-    return `<button class="btn sm ghost" id="btn-run-replay-map" data-testid="run-replay-map" title="${t('run.play_the_files_this_run_s')}">${t('run.replay_on_the_map')}</button>`;
-  }
-
-  // #376: a shipped release run (workflows/release.yaml) shows its release on the city, the previous tag in grey
-  function releaseMapHtml(run) {
-    const shipped = run.projectId && run.status === 'success' && run.inputs?.version && /(^|[\\/])release\.yaml$/.test(String(run.file || ''));
-    if (!shipped || !window.ProjectCityRelease) return '';
-    return `<button class="btn sm ghost" id="btn-run-release-map" data-testid="run-release-map" title="${t('run.the_project_city_at_the_previous', { version: esc(run.inputs.version) })}">${t('run.show_on_the_map')}</button>`;
   }
 
   function mountReplayMap(run) {
@@ -433,20 +419,6 @@ function initFullTextPopover() {
     if (to && (pop.contains(to) || to.closest?.('[data-full]') === owner)) return;
     hide();
   });
-}
-
-function renderRunBanner() {
-  const r = state.run;
-  const box = $('#run-fail-banner');
-  const show = r?.status === 'failed';
-  box.classList.toggle('hidden', !show);
-  if (!show) return;
-  const key = `${r.id}:${issueRefs(r)}:${r.error || ''}`;
-  if (box.dataset.key === key) return;
-  box.dataset.key = key;
-  box.innerHTML = `<div class="fail-banner-text"><b>${t('run.the_workflow_failed')} ${esc(runLabel(r))}</b><span class="muted small mono">${esc(r.id)}</span>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
-    <button class="btn sm sup-btn solid" id="btn-banner-sup"><span class="sup-mark">◆</span> ${t('run.ask_the_supervisor')}</button>`;
-  $('#btn-banner-sup').onclick = () => openSupervisorForCurrent();
 }
 
 // The run's chain (#134): "→ then: <workflow>" on the first run, "← from <run>" on the next one, the
@@ -934,12 +906,18 @@ registerView({
             <button class="tab active" type="button" role="tab" aria-selected="true">${t('run.details')}</button>
             <button id="run-mode-3d" class="tab" type="button" role="tab" aria-selected="false" data-run3d="run" data-testid="run-3d" title="${t('run.show_this_run_in_3d')}">3D</button>
           </div>
+          <div id="run-screen-title" class="run-screen-title" data-testid="run-screen-title"></div>
           <span id="run-screen-status" class="pill pill-idle" data-testid="run-screen-status" data-status="idle">${t('run.idle')}</span>
-          <span id="run-screen-id" class="muted mono small" data-testid="run-screen-id"></span>
           <div id="run-actions" class="run-actions"></div>
           <!-- #368: the run ends paused once its agents finish their current turn (run-controls.js pauseRun); #391 the owner's words: "step" -->
           <button id="btn-pause" class="btn ghost sm hidden" type="button" data-testid="run-pause" title="${t('run.the_agents_finish_their_current_turn')}">${t('run.pause_after_current_step')}</button>
           <button id="btn-stop" class="btn danger sm hidden" type="button" data-testid="run-stop">${t('run.stop')}</button>
+        </div>
+        <!-- redesign 2026-11-28: the run's stations (the Roadmap lane's) and its time and cost -->
+        <div id="run-progress-row" class="run-progress-row hidden" data-testid="run-progress-row">
+          <ol id="run-stations" class="run-stations" aria-label="${t('run.workflow_stations')}"></ol>
+          <span id="run-stats" class="run-stats mono small" data-testid="run-stats" title="${t('run.time_and_cost_so_far')}"></span>
+          <span id="run-screen-id" class="muted mono small run-screen-id" data-testid="run-screen-id"></span>
         </div>
         <div id="run-fail-banner" class="fail-banner hidden"></div>
         <div id="run-pause-banner" class="run-pause-banner hidden" aria-live="polite"></div>
@@ -985,6 +963,7 @@ registerView({
     $('#run-chain').onclick = onChainBannerClick;
     // #410: the tab row's "+ When it finishes…" opens the same chain editor; #412 Stop and Pause
     $('#run-actions').onclick = onChainBannerClick;
+    $('#run-actions').addEventListener('click', onRunActionsMoreClick); // the ⋮ menu (redesign 2026-11-28)
     $('#btn-stop').onclick = stopRun;
     $('#btn-pause').onclick = pauseRun;
     document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));

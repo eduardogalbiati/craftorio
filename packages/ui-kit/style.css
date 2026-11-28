@@ -979,6 +979,18 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-card-buttons { margin: 2px 0 0; padding-left: 18px; }
 .run-gate-full summary { cursor: pointer; color: var(--muted); }
 .run-gate-full .run-gate-message, .run-gate-full .rc-body { margin-top: 4px; }
+/* the run screen redesign (2026-11-28, gateChoiceButtonHtml): an answer as a card, its label over what it
+   does; the cards share the row (three side by side on a wide gate) and grow to the same height */
+.gate-choices:has(.gate-choice-help) { align-items: stretch; }
+.gate-choices .btn.gate-choice { white-space: normal; flex: 1 1 200px; max-width: 360px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 8px 12px; border-radius: 10px; font-weight: 500; }
+.gate-choice-label { font-size: 13px; font-weight: 600; }
+.gate-choice-help { font-size: 12px; line-height: 1.4; color: var(--muted); font-weight: 400; }
+.btn.primary.gate-choice .gate-choice-help { color: inherit; opacity: .85; }
+.gate-choice:not(:has(.gate-choice-help)) { flex: none; }
+.gate-choice[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+/* the request field an answer needs (Ask for changes): shown once that answer is clicked, Cancel / Send */
+.gate-feedback { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 6%, var(--bg)); }
+.gate-feedback-actions { justify-content: flex-end; gap: 8px; }
 /* a gate's report (#290: the release summary), above the rest of its message */
 .gate-report { margin: 4px 0 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; max-height: 50vh; overflow: auto; }
 /* E2E scenarios for the Dev/QA at a gate (#143, gateScenariosHtml) */

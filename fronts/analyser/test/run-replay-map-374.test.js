@@ -59,10 +59,17 @@ function renderSummary(run, { cityAgents = true } = {}) {
     WATCH_TITLE: 'Watch',
     mountInputImages: () => {},
     openSupervisorForCurrent: () => {},
+    renderRunTitle: () => {}, // the title leads the tab row (redesign 2026-11-28)
+    RUN_KEY_INPUTS: [], runInputsOpen: false, // the inputs' fold (redesign 2026-11-28)
+    Menu: require('@craftorio/ui-kit/menu'),
   };
   withI18n(sandbox);
   vm.createContext(sandbox);
-  vm.runInContext(`${fn[0]}\nrenderRunSummary();`, sandbox);
+  // the tab row's actions (redesign 2026-11-28, views/run/run-header.js): at most two buttons, the rest in its ⋮ menu
+  const headerSrc = fs.readFileSync(pageFileOf('views/run/run-header.js'), 'utf8');
+  const helpers = ['runActionsHtml', 'runActionPlan', 'runActionButton', 'runActionsMenuHtml', 'replayMap', 'releaseMap']
+    .map((name) => new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`).exec(headerSrc)?.[0] || assert.fail(`${name} not found in views/run/run-header.js`));
+  vm.runInContext(`${helpers.join('\n')}\n${fn[0]}\nrenderRunSummary();`, sandbox);
   return {
     ids: [...buttons.keys()],
     click: (id) => buttons.get(id).onclick(),

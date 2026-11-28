@@ -1,4 +1,4 @@
-/* Run screen (run.js): its layout, the failure banner, the gate cards above the steps, the summary,
+/* Run screen (run.js): its layout, the tab row's title, ⋮ menu and stations row (redesign 2026-11-28), the failure banner, the gate cards above the steps, the summary,
    the steps by group, the session cards and the Artifacts / Session / Events tabs. The gate cards
    and the gate panel the run chat shares (.run-gate*, .gate-tools, Run App) and the Artifacts
    panel (.ap-*) stay in style.css; so does the tab row the run chat shares (.run-tab-row, #410). */
@@ -134,8 +134,10 @@
   background: rgba(248,113,113,.1); border-bottom: 1px solid rgba(248,113,113,.35);
 }
 .fail-banner-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.fail-banner-text b { color: var(--red); }
+.fail-banner-text b { color: #fca5a5; font-size: 14px; font-weight: 600; }
 .fail-banner-text .mono { color: var(--text); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fail-banner-text .muted.mono { opacity: 1; color: var(--muted); }
+.fail-banner-icon { flex: none; color: var(--red); align-self: flex-start; margin-top: 2px; }
 /* #368: pausing after the current turn (Cancel pause) or paused (Resume); the yellow of a paused pill */
 .run-pause-banner { flex: none; padding: 8px 16px; background: rgba(250,204,21,.08); border-bottom: 1px solid rgba(250,204,21,.3); }
 .run-pause-state { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -158,6 +160,8 @@
 /* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app
    (the cards, .run-gate*, are in style.css: the gate panel's wide variant builds on them) */
 .run-gates { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: rgba(250,204,21,.06); border-bottom: 1px solid rgba(250,204,21,.35); }
+/* redesign (2026-11-28): the gates leave the steps, sessions and artifacts in view: at most 62% of the screen, scrolling */
+#view-run .run-gates { max-height: 62%; overflow: auto; }
 .tab-count { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 600; }
 .run-gate-actions { flex-wrap: wrap; gap: 8px; }
 /* #410: the tab row's actions, on the right; they wrap on a narrow window, never scroll it sideways */
@@ -166,3 +170,57 @@
 #view-run .run-tab-row { flex-wrap: nowrap; }
 #view-run .run-tab-row > :not(.run-actions) { flex: none; }
 #view-run .run-tab-row > .run-actions { flex: 1 1 0; min-width: auto; }
+/* ---------- redesign 2026-11-28: the tab row's title, the ⋮ menu, the stations row ---------- */
+/* the title (editable), its PR and the workflow: shrinks first, the title ending in "…" (#437) */
+/* the actions keep one line (the rest is in ⋮), the title takes the room left and gives it back first */
+#view-run .run-tab-row > .run-actions { flex: none; flex-wrap: nowrap; }
+.run-actions > .link-btn { white-space: nowrap; }
+#view-run .run-tab-row > .run-screen-title { flex: 1 1 auto; min-width: 120px; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; }
+.run-screen-title .run-screen-name { flex: 0 1 auto; font-size: 14px; font-weight: 600; min-width: 6em; overflow: hidden; text-overflow: ellipsis; }
+.run-screen-title .run-screen-wf { flex: 0 10 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.run-screen-title > .badge { flex: none; }
+.run-screen-id { flex: none; }
+.run-actions .btn { font-weight: 500; }
+.run-actions .btn.primary { font-weight: 600; }
+/* the ⋮ menu (Menu, menu.css): a popover under its button, on the right edge */
+.run-actions-more { position: relative; display: inline-flex; }
+.run-actions-toggle { min-width: 30px; font-size: 15px; line-height: 1; }
+.run-actions-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 240px; }
+.run-actions-pop .ui-menu { box-shadow: 0 10px 28px rgba(0, 0, 0, .45); }
+/* the run's stations (the Roadmap lane's glyphs) and its time and cost */
+.run-progress-row { flex: none; display: flex; align-items: center; gap: 8px 20px; flex-wrap: wrap; padding: 8px 16px 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.run-stations { list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; flex: 1 1 520px; min-width: 0; overflow-x: auto; }
+.run-station { position: relative; flex: 1 1 0; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.run-station::before { content: ''; position: absolute; top: 10px; left: 0; right: 0; height: 1px; background: var(--border); z-index: 0; }
+.run-station:first-child::before { left: 50%; }
+.run-station:last-child::before { right: 50%; }
+.run-st-glyph, .run-st-pill { position: relative; z-index: 1; }
+.run-st-glyph { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #4b5263; background: var(--panel); display: flex; align-items: center; justify-content: center; color: var(--muted); box-sizing: border-box; }
+.run-station:is(.st-todo, .st-skipped) .run-st-glyph { width: 14px; height: 14px; margin: 3px 0; }
+.run-station.st-skipped .run-st-glyph { border-style: dashed; }
+.run-station.st-done .run-st-glyph { border-color: color-mix(in srgb, var(--green) 55%, var(--panel)); color: var(--green); }
+.run-station.st-gate .run-st-glyph { border-color: color-mix(in srgb, var(--amber) 55%, var(--panel)); color: var(--amber); }
+.run-station.st-back .run-st-glyph { color: var(--text); }
+.run-st-pill { font-size: 11px; padding: 1px 8px; white-space: nowrap; }
+.run-st-name { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; padding: 0 4px; }
+.run-station:is(.st-running, .st-waiting, .st-failed, .st-stopped) .run-st-name { color: var(--text); }
+.run-stats { flex: none; color: #a3aabb; white-space: nowrap; }
+/* the Workflow panel's inputs: three choices shown, the rest folded under "Inputs (n)" */
+.run-key-inputs { margin-top: 2px; }
+.run-inputs-more { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 0 10px; }
+.run-inputs-more > summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; color: var(--muted); font-weight: 600; }
+.run-inputs-more[open] { padding-bottom: 8px; }
+/* a session's numbers on one line (label, then value), no boxes that break a number over three lines */
+.session-card .metrics { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 6px; }
+.session-card .metric { background: none; padding: 0; display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.session-card .metric label { display: inline; font-size: 11px; }
+.session-card .metric b { font-size: 11.5px; color: #c9cdd8; }
+.session-card .metric.next-turn { white-space: normal; min-width: 0; }
+.session-card { min-width: 0; }
+.session-card .badges { margin-top: 4px; }
+/* the PR monitor's card (#809) as a band across the screen: its lines side by side */
+#run-pr-monitor { flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+#run-pr-monitor .pr-monitor { max-width: none; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+#run-pr-monitor .pr-monitor-lines { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+#run-pr-monitor .pr-monitor-line { display: inline-flex; gap: 6px; }
+#run-pr-monitor .pr-fix, #run-pr-monitor .pr-monitor-actions, #run-pr-monitor .pr-monitor-error { flex-basis: 100%; }

@@ -14,7 +14,7 @@
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('../../../../features/steps/fixtures');
-const { LOAD_TIMEOUT, escapeRe, runTabRow, runTabs, runTab } = require('../../../../features/support/run-screen');
+const { LOAD_TIMEOUT, escapeRe, runAction, runTabRow, runTabs, runTab } = require('../../../../features/support/run-screen');
 
 const ROW_TOLERANCE = 2;
 const overlay = (page) => page.getByTestId('run3d');
@@ -79,12 +79,12 @@ Then('the run\'s tab row offers {string}', async ({ e2e }, name) => {
   await expect(rowButton(e2e.window, name)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
-// the actions on the row's right: after the tabs
+// the actions on the row's right: after the tabs (redesign 2026-11-28: a button of the row or an entry of its ⋮ menu)
 Then('the run\'s tab row offers {string}, {string} and {string} on the right of the tabs', async ({ e2e }, a, b, c) => {
   const page = e2e.window;
   const tabs = await runTabs(page).boundingBox();
   for (const name of [a, b, c]) {
-    const button = rowButton(page, name);
+    const button = await runAction(page, name);
     await expect(button, `"${name}" on the tab row`).toBeVisible({ timeout: LOAD_TIMEOUT });
     expect((await button.boundingBox()).x, `"${name}" is right of the tabs`).toBeGreaterThan(tabs.x + tabs.width - 1);
   }

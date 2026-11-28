@@ -36,6 +36,18 @@ function diagnosisText(diagnosis) {
     + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
 }
 
+// The gate's text field (`feedback: true | { label, placeholder, label_key?, placeholder_key? }` on the step), as
+// approval.requested carries it, or null without one. The run screen redesign (2026-11-28): its catalog keys go
+// along, as a choice's label_key, so the screens read it in the interface language (the YAML texts stay the fallback).
+function gateFeedback(step, ctx) {
+  const fb = step.feedback === true ? {} : step.feedback || null;
+  if (!fb) return null;
+  return {
+    label: render(fb.label || 'Anything to add? (optional)', ctx), placeholder: render(fb.placeholder || '', ctx),
+    ...(fb.label_key ? { label_key: String(fb.label_key) } : {}), ...(fb.placeholder_key ? { placeholder_key: String(fb.placeholder_key) } : {}),
+  };
+}
+
 const methods = {
   // A gate with `check:` (approve_merge): the PR/MR is checked right before the gate opens (its
   // message shows `check`), and again each time another run merges into the same repository while
@@ -88,7 +100,7 @@ const methods = {
     a.resolve({ withdrawn: check });
   },
 
-  // Resolves to { answer, feedback }. `feedback: true | { label, placeholder }` on the step asks the
+  // Resolves to { answer, feedback }. `feedback: true | { label, placeholder, label_key?, placeholder_key? }` on the step asks the
   // UI for an optional free text next to the choices; it is the gate's `output.feedback`, and every
   // non-empty one is appended to the run-wide `feedback` list the next prompts can include.
   // A choice with `feedback_required: true` is refused without a text (resolveApproval returns false).
@@ -137,8 +149,7 @@ const methods = {
       // a gate with choices has no yes/no buttons
       answers: yesNo ? [{ id: 'approve', label: yesNo.approve.label }, { id: 'reject', label: yesNo.reject.label }] : /** @type {object[]} */ (choices),
     });
-    const fb = step.feedback === true ? {} : step.feedback || null;
-    const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
+    const feedback = gateFeedback(step, this.ctx);
     const requestedAt = firstAskedAt(this, step.id);
     const timeout = parseDuration(step.timeout, null);
     // the folder the run's work is in (its worktree; a simulation works in the repository folder)

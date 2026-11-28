@@ -208,11 +208,71 @@ function gateReportParts(g) {
 window.gateReportParts = gateReportParts;
 
 // What each button does (#213), under the buttons: one line per answer that has a help text.
+// (The Run screen and the run chat say it inside each button since the redesign: gateChoiceButtonHtml.)
 function gateButtonsHelpHtml(g) {
   const rows = gateAnswers(g).filter((a) => a.help);
   return rows.length ? `<ul class="gate-card-buttons muted small">${rows.map((a) => `<li><b>${esc(a.label)}</b>: ${esc(a.help)}</li>`).join('')}</ul>` : '';
 }
 window.gateButtonsHelpHtml = gateButtonsHelpHtml;
+
+// ---- the run screen redesign (2026-11-28): a gate's answers as cards, its request field on demand -------
+// The help of an answer (#213) by its id (true / false, a choice id); '' without one.
+function gateHelpOf(g, id) {
+  return gateAnswers(g).find((a) => String(a.id) === String(id) || a.key === String(id))?.help || '';
+}
+window.gateHelpOf = gateHelpOf;
+// One answer as a card: its label, then what it does under it (the line gateButtonsHelpHtml listed under
+// the buttons). `attrs`: the screen's own data-* hooks (raw markup); `primary`: the accent one (the first).
+function gateChoiceButtonHtml({ label, help = '', primary = false, chosen = false, attrs = '' }) {
+  return `<button type="button" class="btn gate-choice${primary ? ' primary' : ''}${chosen ? ' chosen' : ''}" ${attrs}><span class="gate-choice-label">${esc(label)}</span>${help ? `<span class="gate-choice-help">${esc(help)}</span>` : ''}</button>`;
+}
+window.gateChoiceButtonHtml = gateChoiceButtonHtml;
+// The gate's text field (`feedback`), its label and placeholder in the interface language (label_key,
+// placeholder_key; the YAML texts are the English fallback).
+const gateFeedbackLabel = (fb, fallback) => (fb?.label_key ? t(fb.label_key) : fb?.label) || fallback;
+const gateFeedbackPlaceholder = (fb) => (fb?.placeholder_key ? t(fb.placeholder_key) : fb?.placeholder) || '';
+// The field under the answers: open from the start when it is optional; when an answer needs it
+// (`feedback_required`, Ask for changes) it stays closed until that answer is clicked (gateOpenFeedback),
+// then shows with Cancel and "Send: <answer>", the button that answers the gate with the text.
+// `textareaClass` / `rows` / `disabled`: the screen's; `fallback`: the label without one in the workflow.
+function gateFeedbackHtml(g, { textareaClass = '', rows = 3, disabled = false, fallback = '' } = {}) {
+  if (!g.feedback) return '';
+  const required = (g.choices || []).some((c) => c.feedback_required);
+  const area = `<label class="duo-ask-label">${esc(gateFeedbackLabel(g.feedback, fallback))}</label>
+      <textarea class="duo-ask-text${textareaClass ? ` ${textareaClass}` : ''}" rows="${rows}" placeholder="${esc(gateFeedbackPlaceholder(g.feedback))}"${disabled ? ' disabled' : ''}></textarea>`;
+  if (!required) return area;
+  return `<div class="gate-feedback hidden" data-gate-feedback>${area}
+      <div class="row gate-feedback-actions"><button type="button" class="btn sm ghost" data-gate-feedback-cancel>${t('gate_panel.cancel_request')}</button><button type="button" class="btn sm primary" data-gate-feedback-send data-testid="gate-feedback-send"></button></div></div>`;
+}
+window.gateFeedbackHtml = gateFeedbackHtml;
+// A click on an answer that needs the text while the field is closed opens it instead of answering: the
+// send button takes that answer's hooks (its data-* attributes, but its test id) and label, the text gets
+// the focus. true when it opened (the screen then stops: nothing is sent yet). Cancel closes it again.
+function gateOpenFeedback(card, button) {
+  const box = card?.querySelector('[data-gate-feedback]');
+  if (!box || !button?.dataset.needsText || !box.classList.contains('hidden')) return false;
+  const send = box.querySelector('[data-gate-feedback-send]');
+  for (const { name, value } of [...button.attributes]) if (name.startsWith('data-') && name !== 'data-testid') send.setAttribute(name, value);
+  send.textContent = t('gate_panel.send_request', { choice: button.querySelector('.gate-choice-label')?.textContent || button.textContent });
+  box.classList.remove('hidden');
+  card.querySelectorAll('.gate-choice').forEach((b) => b.setAttribute('aria-expanded', String(b === button)));
+  box.querySelector('textarea')?.focus({ preventScroll: true });
+  // the field into view in the box that scrolls it (the Run screen's gates, run.css; the chat), never the page (#208)
+  const scroller = box.closest('.run-gates, .rc-scroll');
+  if (scroller) {
+    const b = box.getBoundingClientRect(), s = scroller.getBoundingClientRect();
+    if (b.bottom > s.bottom) scroller.scrollTop += Math.min(b.bottom - s.bottom + 8, b.top - s.top);
+  }
+  return true;
+}
+window.gateOpenFeedback = gateOpenFeedback;
+function gateCloseFeedback(card) {
+  const box = card?.querySelector('[data-gate-feedback]');
+  if (!box) return;
+  box.classList.add('hidden');
+  card.querySelectorAll('.gate-choice[aria-expanded]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+}
+window.gateCloseFeedback = gateCloseFeedback;
 
 // The answer clicked against the gate's recommendation (#213): the opposite one asks once
 // ("The supervisor recommends Stop the run. Merge anyway?"); resolves true to send it.

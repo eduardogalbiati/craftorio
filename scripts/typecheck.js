@@ -36,6 +36,7 @@ const CHECKED = [
   'fronts/build/views/projects/project-wizard-folder.js',
   'fronts/build/views/projects/project-wizard-repos.js',
   'fronts/build/views/projects/project-wizard.js',
+  'fronts/build/views/run/run-header.js',
   'fronts/build/views/supervisor/supervisor.js',
   'packages/contract/node-globals.js',
   'packages/contract/page-globals.js',

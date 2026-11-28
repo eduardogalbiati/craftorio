@@ -30,8 +30,9 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   assert.match(renderRunGates, /runLabel\(v\.run\)/);
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
-  assert.match(renderRunGates, /data-answer="false">\$\{esc\(g\.reject\?\.label \|\| t\('run\.reject'\)\)\}/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
-  assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| t\('common\.approve'\)\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
+  // the run screen redesign (2026-11-28): each answer is a card (gateChoiceButtonHtml), its label over its help
+  assert.match(renderRunGates, /label: g\.reject\?\.label \|\| t\('run\.reject'\), help: gateHelpOf\(g, false\), attrs: 'data-testid="run-gate-choice" data-answer="false"'/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
+  assert.match(renderRunGates, /label: g\.approve\?\.label \|\| t\('common\.approve'\), help: gateHelpOf\(g, true\), primary: true, attrs: 'data-testid="run-gate-choice" data-answer="true"'/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'i18n', 'en.json'), 'utf8'));
   assert.equal(en['run.reject'], 'Reject');
   assert.equal(en['common.approve'], 'Approve');
@@ -44,7 +45,7 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
 test('renderRunGates: the choice buttons sit in one .row.gate-choices.run-gate-actions row, the first one primary', () => {
   const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   assert.match(renderRunGates, /<div class="row gate-choices run-gate-actions">\$\{buttons\}<\/div>/, 'the buttons share one row, not one per line');
-  assert.match(renderRunGates, /class="btn sm \$\{i === 0 \? 'primary' : 'ghost'\}"/, 'the first choice is the primary one, the rest are ghost');
+  assert.match(renderRunGates, /gateChoiceButtonHtml\(\{ label: c\.label, help: c\.intent \? '' : gateHelpOf\(g, c\.id\), primary: i === 0,/, 'the first choice is the primary one, the rest are not');
   assert.match(renderRunGates, /c\.feedback_required \? ' data-needs-text="1"' : ''/, 'feedback_required still marks the choice as needing text');
 });
 
@@ -77,6 +78,9 @@ function loadHelpers() {
     PasteImage: { settle: async () => {}, attachments: () => [] },
     // an accepted answer redraws the gates, the badge and the menu at once (#603)
     scheduleRender: () => {},
+    // the request field an answer needs (redesign 2026-11-28, gate-panel.js): none of these gates has one
+    gateOpenFeedback: () => false,
+    gateCloseFeedback: () => {},
   };
   vm.createContext(withI18n(sandbox));
   vm.runInContext(`${esc}\n${pendingGates}\n${onRunGateClick}\nthis.helpers = { pendingGates, onRunGateClick };`, sandbox);

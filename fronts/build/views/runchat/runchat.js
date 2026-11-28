@@ -1,5 +1,6 @@
 // Run chat: any workflow run as a conversation (RunChatModel in run-chat-model.js), live or
-// replayed from its events.jsonl. Agents get their robot (robots.js) by provider and model, fan-out
+// replayed from its events.jsonl. Agents get their robot (robots.js) by provider and model, every message on the
+// left and the orchestrator's plain lines folded (groupSystemLines; the redesign of 2026-11-28), fan-out
 // steps sit side by side, human gates are answered inline (never automatically). Opened from the
 // runs lists ("Open chat"), the Backlog and the Run screen's Chat tab, and by every way of opening a
 // run while Chat is the remembered run view (showRun in app.js). Its header is the same tab row as
@@ -101,7 +102,9 @@
     // context window: at the first request of the turn → its largest request (a fresh session starts small)
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · ${it.costUnknown ? esc(t('run_list.cost_unknown')) : `$${it.cost.toFixed(2)}`} · ${fmtSecs(it.durationMs)}` : '';
-    return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-testid="run-chat-turn" data-agent="${esc(it.agent)}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
+    // the redesign (2026-11-28, the owner's choice): every message on the left, one column to read down, each
+    // agent keeping its robot and colour (the model's `side` no longer moves it)
+    return `<div class="rc-msg rc-left" data-testid="run-chat-turn" data-agent="${esc(it.agent)}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar({ ...it, side: 'left' })}<div class="duo-bubble">
       <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? turnModelTag(it) : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
   }
@@ -163,10 +166,16 @@
     const why = away ? 'The run waits in another app window: answer this gate there' : 'The run was interrupted: resume it to answer this gate';
     // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
     const choices = typeof gateChoices === 'function' ? gateChoices({ choices: it.choices, save_to_issue: it.saveToIssue }) : it.choices;
+    // the choices as cards, each saying what it does while the gate waits (redesign 2026-11-28, gate-panel.js)
+    const asking = !it.resolved && !it.closed && !waits;
     const buttons = choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
       const title = waits ? why : c.intent ? c.title : '';
-      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-testid="run-gate-choice" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
+      const attrs = `data-testid="run-gate-choice" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}`;
+      const help = asking && !c.intent ? window.gateHelpOf?.(it, c.id) || '' : '';
+      return window.gateChoiceButtonHtml
+        ? gateChoiceButtonHtml({ label: c.label, help, primary: !it.resolved && i === 0, chosen, attrs })
+        : `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" ${attrs}>${esc(c.label)}</button>`;
     }).join('')
       + (stale ? resumeButton() : '')
       // #183: "Interact with Oracle" at the end of the row
@@ -174,8 +183,9 @@
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
     const open = chat.live && !it.resolved && !it.closed;
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
-    const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || t('runchat.instructions_optional'))}</label>
-      <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
+    // the text field: open when optional; closed until "Ask for changes" (an answer that needs it) is clicked
+    const field = it.feedback && !it.resolved && !it.closed
+      ? window.gateFeedbackHtml?.(it, { rows: 2, disabled: !!off, fallback: t('runchat.instructions_optional') }) ?? '' : '';
     const state = it.resolved ? '' : it.closed ? `<p class="muted small">${t('runchat.the_run_ended_before_an_answer')}</p>`
       : stale ? `<p class="muted small" data-testid="runchat-gate-interrupted">${t('runchat.this_gate_was_waiting_when_the')}</p>`
         : away ? `<p class="muted small" data-testid="runchat-gate-elsewhere">${t('runchat.this_gate_waits_in_another_app')}</p>` : '';
@@ -185,10 +195,9 @@
     const parts = window.gateReportParts?.(it) || { reportHtml: '', message: it.message };
     const full = `${parts.reportHtml}<div class="rc-body md">${md(parts.message)}</div>`;
     const card = gateSummaryHtml(it, open, full);
-    const help = !it.resolved && !it.closed && !waits ?window.gateButtonsHelpHtml?.(it) || '' : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
     const main = `<div class="duo-meta"><b>${t('runchat.human_gate')}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
-      ${card || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${help}${state}`;
+      ${card || full}${tools}<div class="row gate-choices">${buttons}</div>${field}${state}`;
     return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-testid="run-chat-gate" data-gate="${esc(it.approvalId)}">
       ${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div></div>`;
   }
@@ -308,8 +317,10 @@
         const ok = it.status === 'success';
         const tested = testedPill(it);
         // #384: the run that resumed this one (its row's resumedBy, read when a past run opens)
+        // redesign (2026-11-28): a run that did not succeed says it here once (its fail line folds with the
+        // orchestrator's), and Resume from step… is its accent button
         return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}" data-testid="run-chat-finished"><span><b data-status="${esc(it.status)}">${ok ? t('runchat.done') : esc(StatusPill.statusLabel(it.status))}</b>${tested}${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · ${costText(it)} · ${fmtSecs(it.durationMs)}${StatusPill.resumedLink(chat.resumedBy)}</span>
-          <button type="button" class="link-btn small" data-resume title="${t('runchat.start_a_new_run_from_a')}">${t('runchat.resume_from_step')}</button></div>`;
+          <button type="button" class="${ok ? 'link-btn small' : 'btn sm primary'}" data-resume title="${t('runchat.start_a_new_run_from_a')}">${t('runchat.resume_from_step')}</button></div>`;
       }
       default: return '';
     }
@@ -341,6 +352,7 @@
     box.querySelector('[data-testid="runchat-elsewhere-note"]')?.remove();
     if (interrupted()) box.insertAdjacentHTML('beforeend', interruptedHtml());
     else if (chat.elsewhere && !chat.live && chat.model.run.status === 'running') box.insertAdjacentHTML('beforeend', elsewhereHtml());
+    groupSystemLines(box);
     // a gate's Artifacts panel and Run App state (app.js)
     window.mountGateSides?.(box);
     window.paintGateApps?.();
@@ -348,6 +360,40 @@
     drawHead();
     if (stick && chat.live) scroller.scrollTop = scroller.scrollHeight;
     drawJump();
+  }
+
+  // The redesign (2026-11-28, the owner's choice): the orchestrator's plain lines one after another (a transition
+  // and its condition, /loop, a goal, a step's fail line the end repeats) fold into one closed line, "Orchestrator ·
+  // N events" and the last one's text, opened on a click (a single line too). Never folded: a warning (a fallback, an account switch,
+  // the wait for credits), the supervisor's lines, the orchestrator's messages with their state and log (#795),
+  // the agents, the gates. Redone after each draw, from the items as they are: the lines go back in place, then
+  // each run of them is wrapped again; a group the owner opened stays open (by its first line's item).
+  const FOLDED = '.rc-sys:not(.warn):not(.supervisor):not([data-testid]), .rc-sys[data-testid="run-chat-fail"]';
+  const openGroups = new Set();
+  function groupSystemLines(box) {
+    for (const g of [...box.querySelectorAll(':scope > .rc-events')]) g.replaceWith(...g.querySelector('.rc-events-body').children);
+    const runs = [];
+    let cur = [];
+    for (const el of [...box.children]) {
+      if (el.matches(FOLDED)) cur.push(el);
+      else { if (cur.length) runs.push(cur); cur = []; }
+    }
+    if (cur.length) runs.push(cur);
+    // a single line folds too: one closed line ("Orchestrator · 1 event · a → b") reads shorter than a raw condition
+    for (const lines of runs) {
+      const first = lines[0].dataset.item;
+      const last = lines.at(-1);
+      const failed = lines.some((l) => l.classList.contains('error'));
+      const g = document.createElement('details');
+      g.className = `rc-events${failed ? ' failed' : ''}`;
+      g.dataset.testid = 'run-chat-events';
+      g.dataset.first = first;
+      g.open = openGroups.has(first);
+      g.innerHTML = `<summary><span class="rc-events-who">${t('runchat.orch_label')}</span><span class="rc-events-count">${esc(t('runchat.events_count', { count: lines.length }))}</span><span class="rc-events-last">${esc(last.querySelector('span')?.textContent || '')}</span><time>${esc(last.querySelector('time')?.textContent || '')}</time></summary><div class="rc-events-body"></div>`;
+      lines[0].before(g);
+      g.querySelector('.rc-events-body').append(...lines);
+      g.ontoggle = () => (g.open ? openGroups.add(first) : openGroups.delete(first));
+    }
   }
 
   // "Jump to latest" while scrolled up from the last message.
@@ -366,7 +412,7 @@
     const key = active.map((a) => `${a.agent}:${a.state}`).join('|');
     if (el.dataset.key === key) return;
     el.dataset.key = key;
-    el.innerHTML = active.map((a) => `<div class="duo-typing${a.side === 'right' ? ' rc-right' : ''}"${colorStyle(a.agent)} title="${esc([a.agent, ...(isSupervisor(a.agent) ? [] : cardLines(a))].join('\n'))}"><span class="duo-robot" aria-hidden="true">${robot(a, a.state)}</span>
+    el.innerHTML = active.map((a) => `<div class="duo-typing"${colorStyle(a.agent)} title="${esc([a.agent, ...(isSupervisor(a.agent) ? [] : cardLines(a))].join('\n'))}"><span class="duo-robot" aria-hidden="true">${robot({ ...a, side: 'left' }, a.state)}</span>
       <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(nameOf(a.agent))}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted" title="${esc(a.stepId)}">(${esc(stepName(a.stepId))})</span></span></div>`).join('');
   }
 
@@ -391,6 +437,7 @@
   function reset(runId) {
     chat = { model: newModel(), runId, live: false, elsewhere: null, follow: chat.follow, loading: true, buffer: [], openLogs: new Set(), tails: new Map() };
     $c('#rc-messages').innerHTML = '';
+    openGroups.clear(); // another run's items reuse the same ids
     $c('#rc-typing').innerHTML = '';
     delete $c('#rc-typing').dataset.key;
     $c('#rc-jump').classList.add('hidden');
@@ -493,8 +540,11 @@
         return;
       }
       if (e.target.closest('[data-gate-tool]')) { if (chat.live) onGateTool(e, chat.runId); return; }
+      if (e.target.closest('[data-gate-feedback-cancel]')) { window.gateCloseFeedback?.(e.target.closest('.duo-ask')); return; }
       const b = e.target.closest('button[data-approval]');
       if (!b || !chat.live || b.disabled) return;
+      // redesign (2026-11-28): "Ask for changes" first opens the request field; its Send answers the gate
+      if (window.gateOpenFeedback?.(b.closest('.duo-ask'), b)) return;
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
       if (b.dataset.needsText && !text.trim()) { showToast(t('runchat.write_your_request_first'), t('runchat.textcontent_sends_the_text_to_the', { textContent: b.textContent })); b.closest('.duo-ask')?.querySelector('textarea')?.focus({ preventScroll: true }); return; }

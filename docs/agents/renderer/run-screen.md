@@ -47,6 +47,33 @@ Artifact previews and the image viewer, the Run screen's tabs, the gate layout, 
   error) is painted by `paintGateApps` from the run view's `preview` (local_preview events).
   `npm run screenshot -- --view run --workflow software-development-local-hero.yaml --input
   mode=validated --stop-at developer_check` captures it.
+- **The redesign of 2026-11-28** (the owner's Claude Design proposal; his decisions: messages on the left, the
+  request field only on demand, the orchestrator's lines folded, three inputs shown, stations and Steps both kept).
+  *Tab row* (`run.js`): the tabs, then `#run-screen-title` (`renderRunTitle`: the editable title, the resumed link,
+  the PR, the tests' pill, the workflow, Simulated, read-only), the status pill (`run-screen-status`: a live run
+  with an open gate reads "Waiting for you", `data-status="waiting"`), the actions, Pause and Stop. Which actions show
+  as buttons is `runActionPlan` (at most two: none on a live run nor a failed one, whose banner has them; Save to
+  issue, Review changes or Resume from step… lead an ended run); every other action is an entry of the row's ⋮ menu
+  (`runActionsMenuHtml`, `Menu`, `run-actions-more` / `run-actions-menu`) with its old element id, so its handler and
+  its tests' ids are the same. *Stations row* (`#run-progress-row`, `renderRunProgressRow`): the run's stations
+  (`runStations`: `RunProgress.pipeline` as the Roadmap's lanes, the station it is at as a pill, `run-station` with
+  `data-state`), its time and cost (`run-stats`) and its id (`run-screen-id`). *Fail banner*: "Stopped at <step>"
+  (`run-fail-where`, the trail's last step), the error, Resume from step… (`run-fail-resume`, the accent button) and
+  Ask the supervisor. *Gates* (`gate-panel.js`, both screens): each answer is a card, its label over its help
+  (`gateChoiceButtonHtml`, `gateHelpOf`; `gateButtonsHelpHtml` stays for the other screens); the text field
+  (`gateFeedbackHtml`) shows from the start when it is optional and, when an answer needs it (`feedback_required`),
+  stays closed until that answer is clicked (`gateOpenFeedback`: Cancel, and "Send: <answer>", `gate-feedback-send`,
+  which carries the answer's data-* hooks); its label and placeholder read `feedback.label_key` /
+  `placeholder_key` (the engine passes them on, `gates.js`). The Run screen's gates scroll at 62% of its height.
+  *Workflow panel*: `RUN_KEY_INPUTS` (validation, mode, review) as pills (`run-key-inputs`), the other inputs under
+  "Inputs (n)" (`run-inputs-more`). *Sessions*: the numbers on one line (CSS only, same markup and test ids).
+  *PR monitor*: `#run-pr-monitor` is a band, its lines side by side. *Run chat* (`runchat.js`): every message on the
+  left (`rc-left`), the orchestrator's plain lines folded by `groupSystemLines` into a closed `rc-events` line
+  (`run-chat-events`: "Orchestrator · N events" and the last one's text; never a warning, the supervisor, nor the
+  orchestrator's messages with their state and log); a run that did not succeed has Resume from step… as the end
+  note's accent button. Screenshots: `--view run --workflow feature.yaml --input validation=validated --stop-at
+  developer_check` (the gate; `--click ".run-gate [data-choice=changes]"` opens the request field), `--view run-chat
+  --click "#rc-details"` (a finished run; `--click "[data-run-more]"` opens the ⋮ menu).
 - **The diff viewer** (#118, `diff-viewer.js`, model `diff-viewer-model.js`, styles
   `diff-viewer.css`) is a near-full-screen overlay: `DiffViewer.open({ runId, approvalId?, file?, title?, commit? })`
   (`commit`: one of the branch's commits, the Commits select set to it, #289).

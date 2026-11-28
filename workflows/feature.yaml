@@ -1674,11 +1674,11 @@ steps:
       {% set nr = steps.develop.output | screen_not_reviewed(inputs) %}{% if nr %}Screen not reviewed: {{ nr }}{% endif %}
       {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
       {% set e2e = steps.acceptance_tests.output | e2e_scenarios %}{% if inputs.e2e_tests == 'off' %}E2E scenarios: off in this run.{% elif e2e %}{{ e2e }}{% else %}E2E scenarios: none written for this issue.{% endif %}
-    feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
+    feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point", label_key: engine.developer_check_feedback, placeholder_key: engine.developer_check_feedback_placeholder }
     choices:
-      - { id: approve, label: "Approve: go on to the code review", help: "The code review, the tests and the verification run next; you are asked again only on a failure." }
-      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true, help: "The test writer reads your text first and updates the acceptance tests only if it changes what they check; then the developer gets it. The run comes back to this gate after the fix." }
-      - { id: stop,    label: "Stop the run (branch kept to resume)", help: "Ends the run as cancelled; nothing is merged and its branch keeps the work to resume it." }
+      - { id: approve, label: "Approve: go on to the code review", label_key: engine.developer_check_approve, help_key: engine.developer_check_approve_help, help: "The code review, the tests and the verification run next; you are asked again only on a failure." }
+      - { id: changes, label: "Ask for changes: back to the developer", label_key: engine.developer_check_changes, help_key: engine.developer_check_changes_help, feedback_required: true, help: "The test writer reads your text first and updates the acceptance tests only if it changes what they check; then the developer gets it. The run comes back to this gate after the fix." }
+      - { id: stop,    label: "Stop the run (branch kept to resume)", label_key: engine.developer_check_stop, help_key: engine.developer_check_stop_help, help: "Ends the run as cancelled; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       - when: "choice == 'approve'"
         goto: code_review
