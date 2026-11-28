@@ -270,8 +270,9 @@ async function applyMachineSuggestion() {
 // Settings › Execution › Memory guard (settings.memoryGuard, #276, packages/engine/engine/memory-guard.js): the
 // hint gives the limit in GB for this machine (app:info totalMemoryBytes, binary GB like Task Manager).
 async function renderMemoryGuard() {
-  const g = { enabled: true, limitPercent: 25, floorPercent: 10, ...(state.settings.memoryGuard || {}) };
-  $('#set-mg-enabled').checked = g.enabled !== false;
+  // #129: off by default
+  const g = { enabled: false, limitPercent: 25, floorPercent: 10, ...(state.settings.memoryGuard || {}) };
+  $('#set-mg-enabled').checked = g.enabled === true;
   $('#set-mg-limit').value = g.limitPercent;
   $('#set-mg-floor').value = g.floorPercent;
   for (const sel of ['#set-mg-limit', '#set-mg-floor']) { $(sel).classList.remove('invalid'); $(sel).removeAttribute('aria-invalid'); }

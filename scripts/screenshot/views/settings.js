@@ -41,7 +41,8 @@ function seed({ args, ws, workspace, project }) {
   const cr = { enabled: true, max: 3, perProject: null, countSimulations: false };
   if (args.mode === 'machine-manual') workspace.writeSettings(ws, { concurrentRuns: cr, machineProfile: { mode: 'manual', concurrentRuns: 3, testWorkers: 2 } });
   if (args.mode === 'machine-suggestion') {
-    workspace.writeSettings(ws, { concurrentRuns: cr, machineProfile: { mode: 'auto' } });
+    // #129: the suggestion reads the memory guard's history, so the guard is on here
+    workspace.writeSettings(ws, { concurrentRuns: cr, machineProfile: { mode: 'auto' }, memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 } });
     demoMemoryGuard(ws);
   }
   // this process is the app's main process: a machine whose threads cannot be read

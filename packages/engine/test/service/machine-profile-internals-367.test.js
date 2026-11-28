@@ -31,7 +31,8 @@ test('settings:machineProfile: the values, the line, and the memory guard\'s sug
   assert.match(plain.state, /^(auto|unknown)$/);
   assert.equal(typeof plain.line, 'string');
   assert.equal(plain.suggestion, null);
-  api['settings:set']({ concurrentRuns: { enabled: true, max: 4 } });
+  // #129: the suggestion reads the memory guard's history, so the guard is turned on
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 4 }, memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 } });
   const runs = service.workspace().runs;
   const write = (id, events) => {
     fs.mkdirSync(path.join(runs, id), { recursive: true });

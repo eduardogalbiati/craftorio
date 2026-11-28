@@ -49,7 +49,7 @@ test('an invalid settings.json reads as no saved keys, the defaults still apply'
   const ws = tmpWs(t);
   fs.writeFileSync(ws.settings, '{ not json');
   assert.deepEqual(settings.savedSettings(ws), {});
-  assert.deepEqual(settings.readSettings(ws).memoryGuard, { enabled: true, limitPercent: 25, floorPercent: 10 });
+  assert.deepEqual(settings.readSettings(ws).memoryGuard, { enabled: false, limitPercent: 25, floorPercent: 10 });
 });
 
 // #97 (acceptance, written before the code): the orchestrator AI chosen in the Setup, settings.orchestratorProvider,

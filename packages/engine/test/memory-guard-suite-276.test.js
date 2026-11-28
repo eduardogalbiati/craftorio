@@ -94,6 +94,10 @@ async function runFixture(t, { memoryGuard, mockSequences } = {}) {
 test('memory guard (#276): a mock run has no guard (no sampler); a real run gets the app\'s guard without starting anything', (t) => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  // #129: the app's guard is off by default; turned on here, put back after
+  const { configureMemoryGuard } = require('../engine/memory-guard');
+  configureMemoryGuard({ enabled: true });
+  t.after(() => configureMemoryGuard({ enabled: false }));
   const mock = new WorkflowRun({ file: FIXTURE, inputs: {}, mock: true, runsDir, skillsDirs: [] });
   assert.equal(mock.memoryGuard ?? null, null, 'a simulation starts no sampler');
   const real = new WorkflowRun({ file: FIXTURE, inputs: {}, mock: false, runsDir, skillsDirs: [] });

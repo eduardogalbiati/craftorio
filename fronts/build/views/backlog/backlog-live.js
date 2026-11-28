@@ -158,7 +158,9 @@
     const night = r.budget?.period === 'night';
     const note = r.error && !pausedByFailure ? `<div class="${r.state === 'paused' ? 'warn-text' : 'error'} small rm-head-line">${esc(r.error)}${r.state === 'paused' && r.budget ? `<span class="spacer"></span><button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(t(night ? 'backlog_roadmap.budget_raise_night_tip' : 'backlog_roadmap.budget_raise_day_tip'))}">${t(night ? 'backlog_roadmap.raise_for_tonight' : 'backlog_roadmap.raise_for_today')}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(t(night ? 'backlog_roadmap.budget_ignored_night_tip' : 'backlog_roadmap.budget_ignored_day_tip'))}">${t('backlog_roadmap.resume_anyway')}</button>` : ''}</div>` : '';
     const leftOut = r.state === 'done' && offOpen ? `<div class="small muted rm-head-line" data-testid="roadmap-left-out">${t('backlog_roadmap.done_disabled_stages_left_out', { count: offOpen })}</div>` : '';
-    const act = [baseCheckHtml(check, clock), note, failures, leftOut].filter(Boolean).join('');
+    // #128: a real start the memory guard holds (the engine's text, with the floor and where to change it)
+    const memory = r.memoryHold ? `<div class="warn-text small rm-head-line" data-testid="roadmap-memory-hold">${esc(r.memoryHold)}</div>` : '';
+    const act = [baseCheckHtml(check, clock), note, memory, failures, leftOut].filter(Boolean).join('');
     return act ? `<div class="rm-head-activity" data-testid="roadmap-activity">${act}</div>` : '';
   }
   async function baseCheckTerm({ ctx, target }, btn) {

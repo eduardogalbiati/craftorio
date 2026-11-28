@@ -16,6 +16,8 @@
 // person's choice, else the project's, else goes on from the base as it is (localBaseNotices).
 // Stack (#807): a run at its PR's review gate waits for that merge (mergeGateOf); a stacked item starts
 // from its parent's branch (stackInputs) and its card names it (`stackedOn`).
+// Memory (#128): a real start the memory guard holds leaves `memoryHold` (the reason) on the view and one
+// notification per wait; the runs area's timer dispatches again and the start clears it.
 
 const fs = require('fs');
 const path = require('path');
@@ -46,6 +48,9 @@ module.exports = (ctx) => {
   const allowKeptWork = (projectId, itemId) => keptWorkAllowed.add(`${projectId}:${itemId}`);
   // #805: projectId → the choice of a person's Start, for the dispatch that follows it; kept in memory
   const baseChoices = new Map();
+  // #128: projectId → why its next real start waits for memory (memoryProblem's text); kept in memory,
+  // like the runs area's 30 s retry
+  const memoryHolds = new Map();
 
   // A project's roadmap for the screen: item statuses derived from their runs (#112), each running
   // item with `waiting` (at a human gate), and each item with a run its progress (#194, `run`: the
@@ -100,6 +105,8 @@ module.exports = (ctx) => {
     const known = issues || backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
     return costEstimate.withEstimates({
       ...roadmap,
+      // #128: why the next real start waits for memory, while the roadmap runs (null otherwise)
+      memoryHold: (roadmap.state === 'running' && memoryHolds.get(path.basename(String(projectId)))) || null,
       stages: roadmap.stages.map((s) => ({
         ...s,
         // #368: the stage's pause line ({ state: 'pausing' | 'paused', ... }), on the stage it paused at
@@ -433,6 +440,16 @@ module.exports = (ctx) => {
     return (item) => !mockOf(item) && !!project?.repo && !backlog.itemIssues(item).some((i) => localNumbers.has(i.number));
   }
 
+  // #128: a real start held for memory leaves its reason on the roadmap, with one notification per
+  // wait (not one per retry); true when the start waits
+  async function heldForMemory(projectId) {
+    const why = await ctx.memoryHold();
+    if (!why) return false;
+    if (!memoryHolds.has(projectId)) ctx.notify({ kind: 'run', event: 'failed', title: 'Waiting for memory', body: why.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
+    memoryHolds.set(projectId, why);
+    return true;
+  }
+
   async function advanceRoadmap(projectId) {
     const { ws } = ctx;
     const before = roadmaps.readRoadmap(ws.backlog, projectId);
@@ -474,7 +491,8 @@ module.exports = (ctx) => {
       // nor a gate): the roadmap pauses with the next stage's estimate, the owner raises or resumes
       if (!mockOf(item) && budgetStop(projectId, item, roadmap)) break;
       // #276: low memory holds a real start (not an error of the item): a timer dispatches again once it recovers
-      if (!mockOf(item) && await ctx.memoryHold()) break;
+      if (!mockOf(item) && await heldForMemory(projectId)) break;
+      memoryHolds.delete(projectId);
       try {
         const project = projects.readProject(ws.projects, projectId);
         const wf = loadWorkflow(ctx.projectWorkflowFile(projectId, item.workflow));

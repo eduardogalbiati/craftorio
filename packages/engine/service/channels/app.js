@@ -125,7 +125,8 @@ module.exports = (ctx) => [
       const resolved = machineProfile.resolveLimits(settings, machineProfile.readMachine());
       const now = Date.now();
       const events = memoryGuardEvents(ctx.ws.runs, now - machineProfile.CONSTANTS.SUGGEST_DAYS * DAY_MS);
-      const suggestion = settings.concurrentRuns?.enabled
+      // #129: the suggestion reads the guard's history, so only while the guard is on
+      const suggestion = settings.concurrentRuns?.enabled && settings.memoryGuard?.enabled
         ? machineProfile.suggestFromMemoryGuard(events, { now, concurrentRuns: resolved.concurrentRuns, timeZone: settings.timeZone })
         : null;
       return { ...resolved, line: machineProfile.machineLine(resolved), suggestion };
@@ -157,6 +158,8 @@ module.exports = (ctx) => [
       const next = workspace.writeSettings(ctx.ws, patch);
       // a higher limit of concurrent runs frees slots for the roadmaps (#446: the plain queue is retired)
       if (patch && ('concurrentRuns' in patch || 'machineProfile' in patch)) Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e));
+      // #129: the guard turned on starts its stray-process watch now (turned off, configuring it stopped it)
+      if (patch && 'memoryGuard' in patch) ctx.watchStrayProcesses?.();
       // the desktop app re-checks Keep awake (#162, apps/desktop/host/main.js)
       ctx.events.emit('settings:changed', next);
       return next;

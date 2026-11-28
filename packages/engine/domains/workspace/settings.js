@@ -45,8 +45,9 @@ const DEFAULT_SETTINGS = {
   // test workers per run from this machine; 'manual' keeps { concurrentRuns, testWorkers } as set
   machineProfile: { mode: 'auto' },
   // Memory guard (#276, packages/engine/engine/memory-guard.js): a real run's process over limitPercent of the RAM
-  // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
-  memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
+  // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold). #129: off
+  // by default (Settings › Execution turns it on); a saved old default reads as off (readSettings)
+  memoryGuard: { enabled: false, limitPercent: 25, floorPercent: 10 },
   // Platform triggers (#568, packages/engine/domains/triggers/triggers.js): the projects whose repository
   // `triggers:` the app polls ({ <projectId>: true }; off by default) and the poll interval (0 = off)
   triggers: { enabled: {}, intervalMinutes: 2 },
@@ -130,6 +131,12 @@ function savedSettings(ws) {
   try { const saved = JSON.parse(text); return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}; } catch { return {}; }
 }
 
+// #129: the memory guard's default before it was off (on, 25%, 10%). Every save wrote it, so a saved
+// one with no `chosen` mark was never chosen: it reads as the new default. The same values saved by
+// hand since then carry `chosen: true` (writeSettings).
+const sameAsOldGuard = (mg) => !!mg && mg.enabled === true && Number(mg.limitPercent) === 25 && Number(mg.floorPercent) === 10;
+const oldDefaultGuard = (mg) => sameAsOldGuard(mg) && !mg.chosen;
+
 function readSettings(ws) {
   const saved = savedSettings(ws);
   if (!saved) return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], timeZone: TimeZone.systemZone() };
@@ -138,7 +145,8 @@ function readSettings(ws) {
   const legacyMax = !saved.machineProfile && Number.isFinite(saved.concurrentRuns?.max) && saved.concurrentRuns.max !== DEFAULT_SETTINGS.concurrentRuns.max;
   const machineProfile = legacyMax ? { mode: 'manual', concurrentRuns: saved.concurrentRuns.max } : saved.machineProfile || DEFAULT_SETTINGS.machineProfile;
   // an existing settings.json without setupDone: a workspace in use before Setup existed (#319)
-  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved, machineProfile, timeZone: saved.timeZone || TimeZone.systemZone() };
+  const memoryGuard = oldDefaultGuard(saved.memoryGuard) ? { ...DEFAULT_SETTINGS.memoryGuard } : saved.memoryGuard || DEFAULT_SETTINGS.memoryGuard;
+  return { ...DEFAULT_SETTINGS, hiddenWorkflows: [], setupDone: true, ...saved, machineProfile, memoryGuard, timeZone: saved.timeZone || TimeZone.systemZone() };
 }
 
 function writeSettings(ws, patch) {
@@ -150,6 +158,8 @@ function writeSettings(ws, patch) {
   if (Number.isFinite(patch?.concurrentRuns?.max) && !('machineProfile' in patch)) {
     next.machineProfile = { ...next.machineProfile, mode: 'manual', concurrentRuns: patch.concurrentRuns.max };
   }
+  // #129: the guard turned on by hand with the old default's values is marked, so it is not read as off
+  if (sameAsOldGuard(patch?.memoryGuard)) next.memoryGuard = { ...patch.memoryGuard, chosen: true };
   // the computer's zone is not saved until one is chosen (#273): the workspace follows the computer
   if (!(patch && patch.timeZone) && !(saved && saved.timeZone)) next.timeZone = null;
   // setupDone is written once known (#319: the Setup saves false when it opens, true at Finish or

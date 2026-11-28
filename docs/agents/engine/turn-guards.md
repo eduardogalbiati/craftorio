@@ -29,7 +29,10 @@ Tool timeouts, test inputs, the environment allowlist, the base worktree, depend
 - **`base_worktree: true`** on an agent step (#198; needs `orchestrator.worktree`): before each visit the engine prepares the run's checkout of the base (`<worktreesDir>/<run_id>-base`, detached at the current base, dependencies linked from the shared cache) and gives it as `base_worktree_dir` (empty without a worktree), for the test writer's pre-existing-failure check. See [worktrees.md](../worktrees.md).
 - **`deps.ready`** (#198): the run's dependencies from the shared cache, after `worktree.ready`, for the base checkout and after an agent step that changed the lockfile (`{ for: worktree|base, after, status, hit, lockfile, manager, key, entry, seconds, waited, reason }`; nothing when the folder already links its key). Agents with commands get a line about it in their command guide (`depsGuide`). See [worktrees.md](../worktrees.md).
 - **Memory guard** (#276, `packages/engine/engine/memory-guard.js`; Settings › Execution, `settings.memoryGuard`
-  `{ enabled, limitPercent: 25, floorPercent: 10 }`): a deterministic watcher, no AI call. While a
+  `{ enabled, limitPercent: 25, floorPercent: 10 }`; **off by default** since #129: the owner turns it
+  on, and a saved old default `{ enabled: true, 25, 10 }` without the `chosen` mark reads as off): a
+  deterministic watcher, no AI call. Off, no run waits for memory, no process is stopped, no stray
+  check runs and Concurrent runs gets no suggestion from its history. While a
   real run's agent turn, `suite` / `e2e` execution or screenshot capture runs, its process tree is
   sampled every 5 s (Windows: committed bytes through one long-lived PowerShell helper; Linux:
   /proc; macOS: one `sh` loop around `ps`) and a descendant over the limit is stopped with its
@@ -39,10 +42,13 @@ Tool timeouts, test inputs, the environment allowlist, the base worktree, depend
   in a step carries `notify: true` (one notification). Never stopped: the app, the agent CLI's root
   process (a `memory_over_limit` log instead), anything outside the run's tree. A sampler that fails
   logs `memory_guard_off` once and the run goes on. Before each suite / e2e execution the step waits
-  while free memory (Windows: free commit) is under the floor, at most 10 min (`memory_hold` log,
+  while free memory (Windows: free commit; Linux: `MemAvailable`; macOS, #128: free + inactive +
+  speculative pages of `vm_stat`, through the same `sh` helper) is under the floor, at most 10 min (`memory_hold` log,
   `memory.hold` event); a new real run is refused meanwhile (`memoryHold` in
   `packages/engine/service/areas/runs.js`; the roadmap and the queue hold the item and a 30 s timer dispatches
-  again when memory recovers). A round that fails while the guard recorded a stop or a low-memory
+  again when memory recovers). #128: a held roadmap start shows why on the Roadmap's header
+  (`memoryHold` in the view: "Waiting for memory: X GB free, under the floor of Y GB (Settings ›
+  Execution › Memory guard)") with one notification per wait. A round that fails while the guard recorded a stop or a low-memory
   period in its time window reruns in the same visit (`<log>-env.log`, output
   `environment_reruns`, at most 2): only the last result is routed, so it uses no visit of the
   suite → test transition. A simulation has no guard (`run.memoryGuard` null) unless one is given

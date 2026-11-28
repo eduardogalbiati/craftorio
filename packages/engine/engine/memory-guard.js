@@ -9,7 +9,10 @@
 //
 // What a process's size is: on Windows its committed (private) bytes, since the working set stays
 // low while the commit passes 70 GB; elsewhere its resident memory. Free memory: Windows' free
-// commit, elsewhere the available memory.
+// commit, Linux's MemAvailable, macOS's free + inactive + speculative pages of `vm_stat` (#128:
+// os.freemem() there is near 0 on a Mac in use), asked through the same `sh` helper.
+//
+// Off by default (#129): the owner turns it on in Settings › Execution › Memory guard.
 //
 // Sampling never starts a process per sample (when memory is gone, a new `git` cannot even start):
 // Windows uses one long-lived PowerShell helper started with the first sample, macOS one long-lived
@@ -46,7 +49,8 @@ const STRAY_INTERVAL_MS = 60e3;
 /** '' or the reason a new real run cannot start now (like slotProblem in packages/engine/service/areas/runs.js). */
 function memoryProblem({ freeBytes, floorBytes }) {
   if (!(floorBytes > 0) || !(freeBytes < floorBytes)) return '';
-  return `Low memory: ${gb(freeBytes)} GB free, under the memory guard's floor of ${gb(floorBytes)} GB (Settings › Execution); it starts when memory recovers`;
+  // #128: shown as is on the roadmap and in its notification
+  return `Waiting for memory: ${gb(freeBytes)} GB free, under the floor of ${gb(floorBytes)} GB (Settings › Execution › Memory guard); it starts when memory recovers`;
 }
 
 // --- the real sampler ------------------------------------------------------------------------------
@@ -73,7 +77,26 @@ while ($true) {
 }
 `;
 
-const MAC_HELPER = 'while read l; do ps -axo pid=,ppid=,rss=,time=,args=; echo END; done';
+// 'm' asks for vm_stat (#128), anything else for the process list
+const MAC_HELPER = 'while read l; do if [ "$l" = m ]; then vm_stat; else ps -axo pid=,ppid=,rss=,time=,args=; fi; echo END; done';
+
+/**
+ * #128: the memory usable now on macOS, in bytes, from `vm_stat`'s output: free + inactive +
+ * speculative pages at the header's page size (os.freemem() counts only the free ones, near 0 on a
+ * Mac in use). Purgeable pages are left out: they are already counted as active or inactive.
+ * null when the header or a field is missing.
+ */
+function parseVmStat(text) {
+  const page = /page size of (\d+) bytes/.exec(String(text || ''));
+  if (!page) return null;
+  let pages = 0;
+  for (const field of ['free', 'inactive', 'speculative']) {
+    const m = new RegExp(`^Pages ${field}:\\s+(\\d+)\\.?\\s*$`, 'm').exec(text);
+    if (!m) return null;
+    pages += Number(m[1]);
+  }
+  return pages * Number(page[1]);
+}
 
 // ps's cumulative CPU time, [[dd-]hh:]mm:ss[.ss], in ms
 function psTimeMs(s) {
@@ -173,7 +196,8 @@ function realProbe() {
   return {
     sample: async () => (await helper.ask('p')).map((l) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(l)).filter(Boolean)
       .map((m) => ({ pid: +m[1], ppid: +m[2], bytes: +m[3] * 1024, cpuMs: psTimeMs(m[4]), commandLine: m[5].trim() })),
-    free: async () => ({ freeBytes: os.freemem(), totalBytes: os.totalmem() }),
+    // #128: what vm_stat says can be used now; os.freemem() only when vm_stat gives nothing readable
+    free: async () => ({ freeBytes: parseVmStat((await helper.ask('m')).join('\n')) ?? os.freemem(), totalBytes: os.totalmem() }),
     close: helper.close,
   };
 }
@@ -406,14 +430,16 @@ function createMemoryGuard({ limitBytes, floorBytes, intervalMs = 5000, sampler,
 }
 
 // The app's guard for real runs (packages/engine/engine/workflow.js), configured from Settings › Execution
-// (workspace settings `memoryGuard`); null when the owner turned it off. Created on first use; it
-// starts nothing until a real process is watched.
+// (workspace settings `memoryGuard`); null while it is off (the default, #129). Created on first use;
+// it starts nothing until a real process is watched.
 let shared = null;
-let sharedSettings = { enabled: true, limitPercent: 25, floorPercent: 10 };
+let sharedSettings = { enabled: false, limitPercent: 25, floorPercent: 10 };
 
 function configureMemoryGuard(settings = {}) {
   sharedSettings = { ...sharedSettings, ...settings };
   if (shared) shared.configure(bytesOf(sharedSettings));
+  // #129: turned off, a guard made earlier stops its stray check (and so its notifications)
+  if (sharedSettings.enabled === false) shared?.watchStrays(null);
 }
 
 const bytesOf = ({ limitPercent, floorPercent }) => ({
@@ -431,5 +457,6 @@ module.exports = {
   configureMemoryGuard,
   createMemoryGuard,
   memoryProblem,
+  parseVmStat,
   sharedMemoryGuard,
 };
