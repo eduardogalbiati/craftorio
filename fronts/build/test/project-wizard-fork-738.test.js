@@ -34,7 +34,7 @@ const PROFILED = (fork) => ({
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-function page(calls) {
+function page(calls, forkAnswer = withFork(READY, { status: 'created', repo: 'acme/widgets', url: 'https://github.com/me/widgets' })) {
   return loadApp({
     api: {
       listProjects: async () => [clone(PROJECT)],
@@ -42,7 +42,7 @@ function page(calls) {
       onboardingStatus: async () => null,
       analyzeOnboarding: async (id) => ({ ...clone(READY), status: 'analyzing', projectId: id }),
       retryOnboarding: async (id) => ({ ...clone(CLONING), projectId: id }),
-      forkOnboarding: async (id) => { calls.push(`fork:${id}`); return clone(withFork(READY, { status: 'created', repo: 'acme/widgets', url: 'https://github.com/me/widgets' })); },
+      forkOnboarding: async (id) => { calls.push(`fork:${id}`); return clone(forkAnswer); },
       workLocallyOnboarding: async (id) => { calls.push(`local:${id}`); return clone(withFork(READY, { status: 'declined', repo: 'acme/widgets' })); },
       architectureEstimate: async () => ({ estimate: { usd: 0.9 } }),
       refactorCadence: async () => ({ on: false, every: 10, since: null }),
@@ -106,8 +106,8 @@ async function emit(app, state) {
 }
 
 // the wizard on the repository step, the clone done with the given access answer
-async function cloned(ready, calls = []) {
-  const app = page(calls);
+async function cloned(ready, calls = [], forkAnswer = undefined) {
+  const app = page(calls, forkAnswer);
   await app.boot();
   app.sandbox.ProjectWizard.open();
   await app.settle(10);
@@ -168,4 +168,50 @@ test('#738 a failed fork keeps the notice with its reason, so the owner can try 
   assert.equal(currentStep(app), 'repository');
   const notice = textOf(byTestId(wizardMarkup(app), 'wizard-fork-notice'));
   assert.equal(notice.includes('HTTP 403: forking is disabled'), true);
+});
+
+// #126: Create a fork while the clone still runs. The engine makes the fork at once (fork: created, url) and
+// sets the remotes once the clone ends; the notice says so instead of two disabled buttons with no message.
+const FORK_URL = 'https://github.com/me/widgets';
+const SUGGESTED_CLONING = withFork(CLONING, { status: 'suggested', repo: 'acme/widgets' });
+const CREATED_CLONING = withFork(CLONING, { status: 'created', repo: 'acme/widgets', url: FORK_URL });
+const FAILED_CLONING = withFork(CLONING, { status: 'failed', repo: 'acme/widgets', reason: 'HTTP 403: forking is disabled' });
+const isDisabled = (el) => el !== null && Object.prototype.hasOwnProperty.call(el.attrs, 'disabled');
+
+test('#126 Create a fork while the clone runs: the notice shows the fork and that the remotes wait for the clone', { timeout: 20000 }, async () => {
+  const calls = [];
+  const app = await cloned(SUGGESTED_CLONING, calls, CREATED_CLONING);
+  assert.equal(currentStep(app), 'repository');
+  await press(app, 'wizard-create-fork');
+  assert.deepEqual(calls, [`fork:${PID}`]);
+  assert.equal(currentStep(app), 'repository', 'the clone still runs: the wizard stays on the repository step');
+  const html = wizardMarkup(app);
+  const notice = textOf(byTestId(html, 'wizard-fork-notice'));
+  assert.equal(notice.includes(FORK_URL), true, `the notice shows the fork's URL: ${notice}`);
+  assert.match(notice, /clone/i, 'the notice says it waits for the clone');
+  assert.match(notice, /remote|origin|upstream/i, 'the notice says the remotes are set then');
+  assert.equal(isDisabled(byTestId(html, 'wizard-create-fork')), false, 'no disabled Create a fork button left on screen');
+  assert.equal(isDisabled(byTestId(html, 'wizard-work-locally')), false, 'no disabled Work locally button left on screen');
+});
+
+test('#126 the waiting notice moves on to the analysis once the clone ends', { timeout: 20000 }, async () => {
+  const app = await cloned(SUGGESTED_CLONING, [], CREATED_CLONING);
+  await press(app, 'wizard-create-fork');
+  assert.equal(textOf(byTestId(wizardMarkup(app), 'wizard-fork-notice')).includes(FORK_URL), true, 'the waiting notice is shown first');
+  await emit(app, withFork(READY, { status: 'created', repo: 'acme/widgets', url: FORK_URL }));
+  assert.equal(currentStep(app), 'analysis');
+});
+
+test('#126 a fork that fails while the clone runs shows its reason at once, with both choices enabled again', { timeout: 20000 }, async () => {
+  const calls = [];
+  const app = await cloned(SUGGESTED_CLONING, calls, FAILED_CLONING);
+  await press(app, 'wizard-create-fork');
+  assert.deepEqual(calls, [`fork:${PID}`]);
+  assert.equal(currentStep(app), 'repository');
+  const html = wizardMarkup(app);
+  assert.equal(textOf(byTestId(html, 'wizard-fork-notice')).includes('HTTP 403: forking is disabled'), true);
+  const create = byTestId(html, 'wizard-create-fork');
+  const local = byTestId(html, 'wizard-work-locally');
+  assert.equal(create !== null && !isDisabled(create), true, 'Create a fork can be pressed again');
+  assert.equal(local !== null && !isDisabled(local), true, 'Work locally can be pressed');
 });
