@@ -239,6 +239,8 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:refactor.yaml:developer',
     'workflow:refactor.yaml:reviewer',
     'workflow:refactor.yaml:builder',
+    // #130: Remote / Fork + PR end through pr-pipeline, whose ci step needs a ci_pusher
+    'workflow:refactor.yaml:ci_pusher',
     'workflow:release.yaml:developer',
     'workflow:release.yaml:reviewer',
     'workflow:release.yaml:ci_pusher',
