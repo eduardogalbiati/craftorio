@@ -21,7 +21,8 @@
 //   acceptance notice (#40) in its hint's place. #100 defined(): whether the rows show (the wizard's Next waits
 //   for it); state(): the column's state.
 // - cliWarning(cli), forkNotice(onboarding), forkPending(onboarding): the repository step's notices (the
-//   CLI missing or signed out; #738 no push access: Create a fork / Work locally).
+//   CLI missing or signed out; #738 no push access: Create a fork / Work locally; #126 the fork made while the
+//   clone runs: its URL and wizard-fork-waiting, the remotes set once the clone ends).
 // - #79 pushNotice(onboarding): the clone can't push (git's credentials), with the setup-git button.
 // - jobReason(job): a failed job in the interface's language from the engine's code (failureOf in
 //   packages/engine/service/areas/project-onboarding.js), its reason else.
@@ -88,7 +89,17 @@
     // fork (wizard-create-fork) or working locally (wizard-work-locally) on the repository step; a failed
     // fork keeps the notice with its reason (the owner tries again or works locally)
     const forkPending = (o) => ['suggested', 'failed'].includes(o?.fork?.status);
+    // #126: the fork made (or reused) while the clone runs: its URL and wizard-fork-waiting (the remotes are set
+    // once the clone ends), no buttons
+    const forkWaiting = (o) => ['created', 'reused'].includes(o?.fork?.status) && o.status === 'cloning';
     function forkNotice(o) {
+      if (forkWaiting(o)) {
+        return `<div class="wizard-alert" data-testid="wizard-fork-notice" role="status">
+          <strong>${esc(t('onboarding.fork_made'))}</strong>
+          <p class="mono small text-cut" title="${esc(o.fork.url || '')}">${esc(o.fork.url || '')}</p>
+          <p class="muted small" data-testid="wizard-fork-waiting">${esc(t('onboarding.fork_waiting'))}</p>
+        </div>`;
+      }
       if (!forkPending(o)) return '';
       const failed = o.fork.status === 'failed' ? `<p class="small">${esc(t('onboarding.fork_failed', { error: o.fork.reason || t('onboarding.no_reason') }))}</p>` : '';
       const off = cur().busy ? ' disabled' : '';

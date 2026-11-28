@@ -279,7 +279,8 @@ async function machineRemote(provider, { name, folder }) {
 // #738: the simulated gh of an E2E run (features/steps/onboarding.steps.js): CRAFTORIO_E2E_REPO_PUSH=0|1 is
 // the imported repository's permissions.push, whatever its host (a local file:// one too); with it, the
 // signed-in user is e2e-owner, who has no fork yet, and `gh repo fork` answers a fork URL without the network.
-// Without the hook a simulated run reads nothing (null: unknown).
+// Without the hook a simulated run reads nothing (null: unknown). #126: CRAFTORIO_E2E_FORK_FAIL=1 makes that
+// `gh repo fork` fail ('The simulated fork failed (e2e).').
 const E2E_LOGIN = 'e2e-owner';
 function e2ePlatformCli(args) {
   const hook = process.env.CRAFTORIO_E2E_REPO_PUSH;
@@ -289,6 +290,7 @@ function e2ePlatformCli(args) {
   if (api === 'user') return { ok: true, out: JSON.stringify({ login: E2E_LOGIN }) };
   if (api && api.startsWith(`repos/${E2E_LOGIN}/`)) return { ok: false, out: 'gh: Not Found (HTTP 404)' };
   if (api && api.startsWith('repos/')) return { ok: true, out: JSON.stringify({ full_name: api.slice(6), fork: false, permissions: { pull: true, push: hook === '1' } }) };
+  if (a[0] === 'repo' && a[1] === 'fork' && process.env.CRAFTORIO_E2E_FORK_FAIL === '1') return { ok: false, out: 'The simulated fork failed (e2e).' };
   if (a[0] === 'repo' && a[1] === 'fork') return { ok: true, out: `https://github.com/${E2E_LOGIN}/${String(a[2] || '').split('/').pop()}\n` };
   return null;
 }
@@ -659,28 +661,40 @@ function createOnboarding({ projectsDir, reposDir, git = execGit, cli = machineC
    * #738 "Create a fork": the owner's fork (reused when it exists), then in the project's clone origin = the
    * fork and upstream = the original; the project keeps fork: { url, upstream }. A failure leaves the
    * suggestion with its reason (fork: { status: 'failed' }), so the owner can try again or work locally.
-   * The notice comes before the clone ends: the remotes change once the clone is done.
+   * #126: the fork is made (or reused) at once, while the clone goes on, and its state shown; only the remotes
+   * wait for the clone. With the clone still running fork() answers at once (the remotes follow in the
+   * background, a failure there is fork: failed too); with the clone done it answers once they are set.
    */
   async function fork(projectId) {
     const s = forkable(projectId);
-    let name = s.fork.repo;
+    const { repo } = projects.readProject(projectsDir, projectId);
+    const name = s.fork.repo || ownerRepoOf(repo);
+    const failed = (e) => forkChange(projectId, { status: 'failed', repo: name, reason: String(e?.message || e) });
+    let made;
     try {
-      await projects.cloneJob(projectsDir, projectId);
-      const p = projects.readProject(projectsDir, projectId);
-      name = name || ownerRepoOf(p.repo);
-      const made = await makeFork(name, p.repo);
-      const remotes = String(await git(['remote'], p.folder)).split(/\s+/).filter(Boolean);
-      await git(['remote', 'set-url', 'origin', await forkRemoteOf(made.url, p.repo)], p.folder);
-      await git(['remote', remotes.includes('upstream') ? 'set-url' : 'add', 'upstream', p.repo], p.folder);
-      projects.updateProject(projectsDir, projectId, { fork: { url: made.url, upstream: p.repo } });
-      forkChange(projectId, made);
+      made = await makeFork(name, repo);
     } catch (e) {
-      forkChange(projectId, { status: 'failed', repo: name, reason: String(e?.message || e) });
+      failed(e);
       return status(projectId);
     }
+    forkChange(projectId, made);
+    const job = projects.cloneJob(projectsDir, projectId);
+    const remotes = forkRemotes(projectId, made).catch(failed);
+    if (!job) await remotes;
+    return status(projectId);
+  }
+
+  // #126: once the clone is done, origin = the fork and upstream = the original in it; the project keeps
+  // fork: { url, upstream } only then (follow()'s push check at the clone's end must still read the original)
+  async function forkRemotes(projectId, made) {
+    await projects.cloneJob(projectsDir, projectId);
+    const p = projects.readProject(projectsDir, projectId);
+    const remotes = String(await git(['remote'], p.folder)).split(/\s+/).filter(Boolean);
+    await git(['remote', 'set-url', 'origin', await forkRemoteOf(made.url, p.repo)], p.folder);
+    await git(['remote', remotes.includes('upstream') ? 'set-url' : 'add', 'upstream', p.repo], p.folder);
+    projects.updateProject(projectsDir, projectId, { fork: { url: made.url, upstream: p.repo } });
     // #79: the fork is the new origin: checked like an import (never a silent clone that cannot push)
     await checkPush(projectId).catch(() => {});
-    return status(projectId);
   }
 
   /** #738 "Work locally": no fork, origin stays the original, the profile's mode is local (no pull request). */
