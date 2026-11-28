@@ -7,7 +7,8 @@
 # composed set's ci none or release): it opens the PR/MR with no wait. A step `{ id, fragment: pr-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js,
 # expandFragments). Reads the inputs base_branch and issue and the steps develop, ci and pr_open.
-# #130: the developer's branch and summary come from `dev`: the step develop, else refactor (refactor.yaml).
+# #130: the developer's branch and summary come from `dev` (`steps | developer_output`, packages/engine/engine/run/templates.js):
+# the step develop, else refactor (refactor.yaml).
 # #738 Fork + PR (inputs.mode fork): the branch goes to `origin` (the owner's fork), the PR to the
 # original (`upstream`), never a push to upstream; the PR follows CONTRIBUTING.md and the PR template,
 # with `Depends on <inputs.depends_on>` for a dependent roadmap item. With inputs.parent_pr (wait and
@@ -20,7 +21,7 @@ steps:
   ci:
     display: Pull request and CI
     goal:
-      description: "{% set dev = steps.develop.output or steps.refactor.output or {} %}CI green on the PR/MR for branch {{ dev.branch }}"
+      description: "{% set dev = steps | developer_output %}CI green on the PR/MR for branch {{ dev.branch }}"
       until: "output.ci_status == 'success'"
       on_exhausted: ci_failed
     loop:
@@ -36,7 +37,7 @@ steps:
       # (the engine checks it, transitions.js pollParent); empty: no wait
       parent: "{{ inputs.parent_pr }}"
     prompt: |
-      {% set dev = steps.develop.output or steps.refactor.output or {} %}Branch: `{{ dev.branch }}` → base `{{ inputs.base_branch }}`.
+      {% set dev = steps | developer_output %}Branch: `{{ dev.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}The developer fixed a previous failure and pushed: {{ delegate_result.text }}
       Check CI for that new commit, not an older run.
       {% endif %}
@@ -105,7 +106,7 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            {% set dev = steps.develop.output or steps.refactor.output or {} %}CI on PR/MR #{{ output.pr_number }} failed:
+            {% set dev = steps | developer_output %}CI on PR/MR #{{ output.pr_number }} failed:
             {{ output.failure_log }}
             Fix it on branch `{{ dev.branch }}`, check it with a focused test,
             commit, then `git push`, and report the commit hash.
@@ -140,7 +141,7 @@ steps:
   pr_open:
     display: Pull request
     prompt: |
-      {% set dev = steps.develop.output or steps.refactor.output or {} %}Branch: `{{ dev.branch }}` → base `{{ inputs.base_branch }}`.
+      {% set dev = steps | developer_output %}Branch: `{{ dev.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}The developer resolved the conflict and pushed: {{ delegate_result.text }}
       {% endif %}
       {% if vars.tested == 'no tests' %}Nothing was tested in this run: the project has no tests (#71). Say so in the PR/MR body ("Not tested: the project has no tests"); never write that the tests failed or passed.
@@ -191,7 +192,7 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            {% set dev = steps.develop.output or steps.refactor.output or {} %}PR/MR #{{ output.pr_number }} conflicts with `{{ inputs.base_branch }}`: {{ output.detail }}
+            {% set dev = steps | developer_output %}PR/MR #{{ output.pr_number }} conflicts with `{{ inputs.base_branch }}`: {{ output.detail }}
             Rebase branch `{{ dev.branch }}` on the base, resolve it, check it with a
             focused test, commit, then `git push --force-with-lease`, and report the commit hash.
         goto: pr_open
@@ -222,7 +223,7 @@ steps:
       grace: 10m
       parent: "{{ inputs.parent_pr }}"
     prompt: |
-      {% set dev = steps.develop.output or steps.refactor.output or {} %}Branch: `{{ dev.branch }}`, stacked on `{{ inputs.parent_branch }}` (the pull request {{ inputs.parent_pr }}); its PR/MR: {{ steps.pr_open.output.pr_url }}.
+      {% set dev = steps | developer_output %}Branch: `{{ dev.branch }}`, stacked on `{{ inputs.parent_branch }}` (the pull request {{ inputs.parent_pr }}); its PR/MR: {{ steps.pr_open.output.pr_url }}.
       The orchestrator follows the parent PR/MR itself and calls you only when there is something to do:
       - the engine rebased this branch onto the parent's new commits: push it (`git push --force-with-lease origin HEAD`);
       - the parent merged: the engine rebased this branch onto `{{ inputs.base_branch }}`: push it and move the
@@ -243,7 +244,7 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            {% set dev = steps.develop.output or steps.refactor.output or {} %}PR/MR #{{ output.pr_number }} conflicts with its base: {{ output.detail }}
+            {% set dev = steps | developer_output %}PR/MR #{{ output.pr_number }} conflicts with its base: {{ output.detail }}
             Rebase branch `{{ dev.branch }}` on it, resolve it, check it with a focused test,
             commit, then `git push --force-with-lease`, and report the commit hash.
         goto: stack_follow
@@ -270,7 +271,7 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            {% set dev = steps.develop.output or steps.refactor.output or {} %}The pull/merge request {{ output.url }} is waiting for its merge, and the owner asks you for a fix.
+            {% set dev = steps | developer_output %}The pull/merge request {{ output.url }} is waiting for its merge, and the owner asks you for a fix.
 
             {{ output.fix_prompt }}
 

@@ -36,7 +36,7 @@ Agentes: developer, reviewer, ui_reviewer, test_writer, mapper, builder, verifie
 
 ### Refactor
 
-Um refactor, feito com segurança, em qualquer linguagem: o test writer fixa primeiro o comportamento atual do alvo, o developer muda só a estrutura, depois a suíte completa, a auditoria do build e uma revisão de "mesmo comportamento, estrutura mais simples?", e o merge local.
+Um refactor, feito com segurança, em qualquer linguagem: o test writer fixa primeiro o comportamento atual do alvo, o developer muda só a estrutura, depois a suíte completa, a auditoria do build e uma revisão de "mesmo comportamento, estrutura mais simples?", e então o modo de trabalho do projeto: o merge local (Local) ou um pull request e seu CI (Remote, Fork + PR).
 
 Agentes: test_writer, developer, reviewer, builder.
 

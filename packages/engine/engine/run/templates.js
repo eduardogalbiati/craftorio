@@ -2,7 +2,7 @@
 // Templates and expressions of a run (#250, from packages/engine/engine/workflow.js): the nunjucks environment
 // (`render`, autoescape off) with the filters the workflows use (`to_yaml`, `to_json`, `shuffle(seed)`,
 // `clamp(lo, hi)`, `github_repo`, `pr_url`, `shell_quote`, `git_commits`, `git_log_stat`, `git_tags`, `project_version`,
-// `filed_issues`, `developer_gaps`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `screen_not_reviewed`, `check_command`, `checks_off`, `expected_docs`, `issue_numbers`,
+// `filed_issues`, `developer_gaps`, `developer_output`, `e2e_scenarios`, `suite_failures`, `missing_test_ids`, `ui_files`, `screen_not_reviewed`, `check_command`, `checks_off`, `expected_docs`, `issue_numbers`,
 // `issue_lines`, `one_line`, `secret_findings`, `secret_review`, `suite_lines`, `tests_plan_text`, `translated`), `evalExpr` for `when:` conditions, and `testsPlan` (the
 // unit/E2E test inputs as the templates read them). Pure: no run state. nunjucks has no sandbox: the
 // loader's checks (`SHELL_SAFE_FILTERS`, `UNSAFE_TEMPLATE_NAMES`, #469, #474) keep templates safe.
@@ -144,6 +144,18 @@ tpl.addFilter('filed_issues', (filed, analysis) => {
 const NOT_DEVELOPER_TASK = /^[\s>*_#[\]x-]*(?:tests?|measures?|measurements?)\b[*_\s]*(?::|-|–|—|\(|$)/i;
 tpl.addFilter('developer_gaps', (gaps) => (Array.isArray(gaps) ? gaps : []).filter((g) => !NOT_DEVELOPER_TASK.test(String(g?.requirement ?? ''))));
 
+// The steps whose agent writes the run's change on its branch (#130): `develop` (feature, fix) and `refactor`
+// (refactor.yaml), the first one a run has. The shared fragments (pr-pipeline, check-pipeline), the PR monitor's
+// fix round (pr-fix.js) and the #116 commit check read the developer through it.
+const DEVELOPER_STEPS = [
+  'develop',
+  'refactor',
+];
+// The developer step's output of a run's `steps` ({} when none answered yet).
+//   {% set dev = steps | developer_output %}Branch `{{ dev.branch }}`
+const developerOutput = (steps) => DEVELOPER_STEPS.map((id) => steps?.[id]?.output).find((o) => o && typeof o === 'object') || {};
+tpl.addFilter('developer_output', developerOutput);
+
 // The E2E scenarios of a step output for a gate's message (#143): counts, one line per scenario
 // with its status and reason, the note; '' when the output has no `scenarios` (packages/engine/engine/scenarios.js).
 //   {{ steps.test.output | e2e_scenarios }}
@@ -265,6 +277,8 @@ const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %
 const inputsRead = (template) => [...String(template ?? '').matchAll(/\binputs\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
 
 module.exports = {
+  DEVELOPER_STEPS,
+  developerOutput,
   evalExpr,
   inputsRead,
   render,

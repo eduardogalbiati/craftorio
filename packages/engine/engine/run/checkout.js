@@ -11,8 +11,9 @@
 // (no test command given or found, before the first turn; checked again after each agent step, so a
 // change that adds a test runner gets its tests run): feature.yaml / fix.yaml tell the test writer
 // and the developer, and skip the test steps (the change reported as not tested: no test command).
-// #116 `checkDeveloperCommit`: a writing `develop` step that leaves the worktree detached or with uncommitted
-// changes fails at once; otherwise its output carries the worktree's real branch.
+// #116 `checkDeveloperCommit`: a writing `develop` step (#130: or refactor.yaml's `refactor`, templates.js
+// DEVELOPER_STEPS) that leaves the worktree detached or with uncommitted changes fails at once; otherwise its
+// output carries the worktree's real branch.
 // The git operations themselves are packages/engine/engine/worktree.js.
 
 'use strict';
@@ -41,7 +42,10 @@ const { foundChecks } = require('../check-tools');
 const depsCache = require('../deps-cache');
 const testPaths = require('../test-paths');
 const { scratchWorkspace } = require('../../domains/local/local-preview');
-const { render } = require('./templates');
+const {
+  DEVELOPER_STEPS,
+  render,
+} = require('./templates');
 const {
   checkPushAccess,
   isGitUrl,
@@ -472,13 +476,13 @@ const methods = {
     } catch { return null; }
   },
 
-  // #116: after a writing `develop` step, the run's worktree must be on a branch with everything committed (a
+  // #116: after a writing `develop` step (#130: or `refactor`), the run's worktree must be on a branch with everything committed (a
   // sandboxed CLI that could not commit, or an agent that forgot, failed only at the merge before). Returns the
   // output with the worktree's real branch (never the agent's free text); throws "The developer did not commit:
   // <cause>" otherwise. No worktree (a simulation, not a git repository), a read-only agent: the output as it is.
   async checkDeveloperCommit(step, output) {
     const wt = this.worktree;
-    if (step.id !== 'develop' || step.agents || !wt || !output || typeof output !== 'object') return output;
+    if (!DEVELOPER_STEPS.includes(step.id) || step.agents || !wt || !output || typeof output !== 'object') return output;
     // the step's effective capabilities, as the turn got them (sessions.js: defaults, agent, step on top)
     const agent = { ...(this.wf.defaults || {}), ...(this.wf.agents?.[step.agent] || {}) };
     const caps = capabilities.merge(agent.capabilities, step.capabilities);

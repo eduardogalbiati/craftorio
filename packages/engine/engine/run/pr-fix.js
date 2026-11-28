@@ -12,6 +12,8 @@ const fs = require('fs');
 // #811: the fix rounds a run takes from its pull request before each next one asks the owner: the card's
 // (packages/shared/pr-card.js FIX_ROUNDS, one value for the UI and the engine; domains/run/run-pr.js re-exports it)
 const { FIX_ROUNDS: MAX_FIX_ROUNDS } = require('@craftorio/shared/pr-card');
+// #130: the developer step's output (develop, else refactor), as the fragments read it
+const { developerOutput } = require('./templates');
 
 // #811: a turn's tokens (input + output), 0 when unknown: the engine's usage ({ input, output }, providers.js)
 // or a provider's raw one ({ input_tokens, output_tokens })
@@ -72,7 +74,7 @@ const prFixMethods = {
       const wt = this.worktree;
       if (wt?.dir && !fs.existsSync(wt.dir)) {
         this.emitEvent('log', { level: 'info', step_id: step.id, message: `worktree: ${wt.dir} was removed while the run waited: recreating it on its branch for fix round ${fix.round}` });
-        await this.setupWorktree({ again: { dir: wt.dir, branch: wt.ref || wt.branch || this.ctx.steps?.develop?.output?.branch || null } });
+        await this.setupWorktree({ again: { dir: wt.dir, branch: wt.ref || wt.branch || developerOutput(this.ctx.steps).branch || null } });
       }
       const output = { state: this.prMonitorCard?.state || 'open', url: target, fix: true, fix_round: fix.round, fix_prompt: fix.prompt };
       st.output = output;

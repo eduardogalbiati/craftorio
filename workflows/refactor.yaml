@@ -71,7 +71,7 @@ inputs:
     label: "Repository"
     type: string
     required: true
-    description: Local repository path (a git repository; no remote needed).
+    description: Local repository path (a git repository; Local mode needs no remote, Remote and Fork + PR push to its origin).
   target:
     label: "Target"
     type: string

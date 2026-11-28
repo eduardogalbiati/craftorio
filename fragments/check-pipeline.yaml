@@ -21,7 +21,7 @@ steps:
     message: |
       The project's rule checks still fail after {{ vars.check_returns or 0 }} developer round(s): {{ steps.rule_check.output.cause }}
       {{ steps.rule_check.output.message }}
-      The change is on branch `{{ (steps.develop or steps.refactor).output.branch }}`; its code review has not run yet.
+      The change is on branch `{{ (steps | developer_output).branch }}`; its code review has not run yet.
 
   # the owner fixes the environment and tries again, which reruns rule_check; a decision, like check_failed
   check_environment:

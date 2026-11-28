@@ -36,7 +36,7 @@ Agents: developer, reviewer, ui_reviewer, test_writer, mapper, builder, verifier
 
 ### Refactor
 
-One refactor, done safely, in any language: the test writer pins the target's current behaviour first, the developer changes structure only, then the full suite, the build audit and a review of "same behaviour, simpler structure?", and the local merge.
+One refactor, done safely, in any language: the test writer pins the target's current behaviour first, the developer changes structure only, then the full suite, the build audit and a review of "same behaviour, simpler structure?", then the project's way of working: the local merge (Local), or a pull request and its CI (Remote, Fork + PR).
 
 Agents: test_writer, developer, reviewer, builder.
 
