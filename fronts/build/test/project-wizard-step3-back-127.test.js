@@ -102,6 +102,53 @@ test('#127 pt-BR: the back arrow\'s label and tooltip are translated', { timeout
   assert.equal(back.attrs.title, label, 'the tooltip says the same');
 });
 
+// ---- after the review: what the reviewer listed ------------------------------------------------------------
+
+// the last picks saved for resuming ({} when nothing was saved)
+const lastSavedPicks = (app) => JSON.parse(JSON.stringify(app.callsTo('saveOnboardingWizard').at(-1)?.[0] || {})).picks || {};
+
+test('#127 after the back arrow, the wizard saved for resuming has no workflowsMode', { timeout: 30000 }, async () => {
+  const app = await W.atAnalysis({ api: { saveOnboardingWizard: async () => ({}) } });
+  await manual(app);
+  assert.equal(lastSavedPicks(app).workflowsMode, 'manual', 'Define manually was saved');
+  await W.press(app, BACK);
+  await app.settle(20);
+  assert.equal(app.callsTo('saveOnboardingWizard').length > 0, true, 'the wizard was saved');
+  const picks = lastSavedPicks(app);
+  assert.equal(picks.workflowsMode ?? null, null, `the last saved picks: ${JSON.stringify(picks)}`);
+});
+
+test('#127 back from the analysis\' rows, then Analyze with AI again: the rows show again', { timeout: 30000 }, async () => {
+  const app = await W.atAnalysis();
+  await analyzed(app);
+  await W.press(app, BACK);
+  assert.equal(columnState(app), 'choose', 'back on the two choices');
+  await W.press(app, 'wizard-workflows-choice-analyze');
+  await W.emit(app, PROFILED);
+  assert.equal(columnState(app), 'analyzed', `wizard-workflows-column data-state: ${columnState(app)}`);
+  assert.ok(backOf(app), 'the back arrow shows again');
+});
+
+// a new project has no two choices (its column opens on its rows): nothing to go back to
+test('#127 a new project: no back arrow on step 3', { timeout: 30000 }, async () => {
+  const CREATED = {
+    projectId: 'field-notes', name: 'Field Notes', status: 'ready', cli: null,
+    jobs: { clone: { status: 'skipped' }, facts: { status: 'waiting' }, projectMap: { status: 'waiting' }, profile: { status: 'done', profile: { mode: 'local', ci: 'release', release: 'milestone', tests: 'unit' } } },
+  };
+  const app = W.page({ api: { createOnboarding: async () => W.clone(CREATED), onboardingStatus: async () => W.clone(CREATED) } });
+  await app.boot();
+  W.wizard(app).open();
+  await app.settle(20);
+  await W.press(app, 'wizard-source-new');
+  await W.press(app, 'wizard-next');
+  await W.typeInto(app, '#wizard-new-name', 'Field Notes');
+  await W.press(app, 'wizard-next');
+  await app.settle(20);
+  assert.equal(W.currentStep(app), 'analysis', 'the new project is on step 3');
+  assert.notEqual(columnState(app), 'choose', `its column opens on its rows (${columnState(app)})`);
+  assert.equal(backOf(app) === null, true, `no data-testid="${BACK}"`);
+});
+
 test('#127 back from the manual rows, then Define manually again: the picks made by hand are kept', { timeout: 30000 }, async () => {
   const app = await W.atAnalysis();
   await manual(app);
