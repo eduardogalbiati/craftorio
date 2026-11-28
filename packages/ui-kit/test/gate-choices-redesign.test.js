@@ -59,6 +59,10 @@ test('developer_check: each answer is a card, its label over what it does (the o
   assert.equal(cards.every((b) => !!b.querySelector('.gate-choice-help')), true, 'every card says what it does');
   assert.equal(gate.querySelector('.gate-card-buttons'), null);
   assert.equal(cards[0].classList.contains('primary'), true, 'the first answer is the accent one');
+  // its accessible name is the label alone, the help its description (a screen reader, a step finding it by name)
+  assert.equal(cards[0].getAttribute('aria-label'), 'Approve: go on to the code review');
+  const help = cards[0].querySelector('.gate-choice-help');
+  assert.equal(cards[0].getAttribute('aria-describedby'), help.getAttribute('id'));
 });
 
 test('developer_check in pt-BR: the answers and the request field read in Portuguese', async () => {

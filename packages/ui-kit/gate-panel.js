@@ -223,8 +223,12 @@ function gateHelpOf(g, id) {
 window.gateHelpOf = gateHelpOf;
 // One answer as a card: its label, then what it does under it (the line gateButtonsHelpHtml listed under
 // the buttons). `attrs`: the screen's own data-* hooks (raw markup); `primary`: the accent one (the first).
+// Its accessible name is the label alone (aria-label), the help its description (aria-describedby): a screen reader
+// says "Ship", then what it does, and a button is still found by its name.
+let gateChoiceSeq = 0;
 function gateChoiceButtonHtml({ label, help = '', primary = false, chosen = false, attrs = '' }) {
-  return `<button type="button" class="btn gate-choice${primary ? ' primary' : ''}${chosen ? ' chosen' : ''}" ${attrs}><span class="gate-choice-label">${esc(label)}</span>${help ? `<span class="gate-choice-help">${esc(help)}</span>` : ''}</button>`;
+  const helpId = help ? `gate-choice-help-${++gateChoiceSeq}` : '';
+  return `<button type="button" class="btn gate-choice${primary ? ' primary' : ''}${chosen ? ' chosen' : ''}" aria-label="${esc(label)}"${helpId ? ` aria-describedby="${helpId}"` : ''} ${attrs}><span class="gate-choice-label">${esc(label)}</span>${help ? `<span class="gate-choice-help" id="${helpId}">${esc(help)}</span>` : ''}</button>`;
 }
 window.gateChoiceButtonHtml = gateChoiceButtonHtml;
 // The gate's text field (`feedback`), its label and placeholder in the interface language (label_key,

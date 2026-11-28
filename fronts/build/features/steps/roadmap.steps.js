@@ -1169,7 +1169,8 @@ When('I open the gate of the parked roadmap item {string}', async ({ e2e }, titl
 
 When('I choose {string} on the gate card', async ({ e2e }, name) => {
   const card = e2e.window.getByTestId('run-gate').first();
-  await card.getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) }).click();
+  // a choice by its name (the run screen redesign: the card's label; its help is the button's description)
+  await card.getByTestId('run-gate-choice').and(e2e.window.getByRole('button', { name, exact: true })).click();
   await expect(card.getByTestId('run-gate-choice').first()).toBeHidden({ timeout: LOAD_TIMEOUT });
 });
 
