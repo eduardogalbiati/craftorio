@@ -53,8 +53,9 @@ function git(e2e, cwd, args) {
   return execFileSync('git', ['-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', '-c', 'core.autocrlf=false', ...args], { cwd, env, encoding: 'utf8' }).trim();
 }
 
+// no issue yet: the scenarios create the epic and its phase issues (#12 hides that action once `issue:` names one)
 const frontMatter = (slug, stage, status, own, other) => [
-  '---', `item: ${slug}`, 'issue: "#1"', `stage: ${stage}`, `status: ${status}`, 'approver: Owner', 'date: 2026-10-01',
+  '---', `item: ${slug}`, 'issue: ""', `stage: ${stage}`, `status: ${status}`, 'approver: Owner', 'date: 2026-10-01',
   own === 'en' ? `translation: ${other}` : `source: ${other}`, '---', '',
 ];
 

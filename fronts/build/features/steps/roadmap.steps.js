@@ -1451,7 +1451,11 @@ const spentNoted = new WeakMap();
 const spentValue = (page) => headStat(page, 'Spent').getByTestId('roadmap-stat-value');
 
 Then('the cost meter of the roadmap item {string} shows that its run spent nothing', async ({ e2e }, title) => {
-  const meter = roadmapItem(e2e.window, title).getByTestId('roadmap-meter-cost');
+  const row = roadmapItem(e2e.window, title);
+  const meter = row.getByTestId('roadmap-meter-cost');
+  // the roadmap's lanes (2026-11-27): Cost with its numbers is in the row's open panel
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  if (!await meter.isVisible()) await row.getByTestId('roadmap-item-toggle').click();
   await expect(meter).toBeVisible({ timeout: LOAD_TIMEOUT });
   const text = await meter.innerText();
   // "Simulated" may stand for the amount; an amount shown is the run's cost and is zero
