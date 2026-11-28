@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/contract",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "The channels the app and the engine speak (names, params, schemas and their hash), generated from the engine by npm run contract.",
   "license": "MIT",

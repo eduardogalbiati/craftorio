@@ -6,6 +6,18 @@ source: CHANGELOG.md (English)
 
 Todas as releases do app, da mais nova para a mais antiga. Os itens levam aos seus documentos do SDLC; `#123` leva à issue.
 
+## [1.1.1] - 2026-11-28
+
+> Um Roadmap mais leve, runs que resistem a uma recuperação, e a tela de Docs oferecendo só o que o item ainda precisa.
+
+### Alterado
+- **O Roadmap mostra os itens de uma etapa em raias**: um grupo por workflow, as estações como colunas nomeadas uma vez, e uma linha por execução com o status, as suas ações, um ícone por estação e o andamento (custo, tempo); a linha abre com os números, o resumo e as ações do item. O cabeçalho ficou mais leve: a pílula de estado diz o estado, e os números mostram primeiro o que falta.
+
+### Corrigido
+- Uma run recuperada mantém o tempo de espera nos gates, então responder um gate na manhã seguinte não estoura mais o limite de duração da run (#10).
+- Uma run iniciada pela linha de comando é dona da sua pasta: o app nunca a retoma enquanto ela ainda roda, e retomar uma run encerrada para os processos que sobraram (#7).
+- A tela de Docs não oferece um segundo épico nem um plano para um item que já tem a sua issue, e um item pronto aparece como pronto (#12).
+
 ## [1.1.0] - 2026-11-27
 
 > O Codex como IA orquestradora, projeto a partir de qualquer pasta, Setup e wizard novos, e os bugs dos testes exploratórios.

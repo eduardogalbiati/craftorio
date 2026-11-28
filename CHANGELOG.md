@@ -6,6 +6,18 @@ translation: CHANGELOG.pt-BR.md
 
 Every release of the app, newest first. Items link to their SDLC documents; `#123` links to the issue.
 
+## [1.1.1] - 2026-11-28
+
+> A lighter Roadmap, runs that survive a recovery, and the Docs screen offering only what an item still needs.
+
+### Changed
+- **The Roadmap draws a stage's items as lanes**: one group per workflow, its stations as columns named once, and one row per run with its status, your actions, a glyph per station and its progress (cost, time); a row opens for the numbers, the summary and the item's actions. The head is lighter: the state pill says the state, and the numbers show what is left first.
+
+### Fixed
+- A recovered run keeps its gate wait time, so answering a gate the next morning no longer trips the run's duration limit (#10).
+- A run started from the command line owns its folder: the app never resumes it while it still runs, and resuming an ended run stops its leftover processes (#7).
+- The Docs screen offers no second epic or plan for an item that already has its issue, and a done item looks done (#12).
+
 ## [1.1.0] - 2026-11-27
 
 > Codex as the orchestrator AI, a project from any folder, a new Setup and wizard, and the bugs of the exploratory tests.

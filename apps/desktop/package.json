@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/desktop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "The Electron desktop app: the host (main process, preloads, windows and their guards) and the renderer, running the engine in-process or attached to a remote craftorio-engine.",
   "license": "MIT",

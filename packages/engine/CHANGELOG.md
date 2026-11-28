@@ -1,5 +1,15 @@
 # @craftorio/engine
 
+## 1.2.1
+
+### Patch Changes
+
+- A recovered run keeps its gate wait time: the gate clock is rebuilt from the run's events, so answering a gate the next
+  morning no longer trips the run's duration limit (#10). A run started with `scripts/run.js` owns its folder and releases
+  it at the end, and resuming never takes over a live run's worktree; resuming an ended run stops its leftover processes (#7).
+- Updated dependencies [7e50f86]
+  - @craftorio/shared@1.2.1
+
 ## 1.2.0
 
 ### Minor Changes

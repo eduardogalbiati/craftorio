@@ -1,6 +1,6 @@
 {
   "name": "@craftorio/front-plan",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "The Design & Plan front: the Inbox, Discovery and the ideation tools (AI Arena, Write & Review); its screens, their CSS, its features and its tests.",
   "license": "MIT",
