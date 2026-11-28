@@ -12,7 +12,10 @@
 //   (data-testid="run-pause") and "Stop" (data-testid="run-stop") at its right end.
 // - data-testid="run-screen-status": the run's status pill on that row, data-status = the status id
 //   (running, paused, cancelled…), its text the readable label ("Running", "Paused", "Cancelled").
-// - data-testid="run-screen-id": the run's id on that row.
+//   Since the redesign of 2026-11-28 at most two of the run's actions are buttons of the row; the others are
+//   entries (role=menuitem) of its ⋮ menu: data-testid="run-actions-more" opens data-testid="run-actions-menu"
+//   (runAction finds an action either way).
+// - data-testid="run-screen-id": the run's id, under that row (the stations row, data-testid="run-progress-row").
 // - the Start panel opens from Projects › a project card's "Start workflow" (also Home, Workflows ›
 //   Definitions); its own Start button stays data-testid="start-workflow".
 
@@ -27,6 +30,19 @@ const runTabs = (page) => page.getByRole('tablist', { name: 'Run view', exact: t
 const runTab = (page, name) => runTabs(page).getByRole('tab', { name: new RegExp(`^${escapeRe(name)}\\b`) });
 const runScreenStatus = (page) => visibleTestId(page, 'run-screen-status');
 const runScreenId = (page) => visibleTestId(page, 'run-screen-id');
+
+// One of the run's actions (redesign 2026-11-28): its button on the tab row, else its entry in the row's ⋮ menu,
+// which this opens (left open, so the next action is read in it too). A glyph may lead the name ("◆ Watch").
+async function runAction(page, name) {
+  const re = new RegExp(`(^|\\s)${escapeRe(name)}`);
+  const row = runTabRow(page);
+  const button = row.getByRole('button', { name: re }).filter({ visible: true }).first();
+  const more = row.getByTestId('run-actions-more').filter({ visible: true }).first();
+  await expect(button.or(more).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  if (await button.count()) return button;
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+  return page.getByTestId('run-actions-menu').getByRole('menuitem', { name: re }).filter({ visible: true }).first();
+}
 
 const navItem = (page, name) => page.getByRole('navigation').getByRole('button', { name: new RegExp(`^${escapeRe(name)}(\\s+\\d+)?$`) });
 
@@ -56,6 +72,7 @@ module.exports = {
   runTab,
   runScreenStatus,
   runScreenId,
+  runAction,
   demoProjectCard,
   openProjects,
   openStartPanel,

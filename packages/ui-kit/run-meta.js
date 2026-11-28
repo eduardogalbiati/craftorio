@@ -85,6 +85,7 @@ function editRunTitle(btn) {
       try { onRunMeta(await api.setRunTitle(runId, value)); } catch (e) { showToast(t('run_meta.could_not_rename_the_run'), errMsg(e)); }
     }
     $('#run-summary')._html = null; // drawn again even when nothing changed (Esc)
+    if ($('#run-screen-title')) $('#run-screen-title')._html = null; // the Run screen's tab row (redesign 2026-11-28)
     window.runChatRefreshHead?.();
     renderRunListsSoon();
     scheduleRender();

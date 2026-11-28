@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
-const { openStartPanel, runScreenStatus, runTab } = require('../../../../features/support/run-screen');
+const { LOAD_TIMEOUT: SCREEN_TIMEOUT, openStartPanel, runAction, runScreenStatus, runTab } = require('../../../../features/support/run-screen');
 const { fileOf } = require('../../../../features/support/workflows');
 
 // a simulated run of feature (Validation "Validated") reaches its first gate in well under a minute
@@ -71,8 +71,15 @@ Then('the gate card shows its summary and its buttons', async ({ e2e }) => {
   expect(await buttons.count()).toBeGreaterThanOrEqual(2);
 });
 
+// the redesign (2026-11-28): the Workflow panel shows three inputs and folds the others under "Inputs (n)"
+// (data-testid run-inputs-more), opened here when the pill is not among the three
 Then('the run shows the pill {string}', async ({ e2e }, text) => {
-  await expect(e2e.window.getByTestId('input-pill').filter({ hasText: text }).first()).toBeVisible({ timeout: 30000 });
+  const page = e2e.window;
+  const pill = page.getByTestId('input-pill').filter({ hasText: text }).filter({ visible: true }).first();
+  const more = page.getByTestId('run-inputs-more').filter({ visible: true }).first();
+  await expect(pill.or(more).first()).toBeVisible({ timeout: 30000 });
+  if (!(await pill.count()) && !(await more.evaluate((d) => d.open))) await more.locator('summary').click();
+  await expect(pill).toBeVisible({ timeout: 30000 });
 });
 
 // #233: Analytics › Run and the run page mark an estimated cost (a timed-out attempt) and an old
@@ -520,7 +527,8 @@ When('I view the run {string} from the list', async ({ e2e }, fragment) => {
 // #409: the card has no "Open in Analytics" any more: Open run, then the Run screen's own button
 When('I open the run {string} in Analytics from the list', async ({ e2e }, fragment) => {
   await rowButton(e2e.window, fragment, 'Open run');
-  await e2e.window.getByRole('button', { name: 'Open in Analytics', exact: true }).filter({ visible: true }).first().click({ timeout: LOAD_TIMEOUT });
+  // a button of the Run screen's tab row or an entry of its ⋮ menu (redesign 2026-11-28)
+  await (await runAction(e2e.window, 'Open in Analytics')).click({ timeout: SCREEN_TIMEOUT });
   await expect(e2e.window.getByTestId('an-run-header')).toContainText(fragment, { timeout: LOAD_TIMEOUT });
 });
 

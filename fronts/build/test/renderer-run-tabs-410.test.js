@@ -87,6 +87,9 @@ function tabRow(html) {
   return node;
 }
 const hasIn = (html, pred) => H.findAll(html, pred).length > 0;
+// the redesign (2026-11-28): the row shows at most two actions, the others are entries of its ⋮ menu (closed,
+// so hidden): the row's actions are #run-actions' whole markup, open menu or not
+const rowActions = (app) => `<div>${fakeOf(app, 'run-actions')?.innerHTML || ''}</div>`;
 const byId = (id) => (e) => e.attrs.id === id;
 const buttonText = (label) => (e) => e.name === 'button' && H.visibleText(e.inner).trim() === label;
 // the Workflow panel: the element whose heading reads "Workflow"
@@ -142,21 +145,21 @@ test('#410 run chat: its header shows the same tablist, Chat selected, with Deta
 // ---- the run's actions on the tab row ------------------------------------------------------------
 
 test('#410 Details, a live run: Ask the supervisor, Watch, Review changes and Open in Analytics sit on the tab row, outside the tablist, not in the Workflow panel', async () => {
-  const { html } = await runScreen({ status: 'running', events: [{ type: 'worktree.ready', run_id: 'r1' }] });
+  const { app, html } = await runScreen({ status: 'running', events: [{ type: 'worktree.ready', run_id: 'r1' }] });
   const row = tabRow(html);
   const list = H.findEl(row.outer, (e) => e.attrs.role === 'tablist');
+  assert.equal(hasIn(row.outer, byId('run-actions')), true, 'the actions\' box is on the tab row');
   for (const id of ['btn-run-sup', 'btn-run-watch', 'btn-run-diff', 'btn-run-analytics']) {
-    assert.equal(hasIn(row.outer, byId(id)), true, `#${id} is on the tab row`);
+    assert.equal(hasIn(rowActions(app), byId(id)), true, `#${id} is on the tab row (a button or a ⋮ entry)`);
     assert.equal(hasIn(list.outer, byId(id)), false, `#${id} is not one of the tabs`);
     assert.equal(hasIn(workflowPanel(html), byId(id)), false, `#${id} left the Workflow panel`);
   }
 });
 
 test('#410 Details, a failed run: Resume from step… is on the tab row with Ask the supervisor; no Watch (same conditions as before)', async () => {
-  const { html } = await runScreen({ status: 'failed', past: true });
-  const row = tabRow(html);
-  assert.equal(hasIn(row.outer, byId('btn-run-sup')), true, 'Ask the supervisor on the tab row');
-  assert.equal(hasIn(row.outer, byId('btn-run-resume')), true, 'Resume from step… on the tab row');
+  const { app, html } = await runScreen({ status: 'failed', past: true });
+  assert.equal(hasIn(rowActions(app), byId('btn-run-sup')), true, 'Ask the supervisor on the tab row (its ⋮ menu)');
+  assert.equal(hasIn(rowActions(app), byId('btn-run-resume')), true, 'Resume from step… on the tab row (its ⋮ menu)');
   assert.equal(hasIn(html, byId('btn-run-watch')), false, 'no Watch for a run that ended');
   assert.equal(hasIn(workflowPanel(html), byId('btn-run-resume')), false, 'Resume left the Workflow panel');
 });
@@ -266,7 +269,7 @@ test('#410 switching to another run opens it on Artifacts; selecting the same ru
 
 // this file's own reading of the screen (passes before and after the change): the run's actions render
 test('harness: a live run\'s screen renders its actions (Ask the supervisor, Open in Analytics) somewhere on it', async () => {
-  const { html } = await runScreen({ status: 'running' });
-  assert.equal(hasIn(html, byId('btn-run-sup')), true);
-  assert.equal(hasIn(html, byId('btn-run-analytics')), true);
+  const { app } = await runScreen({ status: 'running' });
+  assert.equal(hasIn(rowActions(app), byId('btn-run-sup')), true);
+  assert.equal(hasIn(rowActions(app), byId('btn-run-analytics')), true);
 });

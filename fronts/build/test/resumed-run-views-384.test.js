@@ -73,10 +73,11 @@ async function runScreen(run, byId) {
 // the runs:list { ids } calls of the Run screen (the page's own lists ask without ids)
 const idCalls = (page) => page.callsTo('listRuns').filter((a) => a[0]?.ids).map((a) => JSON.stringify(a[0]));
 
-test('#384 Run screen: the summary of a failed run that was resumed links the resumed run', async () => {
+// the redesign (2026-11-28): the link sits by the run's title, on the tab row (#run-screen-title)
+test('#384 Run screen: the title of a failed run that was resumed links the resumed run', async () => {
   const page = await runScreen({ id: FAILED, status: 'failed', workflow: 'software-development', inputs: {} }, { [FAILED]: { runId: RESUMED, status: 'success' } });
-  const link = page.$('#run-summary [data-testid="run-resumed-link"]');
-  assert.equal(link === null, false, 'the summary has the resume link');
+  const link = page.$('#run-screen-title [data-testid="run-resumed-link"]');
+  assert.equal(link === null, false, 'the title has the resume link');
   assert.equal(link.getAttribute('data-run'), RESUMED);
   assert.equal(textOf(link).trim(), 'Resumed → succeeded');
   assert.deepEqual(idCalls(page), [JSON.stringify({ ids: [FAILED] })]);
@@ -84,13 +85,13 @@ test('#384 Run screen: the summary of a failed run that was resumed links the re
 
 test('#384 Run screen: a run nobody resumed shows no resume link', async () => {
   const page = await runScreen({ id: FAILED, status: 'failed', workflow: 'software-development', inputs: {} }, {});
-  assert.equal(page.$('#run-summary [data-testid="run-resumed-link"]') === null, true);
+  assert.equal(page.$('#run-screen-title [data-testid="run-resumed-link"]') === null, true);
 });
 
 test('#384 Run screen: a running run never asks which run resumed it', async () => {
   const page = await runScreen({ id: FAILED, status: 'running', workflow: 'software-development', inputs: {} }, { [FAILED]: { runId: RESUMED, status: 'success' } });
   assert.deepEqual(idCalls(page), []);
-  assert.equal(page.$('#run-summary [data-testid="run-resumed-link"]') === null, true);
+  assert.equal(page.$('#run-screen-title [data-testid="run-resumed-link"]') === null, true);
 });
 
 // ---- the Chat's finished note --------------------------------------------------------------------

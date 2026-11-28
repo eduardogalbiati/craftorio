@@ -56,9 +56,11 @@ async function drawn(language, file, id, ctx) {
     headline: text(gate.querySelector('.gate-card-what')),
     recommended: gate.getAttribute('data-recommend'),
     recommendation: text(gate.querySelector('.gate-card-rec')),
-    buttons: gate.querySelectorAll('[data-testid="run-gate-choice"]').map(text),
+    // the run screen redesign (2026-11-28): each answer is a card, its label over its help (gateChoiceButtonHtml)
+    buttons: gate.querySelectorAll('[data-testid="run-gate-choice"]').map((b) => text(b.querySelector('.gate-choice-label') || b)),
     choices: gate.querySelectorAll('[data-choice]').map((b) => b.getAttribute('data-choice')),
-    help: gate.querySelectorAll('.gate-card-buttons li').map(text),
+    help: gate.querySelectorAll('[data-testid="run-gate-choice"]').filter((b) => b.querySelector('.gate-choice-help'))
+      .map((b) => `${text(b.querySelector('.gate-choice-label'))}: ${text(b.querySelector('.gate-choice-help'))}`),
   };
 }
 

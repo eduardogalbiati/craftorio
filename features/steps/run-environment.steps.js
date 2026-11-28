@@ -34,7 +34,8 @@ const stepIdOf = (name) => name.trim().toLowerCase().replace(/\s+/g, '_');
 const visibleGates = (page) => page.getByTestId('run-gate').or(page.getByTestId('run-chat-gate')).filter({ visible: true });
 const gateCard = (page) => visibleGates(page).first();
 const environmentMessage = (page) => gateCard(page).getByTestId('check-environment-message');
-const gateChoice = (page, name) => gateCard(page).getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) });
+// a choice by its name (the run screen redesign: the card's label; its help is the button's description)
+const gateChoice = (page, name) => gateCard(page).getByTestId('run-gate-choice').and(page.getByRole('button', { name, exact: true }));
 
 // the one dependency the demo project's check needs: `npm run check` fails with MODULE_NOT_FOUND until
 // node_modules holds it, and passes once it does

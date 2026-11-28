@@ -140,8 +140,11 @@ test('cardLines(): a simulated session says so next to its provider', () => {
   assert.match(first, /\(simulated\)/);
 });
 
-test('turnHtml: a message on the right gets the rc-right class', () => {
-  assert.match(src, /rc-\$\{it\.side === 'right' \? 'right' : 'left'\}/);
+// the redesign (2026-11-28, the owner's choice): every message on the left, whatever side the model gives it
+test('turnHtml: every message sits on the left (rc-left), its robot facing the conversation', () => {
+  assert.match(src, /class="rc-msg rc-left"/);
+  assert.match(src, /agentAvatar\(\{ \.\.\.it, side: 'left' \}\)/);
+  assert.doesNotMatch(src, /rc-\$\{it\.side === 'right' \? 'right' : 'left'\}/);
 });
 
 // turnHtml's activity block (#160): a sub-agent entry gets its own class, a tag for its type and

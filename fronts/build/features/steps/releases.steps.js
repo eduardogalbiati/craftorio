@@ -132,7 +132,8 @@ When('I start a simulated run of the workflow {string}', async ({ e2e }, file) =
 
 Then('the gate card offers {string} and {string}', async ({ e2e }, a, b) => {
   const card = e2e.window.getByTestId('run-gate').first();
-  for (const name of [a, b]) await expect(card.getByTestId('run-gate-choice').filter({ hasText: new RegExp(`^\\s*${escapeRe(name)}\\s*$`) })).toBeEnabled();
+  // a choice by its name (the run screen redesign: the card's label; its help is the button's description)
+  for (const name of [a, b]) await expect(card.getByTestId('run-gate-choice').and(e2e.window.getByRole('button', { name, exact: true }))).toBeEnabled();
 });
 
 // ---- the release summary (#290) -----------------------------------------------------------------
