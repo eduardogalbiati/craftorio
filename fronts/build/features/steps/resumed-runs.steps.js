@@ -19,6 +19,7 @@ const os = require('os');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
+const { openRow } = require('../../../../features/support/roadmap-row');
 
 const LOAD_TIMEOUT = 30000;
 const MIN = 6e4;
@@ -144,7 +145,8 @@ When('I follow the resumed link of the run {string}', async ({ e2e }, fragment) 
 });
 
 Then('the run history of the roadmap item {string} lists the run {string} as {string}', async ({ e2e }, title, fragment, label) => {
-  const history = roadmapItem(e2e.window, title).getByTestId('roadmap-run-history');
+  const item = await openRow(roadmapItem(e2e.window, title), LOAD_TIMEOUT); // the earlier runs are in the item's open row
+  const history = item.getByTestId('roadmap-run-history');
   await expect(history).toBeVisible({ timeout: LOAD_TIMEOUT });
   const entry = history.locator(`[data-testid="roadmap-run-history-entry"][data-run$="${fragment}"]`);
   await expect(entry).toBeVisible();

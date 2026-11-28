@@ -1,9 +1,9 @@
 // #375: the buttons that open an issue's impact preview on the project city.
 // - The Roadmap view (fronts/build/views/backlog/backlog-roadmap.js, window.BacklogRoadmap.html, loaded
-//   whole in a vm sandbox like test/renderer-backlog-roadmap.test.js): every item card has a button
-//   data-testid="show-on-map" with the text "Show on the map"; every stage's header (div.rm-stage-head,
-//   not inside the closed ⋮ menu) has a button data-testid="show-stage-on-map" with the text "Show the
-//   stage on the map".
+//   whole in a vm sandbox like test/renderer-backlog-roadmap.test.js): every item's row has a button
+//   data-testid="show-on-map" with the text "Show on the map" (in its open row since the lanes of
+//   2026-11-27); every stage's ⋮ menu has an entry data-testid="show-stage-on-map" with the text "Show
+//   the stage on the map" (the same day: it was a button of the stage's head).
 // - The Backlog's issue card (fronts/build/views/backlog/backlog.js `const card = (i) => ...`, a
 //   closure with no exported markup function, so checked on its source as a seam like
 //   test/renderer-backlog-filters.test.js): its markup carries a button data-testid="show-on-map"
@@ -46,7 +46,7 @@ function loadRoadmap() {
   sandbox.showRun = () => {};
   withI18n(sandbox);
   vm.createContext(sandbox);
-  for (const f of ['packages/ui-kit/status-pill.js', 'packages/ui-kit/estimates.js', 'packages/shared/run-progress-model.js', 'packages/shared/default-workflow.js', 'packages/shared/roadmap-model.js', 'packages/shared/run-inputs.js', 'packages/ui-kit/workflow-inputs.js', 'fronts/build/views/backlog/backlog-roadmap.js']) {
+  for (const f of ['packages/ui-kit/status-pill.js', 'packages/ui-kit/estimates.js', 'packages/shared/run-progress-model.js', 'packages/shared/default-workflow.js', 'packages/shared/roadmap-model.js', 'packages/shared/run-inputs.js', 'packages/ui-kit/workflow-inputs.js', 'packages/ui-kit/menu.js', 'fronts/build/views/backlog/backlog-roadmap-meters.js', 'fronts/build/views/backlog/backlog-roadmap.js']) {
     vm.runInContext(read(f), sandbox, { filename: path.basename(f) });
   }
   return sandbox.window.BacklogRoadmap;
@@ -73,15 +73,20 @@ test('#375 a roadmap item card has a "Show on the map" button', () => {
   for (const b of found) assert.match(textOf(b), /Show on the map/);
 });
 
-test('#375 a roadmap stage header has a "Show the stage on the map" button', () => {
-  const html = loadRoadmap().html(DATA, () => {}, SHOW_ALL);
-  const found = buttons(html, 'show-stage-on-map');
-  assert.equal(found.length, 2, `one per stage: ${found.length}`);
-  for (const b of found) assert.match(textOf(b), /Show the stage on the map/);
-  // each stage's head: from its div.rm-stage-head to its list of item cards
-  const heads = html.split('<div class="rm-stage-head">').slice(1).map((s) => s.split('<div class="rm-items">')[0]);
-  assert.equal(heads.length, 2, 'two stage heads');
-  assert.equal(heads.filter((h) => h.includes('data-testid="show-stage-on-map"')).length, 2, 'in each stage header, before its items');
+test('#375 a roadmap stage\'s ⋮ menu has a "Show the stage on the map" entry, for its own stage', async () => {
+  const roadmap = loadRoadmap();
+  assert.equal(buttons(roadmap.html(DATA, () => {}, SHOW_ALL), 'show-stage-on-map').length, 0, 'none while the menus are closed: no button in a stage\'s head');
+  const ctx = { projectId: 'p1', render: () => {}, setData: () => {}, setError: () => {} };
+  for (const [s, id] of [[0, 'st1'], [1, 'st2']]) {
+    // the stage's ⋮ button clicked: without a page, the next draw shows its menu open
+    const menuButton = { dataset: { rmStageMenu: id } };
+    menuButton.closest = (sel) => (sel === '[data-rm-stage-menu]' ? menuButton : null);
+    await roadmap.onClick({ target: menuButton }, ctx, DATA);
+    const found = buttons(roadmap.html(DATA, () => {}, SHOW_ALL), 'show-stage-on-map');
+    assert.equal(found.length, 1, `one entry, in the open menu of stage ${s + 1}: ${found.length}`);
+    assert.match(found[0], new RegExp(`role="menuitem"[^>]*data-rm-map-stage="${s}"`));
+    assert.match(textOf(found[0]), /Show the stage on the map/);
+  }
 });
 
 test('#375 the Backlog issue card has a "Show on the map" button', () => {

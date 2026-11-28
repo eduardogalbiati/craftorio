@@ -234,7 +234,7 @@ test('#395 roadmap:park-stage: parks the stage\'s item waiting at a gate and ski
 const H = () => require('../roadmap-status-helpers');
 const RUN_ID = '20261015-100000-park0001';
 
-test('#395 card: an item waiting at a gate shows "Move on", which asks the service to park it', async () => {
+test('#395 card: an item waiting at a gate shows "Move on without it", which asks the service to park it', async () => {
   const h = H();
   const x = h.item('i1', 'running', 1, 'One', { runId: RUN_ID, waiting: true, run: h.run({ waiting: true, gate: 'Accept the work?' }) });
   const d = h.roadmapOf([{ id: 's1', name: '', note: '', items: [x] }, { id: 's2', name: '', note: '', items: [h.item('i2', 'planned', 2, 'Two')] }]);
@@ -244,9 +244,9 @@ test('#395 card: an item waiting at a gate shows "Move on", which asks the servi
   const html = R.html(d, () => {}, { showAll: true, since: 'total' });
   const card = h.itemEl(html, 'i1');
   const buttons = h.findAll(card.outer, (e) => e.name === 'button').map((e) => h.visibleText(e.inner).trim());
-  assert.equal(buttons.includes('Move on'), true, `buttons: ${buttons.join(' | ')}`);
+  assert.equal(buttons.includes('Move on without it'), true, `buttons: ${buttons.join(' | ')}`);
   const { ctx } = h.makeCtx();
-  await R.onClick(h.clickOn(html, (e) => e.name === 'button' && h.visibleText(e.inner).trim() === 'Move on'), ctx, d);
+  await R.onClick(h.clickOn(html, (e) => e.name === 'button' && h.visibleText(e.inner).trim() === 'Move on without it'), ctx, d);
   assert.deepEqual(calls, [['p1', 'i1', 'park']]);
 });
 

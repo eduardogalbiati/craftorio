@@ -216,12 +216,12 @@ test('#750 band 1: Pausar keeps its menu (pause after this stage, or now)', asyn
 
 // ---------- band 2: the four stats ----------
 
-test('#750 stats (pt-BR): four columns Etapas, Falta, Previsão, Gasto with their values and details', (t) => {
+test('#750 stats (pt-BR): four columns Etapas, Faltam, Previsão, Gasto with their values and details', (t) => {
   const out = load();
   lang(t, out, 'pt-BR');
   const cols = stats(html(out, example()));
   assert.equal(cols.length, 4, JSON.stringify(cols));
-  assert.deepEqual(cols.map((c) => c[0]), ['Etapas', 'Falta', 'Previsão', 'Gasto']);
+  assert.deepEqual(cols.map((c) => c[0]), ['Etapas', 'Faltam', 'Previsão', 'Gasto']);
   assert.deepEqual(cols.map((c) => c.length), [3, 3, 3, 3], JSON.stringify(cols));
   assert.deepEqual([cols[0][1], cols[0][2]], ['6', '2 desativadas']);
   assert.deepEqual([cols[1][1], cols[1][2]], ['3 itens', 'em 2 etapas']);
@@ -245,7 +245,7 @@ test('#750 stats: an unknown value (no estimate, nothing spent) reads "—" and 
   const d = example({ stages: [stage('st1', [it('i1', 'planned', 1), it('i2', 'planned', 2)])] });
   const cols = stats(html(out, d));
   assert.equal(cols.length, 4, JSON.stringify(cols));
-  assert.deepEqual(cols.map((c) => c[0]), ['Etapas', 'Falta', 'Previsão', 'Gasto']);
+  assert.deepEqual(cols.map((c) => c[0]), ['Etapas', 'Faltam', 'Previsão', 'Gasto']);
   assert.deepEqual([cols[2][1], cols[3][1]], ['—', '—'], JSON.stringify(cols));
 });
 
@@ -441,7 +441,7 @@ test('#750 pt-BR catalog has the header\'s words as values', () => {
 test('#750 every catalog key the roadmap view and its base check card use is in en.json and pt-BR.json', () => {
   const en = catalog('en');
   const pt = catalog('pt-BR');
-  const src = ['backlog-roadmap.js', 'backlog-live.js'].map((f) => fs.readFileSync(path.join(ROOT, 'fronts', 'build', 'views', 'backlog', f), 'utf8')).join('\n');
+  const src = ['backlog-roadmap.js', 'backlog-roadmap-meters.js', 'backlog-live.js'].map((f) => fs.readFileSync(path.join(ROOT, 'fronts', 'build', 'views', 'backlog', f), 'utf8')).join('\n');
   const keys = [...new Set([...src.matchAll(/\bt\(\s*'([a-z_]+\.[a-z0-9_]+)'/g)].map((m) => m[1]))];
   assert.ok(keys.length > 0);
   assert.deepEqual(keys.filter((k) => !(k in en) || !(k in pt)), []);

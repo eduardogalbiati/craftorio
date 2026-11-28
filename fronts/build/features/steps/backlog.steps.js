@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
+const { openRow } = require('../../../../features/support/roadmap-row');
 
 const board = (page) => page.getByTestId('backlog-board');
 
@@ -127,48 +128,52 @@ Then("the Board's issue count leaves out the epics", async ({ e2e }) => {
   await expect(page.getByTestId('backlog-count')).toHaveText(`${n} issue${n === 1 ? '' : 's'}`);
 });
 
-// ---- the Roadmap's progress ring and its summary popover (#236; #282: the steps are the pipeline) ------
+// ---- the Roadmap's progress ring, the run's summary and a station's card (#236) ------------------------
+// Since the lanes of 2026-11-27 (features/support/roadmap-row.js): the ring (data-testid="roadmap-ring") has no
+// popover, the run's summary (data-testid="roadmap-run-summary") is folded in the item's open row under
+// data-testid="roadmap-run-summary-toggle", and who works at a station shows in its card (role="tooltip") on hover
+// or focus of the station's glyph or pill.
 
 Given('the app is open in a {int}x{int} window', async ({ e2e }, w, h) => {
   await e2e.open({ size: `${w}x${h}` });
 });
 
 const roadmapItem = (page, title) => page.getByTestId('roadmap-item').filter({ hasText: title }).first();
-const ringOf = (item) => item.getByRole('button', { name: /Show the run's steps/ });
-const stepsPopover = (page) => page.getByRole('tooltip', { name: "The run's summary" }).filter({ visible: true }).first();
 const pipelineOf = (page, title) => roadmapItem(page, title).getByTestId('roadmap-pipeline');
 
-When('I hover the progress ring of the roadmap item {string}', async ({ e2e }, title) => {
-  const item = roadmapItem(e2e.window, title);
-  await item.scrollIntoViewIfNeeded();
-  await ringOf(item).hover();
-  await expect(stepsPopover(e2e.window)).toBeVisible();
+When('I unfold the run summary of the roadmap item {string}', async ({ e2e }, title) => {
+  const item = await openRow(roadmapItem(e2e.window, title));
+  await item.getByTestId('roadmap-run-summary-toggle').click();
+  await expect(item.getByTestId('roadmap-run-summary')).toBeVisible();
 });
 
-Then("the run's steps popover shows the run summary", async ({ e2e }) => {
+Then('the run summary of the roadmap item {string} names its estimate, what runs now and the run', async ({ e2e }, title) => {
   // the summary the ring's native tooltip used to carry: the estimate, what runs now, the run id
-  const summary = stepsPopover(e2e.window).getByTestId('roadmap-run-summary');
+  const summary = roadmapItem(e2e.window, title).getByTestId('roadmap-run-summary');
   await expect(summary).toBeVisible();
   await expect(summary).toContainText('Estimate:');
   await expect(summary).toContainText('Now:');
   await expect(summary).toContainText(/Run \d{8}-\d{6}-\w+/);
 });
 
-Then('the progress ring has no native tooltip', async ({ e2e }) => {
-  const progress = e2e.window.getByTestId('roadmap-item').filter({ has: stepsPopover(e2e.window) }).first();
-  await expect(ringOf(progress)).not.toHaveAttribute('title');
+Then('the progress ring of the roadmap item {string} has no native tooltip', async ({ e2e }, title) => {
+  const ring = roadmapItem(e2e.window, title).getByTestId('roadmap-ring');
+  await expect(ring).toBeVisible();
+  await expect(ring).not.toHaveAttribute('title');
 });
 
-When('I hover an agent in the pipeline of the roadmap item {string}', async ({ e2e }, title) => {
-  const agent = pipelineOf(e2e.window, title).getByTestId('progress-agent').first();
-  await agent.scrollIntoViewIfNeeded();
-  await agent.hover();
+// the station a run is at is a pill (a button named "Open the run at <station> (…)")
+When('I hover the station the roadmap item {string} is at', async ({ e2e }, title) => {
+  const pill = pipelineOf(e2e.window, title).getByRole('button', { name: /^Open the run at / });
+  await pill.scrollIntoViewIfNeeded();
+  await pill.hover();
 });
 
-Then('the agent card is shown inside the window', async ({ e2e }) => {
+Then("the station's card is shown inside the window, with who works there", async ({ e2e }) => {
   const page = e2e.window;
   const card = page.getByTestId('roadmap-pipeline').getByRole('tooltip').filter({ visible: true }).first();
   await expect(card).toBeVisible();
+  await expect(card.getByTestId('progress-agent').first()).toBeVisible();
   const box = await card.boundingBox();
   const view = await page.evaluate(() => ({ width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
   expect(box).not.toBeNull();

@@ -104,7 +104,8 @@ Then('stage {int} is the last stage of the roadmap, with one item holding {strin
 
 Then('stage {int} of the roadmap has started', async ({ e2e }, n) => {
   const item = stage(e2e.window, n).getByTestId('roadmap-item').first();
-  await expect(item.getByTestId('run-chip')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // its run chip is in its open row (hidden while the row is closed): the row has it once a run started
+  await expect(item.getByTestId('run-chip')).toHaveAttribute('data-run', /\S/, { timeout: LOAD_TIMEOUT });
   await expect(item).not.toHaveAttribute('data-status', 'planned');
 });
 

@@ -111,9 +111,10 @@ test('#271 a failed start (no run) sends the item\'s error and no run id', async
   assert.equal(/"run_?id"\s*:\s*"[^"]+"/i.test(opened[0]), false, 'no run id');
 });
 
-// the card's header: Retry, Skip and Ask the Oracle are one group (.rm-fail-actions) that the CSS moves
-// under the title on a narrow page; the reorder arrows and "remove" stay in .rm-actions
-test('#271 a failed card groups Retry, Skip and Ask the Oracle in .rm-fail-actions, apart from the arrows and remove', () => {
+// the lanes (2026-11-27): what the owner must do, Retry and Skip, is one group under the row's title
+// (.rm-fail-actions); Ask the Oracle is in the open row with what opens from there (.rm-panel-open), and
+// the reorder arrows and "remove" in the open row's .rm-actions
+test('#271 a failed row groups Retry and Skip in .rm-fail-actions; Ask the Oracle is in its open row, apart from the arrows and remove', () => {
   const { R } = load();
   const card = H.itemEl(R.html(dataOf(FAILED()), () => {}, view), 'a').outer;
   const group = H.findEl(card, (e) => /\brm-fail-actions\b/.test(e.attrs.class || ''));
@@ -124,7 +125,9 @@ test('#271 a failed card groups Retry, Skip and Ask the Oracle in .rm-fail-actio
     has(group.inner, (e) => e.attrs['data-rm-item'] === 'skip'),
     has(group.inner, (e) => 'data-rm-ask-oracle' in e.attrs),
     has(group.inner, (e) => 'data-rm-move' in e.attrs || 'data-rm-remove' in e.attrs),
-  ], [true, true, true, false]);
+  ], [true, true, false, false]);
+  const opens = H.findEl(card, (e) => /\brm-panel-open\b/.test(e.attrs.class || ''));
+  assert.equal(has(opens.inner, (e) => 'data-rm-ask-oracle' in e.attrs), true, 'Ask the Oracle beside "Open run" and "Show on the map"');
   const actions = H.findEl(card, (e) => /\brm-actions\b/.test(e.attrs.class || ''));
   assert.equal(has(actions.inner, (e) => 'data-rm-remove' in e.attrs), true, 'remove stays in .rm-actions');
   assert.equal(has(actions.inner, (e) => 'data-rm-ask-oracle' in e.attrs || e.attrs['data-rm-item'] === 'retry'), false);
@@ -138,18 +141,16 @@ test('#271 planned and running cards have no .rm-fail-actions group', () => {
   assert.deepEqual([group('p'), group('r')], [false, false]);
 });
 
-// #282: the card answers to its own width (a container query on .rm-items), so a narrow window and the
-// Oracle's drawer beside the page are the same case: no rule per window width or for .shell.oracle-side
-test('#271 backlog.css gives the titles the full width on a narrow card (Retry / Skip / the Oracle go under them, in the status block), whatever narrows it (window or the Oracle beside the page)', () => {
+// #282: the rows answer to their group's own width (a container query on .rm-items), so a narrow window and
+// the Oracle's drawer beside the page are the same case: no rule per window width or for .shell.oracle-side
+test('#271 backlog.css stacks Retry / Skip under the row\'s titles, and a group too narrow for its rows scrolls inside itself, whatever narrows it (window or the Oracle beside the page)', () => {
   const css = fs.readFileSync(pageFileOf('views/backlog/backlog.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.match(css, /\.rm-items\s*\{[^}]*container:\s*rm-card\s*\/\s*inline-size/, 'the cards\' list is the container');
-  const at = css.search(/@container\s+rm-card\s*\(max-width:\s*\d+px\)\s*\{/);
-  const narrow = at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));
-  assert.match(narrow, /\.rm-issues\s*\{[^}]*grid-column:\s*1 \/ -1/, 'the titles keep the full width');
-  // Retry / Skip / the Oracle\'s button flow as rows of the status block, which wraps
-  assert.match(css, /\.rm-status\s*\{[^}]*flex-wrap:\s*wrap/);
-  assert.match(css, /(^|[\s,}])\.rm-fail-actions\s*\{[^}]*display:\s*contents/);
-  assert.match(css, /\.rm-fail-actions \.btn\.gate-oracle\s*\{[^}]*order:\s*2/, 'the Oracle\'s longer button after Retry, Skip, move and Remove');
+  assert.match(css, /\.rm-items\s*\{[^}]*container:\s*rm-card\s*\/\s*inline-size/, 'the rows\' list is the container');
+  assert.match(css, /@container\s+rm-card\s*\(max-width:\s*\d+px\)\s*\{\s*\.rm-group-scroll\s*\{[^}]*overflow-x:\s*auto/, 'a narrow group scrolls sideways inside itself');
+  // the run cell is a column: the titles, the row\'s line, the error, then Retry / Skip, which wrap
+  assert.match(css, /\.rm-cell-run\s*\{[^}]*flex-direction:\s*column/);
+  assert.match(css, /(^|[\s,}])\.rm-fail-actions\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.rm-panel-open, \.rm-actions\s*\{[^}]*flex-wrap:\s*wrap/, 'the open row\'s buttons wrap too (the Oracle\'s longer one)');
   assert.doesNotMatch(css, /\.shell\.oracle-side \.rm-/);
 });
 

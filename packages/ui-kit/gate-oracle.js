@@ -167,9 +167,10 @@
   /** A roadmap card's button: "Ask the Oracle about this failure" ("… this interruption" for an interrupted run). */
   function failureButtonHtml(item = {}, attrs = '') {
     const what = item.run?.status === 'interrupted' ? 'interruption' : 'failure';
+    const whatText = t(`gate_oracle.what_${what}`); // the word the button's sentence names, in the interface's language
     return oracleButtonHtml({
       ref: failureRef(item),
-      label: t('gate_oracle.ask_the_oracle_about_this_what', { what }),
+      label: t('gate_oracle.ask_the_oracle_about_this_what', { what: whatText }),
       title: t('gate_oracle.opens_the_oracle_beside_the_roadmap'),
       attrs: `${attrs} data-oracle-ask="${escHtml(failureRef(item))}" data-oracle-what="${what}"`.trim(),
     });

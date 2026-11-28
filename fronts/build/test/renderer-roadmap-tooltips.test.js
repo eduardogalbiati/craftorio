@@ -1,8 +1,8 @@
-// #236: no native `title` tooltips on the Roadmap's run progress (fronts/build/views/backlog/
-// backlog-roadmap.js: the ring .rm-ring, the current step .rm-progress-text, the steps popover
-// .rm-steps with its chips .rm-chip) nor on the progress strip's agent cards (packages/ui-kit/run-list.js:
-// .rp-av / .rp-card, .rp-state, .rp-more, .rp-skip): the run summary the ring's tooltip held moves into
-// the popover, the "Open the run at <step>" hint into an aria-label.
+// #236: no native `title` tooltips where the app shows its own card: the Roadmap's stations (fronts/build/
+// views/backlog/backlog-roadmap.js: each has the hover card of who worked there) and the progress strip's
+// agent cards (packages/ui-kit/run-list.js: .rp-av / .rp-card, .rp-state, .rp-more, .rp-skip). The run summary
+// the ring's tooltip held is the open row's folded summary, the "Open the run at <step>" hint an aria-label.
+// Since the lanes of 2026-11-27 the ring has no popover: the Progress cell's one title says the exact figures.
 // backlog-roadmap.js is loaded whole like test/renderer-backlog-roadmap-view.test.js, but with the
 // REAL run-list.js chips and avatars (evaluated in their own sandbox as in
 // test/renderer-agent-robots.test.js) instead of stubs, so the popover's markup is the real one.
@@ -98,6 +98,7 @@ function loadRoadmap() {
   vm.runInContext(read('workflow-inputs.js'), sandbox);
   if (fs.existsSync(pageFileOf('estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('menu.js'), sandbox); // the shared menu (#748)
+  vm.runInContext(read('views', 'backlog', 'backlog-roadmap-meters.js'), sandbox); // the meters, the timer and the Progress cell (split out on 2026-11-27)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return sandbox.window.BacklogRoadmap;
 }
@@ -119,50 +120,52 @@ const runningItem = () => ({
 
 function progressMarkup() {
   const html = loadRoadmap().html({ roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [runningItem()] }] }, issues: [] }, () => {}, { showAll: true });
-  const start = html.indexOf('class="rm-progress');
-  assert.ok(start >= 0, 'the run\'s progress ring is rendered');
-  const meta = html.indexOf('class="rm-meta"', start);
-  const block = html.slice(start, meta < 0 ? undefined : meta);
-  const stepsAt = block.indexOf('class="rm-steps"');
-  assert.ok(stepsAt >= 0, 'the steps popover (.rm-steps) is rendered');
-  // #282: the popover holds the run's summary; its steps are the pipeline of the Workflow band
-  const band = block.indexOf('data-testid="roadmap-workflow"', stepsAt);
-  const pipeAt = html.indexOf('data-testid="roadmap-pipeline"', start);
-  assert.ok(pipeAt >= 0, 'the pipeline is rendered');
-  return { block, steps: block.slice(block.lastIndexOf('<', stepsAt), band < 0 ? undefined : block.lastIndexOf('<', band)), pipeline: html.slice(html.lastIndexOf('<', pipeAt), html.indexOf('</section>', pipeAt)) };
+  const at = html.indexOf('data-testid="roadmap-item"');
+  assert.ok(at >= 0, 'the run\'s row is rendered');
+  // the row with its open panel: from its opening tag to the end of its group
+  const row = html.slice(html.lastIndexOf('<', at), html.indexOf('</section>', at));
+  const where = (id) => { const k = row.indexOf(`data-testid="${id}"`); assert.ok(k >= 0, `${id} is rendered`); return k; };
+  // the lane: from its opening tag to the Progress cell after it; the summary: its folded block in the open row
+  const pipeline = row.slice(row.lastIndexOf('<', where('roadmap-pipeline')), row.lastIndexOf('<', where('roadmap-status')));
+  const steps = row.slice(row.lastIndexOf('<details', where('roadmap-run-summary')), row.indexOf('</details>', where('roadmap-run-summary')));
+  return { row, steps, pipeline };
 }
 
-test('#236 the roadmap ring (.rm-ring) and the current step text (.rm-progress-text) carry no title attribute', () => {
-  const { block } = progressMarkup();
-  const ring = /<button\b[^>]*class="rm-ring"[^>]*>/.exec(block)?.[0];
-  const step = /<div\b[^>]*class="rm-progress-text"[^>]*>/.exec(block)?.[0];
+test('#236 the roadmap ring (.rm-ring) and the current step carry no title of their own; the Progress cell around the ring has one, its name: the exact figures', () => {
+  const { row } = progressMarkup();
+  const ring = /<span\b[^>]*class="rm-ring[^"]*"[^>]*>/.exec(row)?.[0];
+  const step = /<span\b[^>]*data-testid="roadmap-progress-step"[^>]*>/.exec(row)?.[0];
   assert.ok(ring, 'the ring is rendered');
-  assert.ok(step, 'the current step text is rendered');
+  assert.ok(step, 'the current step is rendered');
   assert.doesNotMatch(ring, /\stitle=/);
   assert.doesNotMatch(step, /\stitle=/);
+  const cell = /<div class="rm-cell-progress" role="img" data-testid="roadmap-status" aria-label="([^"]*)" title="([^"]*)">/.exec(row);
+  assert.ok(cell, 'the Progress cell is rendered');
+  assert.equal(cell[1], cell[2]);
+  assert.match(cell[1], /^Progress \d+%/);
 });
 
-test('#236 the run summary the ring\'s tooltip held (elapsed time, run id) is inside the steps popover (.rm-steps)', () => {
+test('#236 the run summary the ring\'s tooltip held (elapsed time, run id) is in the open row, folded', () => {
   const { steps } = progressMarkup();
   const t = text(steps);
   assert.match(t, /Elapsed/);
   assert.match(t, /run-42/);
 });
 
-test('#236 nothing inside the summary popover or the pipeline carries a title: stations, their state line, the agents\' robots and the human\'s avatar', () => {
+test('#236 nothing inside the run\'s summary or the lane carries a title: stations, their glyphs, the agents\' robots and the human\'s avatar', () => {
   const { steps, pipeline } = progressMarkup();
-  assert.match(pipeline, /data-testid="roadmap-station"/, 'the stations are in the pipeline');
-  assert.doesNotMatch(steps, /data-rm-chip/, 'no step strip in the popover any more');
+  assert.match(pipeline, /data-testid="roadmap-station"/, 'the stations are in the lane');
+  assert.doesNotMatch(steps, /data-rm-chip/, 'no step strip in the summary');
   assert.deepEqual(titles(steps), []);
   assert.deepEqual(titles(pipeline), []);
 });
 
-test('#236 each station keeps its "Open the run at <step>" hint as an aria-label (or visible text), not a title', () => {
+test('#236 the station the run is at keeps its "Open the run at <step>" hint as an aria-label, not a title; the others are named with their state', () => {
   const { pipeline } = progressMarkup();
   const chips = pipeline.match(/<button\b[^>]*data-rm-chip="[^"]*"[^>]*>/g) || [];
-  assert.equal(chips.length, 3);
-  const noTitles = pipeline.replace(/\stitle="[^"]*"/g, '');
-  for (const name of ['Develop', 'Check', 'Review']) assert.ok(noTitles.includes(`Open the run at ${name}`), `the hint for ${name} is kept outside a title`);
+  assert.equal(chips.length, 1);
+  assert.match(chips[0], /aria-label="Open the run at Review \(running\)"/);
+  for (const name of ['Develop', 'Check']) assert.ok(pipeline.includes(`aria-label="${name}: done"`), `${name} is named with its state`);
 });
 
 // ---- run-list.js: the progress strip's agent cards ----------------------------------------------

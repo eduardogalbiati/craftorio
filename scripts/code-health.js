@@ -110,7 +110,6 @@ const COMPLEXITY_EXCEPTIONS = {
   'fronts/build/views/backlog/backlog-po.js:ask': 31,
   'fronts/build/views/backlog/backlog-po.js:render': 33,
   'fronts/build/views/backlog/backlog-roadmap.js:html': 101,
-  'fronts/build/views/backlog/backlog-roadmap.js:progressHtml': 28,
   'fronts/build/views/backlog/backlog.js:onclick(#bl-list)': 27,
   'fronts/build/views/backlog/backlog.js:render': 36,
   'fronts/plan/views/discovery/discovery.js:onDetailClick': 28,

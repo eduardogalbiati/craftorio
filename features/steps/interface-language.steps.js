@@ -18,6 +18,7 @@ const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
 const { demoProjectCard } = require('../support/run-screen');
 const { tableTexts } = require('../support/english-texts');
+const { groupOf, openRow } = require('../support/roadmap-row');
 
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -332,7 +333,12 @@ Then('the Start panel shows the {string} list', async ({ e2e }, name) => {
 // backlog-archive.steps.js ("the backlog has the open issues {string} and {string}") and
 // backlog-plan-roadmap.steps.js ("the Assign dialog has the {string} workflow chosen").
 
-const roadmapCardPart = (page, title) => page.getByTestId('roadmap-item').filter({ hasText: title }).filter({ visible: true }).first();
+// the lanes (2026-11-27, features/support/roadmap-row.js): the item's row with its details open, in the group of its
+// workflow, which names the workflow and its stations once for its rows
+async function roadmapCardPart(page, title) {
+  await openRow(page.getByTestId('roadmap-item').filter({ hasText: title }).filter({ visible: true }).first(), LOAD_TIMEOUT);
+  return groupOf(page, title);
+}
 const assignDialogPart = (page) => page.getByTestId('assign-modal');
 
 async function expectTheseTexts(locator, table, what) {
@@ -347,11 +353,11 @@ async function expectTheseTexts(locator, table, what) {
 }
 
 Then('the roadmap card {string} shows these texts:', async ({ e2e }, title, table) => {
-  await expectTheseTexts(roadmapCardPart(e2e.window, title), table, `the roadmap card "${title}"`);
+  await expectTheseTexts(await roadmapCardPart(e2e.window, title), table, `the roadmap card "${title}"`);
 });
 
 Then('the roadmap card {string} shows none of these English texts:', async ({ e2e }, title, table) => {
-  await expectNoneOfTheseTexts(roadmapCardPart(e2e.window, title), table, `the roadmap card "${title}"`);
+  await expectNoneOfTheseTexts(await roadmapCardPart(e2e.window, title), table, `the roadmap card "${title}"`);
 });
 
 Then('the Assign dialog shows these texts:', async ({ e2e }, table) => {

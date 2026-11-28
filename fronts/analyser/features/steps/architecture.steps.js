@@ -740,6 +740,8 @@ When('I click {string} on the roadmap stage {string}', async ({ e2e }, label, st
   // the stage's name is the value of its "Stage name" input, which hasText does not read
   const stage = e2e.window.getByTestId('roadmap-stage').filter({ has: e2e.window.locator(`input[value="${stageName}"]`) }).first();
   await expect(stage).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // an entry of the stage's ⋮ menu since the lanes of 2026-11-27 (it was a button of the stage's head)
+  await stage.getByTestId('roadmap-stage-menu').click();
   const button = stage.getByTestId('show-stage-on-map');
   await expect(button).toBeVisible();
   await expect(button).toHaveText(new RegExp(`^\\s*${escapeRe(label)}\\s*$`));

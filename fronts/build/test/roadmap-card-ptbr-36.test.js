@@ -77,13 +77,17 @@ const meterLabel = (html, testid) => {
   const label = H.findEl(part(html, testid).outer, (e) => /\brm-meter-label\b/.test(e.attrs.class || ''));
   return label ? text(label).toUpperCase() : null;
 };
-// the names the pipeline's stations show, in order
+// the names the lane's stations show, in order: the heads of their columns, once over the rows of the item's group
+// (the lanes of 2026-11-27); each station's glyph is named after its column
 function stationNames(html) {
-  const pipe = part(html, 'roadmap-pipeline');
-  return H.findAll(pipe.outer, (e) => e.attrs['data-testid'] === 'roadmap-station').map((st) => {
-    const name = H.findEl(st.outer, (e) => /\brm-station-name\b/.test(e.attrs.class || ''));
-    return name ? text(name) : '';
-  });
+  const group = H.findAll(html, (e) => e.attrs['data-testid'] === 'roadmap-workflow').find((g) => !!H.findEl(g.outer, (e) => e.attrs['data-item'] === 'a'));
+  assert.ok(group, 'item a is in a workflow group');
+  const cols = H.findEl(group.outer, (e) => /\brm-cols\b/.test(e.attrs.class || ''));
+  const names = H.findAll(H.findEl(cols.outer, (e) => /\brm-lane\b/.test(e.attrs.class || '')).inner, (e) => e.name === 'span').map((e) => text(e));
+  const glyphs = H.findAll(part(html, 'roadmap-pipeline').outer, (e) => e.attrs['data-testid'] === 'roadmap-station')
+    .map((st) => H.findEl(st.inner, (e) => 'aria-label' in e.attrs)?.attrs['aria-label'] || '');
+  assert.deepEqual(glyphs.map((label, k) => label.includes(names[k])), names.map(() => true), `the glyphs ${JSON.stringify(glyphs)} are named after their columns ${JSON.stringify(names)}`);
+  return names;
 }
 
 function waitingCard() {

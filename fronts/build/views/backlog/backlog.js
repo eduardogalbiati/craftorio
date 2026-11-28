@@ -1272,11 +1272,11 @@
   // The text under the title: what the page shows, where its issues are and their folder.
   function renderDescription(roadmap, local) {
     const where = roadmap ? '' : t('backlog.a_project_s_issues_synced_from');
-    $b('#bl-hint').textContent = [
-      roadmap ? t('backlog.ordered_stages_of_runs_each_stage') : '',
-      local ? t('backlog.local_backlog_description') : where,
-    ].filter(Boolean).join(' ');
+    $b('#bl-hint').textContent = [roadmap ? t('backlog.ordered_stages_of_runs_each_stage') : '', local ? t('backlog.local_backlog_description') : where].filter(Boolean).join(' ');
     $b('#bl-kept').textContent = t(local ? 'backlog.local_backlog_folder' : 'backlog.the_last_sync_is_kept_in');
+    // the Roadmap's header: no sync folder line, and Sync is plain (the roadmap's Resume is its one accent button)
+    for (const id of ['#bl-kept', '#backlog-dir']) $b(id).hidden = !!roadmap;
+    $b('#btn-bl-sync').classList.toggle('primary', !roadmap);
   }
 
   function renderPlatform() {

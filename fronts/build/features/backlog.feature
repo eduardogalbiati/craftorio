@@ -33,21 +33,21 @@ Feature: Backlog Board and Roadmap
     Then the refused item is in view
 
   @issue-236
-  Scenario: Hovering a running item's progress ring shows the run summary in the steps popover
+  Scenario: A running item's open row holds the run summary, and its progress ring has no native tooltip
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    And I hover the progress ring of the roadmap item "Keyboard focus is lost after closing a dialog"
-    Then the run's steps popover shows the run summary
-    And the progress ring has no native tooltip
+    And I unfold the run summary of the roadmap item "Keyboard focus is lost after closing a dialog"
+    Then the run summary of the roadmap item "Keyboard focus is lost after closing a dialog" names its estimate, what runs now and the run
+    And the progress ring of the roadmap item "Keyboard focus is lost after closing a dialog" has no native tooltip
 
   @issue-236
-  Scenario: The agent card of a running item stays inside a narrow window
+  Scenario: The card of who works at a running item's station stays inside a narrow window
     Given the app is open in a 900x800 window
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    And I hover an agent in the pipeline of the roadmap item "Keyboard focus is lost after closing a dialog"
-    Then the agent card is shown inside the window
+    And I hover the station the roadmap item "Keyboard focus is lost after closing a dialog" is at
+    Then the station's card is shown inside the window, with who works there
 
   # The demo roadmap is paused (a refused start); its stage 5 is the unnamed stage with one planned item
   @issue-243

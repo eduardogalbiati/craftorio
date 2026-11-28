@@ -72,6 +72,7 @@ function loadRoadmap({ listWorkflows, now = NOW, runTitle } = {}) {
   vm.runInContext(read('..', '..', '..', 'packages', 'shared', 'pr-card.js'), sandbox); // the PR monitor's lines (#809)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap-pr-card.js'), sandbox); // the PR monitor's card (#809)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap-test-stage.js'), sandbox); // Start Test (#702)
+  vm.runInContext(read('views', 'backlog', 'backlog-roadmap-meters.js'), sandbox); // the meters, the timer and the Progress cell (split out on 2026-11-27)
   vm.runInContext(read('views', 'backlog', 'backlog-roadmap.js'), sandbox);
   return { R: sandbox.window.BacklogRoadmap, sandbox, setNow: both };
 }

@@ -84,6 +84,7 @@ var api;
 /** @type {PageFunction} */ var renderSupervisorFab;
 /** @type {PageObject} */ var RoadmapBaseNotice;
 /** @type {PageObject} */ var RoadmapMergeWait;
+/** @type {PageObject} */ var RoadmapMeters;
 /** @type {PageObject} */ var RoadmapPrCard;
 /** @type {PageObject} */ var RoadmapTestStage;
 /** @type {PageObject} */ var Robots;

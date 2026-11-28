@@ -84,9 +84,11 @@ test('#266 roadmap card: an item that failed before any run started says "Failed
   const box = H.itemEl(render(x), 'a');
   assert.match(H.visibleText(box.outer), /Failed to start/);
   assert.equal(H.findEl(box.outer, (e) => 'data-run' in e.attrs), null, 'no data-run: nothing to open');
-  const tipped = H.findAll(box.outer, (e) => (e.attrs.title || '').includes(error)).some((e) => /Failed to start/.test(H.visibleText(e.inner)));
-  assert.ok(tipped, 'the error is the tooltip of the "Failed to start" pill (or its chip)');
-  assert.ok(H.visibleText(box.outer).includes(error), 'the card shows the error');
+  // the lanes (2026-11-27): "Failed to start" is the row's line, the error the line under it, whole in its own tooltip
+  const label = H.findEl(box.outer, (e) => e.attrs['data-testid'] === 'status-label');
+  assert.deepEqual([H.visibleText(label.inner), label.attrs['data-status']], ['Failed to start', 'failed_to_start']);
+  const line = H.findEl(box.outer, (e) => /\brm-error\b/.test(e.attrs.class || ''));
+  assert.deepEqual([line.attrs.title, H.visibleText(line.inner).includes(error)], [error, true], 'the row shows the error, its tooltip the whole of it');
   assert.ok(H.findEl(box.outer, (e) => e.attrs['data-rm-item'] === 'retry'), 'Retry stays');
   assert.ok(H.findEl(box.outer, (e) => e.attrs['data-rm-item'] === 'skip'), 'Skip stays');
 });

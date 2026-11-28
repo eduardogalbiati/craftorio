@@ -23,7 +23,8 @@ function tmp(t) {
   return dir;
 }
 
-const src = fs.readFileSync(pageFileOf('views/backlog/backlog-roadmap.js'), 'utf8');
+// the meters, the timer and the Progress cell (split out on 2026-11-27), then the screen
+const src = ['views/backlog/backlog-roadmap-meters.js', 'views/backlog/backlog-roadmap.js'].map((f) => fs.readFileSync(pageFileOf(f), 'utf8')).join('\n');
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'ui-kit', 'workflow-inputs.js'), 'utf8');
 const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'run-progress-model.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'default-workflow.js'), 'utf8');
@@ -431,7 +432,7 @@ test('a stage note: "Add note" in the stage\'s ⋮ menu when empty (#282), text 
   assert.match(html, /Why this order <button class="link-btn small" type="button" data-rm-addnote>edit<\/button>/);
 });
 
-test('html: the issues\' footer says the sum of their complexity:n labels (#282); only the count when none has one', () => {
+test('html: an item of several issues says their count over the titles; the sum of their complexity:n labels is in the open row (#282), nothing when none has one', () => {
   const { BacklogRoadmap } = loadRoadmap();
   const item = { id: 'it1', status: 'planned', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }, { number: 2, title: 'B', url: 'u2' }] };
   const data = {
@@ -439,15 +440,16 @@ test('html: the issues\' footer says the sum of their complexity:n labels (#282)
     issues: [{ number: 1, labels: [{ name: 'complexity:3' }] }, { number: 2, labels: [{ name: 'complexity:5' }] }],
   };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /data-testid="roadmap-issues-foot"[^>]*>2 issues · complexity 8<\/span>/);
+  assert.match(html, /data-testid="roadmap-issues-foot"[^>]*>2 issues<\/span>/);
+  assert.match(html, /<dt>Complexity<\/dt><dd data-testid="roadmap-complexity"><span title="[^"]+">8<\/span><\/dd>/);
 
   const noLabels = { ...data, issues: [] };
   const html2 = BacklogRoadmap.html(noLabels, () => {}, SHOW_ALL);
   assert.match(html2, /data-testid="roadmap-issues-foot"[^>]*>2 issues<\/span>/);
-  assert.doesNotMatch(html2, /complexity/);
+  assert.doesNotMatch(html2, /complexity/i);
 });
 
-test('html: status pill classes for a planned, a waiting-at-a-gate and a skipped item', () => {
+test('html: a planned, a waiting-at-a-gate and a skipped item without a run say their status in the row\'s line', () => {
   const { BacklogRoadmap } = loadRoadmap();
   const makeItem = (id, status, waiting) => ({ id, status, waiting, workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }] });
   const data = {
@@ -460,9 +462,9 @@ test('html: status pill classes for a planned, a waiting-at-a-gate and a skipped
   };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   // #266: readable labels, the id in data-status
-  assert.match(html, /<span class="pill pill-idle rm-state" data-status="planned"[^>]*>Planned<\/span>/);
-  assert.match(html, /<span class="pill pill-cancelled rm-state" data-status="waiting"[^>]*>Waiting for you<\/span>/);
-  assert.match(html, /<span class="pill pill-interrupted rm-state" data-status="skipped"[^>]*>Skipped<\/span>/);
+  assert.match(html, /<div class="rm-note muted"><span data-status="planned" data-testid="status-label">Planned<\/span><\/div>/);
+  assert.match(html, /<div class="rm-note muted"><span data-status="waiting" data-testid="status-label">Waiting for you<\/span><\/div>/);
+  assert.match(html, /<div class="rm-note muted"><span data-status="skipped" data-testid="status-label">Skipped<\/span><\/div>/);
 });
 
 test('html: reason and modeReason render inside details.rm-reason', () => {
@@ -797,7 +799,9 @@ test('html: Retry and Skip show on the item that paused the roadmap, even while 
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /data-rm-item="retry"/);
   assert.match(html, /data-rm-item="skip"/);
-  assert.match(html, /<div class="small rm-error error">Could not start #1: #1 already has work from a cancelled run, run-9 \(1 commit on its branch\)\.<div class="rm-error-hint muted">Retry starts it again[^<]*<\/div><\/div>/);
+  // the item that paused the roadmap: its error is in the banner too, so one line here (rm-error-paused), whole in its tooltip
+  assert.match(html, /<div class="small rm-error error rm-error-paused" title="Could not start #1: [^"]*">Could not start #1: #1 already has work from a cancelled run, run-9 \(1 commit on its branch\)\.<div class="rm-error-hint muted">Retry starts it again[^<]*<\/div><\/div>/);
+  assert.match(html, /data-status="failed_to_start" data-testid="status-label">Failed to start</);
 });
 
 test('html: Retry and Skip show on a "planned" item with an error and no run (a refused start that did not pause the roadmap itself)', () => {
@@ -831,7 +835,7 @@ test('html: a skipped item with a leftover error never shows the retry hint (it 
   const data = { roadmap: { state: 'planned', pausedBy: null, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.doesNotMatch(html, /data-rm-item=/);
-  assert.match(html, /<div class="small rm-error muted">Every issue is closed\.<\/div>/);
+  assert.match(html, /<div class="small rm-error muted" title="Every issue is closed\.">Every issue is closed\.<\/div>/);
 });
 
 test('onClick [data-rm-goto]: the bar\'s "Show the item" scrolls to and flashes the item that paused the roadmap', async () => {
@@ -850,7 +854,7 @@ test('onClick [data-rm-goto]: the bar\'s "Show the item" scrolls to and flashes 
   assert.deepEqual(classes, ['flash']);
 });
 
-// ---- #194: the run's progress ring (estimated %, current step, hover/click shows the steps) -------
+// ---- #194: the run's progress ring (estimated %, in the row's Progress cell; its step and summary in the open row) ----
 
 function progressBoxTarget(runId, workflow) {
   return { dataset: { rmProgress: runId, workflow } };
@@ -861,11 +865,13 @@ function chipClickTarget(runId, workflow, chipName, grouped) {
   chip.closest = (sel) => (sel === '[data-rm-progress]' ? box : sel === '[data-rm-chip]' ? chip : null);
   return chip;
 }
-function ringClickTarget(runId, workflow) {
-  const box = progressBoxTarget(runId, workflow);
-  const ring = {};
-  ring.closest = (sel) => (sel === '[data-rm-progress]' ? box : sel === '[data-rm-ring]' ? ring : null);
-  return ring;
+// a row's open control with what toggleRow touches: the row (its data-open), its panel, the button's aria-expanded
+function openClickTarget(itemId) {
+  const seen = { panel: { hidden: true }, attrs: {} };
+  const row = { dataset: { item: itemId }, toggleAttribute: (name, on) => { seen.attrs[name] = on; }, querySelector: (sel) => (sel === '.rm-panel' ? seen.panel : null) };
+  const btn = { setAttribute: (name, value) => { seen.attrs[name] = value; } };
+  btn.closest = (sel) => (sel === '[data-rm-open]' ? btn : sel === '[data-item]' ? row : null);
+  return { btn, seen };
 }
 
 test('html: a running item shows a progress ring with its estimated percent and current step/group', () => {
@@ -884,9 +890,10 @@ test('html: a running item shows a progress ring with its estimated percent and 
   };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /class="rm-progress st-running[^"]*" data-rm-progress="run-1"/);
+  assert.match(html, /<span class="rm-ring st-running" data-testid="roadmap-ring" data-percent="\d+">/);
   assert.match(html, /<span class="rm-ring-pct">\d+%<\/span>/);
-  assert.match(html, />Review</); // the current step's group name
+  assert.match(html, /data-testid="roadmap-progress-step">Review</); // the current step's group name, in the open row
+  assert.match(html, /<div class="rm-lane" [^>]*data-rm-progress="run-1"/); // the pill of the station it is at opens the run
   assert.doesNotMatch(html, /badge p-mock/); // not simulated
 });
 
@@ -898,7 +905,7 @@ test('html: a run waiting at a gate shows the ring in the waiting state, "Waitin
   };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /class="rm-progress st-waiting/);
+  assert.match(html, /<span class="rm-ring st-waiting"/);
   assert.match(html, /Waiting for you/);
 });
 
@@ -910,11 +917,11 @@ test('html: a failed run shows the ring in the failed state, naming the step it 
   };
   const data = { roadmap: { state: 'paused', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /class="rm-progress st-failed/);
+  assert.match(html, /<span class="rm-ring st-failed"/);
   assert.match(html, /Failed at test/);
 });
 
-test('html: a successful run shows the ring at 100%, "Done"', () => {
+test('html: a successful run shows a full ring with a check instead of the number, "Done"', () => {
   const { BacklogRoadmap } = loadRoadmap();
   const item = {
     id: 'it1', status: 'done', runId: 'run-4', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
@@ -922,12 +929,12 @@ test('html: a successful run shows the ring at 100%, "Done"', () => {
   };
   const data = { roadmap: { state: 'done', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /class="rm-progress st-done/);
-  assert.match(html, /<span class="rm-ring-pct">100%<\/span>/);
+  assert.match(html, /<span class="rm-ring st-done" data-testid="roadmap-ring" data-percent="100"><svg[^>]*><circle class="rm-ring-bar"[^>]*\/><path class="rm-ring-check"[^>]*\/><\/svg><\/span>/);
+  assert.doesNotMatch(html, /rm-ring-pct/);
   assert.match(html, />Done</);
 });
 
-test('html: a simulated run\'s ring carries the "simulated" badge; a planned item with no run shows no ring at all', () => {
+test('html: a simulated run says Simulated in its open row; a planned item with no run shows an empty ring, "0%"', () => {
   const { BacklogRoadmap } = loadRoadmap();
   const simItem = {
     id: 'it1', status: 'running', runId: 'run-5', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
@@ -936,10 +943,11 @@ test('html: a simulated run\'s ring carries the "simulated" badge; a planned ite
   const plannedItem = { id: 'it2', status: 'planned', runId: null, workflow: 'w.yaml', issues: [{ number: 2, title: 'B', url: 'u' }] };
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [simItem, plannedItem] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /class="rm-progress st-running sim"/);
-  assert.match(html, /<span class="badge p-mock">Simulated<\/span>/);
-  const perItem = html.split('data-item="it2"')[1];
-  assert.doesNotMatch(perItem.split('data-item="it1"')[0] || perItem, /class="rm-progress/);
+  const [, sim, planned] = html.split('data-testid="roadmap-item"');
+  assert.match(sim, /<span class="rm-ring st-running"/);
+  assert.match(sim, /<span class="badge p-mock">Simulated<\/span>/);
+  assert.match(planned, /<span class="rm-ring st-none" data-testid="roadmap-ring" data-percent="0"><svg[^>]*><circle class="rm-ring-track"[^>]*\/><\/svg><span class="rm-ring-pct">0%<\/span><\/span>/);
+  assert.doesNotMatch(planned, /badge p-mock/);
 });
 
 test('onClick [data-rm-chip]: opens the run and, for a grouped chip, marks that group open; schedules a render either way', async () => {
@@ -966,14 +974,26 @@ test('onClick [data-rm-chip]: an ungrouped chip opens the run but marks no group
   assert.equal(runsMap.get('run-1').openGroups.size, 0);
 });
 
-test('onClick [data-rm-ring]: toggles that run\'s steps open and re-renders, without opening the run', async () => {
+test('onClick [data-rm-open]: a row opens and closes in the page (its panel, aria-expanded), without a redraw and without opening the run; the next draw keeps it open', async () => {
   const { BacklogRoadmap, showRunCalls } = loadRoadmap();
   const ctx = makeCtx();
-  const data = { roadmap: { state: 'running', stages: [] }, issues: [] };
-  const handled = await BacklogRoadmap.onClick({ target: ringClickTarget('run-1', 'w.yaml') }, ctx, data);
-  assert.equal(handled, true);
-  assert.equal(ctx._calls.render, 1);
+  const item = { id: 'it1', status: 'planned', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const closed = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  assert.match(closed, /data-rm-open data-testid="roadmap-item-toggle" aria-expanded="false"/);
+  assert.match(closed, /<div class="rm-panel" data-testid="roadmap-item-panel" hidden>/);
+  const { btn, seen } = openClickTarget('it1');
+  assert.equal(await BacklogRoadmap.onClick({ target: btn }, ctx, data), true);
+  assert.deepEqual([seen.panel.hidden, seen.attrs['aria-expanded'], seen.attrs['data-open']], [false, 'true', true]);
+  assert.equal(ctx._calls.render, 0);
   assert.equal(showRunCalls.length, 0);
+  const open = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
+  assert.match(open, /data-item="it1" data-stage="0" data-open /);
+  assert.match(open, /data-rm-open data-testid="roadmap-item-toggle" aria-expanded="true"/);
+  assert.match(open, /<div class="rm-panel" data-testid="roadmap-item-panel">/);
+  await BacklogRoadmap.onClick({ target: btn }, ctx, data);
+  assert.deepEqual([seen.panel.hidden, seen.attrs['aria-expanded'], seen.attrs['data-open']], [true, 'false', false]);
+  assert.match(BacklogRoadmap.html(data, () => {}, SHOW_ALL), /<div class="rm-panel" data-testid="roadmap-item-panel" hidden>/);
 });
 
 // ---- #193: no horizontal scroll (the roadmap's grids never widen past the window) ------------------
@@ -983,7 +1003,12 @@ test('backlog.css (#193): the roadmap\'s grids use a minmax(0, 1fr) track (not t
   assert.match(css, /\.rm \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(css, /\.rm-stage \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
   assert.match(css, /\.rm-items \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
-  assert.match(css, /\.rm-item \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
+  assert.match(css, /\.rm-item \{[^}]*min-width: 0;/);
+  // a row: the run cell takes what is left and may shrink; the lane, Progress and the open control keep their widths
+  assert.match(css, /\.rm-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) 580px 190px 44px;[^}]*min-width: 0;/);
+  // the one sideways scroll is inside a group narrower than its rows, never the page's
+  assert.match(css, /\.rm-group-rows \{ min-width: 1040px; \}/);
+  assert.match(css, /@container rm-card \(max-width: 1041px\) \{ \.rm-group-scroll \{ overflow-x: auto; \} \}/);
 });
 
 test('backlog.css (#193): a long reason, note, error and input badge wrap or are abbreviated instead of stretching the card', () => {

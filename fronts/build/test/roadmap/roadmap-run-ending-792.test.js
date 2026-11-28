@@ -87,7 +87,9 @@ function stationsOf(html) {
   return H.findAll(pipe.outer, (e) => e.attrs['data-testid'] === 'roadmap-station');
 }
 const hasClass = (e, name) => String(e.attrs.class || '').split(/\s+/).includes(name);
-const stationName = (st) => H.visibleText(H.findEl(st.outer, (e) => hasClass(e, 'rm-station-name')).inner);
+// a station's glyph is named "<station>: <state>" (the lanes of 2026-11-27: its name shows once, over its column)
+const glyphName = (st) => H.findEl(st.inner, (e) => 'aria-label' in e.attrs)?.attrs['aria-label'] || '';
+const stationName = (st) => glyphName(st).replace(/: [^:]*$/, '');
 const lastStationName = (R, file, inputs) => stationName(stationsOf(draw(R, one(card(file, inputs)))).at(-1));
 
 // ---- criterion 1: every item that merges or opens a PR has a badge, whatever the default ---------------
@@ -244,7 +246,7 @@ test('#792 a merged run ending in a PR shows its last station done, naming the c
   const { R } = await screen(t, REMOTE_DEFAULT);
   const list = await workflowList(t);
   const last = (file, inputs) => stationsOf(draw(R, one(ranCard(list, file, inputs, 'done', COMMIT), { state: 'done' }))).at(-1);
-  const seen = [last(HERO, {}), last(FEATURE, { mode: 'remote' })].map((st) => [st.attrs['data-state'], /abc1234/.test(st.attrs.title || '')]);
+  const seen = [last(HERO, {}), last(FEATURE, { mode: 'remote' })].map((st) => [st.attrs['data-state'], /abc1234/.test(glyphName(st))]);
   assert.deepEqual(seen, [['done', true], ['done', true]]);
 });
 
@@ -252,7 +254,7 @@ test('#792 a PR not merged yet is not shown as merged: the last station is not d
   const { R } = await screen(t, REMOTE_DEFAULT);
   const list = await workflowList(t);
   const st = stationsOf(draw(R, one(ranCard(list, HERO, {}, 'waiting_merge', null), { state: 'running' }))).at(-1);
-  assert.deepEqual([st.attrs['data-state'] === 'done', /merged|commit/i.test(st.attrs.title || '')], [false, false]);
+  assert.deepEqual([st.attrs['data-state'] === 'done', /merged|commit/i.test(`${st.attrs.title || ''} ${glyphName(st)}`)], [false, false]);
 });
 
 // ---- criterion 5: the catalogs carry the new texts ---------------------------------------------------------

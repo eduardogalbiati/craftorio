@@ -29,12 +29,16 @@
 // - data-testid="roadmap-loading": the "Loading…" row of the infinite scroll.
 // - data-testid="roadmap-run-timer": the run timer under the progress ring ("52:13", "6:40:02"),
 //   data-tone = ok | warn | over.
+// Since the lanes of 2026-11-27 (features/support/roadmap-row.js) a roadmap item is a row: its status is the pill of
+// the station its run is at, or its line (Planned, Done, "Failed to start"); the run chip, the meters with the timer,
+// the mode, "Ask the Oracle about this failure" and Edit / Remove are in its open row, which the steps open first.
 
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('../../../../features/steps/fixtures');
 const { runScreenId } = require('../../../../features/support/run-screen');
+const { groupOf, openRow } = require('../../../../features/support/roadmap-row');
 
 const LOAD_TIMEOUT = 30000;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -49,7 +53,8 @@ const itemSwitch = (page) => page.getByRole('group', { name: 'Roadmap items', ex
 const dateFilter = (page) => page.getByTestId('roadmap-date-filter');
 const header = (page) => page.getByTestId('roadmap-count');
 const timer = (page, title) => roadmapItem(page, title).getByTestId('roadmap-run-timer');
-const ringOf = (item) => item.getByRole('button', { name: /Show the run's steps/ });
+// the ring of the row's Progress cell: its estimated percent in data-percent
+const ringOf = (item) => item.getByTestId('roadmap-ring');
 
 // ---- the demo workspace, edited before the screen opens (the app follows the files) -----------------
 
@@ -134,6 +139,7 @@ When('the running demo run {string} goes back from code review to develop', asyn
 // ---- #266: readable statuses, the run chip --------------------------------------------------------------
 
 Then('the roadmap item {string} shows a run chip reading {string}', async ({ e2e }, title, label) => {
+  await openRow(roadmapItem(e2e.window, title), LOAD_TIMEOUT);
   const chip = runChip(e2e.window, title);
   await expect(chip).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(chip.getByTestId('status-label')).toHaveText(label);
@@ -153,6 +159,7 @@ Then('the {string} status of the roadmap item {string} pulses', async ({ e2e }, 
 });
 
 When('I click the run chip of the roadmap item {string}', async ({ e2e }, title) => {
+  await openRow(roadmapItem(e2e.window, title), LOAD_TIMEOUT);
   await runChip(e2e.window, title).click();
 });
 
@@ -324,9 +331,9 @@ const seconds = (text) => {
   return c == null ? a * 60 + b : a * 3600 + b * 60 + c;
 };
 
-// #282: the timer is the value of the item's Time meter, and the only timer on the card
+// #282: the timer is the value of the item's Time meter (in its open row), and the only timer of the row
 Then('the roadmap item {string} shows a run timer in its Time line', async ({ e2e }, title) => {
-  const item = roadmapItem(e2e.window, title);
+  const item = await openRow(roadmapItem(e2e.window, title), LOAD_TIMEOUT);
   const line = item.getByTestId('roadmap-meter-time');
   await expect(line.getByTestId('roadmap-run-timer')).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(item.getByTestId('roadmap-run-timer')).toHaveCount(1);
@@ -348,12 +355,11 @@ Then('the run timer of the roadmap item {string} is coloured {string}', async ({
   await expect(timer(e2e.window, title)).toHaveAttribute('data-tone', tone, { timeout: LOAD_TIMEOUT });
 });
 
-// the ring's estimated percent, from its accessible name ("47% estimated, Review. Show the run's steps")
+// the ring's estimated percent (data-percent; the Progress cell's name says it too: "Progress 47% · …")
 const percentOf = async (page, title) => {
-  const name = await ringOf(roadmapItem(page, title)).getAttribute('aria-label');
-  const m = String(name).match(/^(\d+)% estimated/);
-  expect(m, `the ring's percent in "${name}"`).toBeTruthy();
-  return Number(m[1]);
+  const value = await ringOf(roadmapItem(page, title)).getAttribute('data-percent');
+  expect(value, `the ring's percent, "${value}"`).toMatch(/^\d+$/);
+  return Number(value);
 };
 const noted = new WeakMap();
 
@@ -539,8 +545,8 @@ Then('the filter row is under the roadmap bar', async ({ e2e }) => {
 });
 
 // ---- #271: "Ask the Oracle about this failure" on a failed item ----------------------------------------
-// data-testid="roadmap-ask-oracle" (new): a button named "Ask the Oracle about this failure" in a failed
-// item's actions, beside Retry and Skip, with the Oracle's avatar (data-testid="oracle-avatar"). It
+// data-testid="roadmap-ask-oracle": a button named "Ask the Oracle about this failure" in a failed item's open
+// row (the lanes of 2026-11-27: Retry and Skip stay under the row's title), with the Oracle's avatar (data-testid="oracle-avatar"). It
 // opens the Oracle drawer with a context chip for the item's run (data-testid="oracle-context-chip",
 // "Run <run id>", as the gate's "Interact with Oracle") and the question prefilled and sent.
 
@@ -548,20 +554,21 @@ const ASK_ORACLE = 'Ask the Oracle about this failure';
 const askOracle = (page, title) => roadmapItem(page, title).getByRole('button', { name: ASK_ORACLE, exact: true });
 const oracleDrawer = (page) => page.getByRole('complementary', { name: 'Oracle', exact: true });
 
-Then('the roadmap item {string} offers {string} beside Retry and Skip', async ({ e2e }, title, name) => {
+Then('the roadmap item {string} offers Retry and Skip, and {string} in its open row', async ({ e2e }, title, name) => {
   expect(name).toBe(ASK_ORACLE);
   const item = roadmapItem(e2e.window, title);
+  // what the owner must do stays on the row itself, also while it is closed
+  for (const other of ['Retry', 'Skip']) await expect(item.getByRole('button', { name: other, exact: true })).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  await expect(askOracle(e2e.window, title)).toHaveCount(0);
+  await openRow(item, LOAD_TIMEOUT);
   const button = askOracle(e2e.window, title);
-  await expect(button).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  await expect(button).toBeEnabled();
   await expect(button).toHaveAttribute('data-testid', 'roadmap-ask-oracle');
   await expect(button.getByTestId('oracle-avatar')).toBeVisible();
-  // in the same row of actions as Retry and Skip
-  const at = await button.boundingBox();
-  for (const other of ['Retry', 'Skip']) {
-    const b = await item.getByRole('button', { name: other, exact: true }).boundingBox();
-    expect(b, `${other} is shown`).toBeTruthy();
-    expect(Math.abs((b.y + b.height / 2) - (at.y + at.height / 2)), `"${name}" on the row of ${other}`).toBeLessThan(Math.max(b.height, at.height));
-  }
+  // with what opens from the row: on the line of "Open run →"
+  const [at, chip] = [await button.boundingBox(), await runChip(e2e.window, title).boundingBox()];
+  expect(chip, 'the run chip is shown').toBeTruthy();
+  expect(Math.abs((chip.y + chip.height / 2) - (at.y + at.height / 2)), `"${name}" on the line of the run chip`).toBeLessThan(Math.max(chip.height, at.height));
 });
 
 Then('the roadmap item {string} offers no {string} button', async ({ e2e }, title, name) => {
@@ -574,7 +581,10 @@ Then('the roadmap item {string} offers no {string} button', async ({ e2e }, titl
 When('I click {string} on the roadmap item {string}', async ({ e2e }, name, title) => {
   const item = roadmapItem(e2e.window, title);
   await item.scrollIntoViewIfNeeded();
-  await item.getByRole('button', { name, exact: true }).click();
+  const button = item.getByRole('button', { name, exact: true });
+  // a button of the open row (Ask the Oracle, Start Test): the row is opened first
+  if (!await button.isVisible()) await openRow(item, LOAD_TIMEOUT);
+  await button.click();
 });
 
 Then("the Oracle's context chip names the run of the roadmap item {string}", async ({ e2e }, title) => {
@@ -606,6 +616,7 @@ When('I remove the roadmap item {string}', async ({ e2e }, title) => {
   const item = roadmapItem(e2e.window, title);
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
   await item.scrollIntoViewIfNeeded();
+  await openRow(item); // Edit, the arrows and Remove are in the open row
   await item.getByRole('button', { name: /^remove$/i }).click();
 });
 
@@ -647,28 +658,28 @@ When('I restore the most recent earlier version', async ({ e2e }) => {
   await expect(versions(page)).toBeHidden();
 });
 
-// ---- #282: the item card's bands, its Workflow band and pipeline, the stage actions menu ---------------
-// What the card exposes (new for #282), inside data-testid="roadmap-item":
-// - the issues band: the issue titles and data-testid="roadmap-issues-foot" ("N issues · complexity C");
-//   the meters data-testid="roadmap-meter-cost" and "roadmap-meter-time"; one status block
-//   data-testid="roadmap-status" (the ring, the status pill, the step, the full round line).
-// - data-testid="roadmap-workflow": the Workflow band, with data-testid="roadmap-workflow-name" (the
-//   workflow's display name), data-testid="roadmap-mode" (buttons data-mode="auto" / "validated", named
-//   "Automatic" / "Validated", aria-pressed; a click saves the item's mode at once) and
-//   data-testid="roadmap-pipeline", always shown: its stations data-testid="roadmap-station" with
-//   data-state = done | running | back | todo | gate (the owner's gate reads "Your check").
+// ---- #282: the item's row, its workflow's group and lane, the stage actions menu -----------------------
+// What the screen exposes since the lanes of 2026-11-27 (#282's card before them):
+// - data-testid="roadmap-workflow": the group of a workflow in a stage, with data-testid="roadmap-workflow-name"
+//   (the workflow's display name) and, inside it, its rows data-testid="roadmap-item";
+// - a row: the issue titles (one list item each; several: their count in data-testid="roadmap-issues-foot"), its
+//   lane data-testid="roadmap-pipeline", always shown: its stations data-testid="roadmap-station" with
+//   data-state = done | running | back | todo | gate (the owner's gate is named "Your check"), and one status
+//   block data-testid="roadmap-status" (the Progress cell: the ring and the cost and time bars);
+// - its open row data-testid="roadmap-item-panel": the meters data-testid="roadmap-meter-cost" and
+//   "roadmap-meter-time", data-testid="roadmap-mode" (buttons data-mode="auto" / "validated", named
+//   "Automatic" / "Validated", aria-pressed; a click saves the item's mode at once).
 // Each stage (data-testid="roadmap-stage") has a ⋮ button data-testid="roadmap-stage-menu" (accessible
 // name "Stage actions", aria-haspopup="menu", aria-expanded) opening a role="menu" of role="menuitem"
 // entries (Release here, Run this stage, Run earlier / later, the note, Disable / Enable); Enter opens it
 // and focuses its first entry, Esc closes it and gives the focus back to the ⋮ button.
 
 const MODES = { Automatic: 'auto', Validated: 'validated' };
-const workflowBand = (page, title) => roadmapItem(page, title).getByTestId('roadmap-workflow');
-const pipeline = (page, title) => workflowBand(page, title).getByTestId('roadmap-pipeline');
+const pipeline = (page, title) => roadmapItem(page, title).getByTestId('roadmap-pipeline');
 const stations = (page, title) => pipeline(page, title).getByTestId('roadmap-station');
 const modeButton = (page, title, label) => {
   expect(Object.keys(MODES), `a mode named "${label}"`).toContain(label);
-  return workflowBand(page, title).getByTestId('roadmap-mode').locator(`button[data-mode="${MODES[label]}"]`);
+  return roadmapItem(page, title).getByTestId('roadmap-item-panel').getByTestId('roadmap-mode').locator(`button[data-mode="${MODES[label]}"]`);
 };
 const stageMenuButton = (page, n) => stage(page, n).getByRole('button', { name: 'Stage actions', exact: true });
 const stageMenu = (page) => page.getByRole('menu').filter({ visible: true }).first();
@@ -676,20 +687,27 @@ const stageMenu = (page) => page.getByRole('menu').filter({ visible: true }).fir
 Then('the roadmap item {string} shows its issues, its cost and time meters and one status block', async ({ e2e }, title) => {
   const item = roadmapItem(e2e.window, title);
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(item.getByTestId('roadmap-issues-foot')).toBeVisible();
+  await expect(item.getByRole('listitem').first()).toBeVisible();
+  await openRow(item);
   await expect(item.getByTestId('roadmap-meter-cost')).toBeVisible();
   await expect(item.getByTestId('roadmap-meter-time')).toBeVisible();
   await expect(item.getByTestId('roadmap-status')).toHaveCount(1);
   await expect(item.getByTestId('roadmap-status')).toBeVisible();
 });
 
-// the complexity follows the count only when the item has one (the demo items may not)
+// a row lists one title per issue; several issues: their count over the titles ("3 issues"), none for a single one
 Then('the issues footer of the roadmap item {string} counts {string}', async ({ e2e }, title, count) => {
-  await expect(roadmapItem(e2e.window, title).getByTestId('roadmap-issues-foot')).toHaveText(new RegExp(`^${escapeRe(count)}( · complexity \\S+)?$`));
+  const item = roadmapItem(e2e.window, title);
+  const n = Number(count.match(/^(\d+) issues?$/)?.[1]);
+  expect(n, `a count like "2 issues", not "${count}"`).toBeGreaterThan(0);
+  await expect(item.getByRole('listitem')).toHaveCount(n);
+  if (n > 1) await expect(item.getByTestId('roadmap-issues-foot')).toHaveText(count);
+  else await expect(item.getByTestId('roadmap-issues-foot')).toHaveCount(0);
 });
 
+// the group of the item's workflow names it, once for its rows
 Then('the Workflow band of the roadmap item {string} names the workflow {string}', async ({ e2e }, title, name) => {
-  await expect(workflowBand(e2e.window, title).getByTestId('roadmap-workflow-name')).toHaveText(new RegExp(`^${escapeRe(name)}$`, 'i'), { timeout: LOAD_TIMEOUT });
+  await expect(groupOf(e2e.window, title).getByTestId('roadmap-workflow-name')).toHaveText(new RegExp(`^${escapeRe(name)}$`, 'i'), { timeout: LOAD_TIMEOUT });
 });
 
 Then('the roadmap item {string} is in {string} mode', async ({ e2e }, title, label) => {
@@ -700,6 +718,7 @@ Then('the roadmap item {string} is in {string} mode', async ({ e2e }, title, lab
 });
 
 When('I switch the roadmap item {string} to {string} mode', async ({ e2e }, title, label) => {
+  await openRow(roadmapItem(e2e.window, title), LOAD_TIMEOUT);
   const button = modeButton(e2e.window, title, label);
   await button.scrollIntoViewIfNeeded();
   await expect(button).toHaveAccessibleName(label);
@@ -1091,7 +1110,11 @@ Then('the roadmap item {string} waits at a human gate', async ({ e2e }, title) =
 });
 
 Then('the roadmap item {string} offers {string} on its card', async ({ e2e }, title, name) => {
-  const button = roadmapItem(e2e.window, title).getByRole('button', { name, exact: true });
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const button = item.getByRole('button', { name, exact: true });
+  // what the owner must do about a run (Move on, Retry, Skip) is on the row itself; "Start Test" is in its open row
+  if (!await button.isVisible()) await openRow(item, LOAD_TIMEOUT);
   await expect(button).toBeEnabled({ timeout: LOAD_TIMEOUT });
   if (name === 'Move on') await expect(button).toHaveAttribute('data-testid', 'roadmap-item-move-on');
 });
@@ -1354,7 +1377,7 @@ Then('no stage shows the {string} badge', async ({ e2e }, text) => {
 });
 
 // ---- #614: a cleanly merged item's Merge station ---------------------------------------------------------
-// The pipeline's stations (#282, roadmap-station, data-state); a done station reads "✓", one not run "—".
+// The lane's stations (#282, roadmap-station, data-state); a done station's glyph is named "<station>: done…".
 
 Then('the pipeline of the done roadmap item {string} shows its {string} station as done', async ({ e2e }, title, name) => {
   const item = e2e.window.locator('[data-testid="roadmap-item"][data-status="done"]').filter({ hasText: title }).first();
@@ -1362,12 +1385,11 @@ Then('the pipeline of the done roadmap item {string} shows its {string} station 
   const station = item.getByTestId('roadmap-pipeline').getByTestId('roadmap-station').filter({ hasText: name });
   await expect(station).toHaveCount(1);
   await expect(station).toHaveAttribute('data-state', 'done');
-  await expect(station).toContainText('✓');
-  await expect(station).not.toContainText('—');
+  await expect(station.getByRole('img', { name: new RegExp(`^${escapeRe(name)}: done\\b`) })).toBeVisible();
 });
 
 // ---- #615: a running item's cost meter follows its run ----------------------------------------------------
-// The card's Cost meter (data-testid="roadmap-meter-cost", #282) reads "$X.XX" (then "of ≈ $Y"): its
+// The Cost meter of the item's open row (data-testid="roadmap-meter-cost", #282) reads "$X.XX" (then "of ≈ $Y"): its
 // first amount is the run's cost so far. The window is marked when the cost is noted: a reload clears it.
 
 const costNoted = new WeakMap();
@@ -1379,7 +1401,8 @@ const costOf = async (page, title) => {
 
 When('I note the cost meter of the roadmap item {string}', async ({ e2e }, title) => {
   const page = e2e.window;
-  await expect(roadmapItem(page, title).getByTestId('roadmap-meter-cost')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await openRow(roadmapItem(page, title), LOAD_TIMEOUT); // it stays open across the live reloads
+  await expect(roadmapItem(page, title).getByTestId('roadmap-meter-cost')).toBeVisible();
   const before = await costOf(page, title);
   costNoted.set(e2e, before == null ? 0 : before);
   await page.evaluate(() => { window.e2eCostNoted = true; });

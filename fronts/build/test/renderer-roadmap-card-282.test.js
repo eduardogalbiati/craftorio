@@ -5,18 +5,22 @@
 // and its steps' own fields); clicks go through BacklogRoadmap.onClick with targets built from the
 // rendered markup (their closest() walks the real ancestors).
 //
-// The testid contract (shared with the E2E agent):
-// - item `roadmap-item`; issues footer `roadmap-issues-foot` ("4 issues · complexity 9");
-// - meters `roadmap-meter-cost` / `roadmap-meter-time`, `data-verdict` = estimate | none | over | ok;
-//   the live timer `roadmap-run-timer` sits in the time meter, the only timer of the card;
-// - status block `roadmap-status`: the pill, `roadmap-progress-step`, `roadmap-round` ("Round 2 · fix
-//   round after Review", never truncated), Waiting for you, Retry / Skip, ↑ ↓ Remove;
-// - workflow band `roadmap-workflow`: `roadmap-workflow-name`, the mode toggle `roadmap-mode`
-//   (buttons data-mode="auto" | "validated", aria-pressed, disabled while it runs with "locked while it
-//   runs"), "Open run →" (`run-chip`, data-run), Simulated;
-// - pipeline `roadmap-pipeline` of `roadmap-station` (data-step, data-state done | running | back |
-//   todo | gate): "working…", "×2", "asked for fixes", "next" (running item) or "—" (planned item);
-//   Validated adds a gate station "Your check" right after Develop; a click on a station opens the run;
+// The testid contract (shared with the E2E agent), since the lanes of 2026-11-27 (a stage's items are rows
+// grouped by workflow; a row's details are in its open row, drawn hidden until it is opened):
+// - the group `roadmap-workflow` (one per workflow and ending in a stage): `roadmap-workflow-name`, then
+//   its rows `roadmap-item`; a row of several issues counts them in `roadmap-issues-foot` ("4 issues");
+// - the row's line: `status-label` when no station says its state (Planned, Done), `roadmap-round`
+//   ("Review asked for fixes · round 2", never truncated); under it Retry / Skip (.rm-fail-actions);
+// - the lane `roadmap-pipeline` of `roadmap-station` (data-step, data-state done | running | back |
+//   todo | gate): a glyph named "<station>: <state>" (aria-label), the station the run is at a pill
+//   (`status-label`: Running, "Round 2", Waiting for you, Failed) that opens the run; Validated adds a gate
+//   station "Your check" right after Develop;
+// - the Progress cell `roadmap-status`: the ring `roadmap-ring` (data-percent) and the cost and time bars;
+// - the open row `roadmap-item-panel`: the meters `roadmap-meter-cost` / `roadmap-meter-time`
+//   (`data-verdict` = estimate | none | over | ok; the live timer `roadmap-run-timer` sits in the time meter,
+//   the only timer of the row), `roadmap-progress-step`, "Open run →" (`run-chip`, data-run), the mode
+//   toggle `roadmap-mode` (buttons data-mode="auto" | "validated", aria-pressed, disabled while it runs with
+//   "locked while it runs"), Simulated, `roadmap-complexity`, ↑ ↓ Remove;
 // - stage head: `roadmap-stage-menu` (⋮, aria-label "Stage actions", aria-haspopup) opening a menu
 //   (role="menuitem") with Release here, Run this stage, Run earlier, Run later, add note, Disable.
 // Not testable here: the widths (540px at 1200px), the responsive layouts, screenshots, contrast.
@@ -106,10 +110,18 @@ function part(html, itemId, testid) {
   return el;
 }
 const text = (el) => H.visibleText(el.inner);
+// a station: what it shows (`text`: the pill of the station a run is at; a glyph shows none) and what its glyph is named (`label`)
 function stations(html, itemId = 'a') {
   const pipe = part(html, itemId, 'roadmap-pipeline');
-  return allByTestId(pipe.outer, 'roadmap-station').map((e) => ({ step: e.attrs['data-step'] || '', state: e.attrs['data-state'] || '', text: text(e) }));
+  return allByTestId(pipe.outer, 'roadmap-station').map((e) => ({ step: e.attrs['data-step'] || '', state: e.attrs['data-state'] || '', text: text(e), label: H.findEl(e.inner, (x) => 'aria-label' in x.attrs)?.attrs['aria-label'] || '' }));
 }
+// the group of the item's workflow: its head names the workflow, its first row the stations
+function groupOf(html, itemId = 'a') {
+  const group = allByTestId(html, 'roadmap-workflow').find((e) => !!H.findEl(e.outer, (x) => x.attrs['data-item'] === itemId));
+  assert.ok(group, `item ${itemId} is in a workflow group`);
+  return group;
+}
+const panel = (html, itemId = 'a') => part(html, itemId, 'roadmap-item-panel');
 const isDevelop = (s) => s.step.toLowerCase() === 'develop';
 
 // ---- a planned item ---------------------------------------------------------------------------------
@@ -128,52 +140,73 @@ test('#282 planned item without an estimate: the meters say "no estimate yet" (v
   assert.deepEqual([cost.attrs['data-verdict'], time.attrs['data-verdict'], /no estimate yet/.test(text(cost))], ['none', 'none', true]);
 });
 
-test('#282 the issues column ends with "4 issues · complexity 9"', async () => {
+test('#282 a row of several issues says "4 issues" over their titles; their complexity, 9, is in the open row', async () => {
   const { R } = await ready();
-  assert.match(text(part(draw(R, one(card())), 'a', 'roadmap-issues-foot')), /4 issues · complexity 9/);
+  const html = draw(R, one(card()));
+  assert.deepEqual([text(part(html, 'a', 'roadmap-issues-foot')), text(byTestId(panel(html).outer, 'roadmap-complexity'))], ['4 issues', '9']);
 });
 
-test('#282 the issues footer of one issue says "1 issue", without complexity when it is unknown', async () => {
+test('#282 a row of one issue has no count line, and no Complexity line when it is unknown', async () => {
   const { R } = await ready();
-  const d = one(card({ issues: [H.ref(200, 'No label')] }));
-  const foot = text(part(draw(R, d), 'a', 'roadmap-issues-foot'));
-  assert.deepEqual([/\b1 issue\b/.test(foot), /issues/.test(foot), /complexity/.test(foot)], [true, false, false]);
+  const box = H.itemEl(draw(R, one(card({ issues: [H.ref(200, 'No label')] }))), 'a');
+  assert.deepEqual([byTestId(box.outer, 'roadmap-issues-foot'), byTestId(box.outer, 'roadmap-complexity'), /complexity/i.test(text(box))], [null, null, false]);
 });
 
-test('#282 planned item: the status block holds the Planned pill with ↑ ↓ Remove', async () => {
+test('#282 planned item: the row says Planned, its Progress cell an empty ring "0%"; ↑ ↓ Remove are in the open row', async () => {
   const { R } = await ready();
-  const status = text(part(draw(R, one(card())), 'a', 'roadmap-status'));
-  assert.deepEqual([/Planned/.test(status), status.includes('↑'), status.includes('↓'), /remove/i.test(status)], [true, true, true, true]);
+  const html = draw(R, one(card()));
+  const label = part(html, 'a', 'status-label');
+  const actions = text(panel(html));
+  assert.deepEqual([text(label), label.attrs['data-status'], /^0%/.test(text(part(html, 'a', 'roadmap-status')))], ['Planned', 'planned', true]);
+  assert.deepEqual([actions.includes('↑'), actions.includes('↓'), /remove/i.test(actions)], [true, true, true]);
 });
 
-test('#282 planned item: every pipeline station is todo and shows "—"', async () => {
+test('#282 planned item: every station is todo, a glyph named "<station>: not reached" that shows no text', async () => {
   const { R } = await ready();
   const list = stations(draw(R, one(card())));
-  assert.ok(list.length > 0, 'the pipeline has stations');
-  assert.deepEqual(list.filter((s) => s.state !== 'todo' || !s.text.includes('—')), []);
+  assert.ok(list.length > 0, 'the lane has stations');
+  assert.deepEqual(list.filter((s) => s.state !== 'todo' || s.text !== '' || !/: not reached$/.test(s.label)), []);
 });
 
-test('#282 planned item: the mode toggle is enabled, Automatic pressed, in the workflow band', async () => {
+test('#282 planned item: the mode toggle is enabled, Automatic pressed, in the open row', async () => {
   const { R } = await ready();
-  const band = part(draw(R, one(card())), 'a', 'roadmap-workflow');
-  const mode = byTestId(band.outer, 'roadmap-mode');
-  assert.ok(mode, 'the mode toggle is inside the workflow band');
+  const mode = byTestId(panel(draw(R, one(card()))).outer, 'roadmap-mode');
+  assert.ok(mode, 'the mode toggle is inside the open row');
   const buttons = H.findAll(mode.outer, (e) => e.name === 'button' && 'data-mode' in e.attrs)
     .map((e) => [e.attrs['data-mode'], e.attrs['aria-pressed'], 'disabled' in e.attrs]);
   assert.deepEqual(buttons, [['auto', 'true', false], ['validated', 'false', false]]);
 });
 
-test('#282 the workflow band names the workflow', async () => {
+test('#282 the group names the workflow once, with its runs and how they end, and the stations once in its first row', async () => {
   const { R } = await ready();
-  const band = part(draw(R, one(card())), 'a', 'roadmap-workflow');
-  const name = byTestId(band.outer, 'roadmap-workflow-name');
-  assert.ok(name, 'roadmap-workflow-name in the band');
-  assert.match(text(name), /feature/i);
+  const html = draw(R, one(card()));
+  const group = groupOf(html);
+  const name = allByTestId(group.outer, 'roadmap-workflow-name');
+  assert.deepEqual([name.length, /feature/i.test(text(name[0])), allByTestId(H.itemEl(html, 'a').outer, 'roadmap-workflow-name').length], [1, true, 0]);
+  const head = H.findEl(group.outer, (e) => /\brm-group-head\b/.test(e.attrs.class || ''));
+  // how its runs end, when the workflow says (the same words as the ending badge of its rows)
+  const ending = byTestId(panel(html).outer, 'roadmap-item-ending');
+  assert.equal(text(head), `${text(name[0])} 1 run${ending ? ` · ${text(ending)}` : ''}`);
+  // the stations' names, once, over the rows: the same as the glyphs' names
+  const cols = H.findEl(group.outer, (e) => /\brm-cols\b/.test(e.attrs.class || ''));
+  const names = H.findAll(H.findEl(cols.outer, (e) => /\brm-lane\b/.test(e.attrs.class || '')).inner, (e) => e.name === 'span').map((e) => text(e));
+  assert.deepEqual(names, stations(html).map((s) => s.label.replace(/: not reached$/, '')));
+  assert.match(text(cols), /^Run .* Progress$/);
 });
 
-test('#282 a simulated item says Simulated in the workflow band', async () => {
+test('#282 two items of the same workflow share one group; an item of another workflow has its own', async () => {
   const { R } = await ready();
-  assert.match(text(part(draw(R, one(card({ mock: true }))), 'a', 'roadmap-workflow')), /Simulated/);
+  const items = [card(), card({ id: 'b', issues: [H.ref(201, 'B')] }), card({ id: 'c', workflow: 'fix.yaml', workflowName: 'fix', issues: [H.ref(202, 'C')] })];
+  const html = draw(R, { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items }] }, issues: backlogIssues });
+  const groups = allByTestId(html, 'roadmap-workflow').map((g) => [text(byTestId(g.outer, 'roadmap-workflow-name')), allByTestId(g.outer, 'roadmap-item').map((e) => e.attrs['data-item']).join(',')]);
+  assert.deepEqual(groups.map((g) => g[1]), ['a,b', 'c']);
+  assert.match(text(H.findEl(groupOf(html, 'a').outer, (e) => /\brm-group-head\b/.test(e.attrs.class || ''))), /2 runs/);
+  assert.notEqual(groups[0][0], groups[1][0]);
+});
+
+test('#282 a simulated item says Simulated in its open row', async () => {
+  const { R } = await ready();
+  assert.match(text(panel(draw(R, one(card({ mock: true }))))), /Simulated/);
 });
 
 test('#282 Automatic mode: no gate station in the pipeline', async () => {
@@ -186,7 +219,7 @@ test('#282 Validated mode on a planned item: a gate station "Your check" right a
   const list = stations(draw(R, one(card({ inputs: { mode: 'validated' } }))));
   const gates = list.map((s, i) => [s, i]).filter(([s]) => s.state === 'gate');
   assert.equal(gates.length, 1);
-  assert.match(gates[0][0].text, /Your check/);
+  assert.equal(gates[0][0].label, 'Your check: waits for you');
   assert.equal(gates[0][1], list.findIndex(isDevelop) + 1);
 });
 
@@ -233,50 +266,58 @@ test('#282 running item: no "x of ≈ y" time badge outside the meters', async (
   assert.equal(/of ≈/.test(H.visibleText(rest)), false);
 });
 
-test('#282 running item: the round reads in full "Round 2 · fix round after Review", never truncated', async () => {
+test('#282 running item: the row\'s line says the fix round in full, "Review asked for fixes · round 2", never truncated', async () => {
   const { R } = await ready();
-  const status = part(draw(R, running()), 'a', 'roadmap-status');
-  const round = byTestId(status.outer, 'roadmap-round');
-  assert.ok(round, 'roadmap-round inside roadmap-status');
-  assert.match(text(round), /^Round 2 · fix round after (Code )?[Rr]eview$/);
+  const round = part(draw(R, running()), 'a', 'roadmap-round');
+  assert.match(text(round), /^(Code )?[Rr]eview asked for fixes · round 2$/);
   assert.equal(round.outer.includes('…'), false);
 });
 
-test('#282 running item: the status block shows the step name and no agent avatar', async () => {
+test('#282 running item: its Progress cell shows the percent and no agent avatar; the step name is in the open row', async () => {
   const { R } = await ready();
-  const status = part(draw(R, running()), 'a', 'roadmap-status');
+  const html = draw(R, running());
+  const status = part(html, 'a', 'roadmap-status');
   const avatar = H.findEl(status.outer, (e) => e.attrs['data-testid'] === 'progress-agent' || /\brp-av\b/.test(e.attrs.class || ''));
-  assert.deepEqual([!!byTestId(status.outer, 'roadmap-progress-step'), avatar === null], [true, true]);
+  assert.deepEqual([/^\d+%/.test(text(status)), avatar === null, !!byTestId(panel(html).outer, 'roadmap-progress-step')], [true, true, true]);
 });
 
 test('#282 running item: the mode buttons are disabled and say "locked while it runs"', async () => {
   const { R } = await ready();
-  const band = part(draw(R, running()), 'a', 'roadmap-workflow');
-  const mode = byTestId(band.outer, 'roadmap-mode');
-  assert.ok(mode, 'the mode toggle stays in the band');
+  const open = panel(draw(R, running()));
+  const mode = byTestId(open.outer, 'roadmap-mode');
+  assert.ok(mode, 'the mode toggle stays in the open row');
   const buttons = H.findAll(mode.outer, (e) => e.name === 'button' && 'data-mode' in e.attrs);
-  assert.deepEqual([buttons.length, buttons.every((e) => 'disabled' in e.attrs), /locked while it runs/.test(text(band))], [2, true, true]);
+  assert.deepEqual([buttons.length, buttons.every((e) => 'disabled' in e.attrs), /locked while it runs/.test(text(open))], [2, true, true]);
 });
 
-test('#282 running item: the running station says "working…" with its round "×2"', async () => {
+test('#282 running item: the station it is at is a pill, "Round 2" in its fix round, named with its state and its round', async () => {
   const { R } = await ready();
   const runningStations = stations(draw(R, running())).filter((s) => s.state === 'running');
   assert.equal(runningStations.length, 1);
-  assert.deepEqual([isDevelop(runningStations[0]), runningStations[0].text.includes('working…'), runningStations[0].text.includes('×2')], [true, true, true]);
+  assert.deepEqual([isDevelop(runningStations[0]), runningStations[0].text, runningStations[0].label], [true, 'Round 2', 'Open the run at Develop (running, round 2)']);
 });
 
-test('#282 running item: the station that sent it back says "asked for fixes"', async () => {
+test('#282 running item in its first round: the pill says Running and the row\'s line who works', async () => {
+  const { R } = await ready();
+  const start = H.NOW - 5 * H.MIN;
+  const html = draw(R, running({ run: H.run({ status: 'running', workflow: HERO, startedAt: H.iso(start), progress: [step('develop', 'running', start)], groups: wfEntry(HERO).groups, stepTimes: TYPICAL, history: 12 }) }));
+  const at = stations(html).filter((s) => s.state === 'running');
+  assert.deepEqual([at.length, at[0].text, at[0].label], [1, 'Running', 'Open the run at Develop (running)']);
+  assert.match(text(H.findEl(H.itemEl(html, 'a').outer, (e) => /\brm-note\b/.test(e.attrs.class || ''))), /^Developer · working…$/);
+});
+
+test('#282 running item: the station that sent it back is named "asked for fixes"', async () => {
   const { R } = await ready();
   const back = stations(draw(R, running())).filter((s) => s.state === 'back');
   assert.equal(back.length, 1);
-  assert.deepEqual([/review/i.test(back[0].step), back[0].text.includes('asked for fixes')], [true, true]);
+  assert.deepEqual([/review/i.test(back[0].step), / asked for fixes$/.test(back[0].label), back[0].text], [true, true, '']);
 });
 
-test('#282 running item: the stations still to come say "next"', async () => {
+test('#282 running item: the stations still to come are hollow glyphs named "not reached"', async () => {
   const { R } = await ready();
   const todo = stations(draw(R, running())).filter((s) => s.state === 'todo');
   assert.ok(todo.length > 0, 'stations to come');
-  assert.deepEqual(todo.filter((s) => !s.text.includes('next')), []);
+  assert.deepEqual(todo.filter((s) => s.text !== '' || !/: not reached$/.test(s.label)), []);
 });
 
 test('#282 running item over its cost estimate: the cost meter is "over" with ▲ and the percentage', async () => {
@@ -291,41 +332,47 @@ test('#282 running item: the first issue\'s title appears once (no run chip line
   assert.equal(H.visibleText(box.outer).split('Login page').length - 1, 1);
 });
 
-test('#282 running item: "Open run →" in the workflow band is the run chip of its run', async () => {
+test('#282 running item: "Open run →" in the open row is the run chip of its run', async () => {
   const { R } = await ready();
-  const band = part(draw(R, running()), 'a', 'roadmap-workflow');
-  const link = byTestId(band.outer, 'run-chip');
-  assert.ok(link, 'run-chip in the workflow band');
+  const link = byTestId(panel(draw(R, running())).outer, 'run-chip');
+  assert.ok(link, 'run-chip in the open row');
   assert.deepEqual([link.attrs['data-run'], /Open run/.test(text(link))], ['run-9', true]);
 });
 
-test('#282 a click on a station opens the run', async () => {
+test('#282 a click on the pill of the station the run is at opens the run', async () => {
   const { R, sandbox } = await ready();
   const opened = [];
   sandbox.window.showRun = (id) => opened.push(String(id));
   const d = running();
   const html = draw(R, d);
   const { ctx } = H.makeCtx();
-  await R.onClick(H.clickOn(H.itemEl(html, 'a').outer, (e) => e.attrs['data-testid'] === 'roadmap-station' && e.attrs['data-state'] === 'running'), ctx, d);
+  const at = H.findEl(H.itemEl(html, 'a').outer, (e) => e.attrs['data-testid'] === 'roadmap-station' && e.attrs['data-state'] === 'running');
+  assert.equal(H.findAll(H.itemEl(html, 'a').outer, (e) => 'data-rm-chip' in e.attrs).length, 1, 'one station opens the run: the one it is at');
+  assert.ok(H.findEl(at.inner, (e) => 'data-rm-chip' in e.attrs), 'its pill');
+  await R.onClick(H.clickOn(html, (e) => 'data-rm-chip' in e.attrs), ctx, d);
   assert.deepEqual(opened, ['run-9']);
 });
 
 // ---- waiting, failed, done -------------------------------------------------------------------------------
 
-test('#282 an item waiting at a gate says "Waiting for you" in its status block', async () => {
+test('#282 an item waiting at a gate says "Waiting for you" on the pill of the station it waits at, and what the gate asks in its line', async () => {
   const { R } = await ready();
   const start = H.NOW - 15 * H.MIN;
   const progress = [step('develop', 'done', start, { durationMs: 10 * H.MIN }), step('developer_check', 'waiting', start + 10 * H.MIN, { type: 'human_approval', agents: [] })];
   const x = card({ status: 'running', waiting: true, runId: 'run-9', runs: ['run-9'], inputs: { mode: 'validated' }, run: H.run({ status: 'running', waiting: true, gate: 'Try the change', workflow: HERO, startedAt: H.iso(start), progress, groups: wfEntry(HERO).groups, stepTimes: TYPICAL }) });
-  assert.match(text(part(draw(R, one(x, { state: 'running' })), 'a', 'roadmap-status')), /Waiting for you/);
+  const html = draw(R, one(x, { state: 'running' }));
+  const at = stations(html).filter((s) => s.state === 'waiting');
+  assert.deepEqual([at.length, at[0].text], [1, 'Waiting for you']);
+  assert.match(text(H.findEl(H.itemEl(html, 'a').outer, (e) => /\brm-note\b/.test(e.attrs.class || ''))), /Try the change/);
+  assert.equal(byTestId(part(html, 'a', 'roadmap-status').outer, 'roadmap-ring').attrs.class, 'rm-ring st-waiting');
 });
 
-test('#282 a failed item offers Retry and Skip in its status block', async () => {
+test('#282 a failed item offers Retry and Skip under its title', async () => {
   const { R } = await ready();
   const start = H.NOW - 30 * H.MIN;
   const x = card({ status: 'failed', runId: 'run-f', runs: ['run-f'], error: 'Run run-f failed: tests failed', run: H.run({ status: 'failed', workflow: HERO, startedAt: H.iso(start), finishedAt: H.iso(start + 20 * H.MIN), progress: [step('develop', 'failed', start)], groups: wfEntry(HERO).groups }) });
-  const status = part(draw(R, one(x, { state: 'paused', pausedBy: 'a' })), 'a', 'roadmap-status');
-  const buttons = H.findAll(status.outer, (e) => e.name === 'button').map((e) => text(e));
+  const actions = H.findEl(H.itemEl(draw(R, one(x, { state: 'paused', pausedBy: 'a' })), 'a').outer, (e) => /\brm-fail-actions\b/.test(e.attrs.class || ''));
+  const buttons = H.findAll(actions.outer, (e) => e.name === 'button').map((e) => text(e));
   assert.deepEqual([buttons.some((b) => /Retry/.test(b)), buttons.some((b) => /Skip/.test(b))], [true, true]);
 });
 
@@ -339,8 +386,8 @@ test('#282 a done item: the meters compare with the estimate (cost under it ok, 
 
 // ---- #614: a run that merged cleanly draws its Merge station done ------------------------------------------
 // Assumed: the service's runView gives the card's run `mergedCommit` (the merged commit, null when the
-// run did not merge); the card passes it to RunProgress.pipeline, whose Merge station is then done (✓)
-// and names that commit (its title, its accessible name or its text).
+// run did not merge); the row passes it to RunProgress.pipeline, whose Merge station is then done (✓)
+// and names that commit in its glyph's name and in its hover card (#236: never a native title over that card).
 const AI_HERO = 'feature.yaml';
 const MERGED = 'abc1234def567890abc1234def567890abc12345';
 function mergedCard(mergedCommit) {
@@ -357,14 +404,15 @@ test('#614 a done item whose run merged cleanly (never entered resolve_merge): t
   const { R } = await ready();
   const st = mergeStation(draw(R, one(mergedCard(MERGED), { state: 'done' })));
   assert.ok(st, 'a Merge station');
-  assert.deepEqual([st.attrs['data-state'], text(st).includes('✓')], ['done', true]);
+  assert.deepEqual([st.attrs['data-state'], /^Merge: done\b/.test(H.findEl(st.inner, (e) => 'aria-label' in e.attrs)?.attrs['aria-label'])], ['done', true]);
 });
 
 test('#614 the Merge station of a merged run names the merged commit', async () => {
   const { R } = await ready();
   const st = mergeStation(draw(R, one(mergedCard(MERGED), { state: 'done' })));
   assert.ok(st, 'a Merge station');
-  assert.match(`${st.attrs.title || ''} ${st.attrs['aria-label'] || ''} ${H.visibleText(st.outer)}`, /abc1234/);
+  const [glyph, card] = [H.findEl(st.inner, (e) => 'aria-label' in e.attrs), H.findEl(st.inner, (e) => e.attrs.role === 'tooltip')];
+  assert.deepEqual([glyph.attrs['aria-label'], /abc1234/.test(card.inner), 'title' in st.attrs], ['Merge: done, Merged in abc1234', true, false]);
 });
 
 // ---- the stations of each bundled development workflow ---------------------------------------------------
@@ -390,7 +438,7 @@ const stageOf = (html, s) => H.findEl(html, (e) => e.attrs['data-testid'] === 'r
 const inMenu = (el) => { for (let p = el.parent; p; p = p.parent) if (p.attrs.role === 'menu') return true; return false; };
 const headText = (section) => H.visibleText(H.dropWhere(section.outer, (e) => e.attrs['data-testid'] === 'roadmap-item' || e.attrs.role === 'menu'));
 
-test('#282 a stage of one item shows no stage estimate in its head; a stage of two items does', async () => {
+test('#282 a stage shows its estimate in its head, whatever the number of its items (a row not started shows none)', async () => {
   const { R } = await ready();
   const d = {
     roadmap: {
@@ -403,7 +451,8 @@ test('#282 a stage of one item shows no stage estimate in its head; a stage of t
     issues: backlogIssues,
   };
   const html = draw(R, d);
-  assert.deepEqual([headText(stageOf(html, 0)).includes('12.34'), headText(stageOf(html, 1)).includes('56.78')], [false, true]);
+  assert.deepEqual([headText(stageOf(html, 0)).includes('12.34'), headText(stageOf(html, 1)).includes('56.78')], [true, true]);
+  assert.equal(H.visibleText(H.itemEl(html, 'a').outer.split('data-testid="roadmap-item-panel"')[0]).includes('12.34'), false, 'the row itself shows no estimate before it starts');
 });
 
 function twoStages(state = 'running') {
