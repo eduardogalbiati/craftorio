@@ -45,7 +45,7 @@ const realGit = (args, cwd) => execFileSync('git', ['-c', 'user.name=t', '-c', '
 
 // a git whose clone waits for release(); `events` records the order of the clone's end, gh repo fork and the
 // remote changes
-function heldGit(events) {
+function heldGit(events, { remoteFails = null } = {}) {
   let release;
   const gate = new Promise((r) => { release = r; });
   let cloneStarted = false;
@@ -62,7 +62,10 @@ function heldGit(events) {
       events.push('clone-done');
       return '';
     }
-    if (args[0] === 'remote' && args.length > 1) events.push(`remote ${args[1]} ${args[2]}`);
+    if (args[0] === 'remote' && args.length > 1) {
+      events.push(`remote ${args[1]} ${args[2]}`);
+      if (remoteFails && ['set-url', 'add'].includes(args[1])) throw new Error(remoteFails);
+    }
     return realGit(args, cwd);
   };
   return { git, release: () => release(), started: () => cloneStarted };
@@ -97,7 +100,7 @@ function setup(t, opts = {}) {
   const events = [];
   const root = tmp(t);
   const projectsDir = path.join(root, 'projects');
-  const held = heldGit(events);
+  const held = heldGit(events, opts);
   const gh = fakeGh(events, opts);
   const ob = loadArea().createOnboarding({
     projectsDir,
@@ -189,4 +192,32 @@ test('#126 a fork that fails shows its reason at once, before the clone ends, an
   assert.equal(remoteUrl(folder, 'origin'), ORIGINAL);
   assert.equal(ctx.events.some((e) => e.startsWith('remote ')), false, 'no remote changed after a failed fork');
   assert.equal((await ctx.ob.status(id)).fork.status, 'failed', 'the owner can still try again or work locally');
+});
+
+test('#126 with the clone still running, fork() answers at once (the wizard is not left busy until the clone ends)', async (t) => {
+  const ctx = setup(t);
+  const id = await suggestedWhileCloning(ctx);
+  const answer = await Promise.race([
+    Promise.resolve(ctx.ob.fork(id)).then((s) => ({ s }), (e) => ({ e })),
+    pause(3000).then(() => 'still waiting'),
+  ]);
+  assert.notEqual(answer, 'still waiting', 'fork() waited for the clone');
+  assert.equal(answer.e, undefined, String(answer.e));
+  assert.equal(answer.s.fork.status, 'created');
+  assert.equal(String(answer.s.fork.url).replace(/\.git$/, ''), FORK);
+  assert.equal(ctx.events.includes('clone-done'), false);
+});
+
+test('#126 the remotes failing once the clone ends leave fork: failed with git\'s reason and no fork on the project', async (t) => {
+  const ctx = setup(t, { remoteFails: 'fatal: could not lock config file .git/config' });
+  const id = await suggestedWhileCloning(ctx);
+  const forking = Promise.resolve(ctx.ob.fork(id)).catch((e) => e);
+  await until(() => ctx.ob.status(id), (x) => x?.fork?.status === 'created', 'the fork shown while the clone runs');
+  ctx.held.release();
+  await forking;
+  const failed = await until(() => ctx.ob.status(id), (x) => x?.fork?.status === 'failed', 'the remotes\' failure shown');
+  assert.equal(String(failed.fork.reason).includes('could not lock config file'), true, JSON.stringify(failed.fork));
+  const project = projects.readProject(ctx.projectsDir, id);
+  assert.equal(project.fork ?? null, null, 'the project does not keep a fork whose remotes were never set');
+  assert.equal(remoteUrl(project.folder, 'origin'), ORIGINAL);
 });
