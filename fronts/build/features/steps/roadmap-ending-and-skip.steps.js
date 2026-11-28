@@ -82,6 +82,26 @@ Given('the roadmap plans the item {string} on the workflow {string} in {string} 
   });
 });
 
+// #130: as the seed above, but the item gives no input of its own (no mode typed): its mode is the
+// project's, as the wizard's pick records it
+Given('the roadmap plans the item {string} on the workflow {string} without choosing a mode', async ({ e2e }, title, name) => {
+  editRoadmap(e2e, (r) => {
+    const item = seedItem(e2e, r, 1300, title, { workflow: workflows.fileOf(name), workflowName: name, inputs: {} });
+    Object.assign(r, {
+      state: 'planned', simulated: true, pausedBy: null, error: null, scope: null, budget: null, live: false,
+      stages: [{ id: 'stage-mode', name: 'The project mode', note: '', items: [item] }],
+    });
+  });
+});
+
+Then('the roadmap item {string} does not show the ending {string}', async ({ e2e }, title, label) => {
+  expect(Object.keys(ENDINGS), `an ending labelled "${label}"`).toContain(label);
+  const ending = endingOf(e2e.window, title);
+  await expect(ending).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(ending).not.toHaveAttribute('data-ending', ENDINGS[label]);
+  await expect(ending).not.toContainText(label);
+});
+
 Then('the roadmap item {string} shows the ending {string}', async ({ e2e }, title, label) => {
   expect(Object.keys(ENDINGS), `an ending labelled "${label}"`).toContain(label);
   const ending = endingOf(e2e.window, title);
