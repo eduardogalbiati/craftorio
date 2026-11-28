@@ -20,7 +20,8 @@ const load = () => require('../engine/run-settings');
 const { configureMemoryGuard, sharedMemoryGuard } = require('../engine/memory-guard');
 const { setupWorkspace } = require('../domains/workspace/workspace');
 
-const GUARD_DEFAULTS = { enabled: true, limitPercent: 25, floorPercent: 10 };
+// #129: the guard is off by default (limit 25% and floor 10% once it is turned on)
+const GUARD_DEFAULTS = { enabled: false, limitPercent: 25, floorPercent: 10 };
 const pct = (p) => Math.round(os.totalmem() * p / 100);
 
 function tmp(t, prefix) {
@@ -71,10 +72,10 @@ test('#862 a partial memoryGuard setting keeps the defaults for the keys it leav
   // a previous configuration must not leak: the defaults fill what the settings omit
   configureMemoryGuard({ enabled: false, limitPercent: 70, floorPercent: 50 });
   const { runOptionsFromSettings } = load();
-  const saved = { memoryGuard: { floorPercent: 5 } };
+  const saved = { memoryGuard: { enabled: true, floorPercent: 5 } };
   const ws = workspaceWith(t, saved);
   const o = runOptionsFromSettings({ settings: saved, ws, mock: false });
-  assert.equal(o.memoryGuard !== null && o.memoryGuard !== undefined, true, 'enabled comes from the defaults (on)');
+  assert.equal(o.memoryGuard !== null && o.memoryGuard !== undefined, true, 'turned on, the limit comes from the defaults');
   assert.equal(o.memoryGuard.limitBytes, pct(25));
   assert.equal(o.memoryGuard.floorBytes, pct(5));
 });
@@ -89,23 +90,21 @@ test('#862 configureGuardFromSettings returns null when the guard is off in Sett
   assert.equal(sharedMemoryGuard() === null, true);
 });
 
-test('#862 configureGuardFromSettings turns the guard back on with the defaults when Settings have no memoryGuard', (t) => {
+test('#129 configureGuardFromSettings leaves the guard off when Settings have no memoryGuard', (t) => {
   restoreGuard(t);
-  configureMemoryGuard({ enabled: false, limitPercent: 70, floorPercent: 50 });
   const { configureGuardFromSettings } = load();
   for (const s of [{}, null, undefined]) {
-    configureMemoryGuard({ enabled: false, limitPercent: 70, floorPercent: 50 });
+    configureMemoryGuard({ enabled: true, limitPercent: 70, floorPercent: 50 });
     const guard = configureGuardFromSettings(s);
-    assert.equal(guard !== null, true, `guard on for ${JSON.stringify(s)}`);
-    assert.equal(guard.limitBytes, pct(25));
-    assert.equal(guard.floorBytes, pct(10));
+    assert.equal(guard === null, true, `guard off for ${JSON.stringify(s)}`);
+    assert.equal(sharedMemoryGuard() === null, true);
   }
 });
 
 test('#862 configureGuardFromSettings applies the percents and a floor of 0 means no hold', (t) => {
   restoreGuard(t);
   const { configureGuardFromSettings } = load();
-  const guard = configureGuardFromSettings({ memoryGuard: { limitPercent: 60, floorPercent: 0 } });
+  const guard = configureGuardFromSettings({ memoryGuard: { enabled: true, limitPercent: 60, floorPercent: 0 } });
   assert.equal(guard.limitBytes, pct(60));
   assert.equal(guard.floorBytes, 0);
 });

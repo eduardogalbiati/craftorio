@@ -145,10 +145,10 @@ test('renderMemoryGuard: fills the switch and both fields from settings.memoryGu
   assert.equal(el('memory-guard-floor').value, '5');
 });
 
-test('renderMemoryGuard: without a saved memoryGuard, shows the defaults (on, 25%, 10%)', async () => {
+test('renderMemoryGuard: without a saved memoryGuard, shows the defaults (off since #129, 25%, 10%)', async () => {
   const { renderMemoryGuard, el } = loadMemoryGuard({ memoryGuard: undefined });
   await renderMemoryGuard();
-  assert.equal(el('memory-guard-enabled').checked, true);
+  assert.equal(el('memory-guard-enabled').checked, false);
   assert.equal(el('memory-guard-limit').value, '25');
   assert.equal(el('memory-guard-floor').value, '10');
 });

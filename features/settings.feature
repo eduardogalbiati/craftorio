@@ -21,12 +21,14 @@ Feature: Settings
     Then the phone gates section lists the paired devices
     And the paired devices list says no phone is paired yet
 
-  # Assumes Settings › Execution gets a "Memory guard" group under "Concurrent runs" (#276)
+  # Assumes Settings › Execution gets a "Memory guard" group under "Concurrent runs" (#276). Since #129 the
+  # guard is off by default and its limit and floor show only while it is on: the scenarios turn it on first.
   @issue-276
-  Scenario: The memory guard is on by default, with its limit in GB for this machine
+  Scenario: Turned on, the memory guard gives its limit in GB for this machine
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
+    And I turn the memory guard on
     Then the memory guard is on
     And the memory guard's limit is 25
     And the memory guard's floor is 10
@@ -37,6 +39,7 @@ Feature: Settings
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
+    And I turn the memory guard on
     And I set the memory guard's limit to 30
     And I reload the app
     And I open "Settings" in the sidebar
@@ -48,12 +51,38 @@ Feature: Settings
     Given the app is open
     When I open "Settings" in the sidebar
     And I open the "Execution" settings tab
+    And I turn the memory guard on
     And I set the memory guard's limit to 95
     Then the memory guard's limit field shows an error
     When I reload the app
     And I open "Settings" in the sidebar
     And I open the "Execution" settings tab
     Then the memory guard's limit is 25
+
+  # #129: the memory guard is off by default (DEFAULT_SETTINGS.memoryGuard.enabled false), in the demo
+  # seed's settings.json and in a workspace that never saved it; its limit and floor stay 25% and 10%
+  @issue-129
+  Scenario: In a fresh workspace, Settings › Execution shows the memory guard off, its limit and floor hidden
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the memory guard is off
+    And the memory guard's limit and floor are hidden
+
+  @issue-129
+  Scenario: In a workspace that never saved the memory guard, turning it on shows a 25% limit and a 10% floor, and it stays on
+    Given the app is open
+    And the workspace never saved its "memory guard setting"
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the memory guard is off
+    When I turn the memory guard on
+    Then the memory guard's limit is 25
+    And the memory guard's floor is 10
+    When I reload the app
+    And I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then the memory guard is on
 
   # Settings › Execution › Concurrent runs shows this machine's profile (#367); the CI machine varies,
   # so the scenarios check the line's shape, never its numbers

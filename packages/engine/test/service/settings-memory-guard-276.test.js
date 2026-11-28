@@ -15,10 +15,10 @@ const fs = require('fs');
 const os = require('os');
 const { makeService } = require('./helpers');
 
-test('DEFAULT_SETTINGS.memoryGuard: on, a 25% limit and a 10% floor', () => {
+test('DEFAULT_SETTINGS.memoryGuard: off since #129, a 25% limit and a 10% floor', () => {
   const workspace = require('../../domains/workspace/workspace');
   assert.equal(typeof workspace.DEFAULT_SETTINGS.memoryGuard, 'object');
-  assert.equal(workspace.DEFAULT_SETTINGS.memoryGuard?.enabled, true);
+  assert.equal(workspace.DEFAULT_SETTINGS.memoryGuard?.enabled, false);
   assert.equal(workspace.DEFAULT_SETTINGS.memoryGuard?.limitPercent, 25);
   assert.equal(workspace.DEFAULT_SETTINGS.memoryGuard?.floorPercent, 10);
 });
@@ -26,7 +26,7 @@ test('DEFAULT_SETTINGS.memoryGuard: on, a 25% limit and a 10% floor', () => {
 test('settings:get on a new workspace returns the memory guard defaults', (t) => {
   const { api } = makeService(t);
   const mg = api['settings:get']().memoryGuard;
-  assert.equal(mg?.enabled, true);
+  assert.equal(mg?.enabled, false);
   assert.equal(mg?.limitPercent, 25);
   assert.equal(mg?.floorPercent, 10);
 });

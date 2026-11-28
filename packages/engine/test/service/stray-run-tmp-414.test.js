@@ -62,11 +62,16 @@ function setup(t) {
   fs.mkdirSync(wt, { recursive: true });
   writeRun(ws.runs, FINISHED, { status: 'failed', worktree: wt });
   const notices = [];
+  // #129: the guard is off by default; the stray watch only works with it turned on
+  const guardOn = { enabled: true, limitPercent: 30, floorPercent: 10 };
+  fs.writeFileSync(ws.settings, JSON.stringify({ memoryGuard: guardOn }));
   const area = loadArea()({ ws, events: new EventEmitter(), notify: (n) => notices.push(n) });
 
-  const { sharedMemoryGuard, createMemoryGuard } = loadGuard();
+  const { sharedMemoryGuard, createMemoryGuard, configureMemoryGuard } = loadGuard();
+  configureMemoryGuard(guardOn);
+  t.after(() => configureMemoryGuard({ enabled: false, limitPercent: 25, floorPercent: 10 }));
   const shared = sharedMemoryGuard();
-  assert.ok(shared, 'the memory guard is on by default');
+  assert.ok(shared, 'the memory guard is turned on');
   const original = shared.watchStrays;
   let handed = null;
   shared.watchStrays = (next) => { handed = next; };

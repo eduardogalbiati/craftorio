@@ -21,11 +21,11 @@ test('workspace.js re-exports the settings module\'s functions and defaults as t
   }
 });
 
-test('with no settings.json, readSettings gives the defaults (memory guard on, 25% limit, 10% floor) and savedSettings null', (t) => {
+test('with no settings.json, readSettings gives the defaults (memory guard off, 25% limit, 10% floor) and savedSettings null', (t) => {
   const ws = tmpWs(t);
   assert.equal(settings.savedSettings(ws), null);
   const s = settings.readSettings(ws);
-  assert.deepEqual(s.memoryGuard, { enabled: true, limitPercent: 25, floorPercent: 10 });
+  assert.deepEqual(s.memoryGuard, { enabled: false, limitPercent: 25, floorPercent: 10 });
   assert.equal(s.idleWarningMinutes, 5);
   assert.equal(s.accountCooldownMinutes, 60);
 });

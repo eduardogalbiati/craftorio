@@ -59,6 +59,13 @@ const NEVER_SAVED = {
     delete settings.baseCheck;
     fs.writeFileSync(file, JSON.stringify(settings, null, 2));
   },
+  // #129: the memory guard's default (off) comes from DEFAULT_SETTINGS, not from the seed's file
+  'memory guard setting': (ws) => {
+    const file = path.join(ws, 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    delete settings.memoryGuard;
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+  },
   'Night watch permissions': (ws) => fs.rmSync(path.join(ws, 'oracle', 'night-permissions.json'), { force: true }),
 };
 Given('the workspace never saved its {string}', async ({ e2e }, what) => {
