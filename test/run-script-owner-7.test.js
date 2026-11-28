@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { removeTemp } = require('../packages/engine/test/worktree-helpers');
 
 const root = path.join(__dirname, '..');
 
@@ -30,7 +31,7 @@ steps:
 
 function tmp(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  t.after(() => removeTemp(dir)); // the CLI run killed after it may still hold it on Windows
   return dir;
 }
 

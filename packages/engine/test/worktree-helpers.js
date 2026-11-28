@@ -35,6 +35,18 @@ function shortPath(dir) {
   }
 }
 
+// Removes a test's temp folder. After-hooks run in the order they were registered, so a folder made
+// before a process was started in it is removed before that process is killed; Linux and macOS delete it
+// anyway, Windows refuses while the process holds it (EPERM / EBUSY): there the folder is left in the
+// temp dir rather than failing the test (#7's tests hold a live process in their worktree on purpose).
+function removeTemp(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (e) {
+    if (process.platform !== 'win32' || !['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(e.code)) throw e;
+  }
+}
+
 /**
  * A folder in os.tmpdir() spelled in a non-canonical way:
  * 'link' = through a symlink/junction, 'short' = 8.3 short name (Windows; null when unavailable),
@@ -42,7 +54,7 @@ function shortPath(dir) {
  */
 function scratch(t, spelling = 'link') {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-')));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true, maxRetries: 3 }));
+  t.after(() => removeTemp(base));
   const real = path.join(base, 'fixture-with-a-long-name');
   fs.mkdirSync(real);
   if (spelling === 'canonical') return real;
@@ -108,6 +120,7 @@ function age(dir, days, runDir) {
 }
 
 module.exports = {
+  removeTemp,
   age,
   commit,
   endedRun,
