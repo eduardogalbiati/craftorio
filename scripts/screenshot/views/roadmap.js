@@ -34,6 +34,9 @@ const {
 // #807: under its stage the merge-wait notice (Move on, Stack), with the expected files it shares with
 // the next stage (MERGE_FILES).
 const MERGE_FILES = ['packages/engine/server/routes.js', 'packages/engine/server/report.js'];
+// `more` memory (#128, --roadmap memory): no "Tonight" stage; the stored roadmap stays planned (the startup
+// dispatch starts nothing) and the screenshot's channels show it running, its next start held for
+// memory (channels.js demoMemoryHold)
 // #702 (--roadmap test): the work items of the "Work items" stage, `done` of `total` Progress rows done
 const WORK_ITEMS = [{ item: 'checkout-flow', title: 'Checkout flow', done: 3, total: 3 }, { item: 'saved-searches', title: 'Saved searches', done: 2, total: 4 }];
 // their docs/work/<item>/plan.md in the project's folder (roadmapView reads it: built at N of N, DocModel.planStatus)
@@ -74,7 +77,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
   // #391 (--roadmap pausing): no "Tonight" stage; the roadmap runs (simulated) and pauses after stage 2
   const pausing = more === 'pausing';
   const merge = more === 'merge';
-  const tonight = live === 'off' && !pausing ? demoRoadmapRuns(ws, projectId, { fixRound: states, prOpen: merge }) : null;
+  const tonight = live === 'off' && !pausing && more !== 'memory' ? demoRoadmapRuns(ws, projectId, { fixRound: states, prOpen: merge }) : null;
   const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,

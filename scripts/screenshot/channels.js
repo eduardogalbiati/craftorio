@@ -158,6 +158,22 @@ function demoMissingClis(appDir, on) {
   };
 }
 
+// --roadmap memory (#128): the roadmap shows running with its next real start held for memory, the
+// engine's own text (memory-guard.js memoryProblem; absent at an older --ref: the same words). The seed
+// stores it planned, so nothing starts; the guard never holds a start in a simulation-only engine.
+function demoMemoryHold(appDir, which) {
+  if (which !== 'memory') return null;
+  const GB = 1024 ** 3;
+  let why = 'Waiting for memory: 0.06 GB free, under the floor of 1.6 GB (Settings › Execution › Memory guard); it starts when memory recovers';
+  try { why = require(path.join(appDir, 'packages', 'engine', 'engine', 'memory-guard')).memoryProblem({ freeBytes: 0.06 * GB, floorBytes: 1.6 * GB }) || why; } catch { /* older ref */ }
+  const held = (r) => (r ? { ...r, state: 'running', memoryHold: why } : r);
+  return {
+    'backlog:get': (b) => (b ? { ...b, roadmap: held(b.roadmap) } : b),
+    'backlog:state': (s) => (s ? { ...s, roadmap: held(s.roadmap) } : s),
+    'roadmap:get': held,
+  };
+}
+
 // --keep-awake active | error: what main answers (built by the app tree's apps/desktop/host/keep-awake.js, absent
 // at an older --ref); off and idle are the real state from the setting.
 function demoKeepAwake(appDir, which) {
@@ -173,6 +189,7 @@ function demoKeepAwake(appDir, which) {
 
 module.exports = {
   demoKeepAwake,
+  demoMemoryHold,
   demoMissingClis,
   simulateChannels,
 };

@@ -88,7 +88,8 @@
 //                      health" disabled; the last stage's item simulated) | pausing (#391: running,
 //                      simulated, "Pausing after stage 2" with Cancel pause; --click "[data-rm=pause]"
 //                      opens the Pause menu) | parked (#395: the item waiting at the developer's gate
-//                      parked, "Parked at Developer check" and the bar's "1 parked at a gate")
+//                      parked, "Parked at Developer check" and the bar's "1 parked at a gate") |
+//                      memory (#128: running, the next start held for memory, "Waiting for memory: …")
 //   --project <p>      backlog / roadmap: the demo project as gitlab | self-hosted | rust-backend (#735,
 //                      #745; scripts/screenshot/demo-project.js), e.g. its run dialog: --click ".bl-check"
 //                      --click "#btn-bl-assign" --fill "#assign-workflow=feature.yaml"
@@ -165,6 +166,7 @@ const I18n = require('@craftorio/shared/i18n');
 const machineSlot = require('@craftorio/engine/engine/machine-slot');
 const {
   demoKeepAwake,
+  demoMemoryHold,
   demoMissingClis,
   simulateChannels,
 } = require('./screenshot/channels');
@@ -648,7 +650,8 @@ function main() {
     }
   }
 
-  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis), args.oracle === 'answering', args.po);
+  const answers = { ...demoMissingClis(appDir, args.missingClis), ...demoMemoryHold(appDir, args.roadmap) };
+  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), Object.keys(answers).length ? answers : null, args.oracle === 'answering', args.po);
   require(path.join(appDir, 'apps', 'desktop', 'host', 'main'));
 }
 
