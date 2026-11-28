@@ -213,6 +213,7 @@ const VALUE_OPTIONS = {
   '--agents-window': 'agentsWindow',
   '--budget': 'budget',
   '--cause': 'cause',
+  '--fork': 'fork',
   '--issues': 'issues',
   '--live': 'live',
   '--oracle': 'oracle',
