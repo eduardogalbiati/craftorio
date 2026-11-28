@@ -97,7 +97,8 @@ Given('the roadmap plans the item {string} on the workflow {string} without choo
 Then('the roadmap item {string} does not show the ending {string}', async ({ e2e }, title, label) => {
   expect(Object.keys(ENDINGS), `an ending labelled "${label}"`).toContain(label);
   const ending = endingOf(e2e.window, title);
-  await expect(ending).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // the badge sits in the card's collapsed panel (hidden until the row opens): wait for it to be drawn
+  await expect(ending).toBeAttached({ timeout: LOAD_TIMEOUT });
   await expect(ending).not.toHaveAttribute('data-ending', ENDINGS[label]);
   await expect(ending).not.toContainText(label);
 });
