@@ -88,6 +88,22 @@ function refreshWindowsPathAsync() {
 // nothing. Its stdout goes to a file, not a pipe: a child the shell leaves behind would
 // keep a pipe open past the timeout. SIGKILL: an interactive bash or zsh ignores SIGTERM.
 // fish expands "$PATH" with spaces, so it joins the list with colons itself.
+// The shell runs in a session of its own (LOGIN_SHELL_HELPER: a Node child that spawns it detached, so
+// setsid, and kills its process group after 3 s): an interactive shell started from a process that has a
+// controlling terminal (the engine or the tests launched from a terminal, or through wsl) takes that
+// terminal's foreground, and the kernel then stops the process that started it (SIGTTOU/SIGTTIN), whose
+// own timeout can no longer fire: the engine, or an E2E worker, hung for good.
+const LOGIN_SHELL_HELPER = [
+  "const { spawn } = require('child_process');",
+  "const fs = require('fs');",
+  'const [shell, command, file] = process.argv.slice(1);',
+  "const fd = fs.openSync(file, 'w');",
+  "const c = spawn(shell, ['-ilc', command], { stdio: ['ignore', fd, 'ignore'], detached: true });",
+  "const end = () => process.exit(0);",
+  "const timer = setTimeout(() => { try { process.kill(-c.pid, 'SIGKILL'); } catch { /* gone */ } end(); }, 3000);",
+  "c.on('exit', () => { clearTimeout(timer); end(); });",
+  "c.on('error', () => { clearTimeout(timer); end(); });",
+].join('\n');
 let loginPathMerged = false;
 function mergeLoginShellPath() {
   if (process.platform === 'win32' || loginPathMerged) return;
@@ -99,13 +115,11 @@ function mergeLoginShellPath() {
   try {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'login-path-'));
     const file = path.join(dir, 'out');
-    const fd = fs.openSync(file, 'w');
-    try {
-      const value = path.basename(shell) === 'fish' ? '(string join : $PATH)' : '"$PATH"';
-      spawnSync(shell, ['-ilc', `printf '${mark}%s${mark}' ${value}`], {
-        stdio: ['ignore', fd, 'ignore'], timeout: 3000, killSignal: 'SIGKILL', windowsHide: true,
-      });
-    } finally { fs.closeSync(fd); }
+    const value = path.basename(shell) === 'fish' ? '(string join : $PATH)' : '"$PATH"';
+    // ELECTRON_RUN_AS_NODE: in the app, process.execPath is Electron's binary
+    spawnSync(process.execPath, ['-e', LOGIN_SHELL_HELPER, shell, `printf '${mark}%s${mark}' ${value}`, file], {
+      stdio: 'ignore', timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    });
     out = fs.readFileSync(file, 'utf8');
   } catch { /* no shell: PATH stays as it was */ }
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
