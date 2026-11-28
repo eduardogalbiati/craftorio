@@ -1,8 +1,8 @@
 # =============================================================================
 # Workflow: Refactor (#355): one refactor, done safely, in any language
 # -----------------------------------------------------------------------------
-#   pin_behaviour ─► green_check ─► refactor ─► rule_check ─► suite ─► build ─► review ──merge: local──► end
-#        ▲               │             ▲             │          │        │        │
+#   pin_behaviour ─► green_check ─► refactor ─► rule_check ─► suite ─► build ─► review ─┬─ Local:       merge: local ─► end
+#        ▲               │             ▲             │          │        │        │      └─ Remote|Fork: ci (PR + CI) ─► pr_monitor ─► end
 #        └──(red: fails on the unchanged code)       └──────────┴────────┴────────┘ (behaviour changed, or not simpler)
 #
 # Structure only gets worse when every run adds behaviour: this workflow improves it, one target at a
@@ -28,10 +28,15 @@
 #   6. review: one question, "same behaviour, simpler structure?", from the target's before/after
 #      figures (lines, files touched by the change, complexity where a tool exists for the language,
 #      otherwise the reviewer's reading). A behaviour change, or no simpler structure, goes back to
-#      refactor. Approved: the branch merges into the local base (merge: local, never pushed).
+#      refactor. Approved, by the project's way of working (input `mode`, #130, as feature and fix):
+#      Local: the branch merges into the local base (merge: local, never pushed). Remote: the CI pusher
+#      pushes it, opens the pull request and waits for its CI (fragments/pr-pipeline.yaml), the team
+#      merges it. Fork + PR: the same, the branch pushed to the fork and the PR opened against upstream.
+#      The characterization, the "no test may change" rule and the review are the same in every mode.
 # Measured: the figures are the run's outputs (`before`, `after`), recorded in summary.json with the
 # run's cost, so a month of refactor runs can be compared through run_analysis (#184).
-# Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
+# Commits end with "Closes #<n>" for the run's issues: GitHub closes them when <base> is pushed (Local)
+# or the pull request merges (Remote, Fork + PR).
 # =============================================================================
 
 apiVersion: craftorio/v1
@@ -40,8 +45,8 @@ kind: Workflow
 metadata:
   name: refactor
   version: 0.1.0
-  description: "One refactor, done safely, in any language: the test writer pins the target's current behaviour first (characterization tests, green on the unchanged code), the developer changes structure only (no test may change), then the full suite, the build audit and a review of \"same behaviour, simpler structure?\" from before/after figures, and the local merge. No push, no PR."
-  tags: [dev, refactor, test, build, local, worktree]
+  description: "One refactor, done safely, in any language: the test writer pins the target's current behaviour first (characterization tests, green on the unchanged code), the developer changes structure only (no test may change), then the full suite, the build audit and a review of \"same behaviour, simpler structure?\" from before/after figures. Local mode: merged into the local base branch. Remote mode: a pull request and its CI. Fork + PR: a pull request from your fork against the original."
+  tags: [dev, refactor, test, build, local, remote, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
   category: build
 
@@ -85,7 +90,42 @@ inputs:
     label: "Base branch"
     type: string
     default: main
-    description: The local branch the refactor starts from and is merged into.
+    description: The branch the refactor starts from and lands on.
+  # #130: the project's way of working, as feature and fix (the project's run defaults give it)
+  mode:
+    label: "Mode"
+    type: string
+    enum: [local, remote, fork]
+    default: local
+    options: { local: "Local", remote: "Remote (pull request)", fork: "Fork + PR" }
+    description: "Local: merged into the local base branch, then the run pushes it (push main). Remote: the run pushes its branch, opens a pull request and waits for its CI; the team merges it on the platform. Fork + PR (no push access to the original): the run pushes its branch to your fork (origin) and opens the pull request against the original (upstream); the maintainers merge it."
+  # #738 Fork + PR / #807 stacked: set by the roadmap; fragments/pr-pipeline.yaml reads them
+  parent_branch:
+    label: "Parent branch"
+    type: string
+    default: ""
+    show_if: "mode != 'local'"
+    description: "Fork + PR: the branch on your fork this run starts from (the earlier item of a split implementation). Remote (#807, a stacked roadmap stage): the previous stage's branch, also the pull request's base. Empty: the default branch."
+  depends_on:
+    label: "Depends on"
+    type: string
+    default: ""
+    show_if: "mode == 'fork'"
+    description: "Fork + PR: the earlier pull request this one depends on (e.g. #12), written in the pull request's body."
+  parent_pr:
+    label: "Parent pull request"
+    type: string
+    default: ""
+    show_if: "mode != 'local'"
+    description: "Fork + PR: the URL of the earlier pull request to wait for. The pull request opens once it merged upstream, rebased onto the synced default branch. Remote (#807, stacked): the pull request this one builds on; it opens at once and moves to the default branch when that one merges."
+  git_platform:
+    label: "Git platform"
+    type: string
+    enum: [gh, gl]
+    default: gh
+    options: { gh: GitHub, gl: GitLab }
+    show_if: "mode != 'local'"
+    description: "Where Remote and Fork + PR modes open the pull request (merge request on GitLab)."
   test_command:
     type: string
     default: ""
@@ -113,6 +153,8 @@ providers:
 x-tools:
   # every supported language toolchain: the language skill says which one to use
   toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:pip-audit, bash:osv-scanner, bash:go, bash:govulncheck, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet, bash:cargo]
+  # #130: the CI pusher of Remote and Fork + PR
+  vcs: &vcs [bash:git, bash:gh, bash:glab]
 
 defaults:
   # #320: a persistent agent idle past its prompt cache's lifetime continues in a fresh session
@@ -130,12 +172,13 @@ defaults:
 orchestrator:
   provider: claude
   model: claude-sonnet-5-5
-  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: origin/<base> is fetched only to compare);
-  # dependencies linked from the shared cache (#198)
+  # <workspace>/worktrees/<run_id>; dependencies linked from the shared cache (#198). #130: detached at the
+  # LOCAL <base> in Local mode, at the fetched origin/<base> in Remote mode; Fork + PR syncs the fork first (#738)
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-    remote: false
+    remote: "{{ inputs.mode != 'local' }}"
+    fork: "{{ inputs.mode == 'fork' }}"
   supervisor:
     enabled: true
     on_call: true
@@ -194,8 +237,10 @@ agents:
       target, its callers and its tests with line numbers before your first edit. Run only the
       pinned and affected tests, focused, in the foreground; never the whole suite (the
       orchestrator runs it after your turn).
-      Work on the run's branch (the worktree is on it). Never fetch, pull or push: the
-      orchestrator merges your branch into the local {{ inputs.base_branch }} after the review.
+      Work on the run's branch (the worktree is on it). {% if inputs.mode == 'local' %}Never fetch, pull or push: the
+      orchestrator merges your branch into the local {{ inputs.base_branch }} after the review.{% else %}Never fetch or
+      pull; push only when a fix of the pull request's CI asks for it: the CI pusher pushes the branch and
+      opens the pull request after the review.{% endif %}
       The dependencies are linked from a shared cache: never run `npm ci` and never delete
       `node_modules`.
       {% if inputs.issue or (inputs.issues | length) %}End every commit message with one line per issue this run implements,
@@ -231,6 +276,17 @@ agents:
       - blocks: any critical; high in production dependencies
       - report only: moderate/low, and anything in development-only dependencies
 
+  # #130: Remote and Fork + PR (fragments/pr-pipeline.yaml's ci step)
+  ci_pusher:
+    provider: claude
+    model: claude-sonnet-5-5
+    session: handoff
+    capabilities: { tools: [read, *vcs], web: false }
+    skills: ["ci-pipeline-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You are the CI Pusher. You push the branch, make sure a PR/MR is open and watch CI until it
+      passes. You do not fix code and you do not merge.
+
 groups:
   - name: Pin
     steps: [pin_behaviour, green_check, pin_failed]
@@ -241,7 +297,7 @@ groups:
   - name: Review
     steps: [review, review_blocked]
   - name: Merge
-    steps: [merge_blocked]
+    steps: [merge_blocked, ci, ci_failed, pr_monitor]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -267,7 +323,7 @@ steps:
       they pass on the unchanged code, commit them on the same branch, and answer again in full.
       {% else %}
       Pin the CURRENT behaviour of the target before anyone changes its structure:
-      1. Create the run's branch where the worktree starts (the local {{ inputs.base_branch }}):
+      1. Create the run's branch where the worktree starts ({% if inputs.mode == 'local' %}the local {{ inputs.base_branch }}{% else %}origin/{{ inputs.base_branch }}, already fetched{% endif %}):
          `git switch -c <branch>` (a short name, e.g. refactor-<target>). Never fetch, pull or push.
       2. Find the target's public seams (exported functions, the module's entry points, a CLI or
          a screen's rendered output) and its callers. The code → tests map of this checkout is
@@ -623,20 +679,26 @@ steps:
           name: review_cycle
           max_iterations: 3
           on_exhausted: review_blocked
+      # #130 Remote / Fork + PR: the pull-request half, no local merge
+      - when: "inputs.mode != 'local'"
+        goto: ci
       - when: "true"
         merge: local
         goto: end
         on_error: merge_blocked
 
+  # a human gate in every mode: in Remote / Fork + PR its Approve pushes and opens the pull request
   - id: review_blocked
     type: human_approval
     message: |
       The reviewer still does not find the same behaviour with a simpler structure after 3 rounds:
       same behaviour: {{ steps.review.output.same_behaviour }}, simpler structure: {{ steps.review.output.simpler_structure }}.
       {{ steps.review.output.findings | to_yaml }}
-      Approve: merge the branch into the local {{ inputs.base_branch }} as it is (nothing is pushed). Reject: stop the run as failed (its branch keeps the work).
+      {% if inputs.mode == 'local' %}Approve: merge the branch into the local {{ inputs.base_branch }} as it is (nothing is pushed).{% else %}Approve: push the branch and open the pull request{% if inputs.mode == 'fork' %} against the original (upstream){% endif %} as it is; the team merges it.{% endif %} Reject: stop the run as failed (its branch keeps the work).
     diff_base: "{{ inputs.base_branch }}"
     transitions:
+      - when: "approved and inputs.mode != 'local'"
+        goto: ci
       - when: "approved"
         merge: local
         goto: end
@@ -661,6 +723,15 @@ steps:
         goto: end
         status: failed
 
+  # ============================ REMOTE / FORK + PR (#130) ==========================
+  - id: ci
+    fragment: pr-pipeline
+    agent: ci_pusher
+  - id: ci_failed
+    fragment: pr-pipeline
+  - id: pr_monitor
+    fragment: pr-pipeline
+
 # -----------------------------------------------------------------------------
 # What the run records (summary.json, with its cost) and hands to the next one (#134).
 outputs:
@@ -684,6 +755,10 @@ outputs:
     type: string
     description: The commit the run merged into the local base branch. Empty when nothing was merged.
     value: "{{ run.local_merge.commit if run.local_merge else '' }}"
+  pr_url:
+    type: string
+    description: The PR/MR the Remote or Fork + PR mode opened; empty in Local mode.
+    value: "{{ steps.ci.output.pr_url if steps.ci.output and steps.ci.output.pr_url else '' }}"
 
 # -----------------------------------------------------------------------------
 observability:

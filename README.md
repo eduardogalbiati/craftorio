@@ -1199,7 +1199,12 @@ mix structural and behavioural changes in one commit):
    before/after figures of the target (lines, files touched by the change, complexity, or the
    reviewer's reading). A behaviour change goes back to the refactor.
 
-Green: the branch merges into the local base (`merge: local`, never pushed). The run's
+Green: the run lands in the project's way of working (input `mode`, from the project's run defaults,
+#130), like Feature and Fix. Local: the branch merges into the local base (`merge: local`, never
+pushed). Remote: the branch is pushed, a pull request opened and its CI awaited, then the team merges
+it. Fork + PR: the branch goes to your fork and the pull request against the original. The
+characterization, the "no test may change" rule and the review are the same in every mode, and the
+review's gate (`review_blocked`) stays a human gate: in Remote its Approve opens the pull request. The run's
 `summary.json` records the target's `before` and `after` figures with its cost, so a month of refactor
 runs can be compared with `run_analysis` (#184).
 
@@ -1408,7 +1413,8 @@ Fix, a `refactor` label a Refactor, the content decides) and gives each one that
 Fix and a Feature never share a run, a recommendation shows its kind as a badge with a one-line
 reason, the plan sums up its runs by kind, and a Feature | Fix | Other control swaps the workflow
 (Other lists every workflow that takes a task). Without a map, a Feature runs the project's default
-and a Fix runs `fix` in the project's way of working (Local, Remote or Fork + PR). Both names must be
+and a Fix runs `fix` in the project's way of working (Local, Remote or Fork + PR); a Refactor issue
+put on the roadmap with `refactor` follows that way of working too (#130). Both names must be
 among the manifest's `workflows`, and an entry with a `file` must be named after that file: anything
 else is reported as a manifest error and ignored. The map has `feature` and `fix` only (a Refactor
 runs on the Feature entry; another key is an error too), and a manifest with errors counts as none

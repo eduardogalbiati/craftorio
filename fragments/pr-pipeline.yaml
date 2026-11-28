@@ -7,6 +7,7 @@
 # composed set's ci none or release): it opens the PR/MR with no wait. A step `{ id, fragment: pr-pipeline }`
 # gets the body under its id; the step's own keys win (packages/engine/engine/run/load.js,
 # expandFragments). Reads the inputs base_branch and issue and the steps develop, ci and pr_open.
+# #130: the developer's branch and summary come from `dev`: the step develop, else refactor (refactor.yaml).
 # #738 Fork + PR (inputs.mode fork): the branch goes to `origin` (the owner's fork), the PR to the
 # original (`upstream`), never a push to upstream; the PR follows CONTRIBUTING.md and the PR template,
 # with `Depends on <inputs.depends_on>` for a dependent roadmap item. With inputs.parent_pr (wait and
@@ -19,7 +20,7 @@ steps:
   ci:
     display: Pull request and CI
     goal:
-      description: "CI green on the PR/MR for branch {{ steps.develop.output.branch }}"
+      description: "{% set dev = steps.develop.output or steps.refactor.output or {} %}CI green on the PR/MR for branch {{ dev.branch }}"
       until: "output.ci_status == 'success'"
       on_exhausted: ci_failed
     loop:
@@ -35,7 +36,7 @@ steps:
       # (the engine checks it, transitions.js pollParent); empty: no wait
       parent: "{{ inputs.parent_pr }}"
     prompt: |
-      Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
+      {% set dev = steps.develop.output or steps.refactor.output or {} %}Branch: `{{ dev.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}The developer fixed a previous failure and pushed: {{ delegate_result.text }}
       Check CI for that new commit, not an older run.
       {% endif %}
@@ -50,14 +51,14 @@ steps:
          Merged: the orchestrator rebases the branch onto upstream/{{ inputs.base_branch }} itself and says so
          above (worktree.js restackOnBase); when it says the rebase failed, `git fetch upstream`, then
          `git rebase --onto upstream/{{ inputs.base_branch }} origin/{{ inputs.parent_branch }}` (only this branch's
-         own commits stay). Check it builds, `git push --force-with-lease origin {{ steps.develop.output.branch }}`,
+         own commits stay). Check it builds, `git push --force-with-lease origin {{ dev.branch }}`,
          then go on with 2.
-      {% endif %}1. Push the branch to `origin` (the fork): `git push -u origin {{ steps.develop.output.branch }}`.
+      {% endif %}1. Push the branch to `origin` (the fork): `git push -u origin {{ dev.branch }}`.
          Never push anything to `upstream`: the maintainers merge the pull request.
       2. Make sure a pull request from the fork to the original is open (reuse it if it exists; else
-         `gh pr create --repo <upstream owner/name> --head <fork owner>:{{ steps.develop.output.branch }} --base {{ inputs.base_branch }}`,
+         `gh pr create --repo <upstream owner/name> --head <fork owner>:{{ dev.branch }} --base {{ inputs.base_branch }}`,
          on GitLab `glab mr create` with the original as the target project,
-         with a short title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         with a short title and this summary: {{ dev.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}{% if inputs.depends_on %}, and a
          line `Depends on {{ inputs.depends_on }}`{% endif %}. Follow the repository's CONTRIBUTING.md (or
          .github/CONTRIBUTING.md): its commit format and required checks; fill the sections of its pull
@@ -66,14 +67,14 @@ steps:
       roadmap stage (its branch `{{ inputs.parent_branch }}`): its PR/MR targets that branch, not `{{ inputs.base_branch }}`.
       1. Push the branch to the remote.
       2. Make sure a PR/MR to the parent's branch is open (reuse it if it exists; else
-         `gh pr create --base {{ inputs.parent_branch }} --head {{ steps.develop.output.branch }}`, on GitLab
+         `gh pr create --base {{ inputs.parent_branch }} --head {{ dev.branch }}`, on GitLab
          `glab mr create --target-branch {{ inputs.parent_branch }}`, with a short title and this summary:
-         {{ steps.develop.output.summary }}), its body saying `Builds on {{ inputs.parent_pr }}`{% if inputs.issue %} and
+         {{ dev.summary }}), its body saying `Builds on {{ inputs.parent_pr }}`{% if inputs.issue %} and
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}. Once the parent merges, the
          orchestrator rebases the branch onto `{{ inputs.base_branch }}` and tells you to move the PR/MR's base there.
       {% else %}1. Push the branch to the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
-         title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         title and this summary: {{ dev.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
       {% endif %}{% endif %}3. Check its mergeability first: a conflict with the base never starts CI, answer ci_status:
          failed with a failure_log saying so.
@@ -104,9 +105,9 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            CI on PR/MR #{{ output.pr_number }} failed:
+            {% set dev = steps.develop.output or steps.refactor.output or {} %}CI on PR/MR #{{ output.pr_number }} failed:
             {{ output.failure_log }}
-            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test,
+            Fix it on branch `{{ dev.branch }}`, check it with a focused test,
             commit, then `git push`, and report the commit hash.
         goto: ci
         max_visits: 5
@@ -139,7 +140,7 @@ steps:
   pr_open:
     display: Pull request
     prompt: |
-      Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
+      {% set dev = steps.develop.output or steps.refactor.output or {} %}Branch: `{{ dev.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}The developer resolved the conflict and pushed: {{ delegate_result.text }}
       {% endif %}
       {% if vars.tested == 'no tests' %}Nothing was tested in this run: the project has no tests (#71). Say so in the PR/MR body ("Not tested: the project has no tests"); never write that the tests failed or passed.
@@ -149,14 +150,14 @@ steps:
       {% if inputs.parent_pr %}This branch builds on the earlier pull request {{ inputs.parent_pr }} (its parent branch: `{{ inputs.parent_branch }}`).
       0. Check whether it merged (`gh pr view {{ inputs.parent_pr }} --json state`, `glab mr view` on GitLab). Merged:
          `git fetch upstream`, `git rebase --onto upstream/{{ inputs.base_branch }} origin/{{ inputs.parent_branch }}`, then
-         `git push --force-with-lease origin {{ steps.develop.output.branch }}`. Not merged: this step cannot wait
+         `git push --force-with-lease origin {{ dev.branch }}`. Not merged: this step cannot wait
          (the project's CI does not run on pull requests), so the pull request says `Depends on {{ inputs.parent_pr }}`.
-      {% endif %}1. Push the branch to `origin` (the fork): `git push -u origin {{ steps.develop.output.branch }}`.
+      {% endif %}1. Push the branch to `origin` (the fork): `git push -u origin {{ dev.branch }}`.
          Never push anything to `upstream`: the maintainers merge the pull request.
       2. Make sure a pull request from the fork to the original is open (reuse it if it exists; else
-         `gh pr create --repo <upstream owner/name> --head <fork owner>:{{ steps.develop.output.branch }} --base {{ inputs.base_branch }}`,
+         `gh pr create --repo <upstream owner/name> --head <fork owner>:{{ dev.branch }} --base {{ inputs.base_branch }}`,
          on GitLab `glab mr create` with the original as the target project,
-         with a short title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         with a short title and this summary: {{ dev.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}{% if inputs.depends_on %}, and a
          line `Depends on {{ inputs.depends_on }}`{% endif %}. Follow the repository's CONTRIBUTING.md (or
          .github/CONTRIBUTING.md): its commit format and required checks; fill the sections of its pull
@@ -165,14 +166,14 @@ steps:
       roadmap stage (its branch `{{ inputs.parent_branch }}`): its PR/MR targets that branch, not `{{ inputs.base_branch }}`.
       1. Push the branch to the remote.
       2. Make sure a PR/MR to the parent's branch is open (reuse it if it exists; else
-         `gh pr create --base {{ inputs.parent_branch }} --head {{ steps.develop.output.branch }}`, on GitLab
+         `gh pr create --base {{ inputs.parent_branch }} --head {{ dev.branch }}`, on GitLab
          `glab mr create --target-branch {{ inputs.parent_branch }}`, with a short title and this summary:
-         {{ steps.develop.output.summary }}), its body saying `Builds on {{ inputs.parent_pr }}`{% if inputs.issue %} and
+         {{ dev.summary }}), its body saying `Builds on {{ inputs.parent_pr }}`{% if inputs.issue %} and
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}. Once the parent merges, the
          orchestrator rebases the branch onto `{{ inputs.base_branch }}` and tells you to move the PR/MR's base there.
       {% else %}1. Push the branch to the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; else create one with a short
-         title and this summary: {{ steps.develop.output.summary }}){% if inputs.issue %}, its body
+         title and this summary: {{ dev.summary }}){% if inputs.issue %}, its body
          closing {{ inputs.issue }} with a line `Closes #<number>`{% endif %}.
       {% endif %}{% endif %}3. Check its mergeability: a conflict with the base → conflict: true with what conflicts in
          `detail`. The project's CI does not run on pull requests: do not wait for checks.
@@ -190,8 +191,8 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            PR/MR #{{ output.pr_number }} conflicts with `{{ inputs.base_branch }}`: {{ output.detail }}
-            Rebase branch `{{ steps.develop.output.branch }}` on the base, resolve it, check it with a
+            {% set dev = steps.develop.output or steps.refactor.output or {} %}PR/MR #{{ output.pr_number }} conflicts with `{{ inputs.base_branch }}`: {{ output.detail }}
+            Rebase branch `{{ dev.branch }}` on the base, resolve it, check it with a
             focused test, commit, then `git push --force-with-lease`, and report the commit hash.
         goto: pr_open
         max_visits: 3
@@ -221,7 +222,7 @@ steps:
       grace: 10m
       parent: "{{ inputs.parent_pr }}"
     prompt: |
-      Branch: `{{ steps.develop.output.branch }}`, stacked on `{{ inputs.parent_branch }}` (the pull request {{ inputs.parent_pr }}); its PR/MR: {{ steps.pr_open.output.pr_url }}.
+      {% set dev = steps.develop.output or steps.refactor.output or {} %}Branch: `{{ dev.branch }}`, stacked on `{{ inputs.parent_branch }}` (the pull request {{ inputs.parent_pr }}); its PR/MR: {{ steps.pr_open.output.pr_url }}.
       The orchestrator follows the parent PR/MR itself and calls you only when there is something to do:
       - the engine rebased this branch onto the parent's new commits: push it (`git push --force-with-lease origin HEAD`);
       - the parent merged: the engine rebased this branch onto `{{ inputs.base_branch }}`: push it and move the
@@ -242,8 +243,8 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            PR/MR #{{ output.pr_number }} conflicts with its base: {{ output.detail }}
-            Rebase branch `{{ steps.develop.output.branch }}` on it, resolve it, check it with a focused test,
+            {% set dev = steps.develop.output or steps.refactor.output or {} %}PR/MR #{{ output.pr_number }} conflicts with its base: {{ output.detail }}
+            Rebase branch `{{ dev.branch }}` on it, resolve it, check it with a focused test,
             commit, then `git push --force-with-lease`, and report the commit hash.
         goto: stack_follow
         max_visits: 3
@@ -269,14 +270,14 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            The pull/merge request {{ output.url }} is waiting for its merge, and the owner asks you for a fix.
+            {% set dev = steps.develop.output or steps.refactor.output or {} %}The pull/merge request {{ output.url }} is waiting for its merge, and the owner asks you for a fix.
 
             {{ output.fix_prompt }}
 
-            Work on the run's branch `{{ steps.develop.output.branch }}` (if the worktree is not on it:
-            `git fetch origin {{ steps.develop.output.branch }}` and check it out). Make the change asked for, check it
+            Work on the run's branch `{{ dev.branch }}` (if the worktree is not on it:
+            `git fetch origin {{ dev.branch }}` and check it out). Make the change asked for, check it
             with a focused test (only the tests that cover it, never the whole suite), commit, then push the branch
-            {% if inputs.mode == 'fork' %}to `origin` (`git push origin HEAD:{{ steps.develop.output.branch }}`): Fork + PR, `origin` is the owner's fork that holds the branch; never push to `upstream`.{% else %}(`git push origin HEAD:{{ steps.develop.output.branch }}`).{% endif %}
+            {% if inputs.mode == 'fork' %}to `origin` (`git push origin HEAD:{{ dev.branch }}`): Fork + PR, `origin` is the owner's fork that holds the branch; never push to `upstream`.{% else %}(`git push origin HEAD:{{ dev.branch }}`).{% endif %}
             Do not reply on the pull request, nor resolve its threads: the run replies with your commit.
             Report the commit hash; if you could not fix it, say why and push nothing.
         goto: pr_monitor

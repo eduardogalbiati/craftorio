@@ -29,7 +29,12 @@ mix structural and behavioural changes in one commit):
    before/after figures of the target (lines, files touched by the change, complexity, or the
    reviewer's reading). A behaviour change goes back to the refactor.
 
-Green: the branch merges into the local base (`merge: local`, never pushed). The run's
+Green: the run lands in the project's way of working (input `mode`, from the project's run defaults,
+#130), like Feature and Fix. Local: the branch merges into the local base (`merge: local`, never
+pushed). Remote: the branch is pushed, a pull request opened and its CI awaited, then the team merges
+it. Fork + PR: the branch goes to your fork and the pull request against the original. The
+characterization, the "no test may change" rule and the review are the same in every mode, and the
+review's gate (`review_blocked`) stays a human gate: in Remote its Approve opens the pull request. The run's
 `summary.json` records the target's `before` and `after` figures with its cost, so a month of refactor
 runs can be compared with `run_analysis` (#184).
 

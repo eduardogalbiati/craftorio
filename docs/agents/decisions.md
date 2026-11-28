@@ -8,6 +8,13 @@ appears once, in its latest form, naming what it replaced. The hard rules of
 [AGENTS.md](../../AGENTS.md) are not repeated here. This is not the `decision-log` skill (a run's
 own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
 
+- **2026-11-28** (#130): the `refactor` workflow follows the way of working chosen in the new-project
+  wizard, like `feature` and `fix` (input `mode` from the project's run defaults): Local merges into
+  the local base, Remote pushes the branch, opens a pull request and waits for its CI, Fork + PR opens
+  it from the fork against the original (fragments/pr-pipeline.yaml). Replaces "always local, no push,
+  no PR". The characterization, the "no test may change" rule and the review are the same in every
+  mode; the review's gate stays a human gate, and in Remote its Approve pushes and opens the pull
+  request instead of merging locally. Why: a refactor issue in a Remote project showed "Merge local".
 - **2026-11-26** (#97): the first-run Setup's AIs step asks "Which AI do you want to use as the
   orchestrator?" and the owner picks Claude Code or Codex CLI (`settings.orchestratorProvider`;
   unset = Claude Code); Grok Build stays an optional CLI, never an orchestrator. The same choice is in
@@ -191,7 +198,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   tested on its own, and the measurements showed the seam already exists (the service never
   requires the renderer, the renderer never requires the backend) while 135 loose files at the
   root of `src/` made every later step costlier.
-- **2026-10-23** (#476): the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
+- **2026-10-23** (#476; #469, #474 of 2026-10-22): security defaults. #476: the Linux AppImage keeps its AppRun fallback to `--no-sandbox` when the
   kernel forbids unprivileged user namespaces (Ubuntu 23.10+), but only as a last resort and never
   silently: the launcher warns on stderr and sets `CRAFTORIO_NO_SANDBOX=1`, Settings › About shows
   the warning, and the README gives the user's own alternative (the sysctl
@@ -200,7 +207,7 @@ own `decisions.tsv`). Dates are the issue's (or the owner session's) date.
   `chrome-sandbox` is setuid (or that installs the profile) is the way to a sandbox by default and
   stays a future packaging target. Assumption recorded by the run, not yet confirmed by the owner.
   Why: on Ubuntu 24.04 the AppImage ran with Chromium's renderer sandbox off and nobody was told.
-- **2026-10-22** (#469, #474): workflows, skills and seeds are code. Transition `action:` and
+  #469, #474 (2026-10-22): workflows, skills and seeds are code. Transition `action:` and
   `ship.build` stay shell strings (the bundled ones use `&&` and `{% if %}`: an argv list would
   break them); `loadWorkflow` allows there unfiltered only an allowlist of names the workflow or
   the user controls and output fields its `output_schema` types as a number or a boolean, anything

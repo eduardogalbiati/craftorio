@@ -25,7 +25,8 @@ Fix, a `refactor` label a Refactor, the content decides) and gives each one that
 Fix and a Feature never share a run, a recommendation shows its kind as a badge with a one-line
 reason, the plan sums up its runs by kind, and a Feature | Fix | Other control swaps the workflow
 (Other lists every workflow that takes a task). Without a map, a Feature runs the project's default
-and a Fix runs `fix` in the project's way of working (Local, Remote or Fork + PR). Both names must be
+and a Fix runs `fix` in the project's way of working (Local, Remote or Fork + PR); a Refactor issue
+put on the roadmap with `refactor` follows that way of working too (#130). Both names must be
 among the manifest's `workflows`, and an entry with a `file` must be named after that file: anything
 else is reported as a manifest error and ignored. The map has `feature` and `fix` only (a Refactor
 runs on the Feature entry; another key is an error too), and a manifest with errors counts as none
