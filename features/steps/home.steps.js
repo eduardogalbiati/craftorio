@@ -7,7 +7,7 @@
 //   home-flow-count                         a stage's count (a button: opens its screen, filtered)
 //   home-needs-you, home-needs-item         "What needs you" and its items (data-kind: gate,
 //                                           failed-item, discovery), each with one action button
-//   home-today                              today's summary (cost, runs, 24/7 occupancy, next stage)
+//   home-today                              the last 24 hours' summary (cost, runs, 24/7 occupancy)
 // Analytics' own tabs: role="tablist" named "Analytics" (fronts/build/features/steps/run.steps.js opens them).
 
 const { expect } = require('@playwright/test');
@@ -106,10 +106,12 @@ Then('every item of "What needs you" offers one action', async ({ e2e }) => {
   }
 });
 
-Then('Home shows today\'s summary', async ({ e2e }) => {
-  const today = e2e.window.getByTestId('home-today');
-  await expect(today).toBeVisible();
-  await expect(today).toContainText(/\d/);
+// the Home redesign (2026-11-28): "Last 24 hours" in place of "Today" (its test id kept)
+Then('Home shows the last 24 hours\' summary', async ({ e2e }) => {
+  const day = e2e.window.getByTestId('home-today');
+  await expect(day).toBeVisible();
+  await expect(day).toContainText('Last 24 hours');
+  await expect(day).toContainText(/\d/);
 });
 
 // a tab's name may be longer than the feature's word ("Repository performance" for "Performance")

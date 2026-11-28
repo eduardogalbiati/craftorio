@@ -40,7 +40,8 @@ const body = (app) => String(app.el('#home-body').innerHTML || '');
 const needRows = (app) => [...body(app).matchAll(/<div class="home-need" data-testid="home-needs-item" data-kind="([^"]+)">([\s\S]*?)<\/div>\s*(?=<div class="home-need"|<\/div>)/g)]
   .map((m) => ({ kind: m[1], html: m[2], text: text(m[2]) }));
 const count = (app, stage) => (new RegExp(`data-testid="home-flow-count" data-stage="${stage}"[^>]*>(\\d+)<`).exec(body(app)) || [])[1];
-const stat = (app, label) => (new RegExp(`<label>${label}</label><b>([\\s\\S]*?)</b>`).exec(body(app)) || [])[1];
+// a "Last 24 hours" stat (the Home redesign: its own box, #home-last24)
+const stat = (app, label) => (new RegExp(`<label>${label}</label><b>([\\s\\S]*?)</b>`).exec(String(app.el('#home-last24').innerHTML || '')) || [])[1];
 const clickHome = (app, sel, dataset) => app.click(sel, { dataset, within: ['#view-dashboard'] });
 
 // ---- What needs you -----------------------------------------------------------------------------
@@ -196,8 +197,10 @@ test('the strip follows the last project asked: a slower answer for the previous
 
 // ---- Today --------------------------------------------------------------------------------------
 
-test('"Today" counts the runs finished and failed today, the cost of the day and of the last night\'s real runs, and the occupancy (#255)', async () => {
-  const yesterday = new Date(new Date().setHours(0, 0, 0, 0) - 3600e3).toISOString();
+// the Home redesign (2026-11-28, the owner's choice): the last 24 hours instead of the calendar day; the cost is the
+// real runs started in them, the last watch's cost the real runs started in its window
+test('"Last 24 hours" counts the runs finished and failed in them, the cost of their real runs and of the last watch\'s, and the occupancy', async () => {
+  const yesterday = iso(26 * 60);
   const now = new Date().toISOString();
   const app = await home({
     listRuns: async () => ({ runs: [
@@ -215,18 +218,18 @@ test('"Today" counts the runs finished and failed today, the cost of the day and
     nightWatchMorning: async () => ({ window: { from: iso(720), to: iso(240) }, summary: { ran: 'Ran 1 run overnight.' } }),
   });
   await app.settle(20);
-  assert.equal(stat(app, 'Runs finished'), '2', 'yesterday\'s run is not today\'s');
+  assert.equal(stat(app, 'Runs finished'), '2', 'a run of 26 hours ago is not in the last 24 hours');
   assert.equal(stat(app, 'Runs failed'), '1');
-  assert.equal(stat(app, 'Cost today'), '$3.50');
-  assert.equal(stat(app, 'Cost last night'), '$1.25', 'the real runs started in the last Night watch\'s window only');
+  assert.equal(stat(app, 'Cost'), '$6.25', 'the real runs started in the last 24 hours (n1 and n3; n2 is simulated)');
+  assert.equal(stat(app, 'Cost of the last watch'), '$1.25', 'the real runs started in the last watch\'s window only');
   assert.equal(stat(app, '24/7 occupancy'), '36%');
 });
 
-test('"Today" shows tonight\'s cost while the Night watch is spending (#255)', async () => {
+test('"Last 24 hours" shows tonight\'s cost while the Night watch is spending (#255)', async () => {
   const app = await home({ getUsage: async () => ({ spending: { day: { spentUsd: 1 }, night: { spentUsd: 0.8, estimated: true } } }) });
   await app.settle(20);
   assert.equal(stat(app, 'Cost tonight'), '≈ $0.80');
-  assert.equal(stat(app, 'Cost last night'), undefined);
+  assert.equal(stat(app, 'Cost of the last watch'), undefined);
 });
 
 // ---- Open roadmap -------------------------------------------------------------------------------

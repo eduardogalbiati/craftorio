@@ -7,7 +7,10 @@
 // Home is the shell's, its content the fronts' (phase 3 of docs/reorganisation-study-2026-10.md,
 // decision 5): each front registers a card with HomeCards (home-cards.js) as it loads, and Home draws
 // what the registered cards give it, so a composition without a front shows none of its parts:
-// - the banner above the body: a card's `morning` (the AI front: the last Night watch's summary);
+// The Home redesign (2026-11-28, the owner's Claude Design proposal): "What needs you" first (counted chips, who asks as a
+// robot, one button per row), the flow as the Roadmap's stations, the cards' `blocks` (Now, Roadmap, Next release, each
+// only with content), then the last watch (#dash-nightwatch) beside "Last 24 hours" (#home-last24; it was "Today").
+// - the last watch's box: a card's `morning` (the AI front: the last Night watch's summary);
 // - the flow strip: the cards' stages in order (the plan front: Inbox, Discovery, Ready; the build
 //   front: Backlog To do, Running, Merged locally, Released), each with its count; a count opens its
 //   screen on that stage; a stage whose screen is not registered is left out;
@@ -113,75 +116,102 @@ function homeNeeds(d) {
   return [...gates, ...paused, ...fromCards].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
-// the badge of a row's kind; an unknown kind gets a warn badge with the kind as its text
+// the badge of a row's kind; an unknown kind gets a warn badge with the kind as its text. The Home redesign
+// (2026-11-28): what waits for an answer reads "Waiting for you" (the Run screen's and the Roadmap's words), the
+// rows the menu's screens add are a PR, a new error and the usage
 const homeBadge = (kind) => ({
-  gate: `<span class="badge warn">${t('dashboard.gate')}</span>`,
+  gate: `<span class="badge warn">${t('dashboard.badge_waiting_for_you')}</span>`,
   card: `<span class="badge warn">${t('dashboard.question')}</span>`,
+  pr: `<span class="badge info">${t('dashboard.badge_pr')}</span>`,
   'failed-item': `<span class="pill pill-failed">${t('dashboard.failed')}</span>`,
+  error: `<span class="pill pill-failed">${t('dashboard.badge_new_error')}</span>`,
+  usage: `<span class="badge warn">${t('dashboard.badge_usage')}</span>`,
   'paused-run': StatusPill.statusPill('paused'),
 }[kind] || `<span class="badge warn">${esc(kind)}</span>`);
+// who asks, as the robots of the chat draw them (decoration: the badge and the text say it)
+const HOME_ROBOT = { card: 'product-owner', 'failed-item': 'supervisor', error: 'supervisor', usage: 'oracle' };
+const homeRobot = (kind) => (window.Robots ? `<span class="home-need-robot" aria-hidden="true">${Robots.svg(HOME_ROBOT[kind] || 'vanilla', 'idle', { bubble: false, brand: false })}</span>` : '');
+// the counted chips of the section's head (the Roadmap stage head's): what waits, what failed
+const HOME_WAITS = new Set(['gate', 'card', 'pr', 'paused-run']);
+const HOME_FAILS = new Set(['failed-item', 'error']);
 // the one button of a "What needs you" row
 const homeNeedButton = (b) => `<button type="button" class="btn sm${b.primary ? ' primary' : ''}" ${esc(b.attr)}="${esc(b.value)}">${esc(b.label)}</button>`;
 
+// The flow as the Roadmap's stations (the Home redesign): each stage a count over its whole name (two lines when it
+// must, never cut), joined by a track; a stage at work (Running) in blue, one waiting for the owner (Merged locally:
+// to push) in amber, an empty one dashed. Wide enough or it scrolls sideways (a narrow window, a phone).
+const HOME_STAGE_STATE = { running: 'running', merged: 'attention' };
 function homeStripHtml(d) {
   const project = state.projects.find((p) => p.id === d.projectId);
   const stages = homeStages().map((s) => ({ ...s, label: t(`dashboard.stage_${s.id}`), hint: t(`dashboard.stage_${s.id}_hint`), count: Number(s.count?.(ownOf(d, s.card), d)) || 0 }))
-    .map((s) => `<div class="home-stage" data-testid="home-flow-stage" data-stage="${s.id}" title="${esc(`${s.label}: ${s.hint}`)}">
+    .map((s) => `<div class="home-stage" data-testid="home-flow-stage" data-stage="${s.id}" data-state="${s.count ? HOME_STAGE_STATE[s.id] || 'count' : 'empty'}" title="${esc(`${s.label}: ${s.hint}`)}">
       <button type="button" class="home-count" data-testid="home-flow-count" data-stage="${s.id}" aria-label="${esc(t('dashboard.label_value_open_it', { label: s.label, value: s.count }))}">${s.count}</button>
       <span class="home-stage-label">${esc(s.label)}</span>
     </div>`);
   if (!stages.length) return '';
   return `<section class="home-block" aria-label="${t('dashboard.flow')}">
-    <h2 class="home-title">${t('dashboard.flow')}${project ? ` <span class="muted" title="${t('dashboard.the_header_s_project')}">· ${esc(project.name)}</span>` : ''}</h2>
-    <div class="card home-strip" data-testid="home-flow-strip" role="group" aria-label="${t('dashboard.flow_from_inbox_to_release')}">${stages.join('<span class="home-arrow" aria-hidden="true">→</span>')}</div>
+    <h2 class="home-title">${project ? esc(t('dashboard.flow_of', { project: project.name })) : t('dashboard.flow')}<span class="muted small home-title-hint">${t('dashboard.flow_hint')}</span></h2>
+    <div class="card home-strip" data-testid="home-flow-strip" role="group" aria-label="${t('dashboard.flow_from_inbox_to_release')}">${stages.join('')}</div>
   </section>`;
 }
 
 function homeNeedsHtml(d) {
   const needs = homeNeeds(d);
+  const waits = needs.filter((n) => HOME_WAITS.has(n.kind)).length;
+  const fails = needs.filter((n) => HOME_FAILS.has(n.kind)).length;
   const rows = needs.map((n) => {
     const age = n.since && Date.parse(n.since) ? `<span class="muted small home-need-age" title="${t('dashboard.asked_since', { since: esc(dateOf(n.since)) })}">${t('dashboard.waiting')} ${esc(homeAge(n.since))}</span>` : '';
     const phone = n.phoneUrl ? `<a class="small home-need-phone" href="${esc(n.phoneUrl)}" target="_blank" rel="noopener" title="${t('dashboard.this_gate_s_page_for_a')}">${t('dashboard.phone_link')}</a>` : '';
     return `<div class="home-need" data-testid="home-needs-item" data-kind="${esc(n.kind)}">
-      ${homeBadge(n.kind)}
-      <span class="home-need-text"><b title="${esc(n.title)}">${esc(n.title)}</b><span class="muted small" title="${esc(n.detail)}">${esc(n.detail)}</span></span>
-      ${age}${phone}
-      ${n.button ? homeNeedButton(n.button) : ''}
+      ${homeRobot(n.kind)}
+      <span class="home-need-text"><span class="home-need-line">${homeBadge(n.kind)}<b title="${esc(n.title)}">${esc(n.title)}</b></span><span class="muted small" title="${esc(n.detail)}">${esc(n.detail)}</span></span>
+      <span class="home-need-end">${age}${phone}${n.button ? homeNeedButton(n.button) : ''}</span>
     </div>`;
   });
+  const chips = `${waits ? ` <span class="home-chip warn" data-testid="home-needs-waiting">${esc(t('dashboard.n_waiting_for_you', { count: waits }))}</span>` : ''}${fails ? ` <span class="home-chip failed" data-testid="home-needs-failed">${esc(t('dashboard.n_failed', { count: fails }))}</span>` : ''}`;
   return `<section class="home-block" data-testid="home-needs-you" aria-label="${t('dashboard.what_needs_you')}">
-    <h2 class="home-title">${t('dashboard.what_needs_you')}${needs.length ? ` <span class="badge warn">${needs.length}</span>` : ''}</h2>
+    <h2 class="home-title home-title-lead">${t('dashboard.what_needs_you')}${chips}</h2>
     <div class="card home-needs">${rows.join('') || `<p class="muted small home-none">${t('dashboard.nothing_waits_for_you')}</p>`}</div>
   </section>`;
 }
 
-// "Today": the shell's stats and the cards', by order (the cost first, the roadmap's next stage last).
-function homeTodayHtml(d) {
-  const start = TimeZone.startOfDay(Date.now(), TimeZone.current()); // #273: the owner's local today
-  const today = (iso) => Date.parse(iso) >= start;
-  const finished = d.runs.filter((r) => r.status === 'success' && today(r.finishedAt)).length;
-  const failed = d.runs.filter((r) => HOME_FAILED.includes(r.status) && today(r.finishedAt || r.startedAt)).length;
-  const sp = state.usage?.spending;
-  const usd = (p) => (p ? `${p.estimated ? '≈ ' : ''}${fmtUsd(p.spentUsd)}` : '—');
+// The blocks the cards add between the flow and the bottom row (the Home redesign: Now, Roadmap, Next release), each
+// only while it has something to show (the card answers none otherwise), side by side when there is room.
+function homeBlocksHtml(d) {
+  const blocks = homeCards().flatMap((card) => (card.blocks ? homeList(card.blocks(ownOf(d, card), d)) : [])).filter((b) => b?.html)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  return blocks.length ? `<div class="home-row" data-testid="home-blocks">${blocks.map((b) => `<section class="card home-card" data-testid="home-block" data-block="${esc(b.id)}">${b.html}</section>`).join('')}</div>` : '';
+}
+
+// "Last 24 hours" (the owner's choice over "Today"): the shell's stats and the cards', by order (the cost first).
+// The cost is the real runs started in the last 24 h (the runs list's own costs), the daily budget under it.
+const HOME_DAY_MS = 24 * 3600e3;
+function homeLast24Html(d) {
+  const since = Date.now() - HOME_DAY_MS;
+  const inDay = (iso) => Date.parse(iso) >= since;
+  const finished = d.runs.filter((r) => r.status === 'success' && inDay(r.finishedAt)).length;
+  const failed = d.runs.filter((r) => HOME_FAILED.includes(r.status) && inDay(r.finishedAt || r.startedAt)).length;
+  const real = d.runs.filter((r) => !r.mock && inDay(r.startedAt));
+  const cost = fmtUsd(real.reduce((a, r) => a + (Number(r.costUsd) || 0), 0), real.some((r) => r.costApprox));
+  const limit = state.usage?.spending?.day?.limitUsd;
   // undefined: not answered yet (#389: shown as loading), null: no figures
   const o = homeView.occupancy;
   const occupancyBusy = o === undefined;
   const occupancy = occupancyBusy ? '…' : o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
   const occupancyTitle = occupancyBusy ? t('occupancy_chip.reading_the_last_24_h') : o && !o.empty ? window.OccupancyChip?.chipModel(o).tooltip || '' : t('occupancy_chip.no_runs_yet_start_one_to');
-  const costBusy = usageBusy();
   const busy = (on) => (on ? ' aria-busy="true"' : '');
   const shell = [
-    { order: 10, label: t('dashboard.cost_today'), value: esc(costBusy ? '…' : usd(sp?.day)), title: costBusy ? t('dashboard.reading_the_usage') : t('dashboard.spent_today_by_real_runs_live'), attrs: ` data-testid="home-cost-today"${busy(costBusy)}` },
-    { order: 30, label: t('dashboard.runs_finished'), value: finished, title: t('dashboard.runs_that_succeeded_today') },
-    { order: 40, label: t('dashboard.runs_failed'), value: failed, title: t('dashboard.runs_that_failed_were_cancelled_or') },
+    { order: 10, label: t('dashboard.cost'), value: esc(cost), sub: limit ? t('dashboard.daily_budget_value', { value: fmtUsd(limit) }) : '', title: t('dashboard.cost_of_the_real_runs_started_in'), attrs: ' data-testid="home-cost-24h"' },
+    { order: 30, label: t('dashboard.runs_finished'), value: finished, title: t('dashboard.runs_that_succeeded_in_the_last'), cls: 'ok' },
+    { order: 40, label: t('dashboard.runs_failed'), value: failed, title: t('dashboard.runs_that_failed_in_the_last'), cls: failed ? 'bad' : '' },
     { order: 50, label: t('dashboard.n24_7_occupancy'), value: occupancy, title: occupancyTitle, attrs: ` data-testid="home-occupancy"${busy(occupancyBusy)}` },
   ];
   const fromCards = homeCards().flatMap((card) => (card.today ? homeList(card.today(ownOf(d, card), d)) : []));
   // `attrs`: a test id and, while its figure loads, aria-busy
-  const stat = (s) => `<div class="u-stat" title="${esc(s.title)}"${s.attrs || ''}><label>${esc(s.label)}</label><b>${s.value}</b></div>`;
-  return `<section class="home-block" data-testid="home-today" aria-label="${t('dashboard.today')}">
-    <h2 class="home-title">${t('dashboard.today')}</h2>
-    <div class="home-stats">
+  const stat = (s) => `<div class="home-well${s.cls ? ` ${s.cls}` : ''}" title="${esc(s.title)}"${s.attrs || ''}><label>${esc(s.label)}</label><b>${s.value}</b>${s.sub ? `<span>${esc(s.sub)}</span>` : ''}</div>`;
+  return `<section class="card home-card" data-testid="home-today" aria-label="${t('dashboard.last_24_hours')}">
+    <div class="home-card-head"><h2 class="home-card-title">${t('dashboard.last_24_hours')}</h2><span class="spacer"></span>${viewRegistry.has('analytics') ? `<button type="button" class="link-btn small" data-home-tab="analytics">${t('dashboard.open_analytics')}</button>` : ''}</div>
+    <div class="home-wells home-wells-24h">
       ${[...shell, ...fromCards].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(stat).join('\n      ')}
     </div>
   </section>`;
@@ -209,7 +239,12 @@ function paintHome() {
   const d = homeView.data;
   const body = $('#home-body');
   const fresh = d && !state.projects.length && !state.runs.size && !d.runs.length;
-  const html = !d ? `<p class="muted small home-none">${t('dashboard.loading')}</p>` : fresh ? homeEmptyHtml() : homeStripHtml(d) + homeNeedsHtml(d) + homeTodayHtml(d);
+  // the Home redesign (2026-11-28): what needs you first, the flow, the cards' blocks, then the last watch (its own
+  // box, #dash-nightwatch, drawn by its card) beside the last 24 hours
+  const html = !d ? `<p class="muted small home-none">${t('dashboard.loading')}</p>` : fresh ? homeEmptyHtml() : homeNeedsHtml(d) + homeStripHtml(d) + homeBlocksHtml(d);
+  const last24 = d && !fresh ? homeLast24Html(d) : '';
+  $('#home-bottom').classList.toggle('hidden', !d || fresh);
+  if (last24 !== homeView.last24) { homeView.last24 = last24; $('#home-last24').innerHTML = last24; }
   if (html === homeView.html) return;
   homeView.html = html;
   // the button in focus keeps it across the redraw
@@ -290,8 +325,11 @@ registerView({
         <div class="home-main">
           <div class="tabs page-tabs" role="tablist" aria-label="${t('dashboard.home')}"><button type="button" class="tab active" role="tab" aria-selected="true" data-home-tab="overview" data-testid="home-tab-overview">${t('dashboard.overview')}</button><button type="button" class="tab" role="tab" aria-selected="false" data-home-tab="analytics" data-testid="home-tab-analytics">${t('dashboard.analytics')}</button></div>
           <div id="home-overview" class="home-overview" role="tabpanel">
-            <div id="dash-nightwatch" class="home-night hidden"></div>
             <div id="home-body"></div>
+            <div id="home-bottom" class="home-row hidden">
+              <div id="dash-nightwatch" class="card home-card home-night hidden" data-testid="home-last-watch"></div>
+              <div id="home-last24" class="home-last24"></div>
+            </div>
           </div>
           ${viewRegistry.get('analytics')?.panel?.() ||'<div id="view-analytics" class="hidden"></div>'}
         </div>

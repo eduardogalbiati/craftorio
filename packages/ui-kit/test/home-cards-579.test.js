@@ -73,9 +73,10 @@ test('with every front, Home\'s strip runs from Inbox to Released and the questi
   assert.deepEqual(stages, ['inbox', 'discovery', 'ready', 'todo', 'running', 'merged', 'released']);
   assert.match(body, /data-kind="card"/);
   assert.match(body, /data-home-card="c1"[^>]*>Answer</);
-  // "Today": the shell's stats, the AI front's night cost, the build front's next stage, in that order
-  const labels = [...body.matchAll(/<label>([^<]+)<\/label>/g)].map((m) => text(m[1]));
-  assert.deepEqual(labels, ['Cost today', 'Cost last night', 'Runs finished', 'Runs failed', '24/7 occupancy', 'Next roadmap stage']);
+  // "Last 24 hours" (the Home redesign, 2026-11-28: it was "Today"): the shell's stats and the AI front's cost of the
+  // last watch, in that order; the build front's next stage left it (the Roadmap block names it)
+  const labels = [...app.el('#home-last24').innerHTML.matchAll(/<label>([^<]+)<\/label>/g)].map((m) => text(m[1]));
+  assert.deepEqual(labels, ['Cost', 'Cost of the last watch', 'Runs finished', 'Runs failed', '24/7 occupancy']);
 });
 
 test('without the analyser front, Home hides its Analytics tab', async () => {
@@ -89,7 +90,7 @@ test('without the analyser front, Home hides its Analytics tab', async () => {
   assert.equal(tab.classList.contains('hidden'), true, 'the tab is hidden without the Analytics screen');
 });
 
-test('with one front (ai), Home has no flow strip, "What needs you" holds the shell\'s rows only, and Today has no next-stage stat', async () => {
+test('with one front (ai), Home has no flow strip, "What needs you" holds the shell\'s rows only, and Last 24 hours has the AI front\'s stat', async () => {
   const app = loadApp({ api, fronts: ['ai'] });
   await app.boot();
   app.run("showView('dashboard')");
@@ -99,7 +100,8 @@ test('with one front (ai), Home has no flow strip, "What needs you" holds the sh
   assert.doesNotMatch(body, /data-testid="home-flow-strip"/, 'no stage, no strip');
   assert.doesNotMatch(body, /data-testid="home-needs-item"/, 'no gate here, no row from a card: nothing waits');
   assert.match(body, /home-none/, 'the "nothing waits for you" line');
-  const labels = [...body.matchAll(/<label>([^<]+)<\/label>/g)].map((m) => text(m[1]));
-  assert.deepEqual(labels, ['Cost today', 'Cost last night', 'Runs finished', 'Runs failed', '24/7 occupancy'], 'the shell\'s stats and the AI front\'s night cost, no roadmap stage');
+  const labels = [...app.el('#home-last24').innerHTML.matchAll(/<label>([^<]+)<\/label>/g)].map((m) => text(m[1]));
+  assert.deepEqual(labels, ['Cost', 'Cost of the last watch', 'Runs finished', 'Runs failed', '24/7 occupancy'], 'the shell\'s stats and the AI front\'s cost of the last watch');
+  assert.doesNotMatch(body, /data-testid="home-blocks"/, 'no build front, no Now / Roadmap / Next release blocks');
   assert.ok(!app.defs.has('backlog') && !app.defs.has('inbox') && app.defs.has('oracle'));
 });

@@ -451,6 +451,11 @@
   // renderDashboard runs on every run event: the summary is fetched at most once a minute.
   // Answers the summary shown ({ window, summary }, #255: Home dates "Cost last night" by its window) or null.
   const morning = { at: 0, value: null };
+  // "3 h", "2 d": how long ago the watch ended, for the card's head (the Home redesign)
+  const agoText = (iso) => {
+    const min = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+    return min < 60 ? `${min} min` : min < 48 * 60 ? `${Math.round(min / 60)} h` : `${Math.round(min / 1440)} d`;
+  };
   async function renderMorning(box) {
     if (!box || !api.nightWatchMorning) return null;
     if (Date.now() - morning.at > 60e3) {
@@ -461,10 +466,23 @@
     box.classList.toggle('hidden', !m);
     if (!m) { box.innerHTML = ''; return null; }
     const s = m.summary;
-    // #278: a Self-healing day leads with its line (detected, repaired alone, waiting, cost with tokens)
-    box.innerHTML = `<div class="dash-gates-title"><b>☾ ${m.window.selfHealing ? t('nightwatch.self_healing') : t('nightwatch.night_watch')} · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ` <span class="pill pill-failed">${t('nightwatch.safety_alarm_2')}</span>` : ''}</div>
-      <div class="nw-dash-lines small">${s.selfHealing ? `<div data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}<div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div>${regressionLines(s)}${limitLines(s)}${supervisorGateLines(s)}</div>
-      <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">${t('nightwatch.open_night_watch')}</button></div>`;
+    // the Home redesign (2026-11-28): "Last watch", the last run of the watch (by day or by night), its window with its
+    // date and how long ago it ended, three wells (runs, incidents, active time) and the lines that matter, in the
+    // interface language from the summary's `counts` (an engine before them: its English lines). #278: a Self-healing
+    // day leads with its line (detected, repaired alone, waiting, cost with tokens).
+    const c = s.counts;
+    const localDay = new Date(m.window.from).toLocaleDateString(I18n.getLanguage?.() || 'en', { month: 'short', day: 'numeric', timeZone: zone() });
+    const when = `${esc(localDay)}, ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))} · ${esc(t('nightwatch.ended_ago', { ago: agoText(m.window.to) }))}`;
+    const well = (label, value, sub) => `<div class="home-well"><label>${esc(label)}</label><b>${esc(value)}</b><span>${esc(sub)}</span></div>`;
+    const wells = c ? `<div class="home-wells" data-testid="dash-watch-wells">${well(t('nightwatch.well_runs'), c.runs, t('nightwatch.well_issues_delivered', { count: c.issues }))}${well(t('nightwatch.well_incidents'), c.incidents, t('nightwatch.well_resolved_escalated', { resolved: c.resolved, escalated: c.escalated }))}${well(t('nightwatch.well_active'), `${c.activeHours} h`, t('nightwatch.well_of_hours', { hours: c.windowHours }))}</div>` : `<div class="nw-dash-lines small"><div>${esc(s.ran)}</div><div>${esc(s.did)}</div></div>`;
+    const waits = c ? (c.gatesOpen || c.proposed ? `<div>${esc(t('nightwatch.waits_line', { gates: c.gatesOpen, proposed: c.proposed }))}</div>` : '') : `<div>${esc(s.waits)}</div>`;
+    const safety = c ? (s.alarm ? t('nightwatch.safety_alarm_line', { gates: c.gatesCrossed, never: c.neverActions }) : t('nightwatch.safety_line', { blocked: c.blocked, refused: c.refused })) : s.safety;
+    box.innerHTML = `<div class="home-card-head"><svg class="home-card-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M11.5 10.5A5.5 5.5 0 0 1 5.5 4.5c0-1 .3-2 .8-2.8A6 6 0 1 0 14.3 9.7c-.8.5-1.8.8-2.8.8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <h2 class="home-card-title">${m.window.selfHealing ? t('nightwatch.self_healing') : t('nightwatch.last_watch')}</h2><span class="muted small" data-testid="dash-watch-when">${when}</span>${s.alarm ? ` <span class="pill pill-failed">${t('nightwatch.safety_alarm_2')}</span>` : ''}
+        <span class="spacer"></span><button class="link-btn small" type="button" id="dash-nw-open">${t('nightwatch.view_report')}</button></div>
+      ${s.selfHealing ? `<div class="small" data-testid="dash-self-healing">${esc(s.selfHealing)}</div>` : ''}${wells}
+      <div class="nw-dash-lines small">${waits}${regressionLines(s)}${limitLines(s)}${supervisorGateLines(s)}</div>
+      <p class="small ${s.alarm ? 'error' : 'muted'} home-card-foot">${esc(safety)}</p>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
     box.querySelectorAll('[data-testid="nw-regression-run"]').forEach((b) => { b.onclick = () => window.showRun(b.dataset.run); });
     return m;

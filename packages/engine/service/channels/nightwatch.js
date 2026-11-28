@@ -71,8 +71,9 @@ const LIMITS = oneOf(
 
 const TICK_MS = 60e3;
 const NIGHTS_SHOWN = 14;
-// the morning summary stays on the Dashboard this long after the end of the night
-const MORNING_MS = 18 * 3600e3;
+// Home's "Last watch" card (the Home redesign, 2026-11-28, the owner's choice: the last run of the Night watch, by day
+// or by night, not "this night") stays this long after the watch ended
+const MORNING_MS = 7 * 24 * 3600e3;
 const ROADMAP_KINDS = new Set(['dispatch-idle', 'roadmap-empty', 'roadmap-paused']);
 // Self-healing (#278): the findings of this long wake the Oracle in one turn (as oracle-wake.js batches run events)
 const FINDINGS_BATCH_MS = 30e3;
@@ -512,8 +513,8 @@ module.exports = (ctx) => {
   }
 
   /**
-   * The Dashboard's morning card: the last night, or the last Self-healing day that ended (#278: its
-   * summary has the day's line), whichever ended later and less than MORNING_MS ago; or null.
+   * Home's "Last watch" card: the last night, or the last Self-healing day that ended (#278: its
+   * summary has the day's line), whichever ended later and less than MORNING_MS (a week) ago; or null.
    */
   async function morning() {
     const log = night.readNightLog(dir());

@@ -144,12 +144,13 @@ function blocks(html, testid, max = 2000) {
     return { tag: m[0], html: html.slice(m.index, end) };
   });
 }
-// one section of Home: from its tag up to the next Home section (or 3000 chars)
-const SECTIONS = ['home-flow-strip', 'home-needs-you', 'home-today', 'home-empty'];
+// one section of Home: from its tag up to the next Home section (or 60000 chars: the Home redesign's rows carry their
+// robot's SVG)
+const SECTIONS = ['home-flow-strip', 'home-needs-you', 'home-today', 'home-empty', 'home-blocks', 'home-last-watch'];
 function section(html, testid) {
   const at = html.search(new RegExp(`<[a-z][^>]*\\bdata-testid="${testid}"`, 'i'));
   if (at < 0) return null;
-  let end = at + 3000;
+  let end = at + 60000;
   for (const other of SECTIONS.filter((s) => s !== testid)) {
     const n = html.indexOf(`data-testid="${other}"`, at + 1);
     if (n > at && n < end) end = n;
@@ -266,7 +267,7 @@ test('"What needs you" lists the waiting gate with its age and the failed roadma
   const { app } = await home();
   const needs = section(pageMarkup(app), 'home-needs-you');
   assert.ok(needs, 'a "What needs you" block (data-testid="home-needs-you")');
-  const items = blocks(needs, 'home-needs-item', 1500);
+  const items = blocks(needs, 'home-needs-item', 20000);
   const gate = items.find((b) => attr(b.tag, 'data-kind') === 'gate');
   const failed = items.find((b) => attr(b.tag, 'data-kind') === 'failed-item');
   assert.ok(gate, `a gate item: ${text(needs)}`);
@@ -279,16 +280,21 @@ test('"What needs you" lists the waiting gate with its age and the failed roadma
 
 // ---- today --------------------------------------------------------------------------------------
 
-test('"Today" shows the cost, the runs finished and failed, the 24/7 occupancy and the next roadmap stage (#255)', async () => {
+// the Home redesign (2026-11-28): "Last 24 hours" in place of "Today"; the roadmap's stage moved to the Roadmap block
+test('"Last 24 hours" shows the cost, the runs finished and failed and the 24/7 occupancy; the Roadmap block names the current stage', async () => {
   const { app } = await home();
-  const today = section(pageMarkup(app), 'home-today');
-  assert.ok(today, 'a "Today" block (data-testid="home-today")');
-  const t = text(today);
-  assert.match(t, /cost/i, `the cost of the day: ${t}`);
+  const page = pageMarkup(app);
+  const day = section(page, 'home-today');
+  assert.ok(day, 'a "Last 24 hours" block (data-testid="home-today")');
+  const t = text(day);
+  assert.match(t, /Last 24 hours/, t);
+  assert.match(t, /cost/i, `the cost: ${t}`);
   assert.match(t, /finished/i, `the runs finished: ${t}`);
   assert.match(t, /failed/i, `the runs failed: ${t}`);
   assert.match(t, /24\/7|occupancy/i, `the 24/7 occupancy: ${t}`);
-  assert.ok(t.includes('Payments'), `the next roadmap stage: ${t}`);
+  assert.doesNotMatch(t, /Next roadmap stage/, 'the next stage left the stats');
+  const roadmap = blocks(section(page, 'home-blocks') || '', 'home-block', 20000).find((b) => attr(b.tag, 'data-block') === 'roadmap');
+  assert.ok(roadmap && text(roadmap.html).includes('Payments'), `the Roadmap block names the stage: ${roadmap && text(roadmap.html)}`);
 });
 
 // ---- the empty state ----------------------------------------------------------------------------

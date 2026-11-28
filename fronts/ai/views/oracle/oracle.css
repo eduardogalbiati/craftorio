@@ -1,12 +1,21 @@
 /* The Oracle (views/oracle/oracle.js): its dock on the Dashboard, its drawer on the other screens and
    the header button. Messages reuse .sup-wmsg, .sup-loading (style.css) and the .svc-* layout
    (views/supervisor/supervisor.css); card states use the shared .pill status styles. */
-#view-dashboard.oracle-docked { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: minmax(0, 1fr); gap: 20px; overflow: hidden; }
+/* the Home redesign (2026-11-28, the owner's choice): the dock open and small (340 px, 300 px on a narrower window);
+   under 860 px it goes under Home's content and the page scrolls (a phone) */
+#view-dashboard.oracle-docked { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); gap: 20px; overflow: hidden; }
 #view-dashboard.oracle-docked > .home-main { overflow: auto; min-height: 0; width: 100%; }
 /* #255: Home's Analytics tab takes the whole width: no dock there (the Oracle is its drawer, as on the other screens) */
 #view-dashboard.oracle-docked.home-on-analytics { display: block; overflow: auto; }
 #view-dashboard.home-on-analytics > .oracle-dock { display: none; }
-@media (max-width: 1150px) { #view-dashboard.oracle-docked { grid-template-columns: minmax(0, 1fr) 340px; } }
+@media (max-width: 1150px) { #view-dashboard.oracle-docked { grid-template-columns: minmax(0, 1fr) 300px; } }
+@media (max-width: 860px) {
+  #view-dashboard.oracle-docked { display: block; overflow: auto; }
+  #view-dashboard.oracle-docked > .home-main { overflow: visible; }
+  #view-dashboard.oracle-docked > .oracle-dock { margin-top: 20px; height: 460px; }
+}
+.oracle-intro p { margin: 0 0 8px; line-height: 1.5; }
+.oracle-intro-more summary { cursor: pointer; min-height: 24px; display: flex; align-items: center; }
 .oracle-dock { padding: 0; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .oracle-dock .drawer-body { min-height: 0; }
 .oracle-drawer .drawer-head .row, .oracle-dock .drawer-head .row { gap: 6px; flex: none; }

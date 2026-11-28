@@ -1,41 +1,89 @@
-/* Home (views/dashboard/dashboard.js, #255): its tabs, the flow strip, "What needs you", "Today", the
-   empty state and the Night watch's morning summary. Stats reuse .u-stat, lists .card (style.css). */
-.home-overview { max-width: 980px; margin: 0 auto; display: grid; gap: 22px; }
+/* Home (views/dashboard/dashboard.js, #255; the Home redesign of 2026-11-28): its tabs, "What needs you" first, the flow
+   as the Roadmap's stations, the cards' blocks (Now, Roadmap, Next release), then the last watch beside "Last 24 hours";
+   the empty state. Nothing has a fixed width: the rows become one column on a narrow window or a phone. */
+.home-overview { max-width: 1040px; margin: 0 auto; display: grid; gap: 22px; min-width: 0; }
 #home-body { display: grid; gap: 22px; min-width: 0; }
 .home-block { min-width: 0; }
-.home-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.home-title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0 0 10px; }
+.home-title-lead { font-size: 17px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); }
+.home-title-hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
 .home-none { margin: 0; }
+/* the counted chips of a head (the Roadmap stage head's) */
+.home-chip { font-size: 12px; font-weight: 600; border-radius: 99px; padding: 1px 9px; border: 1px solid var(--border); }
+.home-chip.warn { color: #f0c063; background: color-mix(in srgb, var(--amber) 14%, transparent); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.home-chip.failed { color: #fca5a5; background: color-mix(in srgb, var(--red) 12%, transparent); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
 
-/* the flow strip: one row, never wrapped (the stages read left to right) */
-.home-strip { flex-direction: row; align-items: stretch; gap: 4px; padding: 12px 10px; overflow-x: auto; }
-.home-stage { flex: 1 1 0; min-width: 58px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+/* what needs you: one row per thing, who asks (a robot), the badge and the title, one line of what happened, its age and its one button */
+.home-needs { padding: 0; gap: 0; overflow: hidden; }
+.home-need { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 16px; min-width: 0; }
+.home-need + .home-need { border-top: 1px solid var(--border); }
+.home-need-robot { flex: none; width: 40px; height: 40px; display: block; }
+.home-need-robot svg { width: 100%; height: 100%; }
+.home-need-text { flex: 1 1 220px; min-width: 0; display: grid; gap: 3px; }
+.home-need-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-need-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.home-need-line > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.home-need-line > .badge, .home-need-line > .pill { flex: none; }
+.home-need-end { display: flex; align-items: center; gap: 12px; margin-left: auto; flex: none; }
+.home-need-age, .home-need-phone { white-space: nowrap; }
+.home-needs .home-none { padding: 14px 16px; }
+
+/* the flow strip: the Roadmap's stations, never cut; it scrolls sideways when the window is too narrow */
+.home-strip { flex-direction: row; align-items: flex-start; gap: 0; padding: 14px 8px 12px; overflow-x: auto; }
+.home-stage { position: relative; flex: 1 0 86px; min-width: 86px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.home-stage + .home-stage::before { content: ''; position: absolute; top: 23px; right: 50%; width: 100%; height: 1px; background: var(--border); z-index: 0; }
 .home-count {
-  min-width: 56px; padding: 6px 10px; border-radius: 10px; cursor: pointer; color: var(--text);
-  font: 600 24px var(--mono); background: var(--panel-2); border: 1px solid var(--border); transition: border-color .15s;
+  position: relative; z-index: 1; min-width: 48px; height: 48px; padding: 0 10px; border-radius: 12px; cursor: pointer; color: var(--text);
+  font: 600 20px "Segoe UI", system-ui, sans-serif; background: var(--panel-2); border: 1px solid #2e3442; transition: border-color .15s;
 }
 .home-count:hover, .home-stage:hover .home-count { border-color: var(--accent); }
-.home-stage-label { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-arrow { flex: none; align-self: center; color: var(--muted); padding-bottom: 18px; }
+.home-count:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.home-stage[data-state="empty"] .home-count { background: var(--panel); color: var(--muted); border-style: dashed; border-color: #3a4152; }
+.home-stage[data-state="running"] .home-count { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: #a9bcff; border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.home-stage[data-state="attention"] .home-count { background: color-mix(in srgb, var(--amber) 14%, var(--panel)); color: #f0c063; border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+.home-stage-label { font-size: 12px; color: var(--muted); line-height: 1.3; padding: 0 4px; overflow-wrap: anywhere; }
+.home-stage:is([data-state="running"], [data-state="attention"]) .home-stage-label { color: var(--text); }
 
-/* what needs you: one row per gate or failed item, its button at the right */
-.home-needs { padding: 6px 14px; gap: 0; }
-.home-need { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-width: 0; }
-.home-need + .home-need { border-top: 1px solid var(--border); }
-.home-need > .badge, .home-need > .pill, .home-need-age, .home-need-phone, .home-need > .btn { flex: none; }
-.home-need-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.home-need-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-needs .home-none { padding: 8px 0; }
+/* a row of cards (the blocks, and the last watch beside the last 24 hours): side by side when there is room */
+.home-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; min-width: 0; }
+.home-row.hidden { display: none; }
+.home-card { min-width: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.home-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0; }
+.home-card-title { margin: 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); }
+.home-card-icon { color: var(--purple); flex: none; }
+.home-card-foot { margin: 0; }
+.home-last24 { min-width: 0; display: grid; }
+/* number wells (the Roadmap's), with a line under the number */
+.home-wells { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.home-wells-24h { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.home-well { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.home-well label { font-size: 11px; color: #a3aabb; }
+.home-well b { font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-well span { font-size: 11px; color: #a3aabb; }
+.home-well.ok b { color: #86efac; }
+.home-well.bad b { color: #fca5a5; }
+/* Now: a run in progress per row, a button that opens it */
+.home-live { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; text-align: left; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; font: inherit; }
+.home-live:hover { border-color: #3a4152; }
+.home-live-text { flex: 1 1 180px; min-width: 0; display: grid; gap: 2px; }
+.home-live-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Roadmap: the stage as one bar */
+.home-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--border); }
+.home-bar-done { background: var(--green); }
+.home-bar-running { background: var(--accent); }
+.home-bar-waiting { background: var(--amber); }
+.home-bar-failed { background: var(--red); }
+.home-bar-todo { background: var(--border); }
 
-.home-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.home-stats .u-stat b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-next { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* a new workspace: the three steps as a list, the first one leading */
+.home-steps { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; text-align: left; max-width: 720px; margin-left: auto; margin-right: auto; }
+.home-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.home-step:first-child { border-color: var(--accent); }
+.home-step > b { flex: 1 1 200px; }
+.home-step > .muted { flex: 1 1 100%; order: 2; }
+.home-step .btn { order: 1; }
 
-/* a new workspace: the three steps side by side */
-.home-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; text-align: left; }
-.home-step { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
-.home-step .btn { margin-top: auto; align-self: flex-start; }
-@media (max-width: 1150px) { .home-steps { grid-template-columns: 1fr; } }
-
-/* the Night watch's morning summary (views/nightwatch/nightwatch.js renderMorning) */
-.home-night { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border: 1px solid rgba(250,204,21,.45); border-radius: 10px; background: var(--panel); }
+/* the last watch's card (views/nightwatch/nightwatch.js renderMorning) */
+.home-night .nw-dash-lines { display: grid; gap: 6px; }
+.home-night .nw-dash-lines:empty { display: none; }
 .dash-gates-title { display: flex; align-items: center; gap: 8px; }
