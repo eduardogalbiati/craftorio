@@ -4243,6 +4243,7 @@
   "onboarding.workflow_fix": "fix",
   "onboarding.workflow_release": "release",
   "onboarding.workflow_why_label": "Por quê:",
+  "onboarding.workflows_back": "Voltar para como os workflows são definidos",
   "onboarding.workflows_choice_analyze": "Analisar com IA",
   "onboarding.workflows_choice_analyze_hint": "Lê o histórico do git e o código e sugere cada workflow; a IA entra onde o git não responde. Você revisa antes de continuar.",
   "onboarding.workflows_choice_cost": "Custo: {cost}",

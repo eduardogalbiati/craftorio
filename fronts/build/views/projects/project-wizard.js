@@ -461,7 +461,7 @@
     const at = column.state();
     const rows = at === 'analyzed' || at === 'manual';
     return `<div class="wizard-analysis" data-state="${at}">
-        <h2 id="project-wizard-title">${esc(t(column.sourceKey('onboarding.analyze_title'), { name: cur.model.name }))}</h2>
+        <div class="wizard-analysis-head">${column.backArrow()}<h2 id="project-wizard-title">${esc(t(column.sourceKey('onboarding.analyze_title'), { name: cur.model.name }))}</h2></div>
         ${at === 'analyzing' ? `<p class="muted">${esc(t(column.sourceKey('onboarding.read_only')))}</p>` : ''}
         ${costs.costBlock({ rows: at === 'analyzing' || at === 'failed', running: o.status === 'analyzing' })}
         ${o.status === 'failed' ? errorBlock(o) : ''}
@@ -827,6 +827,8 @@
     else if (FORK_CALLS[act] && cur.projectId) await call(() => api[FORK_CALLS[act]](cur.projectId));
     // #725: the workflows column's two ways in; Analyze the repository starts the analysis (the paid part too; #20: an earlier Skip no longer holds), or runs again a failed profile job
     else if (act === 'workflows-manual') { cur.workflowsMode = 'manual'; render(); }
+    // #127: the arrow back to the two ways in; starts nothing, the picks in cur.workflows stay
+    else if (act === 'workflows-choose') { cur.workflowsMode = undefined; render(); }
     else if (act === 'workflows-analyze' && cur.projectId) await analyze();
     else if (act === 'setup') openSetup();
   }

@@ -432,6 +432,10 @@ p.wizard-cost-total-row [data-testid="wizard-cost-unknown"] { display: block; }
    analyzed / manual: the workflows on the whole width, the work model under them */
 .wizard-analysis { flex: 1 0 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .wizard-analysis > .wizard-workflows-column { gap: 12px; }
+/* #127: the heading's row, the back arrow (manual, analyzed) at its left */
+.wizard-analysis-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wizard-analysis-head h2 { min-width: 0; }
+.wizard-analysis-head .wizard-workflows-back { flex: none; min-width: 28px; min-height: 28px; padding: 4px; }
 .wizard-analysis[data-state="choose"] .wizard-question-title { font-size: 14px; font-weight: 400; color: var(--muted); margin-top: -6px; }
 .wizard-analysis[data-state="choose"] .wizard-workflows-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
 .wizard-analysis[data-state="choose"] .card.wizard-workflows-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 220px; padding: 20px; background-image: none; }

@@ -33,6 +33,8 @@
 // - #790 loadManifest(): reads cur.manifest for the Default row; pickedDefault(workflows): Finish's default.
 // - #40 awaitingNotice(): wizard-default-awaiting-acceptance (step 3 and the review) while the project's default is a
 //   repository workflow refused until accepted (cur.repoWorkflows, read by loadManifest), with Review and accept (data-act="review-accept").
+// - #127 backArrow(): wizard-workflows-back (data-act="workflows-choose"), before step 3's heading on the rows
+//   (manual, analyzed): back to the two ways in, nothing started, the picks kept; none for a new project.
 // - #726 textOf(x): the model's i18n keys (a key, { key, params }, an array) in the interface's language: the
 //   reasons (after the highlighted wizard-workflow-why "Why:" label), the selects' options, the profile line.
 // Uses app.js globals (esc, t), window.OnboardingModel and window.Select.
@@ -183,6 +185,13 @@
     const choiceIcon = (id) => `<span class="wizard-tile-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="${CHOICE_ICON[id]}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
     const choiceButton = (id, inline = false) => `<button type="button" class="${inline ? 'btn' : 'card wizard-workflows-choice'}" data-act="workflows-${id}" data-testid="wizard-workflows-choice-${id}">
         ${inline ? '' : choiceIcon(id)}<strong>${esc(t(`onboarding.workflows_choice_${id}`))}${id === 'analyze' ? recommended() : ''}</strong>${inline ? '' : `<span class="muted small">${esc(t(`onboarding.workflows_choice_${id}_hint`))}</span>`}${choiceCost(id, inline)}</button>`;
+    // #127: the arrow back to the two ways in, on the rows (manual, analyzed); a new project never shows the
+    // two choices (columnMode), so it has none
+    const backArrow = () => {
+      if (cur().model.source === 'new' || !['manual', 'analyzed'].includes(columnState())) return '';
+      const label = esc(t('onboarding.workflows_back'));
+      return `<button type="button" class="btn ghost wizard-workflows-back" data-act="workflows-choose" data-testid="wizard-workflows-back" aria-label="${label}" title="${label}"><svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M13 8H3M7.5 3.5 3 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
+    };
 
     // by its state: the two choices first; then the rows, dimmed under a loading notice while the profile
     // job runs, with the profile's reasons once it is done, without reasons when defined by hand; a failed
@@ -366,6 +375,7 @@
 
     return {
       awaitingNotice,
+      backArrow,
       // #100: the workflows are defined once their rows show (by hand, or the analysis asked for)
       defined: () => !['choose', 'failed'].includes(columnState()),
       state: () => columnState(),

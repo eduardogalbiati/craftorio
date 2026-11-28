@@ -4243,6 +4243,7 @@
   "onboarding.workflow_fix": "fix",
   "onboarding.workflow_release": "release",
   "onboarding.workflow_why_label": "Why:",
+  "onboarding.workflows_back": "Back to how the workflows are defined",
   "onboarding.workflows_choice_analyze": "Analyze with AI",
   "onboarding.workflows_choice_analyze_hint": "Reads the git history and the code and suggests each workflow; AI steps in where git has no answer. You review before continuing.",
   "onboarding.workflows_choice_cost": "Cost: {cost}",
