@@ -30,23 +30,25 @@ Page alerts, toasts with an action, ⋮ menus, the roadmap card and releases, an
   keyboard and the outside click), behind a button with `aria-haspopup="menu"` and `aria-expanded`;
   the first entry focused when it opens, Esc closes it and gives the focus back. A new action is a
   line in the list, not a new button.
-- **The roadmap item card** (#282, `itemHtml` in `backlog-roadmap.js`, `.rm-*` in `backlog.css`) reads in
-  three bands. Band 1, `.rm-item-top`: the issues (`.rm-issues`: the titles, then the count and the
-  complexity, `roadmap-issues-foot`) | cost and time (`metersHtml`: `roadmap-meter-cost` /
-  `roadmap-meter-time` with `data-verdict` none | estimate | ok | warn | over; the time of a run at
-  work is the live timer, `roadmap-run-timer`, moved by `tick()`) | the status block (`statusHtml`,
-  `roadmap-status`: the ring, the StatusPill and the step, the fix round in full, then Retry / Skip
-  or move and Remove; never an agent avatar). Band 2, `.rm-workflow` (`workflowHtml`,
-  `roadmap-workflow`): the workflow's name, the run chip ("Open run →") or Edit, the mode toggle
-  (`roadmap-mode`: `.seg.sm`, locked while the item runs), the badges and input pills (`.rm-meta`),
-  and the pipeline (`pipelineHtml`, `roadmap-pipeline` / `roadmap-station` with `data-state`), whose
-  stations come from `RunProgress.pipeline` (`run-progress-model.js`): the workflow's groups and its
-  steps in no group, in order (a human gate in no group is no station; the gate a mode turns on is
-  one, right after the station that holds it), each with what the run's trail did there. Band 3: the
-  Product Owner's reason, then the error line and the Edit form. The card answers to its own width
-  (`@container rm-card` on `.rm-items`, not the window: the sidebar and the Oracle's drawer narrow
-  it): the issues share the first row only while they keep 540px, the Workflow band stacks under
-  980px, and under 520px everything is one column. A stage's actions are its ⋮ menu
+- **The roadmap's items as lanes** (proposal C, 2026-11-27; `lanesHtml` / `groupHtml` / `rowHtml` /
+  `panelHtml` in `backlog-roadmap.js`, the meters, the live timer and the Progress cell in
+  `backlog-roadmap-meters.js`, `.rm-group` / `.rm-row` / `.rm-station` in `backlog.css`). A stage's head is one line:
+  counted chips (waiting for you, failed, running, N of M done), the estimate and its ⋮ menu. Inside the stage, one
+  group per workflow (`roadmap-workflow`, `roadmap-workflow-name`; grouped by the name a row shows, so a run of a
+  workflow's earlier name has its own group), whose stations are columns drawn once (from `RunProgress.pipeline`,
+  `run-progress-model.js`: the workflow's groups and its steps in no group, in order), and one row per item
+  (`roadmap-item`): the issue titles (and #90's outside-author badge), a status line, the owner's actions (Retry /
+  Skip, Resume run, Move on, the merge wait), one glyph per station (`roadmap-station` with `data-state`; the
+  current one is a pill that opens the run), the Progress cell (`roadmap-ring` and two bars: `roadmap-meter-cost` /
+  `roadmap-meter-time` with `data-verdict` none | estimate | ok | warn | over, the time of a run at work being the
+  live `roadmap-run-timer` moved by `tick()`) and a chevron (`roadmap-item-toggle`). The open row
+  (`roadmap-item-panel`) has Cost, Time and Progress with numbers, the run's summary, Open run, the map, Ask the
+  Oracle (`roadmap-ask-oracle`), the mode (`roadmap-mode`), the ending, the complexity, earlier runs
+  (`roadmap-run-history`), the inputs and Edit / move / Remove. The roadmap's head no longer draws its state dot
+  (`roadmap-state-dot` stays in the page, hidden, with the state) nor its title (kept for assistive technology):
+  the state pill (`roadmap-state-pill`) says the state. Under 1042px of the card's own width (`@container rm-card`)
+  a group's rows scroll sideways.
+  A stage's actions are its ⋮ menu
   (`stageMenuHtml`, `roadmap-stage-menu`; an entry that cannot be used is `aria-disabled` with its
   reason under it); a disabled stage (#284) is `.rm-stage.disabled` with `data-disabled="true"`.
   More states for screenshots: `--roadmap states` (a fix round, a disabled stage, a simulated item).

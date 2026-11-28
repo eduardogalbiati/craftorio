@@ -430,9 +430,11 @@ Given('the roadmap is running as a simulation', async ({ e2e }) => {
   });
 });
 
+// the dot is no longer drawn in the head (layout rework of 2026-11-27: the state pill says it); it stays in the
+// page with the state, for assistive technology and these checks
 Then("the roadmap bar's state dot is {string} and reads {string}", async ({ e2e }, id, label) => {
   const dot = stateDot(e2e.window);
-  await expect(dot).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(dot).toBeAttached({ timeout: LOAD_TIMEOUT });
   await expect(dot).toHaveAttribute('data-state', id, { timeout: 20000 });
   await expect(dot).toHaveAttribute('aria-label', new RegExp(`^${escapeRe(label)}`));
   await expect(dot).toHaveAttribute('title', new RegExp(`^${escapeRe(label)}`));
@@ -445,11 +447,11 @@ Then("the roadmap bar's state dot pulses", async ({ e2e }) => {
 });
 
 // the dot is drawn left of the bar's "Roadmap" title
-Then("the roadmap bar's state dot comes before {string}", async ({ e2e }, title) => {
-  const dot = await stateDot(e2e.window).boundingBox();
-  const text = await rmBar(e2e.window).getByText(title, { exact: true }).first().boundingBox();
-  expect(dot && text, 'the dot and the title are shown').toBeTruthy();
-  expect(dot.x + dot.width, 'the dot ends before the title starts').toBeLessThanOrEqual(text.x + 1);
+// layout rework of 2026-11-27: the head draws neither the dot nor the title (the page's title says Roadmap and the
+// state pill says the state); both stay in the page for assistive technology
+Then("the roadmap bar draws no state dot and keeps {string} for assistive technology", async ({ e2e }, title) => {
+  await expect(stateDot(e2e.window)).toBeHidden();
+  await expect(rmBar(e2e.window).getByText(title, { exact: true }).first()).toBeAttached();
 });
 
 Then('the roadmap bar offers {string} with a {word} icon', async ({ e2e }, name, icon) => {
@@ -1547,19 +1549,16 @@ Then('the roadmap header shows no activity band', async ({ e2e }) => {
   await expect(activity(page)).toHaveCount(0);
 });
 
-// the pill follows the dot and the title "Roadmap", on the band's left
+// the pill opens the band on its left (layout rework of 2026-11-27: the page's title already says Roadmap, so the
+// band's title is for assistive technology only, and the state pill replaces the dot)
 Then("the roadmap's state pill reads {string}", async ({ e2e }, label) => {
   const page = e2e.window;
   const pill = statePill(page);
   await expect(pill).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(pill).toHaveText(exactText(label), { timeout: 20000 });
   const bar = rmHead(page).getByTestId('roadmap-bar');
-  const dot = await bar.getByTestId('roadmap-state-dot').boundingBox();
-  const title = await bar.getByText('Roadmap', { exact: true }).first().boundingBox();
-  const box = await pill.boundingBox();
-  expect(dot && title, 'the state dot and the title are shown').toBeTruthy();
-  expect(dot.x + dot.width, 'the dot comes before the title').toBeLessThanOrEqual(title.x + 1);
-  expect(title.x + title.width, 'the pill comes after the title').toBeLessThanOrEqual(box.x + 1);
+  await expect(bar.getByTestId('roadmap-state-dot'), 'the state dot is not drawn').toBeHidden();
+  await expect(bar.getByText('Roadmap', { exact: true }).first(), 'the band keeps its title for assistive technology').toBeAttached();
 });
 
 // exactly these three controls in the band, left to right, at its right end, after the pill
@@ -1601,13 +1600,19 @@ Then("the roadmap header's numbers are {string}, {string}, {string} and {string}
   const labels = [a, b, c, d];
   const cols = headStats(page);
   await expect(cols).toHaveCount(4, { timeout: LOAD_TIMEOUT });
-  const boxes = [];
-  for (const [i, label] of labels.entries()) {
+  // in the order they are seen, left to right (the layout rework of 2026-11-27 shows what is left first)
+  const seen = [];
+  for (let i = 0; i < 4; i++) {
     const col = cols.nth(i);
-    await expect(col.getByTestId('roadmap-stat-label'), `column ${i + 1}'s label`).toHaveText(exactText(label));
+    seen.push({ col, box: await col.boundingBox(), label: (await col.getByTestId('roadmap-stat-label').textContent()).trim() });
+  }
+  seen.sort((p, q) => p.box.x - q.box.x);
+  expect(seen.map((p) => p.label), 'the columns, left to right').toEqual(labels);
+  const boxes = [];
+  for (const { col, box, label } of seen) {
     await expect(col.getByTestId('roadmap-stat-value'), `the "${label}" value`).toHaveText(/\S/);
     await expect(col.getByTestId('roadmap-stat-detail'), `the "${label}" detail`).toHaveCount(1);
-    boxes.push(await col.boundingBox());
+    boxes.push(box);
   }
   for (let i = 1; i < boxes.length; i++) {
     expect(Math.abs(boxes[i].width - boxes[0].width), `column ${i + 1} as wide as column 1`).toBeLessThanOrEqual(2);

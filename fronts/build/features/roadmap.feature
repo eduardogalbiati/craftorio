@@ -183,7 +183,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I open the Roadmap
     Then the roadmap bar's state dot is "running" and reads "Running"
     And the roadmap bar's state dot pulses
-    And the roadmap bar's state dot comes before "Roadmap"
+    And the roadmap bar draws no state dot and keeps "Roadmap" for assistive technology
     And the roadmap bar offers "Pause" with a pause icon
     And the roadmap bar's "Pause" button is amber
     And the roadmap bar offers "Stop" with a stop icon
@@ -880,7 +880,7 @@ Feature: Roadmap statuses, done items, filters and run timers
     And the roadmap's state pill reads "Paused by a failure"
     And the roadmap header's controls are "Resume", "Stop" and the ⋮ menu, in that order
     And the roadmap header offers no "Simulated" checkbox outside its ⋮ menu
-    And the roadmap header's numbers are "Stages", "Left", "Forecast" and "Spent", in equal columns, each with its value
+    And the roadmap header's numbers are "Left", "Forecast", "Spent" and "Stages", in equal columns, each with its value
     And the "Left" number of the roadmap header says "in 4 stages"
     And the "Spent" number of the roadmap header says "so far"
     And the roadmap's view band holds the date filter, the Planned and All switch and "Group by epic" on its left, and the item count on its right
