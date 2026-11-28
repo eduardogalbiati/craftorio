@@ -463,7 +463,8 @@
     return '';
   }
   // the conversation's own parts around the shared chat's messages (#274)
-  const emptyHtml = () => `<div class="svc-empty muted small">${t('oracle.the_oracle_keeps_one_conversation_for')}</div>`;
+  // the Home redesign (2026-11-28): one sentence, the whole description one click away
+  const emptyHtml = () => `<div class="svc-empty small oracle-intro"><p>${t('oracle.intro_short')}</p><details class="oracle-intro-more"><summary class="muted">${t('oracle.what_the_oracle_can_do')}</summary><p class="muted">${t('oracle.the_oracle_keeps_one_conversation_for')}</p></details></div>`;
   const pendingHtml = (f) => `<div class="sup-wmsg user"><div class="sup-wmsg-meta">${t('oracle.you_2')}</div><div class="oracle-text">${esc(or.pending || f.text)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>`;
   // the questions waiting for the one in flight (#183), and an error of the Oracle's own buttons
   const afterHtml = () => or.queue.map(({ q, context }) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">${t('oracle.you')} <span class="badge">${t('oracle.queued')}</span>${context ? ` · <span class="muted" title="${esc(context.label)}">${esc(context.label)}</span>` : ''}</div><div class="oracle-text">${esc(q)}</div></div>`).join('')
@@ -525,6 +526,15 @@
     if (or.pending) return or.liveIn === w ? null : { text: or.pending, since: or.pendingSince };
     return or.service?.busy ? { since: or.busySince } : null;
   }
+  // the Home redesign (2026-11-28): a surface's field and Send in the interface language at every draw (they were
+  // written once, as the page loaded, before the chosen language applied)
+  function localizeForm(w) {
+    const input = $(`#oracle-q-${w}`);
+    if (input && input.placeholder !== t('oracle.ask_the_oracle_enter_to_send')) input.placeholder = t('oracle.ask_the_oracle_enter_to_send');
+    const send = $(`#oracle-chat-${w} .oracle-send`);
+    if (send && !send.querySelector('*') && send.textContent !== t('agent_chat.send')) send.textContent = t('agent_chat.send');
+  }
+
   function render() {
     const v = view();
     // a failed answer keeps its question in the input, once
@@ -537,6 +547,7 @@
       if (!shownIn(w) || !chats[w]) continue;
       const chat = chats[w];
       chat.update({ messages: or.messages, turn: turnElsewhere(w) });
+      localizeForm(w);
       const memBox = $(`#oracle-memory-${w}`);
       const editingHere = memBox.querySelector('textarea');
       // the form is redrawn on its own changes only, never while typing

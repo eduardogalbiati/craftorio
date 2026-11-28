@@ -39,7 +39,8 @@ async function home(api = {}) {
   await app.settle(30);
   return app;
 }
-const body = (app) => String(app.el('#home-body').innerHTML || '');
+// the overview: #home-body and, since the Home redesign (2026-11-28), "Last 24 hours" in its own box (#home-last24)
+const body = (app) => String(app.el('#home-body').innerHTML || '') + String(app.el('#home-last24').innerHTML || '');
 const order = (app, name) => app.apiCalls.findIndex(([n]) => n === name);
 
 test('init asks for the workspace and the first data before the usage (#389)', async () => {

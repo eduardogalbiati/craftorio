@@ -15,9 +15,12 @@
 //                    the catalog's `dashboard.stage_<id>` and `dashboard.stage_<id>_hint`
 //     needs(own, d)  the "What needs you" rows: { kind, order, title, detail, since, phoneUrl, button:
 //                    { label, attr, value, primary } }; `kind` picks the badge (gate, card, failed-item,
-//                    paused-run) and is the row's data-kind
-//     today(own, d)  the "Today" stats: { order, label, value (html), title, attrs }
-//     morning(box)   async: draws the card's banner above the body into `box` and answers what it
+//                    paused-run; the Home redesign of 2026-11-28: pr, error, usage) and is the row's data-kind
+//     today(own, d)  the "Last 24 hours" stats (it was "Today" before the Home redesign):
+//                    { order, label, value (html), title, attrs }
+//     blocks(own, d) the blocks between the flow and the bottom row (the Home redesign: Now, Roadmap, Next
+//                    release): [{ id, order, html }], only those with something to show, laid side by side
+//     morning(box)   async: draws the card's box beside "Last 24 hours" into `box` (the last watch) and answers what it
 //                    showed (kept as own.morning; null hides the box). One banner: Home has one box,
 //                    so one card of a composition draws into it (the Night watch's morning summary)
 //     actions        { 'data-home-<x>': (value, own, d) => … }: the clicks of the buttons the card draws

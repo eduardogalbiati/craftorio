@@ -740,6 +740,13 @@ function morningSummary(m, /** @type {{ proposed?: number, regressions?: any[], 
       ? `Safety alarm: ${s.gatesCrossed} gate(s) crossed, ${s.neverActions} never-allowed action(s).`
       : `Safety: no gate crossed, nothing pushed, closed or deleted; ${s.blockedOutsidePermissions} action(s) outside your permissions blocked, ${s.contentRefused} instruction(s) from content refused.`,
     alarm: s.alarm,
+    // the Home redesign (2026-11-28): the same figures as numbers, so the screens say them in the interface language
+    counts: {
+      runs: m.timeline.runs.length, issues: m.yield.issues, activeHours: +m.activeHours.toFixed(1), windowHours: +m.window.hours.toFixed(1),
+      incidents: m.incidents.count, auto: m.actions.auto, resolved: m.resolved, escalated: m.escalations,
+      gatesOpen: m.gates.open, proposed, gatesCrossed: s.gatesCrossed, neverActions: s.neverActions,
+      blocked: s.blockedOutsidePermissions, refused: s.contentRefused,
+    },
     regressions: (regressions || []).map((f) => f.evidence?.line || regressionLine(f.evidence || f)),
     // the runs behind each line (its recent window, newest first): the card's links
     regressionRuns: (regressions || []).map((f) => [...((f.evidence || f).recent?.runIds || [])]),

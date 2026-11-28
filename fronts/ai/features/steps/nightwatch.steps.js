@@ -135,7 +135,8 @@ const appUpdateRow = (page) => page.getByTestId('app-update-row');
 
 // ---- a step that regresses against its own history (#335) ---------------------------------------------
 // Home's morning summary (the Night watch / Self-healing card, views/nightwatch/nightwatch.js
-// renderMorning, shown with its "Open Night watch" button when a watch ended less than 18 h ago):
+// renderMorning, the Home redesign's "Last watch" card, shown with its "View report" button when a watch ended less
+// than a week ago):
 // data-testid="nw-regression" is one flagged step (its text leads with the step and the rise, e.g.
 // "test: +50% cost over 3 runs"), data-testid="nw-regression-run" one link to a run behind it
 // (data-run: the run id; it opens the Run screen). Runs are written like run-card.steps.js' run, with
@@ -147,7 +148,7 @@ const WORKFLOW = 'software-development-local-hero';
 const { trailOf } = require('@craftorio/shared/run-progress-model');
 const regressions = (page) => page.getByTestId('nw-regression');
 const regressionOf = (page, step) => regressions(page).filter({ hasText: new RegExp(`^\\s*${escapeRe(step)}:`) });
-const morningCard = (page) => page.getByRole('button', { name: 'Open Night watch', exact: true });
+const morningCard = (page) => page.getByTestId('home-last-watch').getByRole('button', { name: 'View report', exact: true });
 
 // The watch on for 8 hours, ended `hours` ago (oracle/night-log.jsonl, packages/engine/domains/night/night-watch.js nightsOf)
 Given('the Night watch ended {int} hours ago', async ({ e2e }, hours) => {
