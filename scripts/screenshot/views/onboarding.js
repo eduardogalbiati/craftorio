@@ -29,6 +29,8 @@
 // running indicator, the languages bar's loading placeholder
 // --review no-push (with --mode review, #79): the clone's push check fails (the simulation-only hook
 // CRAFTORIO_E2E_GIT_PUSH=0), the review shows wizard-push-notice with its "Run gh auth setup-git" button
+// --fork suggested | waiting | failed (with --mode cloning, #126): the fork notice while the clone runs, before
+// the choice, after Create a fork (the fork's URL and wizard-fork-waiting), and a fork that failed at once
 // Nothing reaches the network nor a model (CRAFTORIO_SIMULATION_ONLY).
 
 const fs = require('fs');
@@ -160,19 +162,31 @@ function stubTakenProject() {
   ipcMain.handle('projects:list', () => [{ id: 'garden-log', name: 'garden-log' }]);
 }
 
-// #743 (cloning): onboarding:start answers the clone running for a demo project, as a slow clone does
-function stubCloning() {
+// #743 (cloning): onboarding:start answers the clone running for a demo project, as a slow clone does.
+// #126 (--fork suggested | waiting | failed): a repository the owner can't push to, so the clone shows the
+// fork notice; waiting clicks Create a fork (onboarding:fork answers the fork made, the clone still running:
+// wizard-fork-waiting), failed clicks it too (the fork's reason at once, both choices again)
+const FORK_REPO = 'example/private-billing';
+
+function stubCloning(fork) {
   const { ipcMain } = require('electron');
   const waiting = { status: 'waiting' };
+  const state = (forkState) => ({ projectId: 'billing-api', status: 'cloning', cli: null, ...(forkState ? { access: { push: false }, fork: forkState } : {}), jobs: { clone: { status: 'running' }, facts: waiting, profile: waiting, projectMap: waiting, ranking: waiting } });
   ipcMain.removeHandler('onboarding:start');
-  ipcMain.handle('onboarding:start', () => ({ projectId: 'billing-api', status: 'cloning', cli: null, jobs: { clone: { status: 'running' }, facts: waiting, profile: waiting, projectMap: waiting, ranking: waiting } }));
+  ipcMain.handle('onboarding:start', () => state(fork ? { status: 'suggested', repo: FORK_REPO } : null));
+  if (!fork) return;
+  const answer = fork === 'failed'
+    ? { status: 'failed', repo: FORK_REPO, reason: 'gh repo fork failed: HTTP 403: Resource not accessible by integration' }
+    : { status: 'created', repo: FORK_REPO, url: 'https://github.com/octo-demo/private-billing' };
+  ipcMain.removeHandler('onboarding:fork');
+  ipcMain.handle('onboarding:fork', () => state(answer));
 }
 
 async function open({ args, click, js, pause, win }) {
   const mode = args.mode || 'start';
   if (mode === 'start' || mode === 'repository') stubAccounts();
   if (mode === 'repository') stubRepos();
-  if (mode === 'cloning') stubCloning();
+  if (mode === 'cloning') stubCloning(args.fork);
   await click('.nav-item[data-view="dashboard"]');
   if (args.source === 'new') stubTakenProject();
   await click('[data-testid="home-empty-create-project"]');
@@ -211,6 +225,11 @@ async function open({ args, click, js, pause, win }) {
   }
   if (mode === 'cloning') {
     await waitFor(js, '#wizard-next[aria-busy="true"]', IMPORT_WAIT_MS);
+    if (!args.fork) return;
+    await waitFor(js, '[data-testid="wizard-create-fork"]', 5000);
+    if (args.fork === 'suggested') return;
+    await click('[data-testid="wizard-create-fork"]');
+    await waitFor(js, args.fork === 'waiting' ? '[data-testid="wizard-fork-waiting"]' : '[data-testid="wizard-create-fork"]:not([disabled])', 5000);
     return;
   }
   await waitFor(js, '[data-testid="wizard-cost"] [data-testid="wizard-cost-total"]', IMPORT_WAIT_MS);
@@ -248,8 +267,10 @@ module.exports = {
   // #79: the review of a clone that cannot push (its push notice and setup-git button)
   // #40: a repository whose own default workflow awaits acceptance (with --mode analysis or review)
   // #107: the cause of a refused import (with --mode access-error); #108: Create new project's step 2 (with --mode repository)
+  // #126: the fork notice while the clone runs (with --mode cloning)
   options: {
     cause: ['no-access', 'not-found'],
+    fork: ['failed', 'suggested', 'waiting'],
     review: ['awaiting', 'issues-off', 'manual', 'no-push', 'running'],
     source: ['new'],
   },
