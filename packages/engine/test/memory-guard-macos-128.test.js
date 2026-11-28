@@ -80,6 +80,56 @@ test('#128 a 16 GB Mac with that vm_stat is not held under a 10% floor (1.6 GB):
   assert.equal(memoryProblem({ freeBytes: parseVmStat(VM_STAT(16384)), floorBytes }), '');
 });
 
+test('#128 parseVmStat gives null for output it cannot read (no header, a missing field, empty)', () => {
+  const { parseVmStat } = load();
+  const noHeader = VM_STAT(16384).split('\n').slice(1).join('\n');
+  const noInactive = VM_STAT(16384).split('\n').filter((l) => !l.startsWith('Pages inactive')).join('\n');
+  assert.deepEqual([noHeader, noInactive, '', 'vm_stat: command not found'].map((s) => parseVmStat(s)), [null, null, null, null]);
+});
+
+// a fake `vm_stat` (script body after the shebang) first in PATH, process.platform faked as darwin, and a
+// fresh memory-guard module; returns the module
+function fakeMac(t, body) {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'vmstat-128-'));
+  t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(bin, 'vm_stat'), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath}`;
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
+  t.after(() => {
+    Object.defineProperty(process, 'platform', platform);
+    process.env.PATH = oldPath;
+  });
+  delete require.cache[require.resolve(MODULE)];
+  const mod = load();
+  delete require.cache[require.resolve(MODULE)];
+  return mod;
+}
+
+test('#128 on macOS a vm_stat that fails or prints nothing readable falls back to os.freemem(), never an error', { skip: process.platform === 'win32' ? 'needs /bin/sh' : false }, async (t) => {
+  const { createMemoryGuard } = fakeMac(t, 'echo "vm_stat: something went wrong" >&2\nexit 1');
+  const guard = createMemoryGuard({ intervalMs: 60000 });
+  t.after(() => guard.close());
+  const m = await guard.freeMemory();
+  const freeBytes = m?.freeBytes ?? null;
+  assert.equal(Number.isFinite(freeBytes) && freeBytes > 0, true, `freeBytes ${freeBytes}`);
+  assert.equal(usable(16384).includes(freeBytes), false);
+});
+
+test('#128 on macOS the free memory is read again at each ask (one long-lived helper, two answers)', { skip: process.platform === 'win32' ? 'needs /bin/sh' : false }, async (t) => {
+  const vmStat = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vmstat-txt-128-')), 'vm_stat.txt');
+  t.after(() => fs.rmSync(path.dirname(vmStat), { recursive: true, force: true }));
+  fs.writeFileSync(vmStat, VM_STAT(16384));
+  const { createMemoryGuard } = fakeMac(t, `cat '${vmStat}'`);
+  const guard = createMemoryGuard({ intervalMs: 60000 });
+  t.after(() => guard.close());
+  const first = (await guard.freeMemory())?.freeBytes ?? null;
+  fs.writeFileSync(vmStat, VM_STAT(4096));
+  const second = (await guard.freeMemory())?.freeBytes ?? null;
+  assert.deepEqual([usable(16384).includes(first), usable(4096).includes(second)], [true, true]);
+});
+
 test('#128 on macOS the guard\'s free memory is read from vm_stat, not os.freemem()', { skip: process.platform === 'win32' ? 'needs /bin/sh' : false }, async (t) => {
   // a fake vm_stat first in PATH (the command's output is the system boundary)
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'vmstat-128-'));

@@ -42,12 +42,13 @@ async function setup(t) {
   roadmaps.setState(ws.backlog, p.id, 'running', { simulated: false, stage: null });
   const itemId = roadmaps.readRoadmap(ws.backlog, p.id).stages[0].items[0].id;
   const low = { on: true };
+  const slot = { taken: false };
   const notices = [];
   const starts = [];
   const area = loadArea()({
     ws,
     active: new Map(),
-    slotProblem: () => '',
+    slotProblem: () => (slot.taken ? 'All 1 slots are in use' : ''),
     memoryHold: async () => (low.on ? loadGuard().memoryProblem(LOW) : ''),
     budgetBlock: () => null,
     refillRoadmap: () => {},
@@ -66,7 +67,8 @@ async function setup(t) {
   const shown = () => JSON.stringify(area.roadmapView(p.id));
   const item = () => roadmaps.findItem(roadmaps.readRoadmap(ws.backlog, p.id), itemId);
   const memoryNotices = () => notices.filter((n) => /memory/i.test(n));
-  return { low, starts, dispatch, shown, item, memoryNotices };
+  const setState = (state) => roadmaps.setState(ws.backlog, p.id, state, { simulated: false, stage: null });
+  return { low, slot, starts, dispatch, shown, item, memoryNotices, setState };
 }
 
 test('#128 a roadmap start held for memory shows "Waiting for memory" with the GB free, the floor and the Settings hint', async (t) => {
@@ -94,4 +96,30 @@ test('#128 once memory recovers the held item starts and the wait is no longer s
   await s.dispatch();
   assert.deepEqual([s.starts, s.item().runId ?? null, s.item().error ?? null], [['fixture-issue.yaml'], '20261128-150000-memhold128', null]);
   assert.equal(s.shown().includes('Waiting for memory'), false, 'the wait is still shown');
+});
+
+// ---- after the build (21e966da): a wait ends with any dispatch that holds no real start ----
+
+test('#128 a slot taken first ends the wait: the reason goes, and the next wait for memory notifies again', async (t) => {
+  const s = await setup(t);
+  await s.dispatch();
+  s.slot.taken = true;
+  await s.dispatch();
+  const shownWhileSlotTaken = s.shown().includes('Waiting for memory');
+  s.slot.taken = false;
+  await s.dispatch();
+  assert.deepEqual([shownWhileSlotTaken, s.shown().includes('Waiting for memory'), s.memoryNotices().length, s.starts.length], [false, true, 2, 0]);
+});
+
+test('#128 the wait is shown only while the roadmap runs (a paused roadmap shows no memory reason)', async (t) => {
+  const s = await setup(t);
+  await s.dispatch();
+  s.setState('paused');
+  assert.equal(s.shown().includes('Waiting for memory'), false);
+});
+
+test('#128 the memory reason is never written to the roadmap file', async (t) => {
+  const s = await setup(t);
+  await s.dispatch();
+  assert.equal(JSON.stringify(s.item()).includes('Waiting for memory'), false, 'not on the stored item');
 });

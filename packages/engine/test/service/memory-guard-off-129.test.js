@@ -134,3 +134,19 @@ test('#129 Concurrent runs gets no suggestion from the guard\'s history while th
   const whenOn = api['settings:machineProfile']().suggestion;
   assert.deepEqual([whenOff === null, whenOn?.concurrentRuns ?? null], [true, 3]);
 });
+
+// settings:set (the Settings › Execution switch): turning the guard on starts the stray-process watch at
+// once, turning it off stops it (the guard is handed null), with no restart of the app
+test('#129 settings:set turning the guard on starts the stray-process watch, turning it off stops it', async (t) => {
+  const shared = sharedGuard(t);
+  const original = shared.watchStrays;
+  const handed = [];
+  shared.watchStrays = (next) => { handed.push(next == null ? 'stop' : typeof next.runs === 'function' ? 'watch' : 'other'); };
+  t.after(() => { shared.watchStrays = original; });
+  const { api } = makeService(t);
+  await outsideSimulation(() => api['settings:set']({ memoryGuard: { enabled: true, limitPercent: 30, floorPercent: 10 } }));
+  const afterOn = handed.splice(0);
+  await outsideSimulation(() => api['settings:set']({ memoryGuard: { enabled: false, limitPercent: 30, floorPercent: 10 } }));
+  const afterOff = handed.splice(0);
+  assert.deepEqual([afterOn.at(-1) ?? null, afterOff.includes('watch'), afterOff.at(-1) ?? null], ['watch', false, 'stop']);
+});
